@@ -269,7 +269,9 @@ retargeting humanoide, pero no lleva controlador.
 El avatar de la demo es `Assets/Avatar/Babe.glb` (Ready Player Me, importado
 con glTFast: malla única `Wolf3D_Avatar` con 15 visemas Oculus y 52 blendshapes
 ARKit, huesos de ojos, esqueleto Mixamo). Quedan como alternativa los VRM
-`Assets/Avatar/Yae.vrm` y `Snb.vrm`. Las animaciones son la biblioteca de
+`Assets/Avatar/Yae.vrm` y `Snb.vrm`. De dónde salió, qué otros personajes se
+evaluaron y hasta dónde se puede personalizar la ropa: `docs/avatares.md`.
+Las animaciones son la biblioteca de
 Ready Player Me (`Assets/Animations/RPM/`, hecha para este esqueleto: 10 idles
 femeninos, 6 clips de hablar femeninos y 10 masculinos, 1 baile) más los FBX de
 Mixamo (`Assets/Animations/Mixamo/`) para bailes, pensar, asentir y gestos de
