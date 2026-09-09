@@ -417,6 +417,11 @@ namespace Sonia.EditorTools
                 volume.sharedProfile = profile;
             }
 
+            // Referencias muertas (componentes que se añadieron sin guardarlos
+            // como sub-assets y se perdieron al pasar por Play): fuera, o el
+            // SetDirty de abajo lanza MissingReferenceException.
+            profile.components.RemoveAll(component => component == null);
+
             Tonemapping tonemapping = GetOrAdd<Tonemapping>(profile);
             tonemapping.active = true;
             tonemapping.mode.overrideState = true;
@@ -463,21 +468,37 @@ namespace Sonia.EditorTools
             EditorUtility.SetDirty(profile);
             foreach (VolumeComponent component in profile.components)
             {
-                EditorUtility.SetDirty(component);
+                if (component != null)
+                {
+                    EditorUtility.SetDirty(component);
+                }
             }
 
             AssetDatabase.SaveAssets();
         }
 
+        /// <summary>
+        /// Devuelve el componente del perfil, creándolo si falta. Un componente
+        /// nuevo se guarda como sub-asset del perfil: <c>VolumeProfile.Add</c>
+        /// solo lo crea en memoria y, sin esto, la referencia quedaba muerta en
+        /// el archivo al pasar por Play.
+        /// </summary>
         private static T GetOrAdd<T>(VolumeProfile profile) where T : VolumeComponent
         {
             T component;
-            if (profile.TryGet(out component))
+            if (profile.TryGet(out component) && component != null)
             {
                 return component;
             }
 
-            return profile.Add<T>(true);
+            component = profile.Add<T>(true);
+            if (AssetDatabase.Contains(profile) && !AssetDatabase.Contains(component))
+            {
+                component.name = typeof(T).Name;
+                AssetDatabase.AddObjectToAsset(component, profile);
+            }
+
+            return component;
         }
 
         // ------------------------------------------------------------------
