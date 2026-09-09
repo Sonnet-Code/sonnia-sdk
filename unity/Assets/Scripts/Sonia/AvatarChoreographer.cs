@@ -135,6 +135,7 @@ namespace Sonia
         private MotionPlayer.Handle _body;
         private MotionPlayer.Handle _upper;
         private AnimationClip _lastTalking;
+        private bool _speechPaused;
         private AnimationClip _lastVariation;
         private int _lastAttention = -1;
         private float _stateSeconds;
@@ -215,6 +216,7 @@ namespace Sonia
             AvatarState previous = _state;
             _state = state;
             _stateSeconds = 0f;
+            _speechPaused = false;
 
             if (!_started)
             {
@@ -250,9 +252,52 @@ namespace Sonia
                 return;
             }
 
+            if (_speechPaused)
+            {
+                SetSpeechPaused(false);
+                return;
+            }
+
             if (_body == null || !_body.IsAlive || _body.NormalizedTime >= speechChangeThreshold)
             {
                 PlayNextTalking(talkingChainFade);
+            }
+        }
+
+        /// <summary>Cierto mientras los gestos de hablar están en pausa por falta de audio.</summary>
+        public bool SpeechPaused
+        {
+            get { return _speechPaused; }
+        }
+
+        /// <summary>
+        /// En mitad de una respuesta el modelo puede tardar en dar la frase
+        /// siguiente y Sonia se queda sin voz unos segundos: gesticular con la
+        /// boca cerrada queda raro. En pausa se pasa al bucle de escuchar (una
+        /// espera atenta) sin salir de "hablando"; al volver el audio se retoma la
+        /// gesticulación.
+        /// </summary>
+        public void SetSpeechPaused(bool paused)
+        {
+            if (paused == _speechPaused)
+            {
+                return;
+            }
+
+            _speechPaused = paused;
+            if (!Ready || _state != AvatarState.Speaking || _phase != Phase.Base)
+            {
+                return;
+            }
+
+            if (paused)
+            {
+                PlayLoop(motionSet.listeningLoop != null ? motionSet.listeningLoop : motionSet.idleLoop, speakFade);
+                Log("gestos de hablar en pausa: sin audio");
+            }
+            else
+            {
+                PlayNextTalking(speakFade);
             }
         }
 
@@ -552,6 +597,12 @@ namespace Sonia
 
         private void UpdateSpeaking()
         {
+            if (_speechPaused)
+            {
+                EnsureLoop(motionSet.listeningLoop != null ? motionSet.listeningLoop : motionSet.idleLoop, speakFade);
+                return;
+            }
+
             if (_body == null || !_body.IsAlive || _body.Remaining <= talkingChainFade)
             {
                 PlayNextTalking(_body == null || !_body.IsAlive ? speakFade : talkingChainFade);

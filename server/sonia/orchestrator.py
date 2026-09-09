@@ -200,6 +200,10 @@ class _Turn:
     playback_end_at: float = 0.0
     #: Último ``utterance_id`` de este turno (para esperar su ``playback_done``).
     last_utterance_id: int | None = None
+    #: Cierto mientras el TTS está sintetizando una frase de este turno.
+    tts_busy: bool = False
+    #: Instante en que se pidió la respuesta al modelo (para medir su latencia).
+    llm_started_at: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -584,10 +588,16 @@ class Orchestrator:
             prompt_calls: list[ToolCall] = []
             turn.round_sentences = []
             final: LLMEvent | None = None
+            turn.llm_started_at = time.monotonic()
+            first_delta_at: float | None = None
+            chars = 0
 
             async for event in self._llm.stream(self._conversation.messages(), self._tools):
                 if isinstance(event, TextDelta):
                     text = event.text
+                    if first_delta_at is None and text:
+                        first_delta_at = time.monotonic()
+                    chars += len(text)
                     if parser is not None:
                         text, calls = parser.feed(text)
                         prompt_calls.extend(calls)
@@ -595,6 +605,19 @@ class Orchestrator:
                     continue
                 final = event
                 break
+
+            elapsed = time.monotonic() - turn.llm_started_at
+            if first_delta_at is not None:
+                streaming = time.monotonic() - first_delta_at
+                logger.info(
+                    "Modelo: primer texto a los %.1f s, %d caracteres en %.1f s (%.0f car/s)",
+                    first_delta_at - turn.llm_started_at,
+                    chars,
+                    elapsed,
+                    chars / streaming if streaming > 0.05 else 0.0,
+                )
+            else:
+                logger.info("Modelo: respuesta sin texto en %.1f s", elapsed)
 
             if parser is not None:
                 self._feed_text(turn, splitter, parser.flush())
@@ -667,8 +690,15 @@ class Orchestrator:
     def _feed_text(
         self, turn: _Turn, splitter: SentenceSplitter, text: str, *, flush: bool = False
     ) -> None:
-        """Pasa texto hablable por el splitter y encola las frases cerradas."""
-        sentences = [text] if flush else splitter.feed(text)
+        """Pasa texto hablable por el splitter y encola las frases cerradas.
+
+        Si la cola de voz está vacía y el TTS no tiene nada entre manos, Sonia
+        está a punto de callarse porque el modelo escribe más despacio de lo
+        que ella habla: el troceador corta entonces al primer límite natural
+        (``hurry``) en vez de esperar una frase larga.
+        """
+        hurry = not flush and turn.sentences.empty() and not turn.tts_busy
+        sentences = [text] if flush else splitter.feed(text, hurry=hurry)
         for sentence in sentences:
             sentence = sentence.strip()
             if not sentence:
@@ -707,6 +737,7 @@ class Orchestrator:
             self._utterance_counter += 1
             utterance_id = self._utterance_counter
             turn.last_utterance_id = utterance_id
+            turn.tts_busy = True
             try:
                 await self._speak_sentence(turn, utterance_id, sentence)
             except asyncio.CancelledError:
@@ -721,6 +752,8 @@ class Orchestrator:
                         AudioChunk(pcm=b"", sample_rate=self._tts.sample_rate, is_last=True),
                     )
                     await self._hub.broadcast_json(p.msg_speech_end(utterance_id))
+            finally:
+                turn.tts_busy = False
 
         if turn.last_utterance_id is not None:
             remaining = max(0.0, turn.playback_end_at - time.monotonic())

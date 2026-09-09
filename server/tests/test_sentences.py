@@ -193,3 +193,16 @@ def test_min_chars_respeta_el_salto_de_linea_largo() -> None:
     assert out[0] == "Primera."
     assert out[1] == "Segunda corta. Tercera bastante más larga que las otras."
     assert out[2] == "Cuarta."
+
+
+def test_hurry_corta_sin_esperar_min_chars() -> None:
+    splitter = SentenceSplitter(min_chars=80, comma_min_chars=120, first_sentence_comma_chars=10)
+    assert splitter.feed("Primera. ") == ["Primera."]
+    # Sin prisa, una frase corta se retiene.
+    assert splitter.feed("Segunda corta. ") == []
+    # Con prisa sale al momento lo retenido, y también corta por coma temprana.
+    assert splitter.feed("Y ahora una coma, aquí. ", hurry=True) == [
+        "Segunda corta.",
+        "Y ahora una coma,",
+        "aquí.",
+    ]

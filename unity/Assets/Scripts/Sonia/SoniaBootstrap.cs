@@ -77,6 +77,11 @@ namespace Sonia
         [Tooltip("Segundos máximos de espera del audio antes de aplicar 'hablando' igualmente (por si el TTS falla en silencio).")]
         private float speakingAudioTimeout = 2.5f;
 
+        [SerializeField]
+        [Range(0f, 3f)]
+        [Tooltip("Si en mitad de una respuesta se acaba el audio y no llega más en estos segundos, los gestos de hablar se pausan (espera atenta) hasta que vuelva la voz. 0 lo desactiva.")]
+        private float speechGapPauseSeconds = 0.4f;
+
         [Header("Registro")]
         [SerializeField]
         [Tooltip("Escribir en la consola los eventos importantes del protocolo.")]
@@ -88,6 +93,8 @@ namespace Sonia
         private bool _pendingSpeakingState;
         private float _pendingSince;
         private int _lastAudioUtteranceId = -1;
+        // Momento en que se agotó el audio en mitad de 'hablando' (-1 si suena).
+        private float _audioDrainedAt = -1f;
 
         private void Awake()
         {
@@ -266,6 +273,7 @@ namespace Sonia
         /// </summary>
         private void ApplyAvatarState(AvatarState state)
         {
+            _audioDrainedAt = -1f;
             if (avatarState != null)
             {
                 avatarState.SetState(state);
@@ -400,6 +408,13 @@ namespace Sonia
             {
                 ReleasePendingSpeech("por tiempo de espera sin audio");
             }
+
+            if (_audioDrainedAt >= 0f && speechGapPauseSeconds > 0f && choreographer != null
+                && !choreographer.SpeechPaused && Time.time - _audioDrainedAt > speechGapPauseSeconds
+                && avatarState != null && avatarState.State == AvatarState.Speaking)
+            {
+                choreographer.SetSpeechPaused(true);
+            }
         }
 
         /// <summary>El orquestador pide un gesto de atención (por ejemplo un baile para cantar encima).</summary>
@@ -445,6 +460,13 @@ namespace Sonia
             {
                 ReleasePendingSpeech(null);
             }
+
+            // Vuelve la voz: se retoman los gestos si estaban en pausa.
+            _audioDrainedAt = -1f;
+            if (choreographer != null && choreographer.SpeechPaused)
+            {
+                choreographer.SetSpeechPaused(false);
+            }
         }
 
         private void HandleVisemes(VisemesMessage message)
@@ -481,6 +503,7 @@ namespace Sonia
         {
             _pendingSpeakingState = false;
             _pendingSpeechStart = false;
+            _audioDrainedAt = -1f;
             if (audioPlayer != null)
             {
                 audioPlayer.Flush();
@@ -562,6 +585,13 @@ namespace Sonia
             if (client != null)
             {
                 client.SendPlaybackDone(utteranceId);
+            }
+
+            // Se agotó lo que había: si el orquestador sigue en 'hablando' y no
+            // manda más audio enseguida, los gestos se pausan (ver Update).
+            if (_lastAudioUtteranceId <= utteranceId)
+            {
+                _audioDrainedAt = Time.time;
             }
 
             if (lipSync != null)

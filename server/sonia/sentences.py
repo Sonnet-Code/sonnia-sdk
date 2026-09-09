@@ -135,14 +135,19 @@ class SentenceSplitter:
         self._buffer = ""
         self._emitted = 0
 
-    def feed(self, delta: str) -> list[str]:
-        """Añade un trozo de texto y devuelve las frases que hayan quedado cerradas."""
+    def feed(self, delta: str, *, hurry: bool = False) -> list[str]:
+        """Añade un trozo de texto y devuelve las frases que hayan quedado cerradas.
+
+        Con ``hurry`` se corta al primer límite natural (puntuación o coma a
+        partir de ``first_sentence_comma_chars``) sin esperar ``min_chars``:
+        es para cuando la voz está a punto de quedarse sin texto.
+        """
         if not delta:
             return []
         self._buffer += delta
         sentences: list[str] = []
         while True:
-            cut = self._find_cut(self._buffer)
+            cut = self._find_cut(self._buffer, hurry=hurry)
             if cut is None:
                 break
             raw, self._buffer = self._buffer[:cut], self._buffer[cut:].lstrip()
@@ -178,11 +183,11 @@ class SentenceSplitter:
             return 0
         return self.min_chars
 
-    def _find_cut(self, buffer: str) -> int | None:
+    def _find_cut(self, buffer: str, *, hurry: bool = False) -> int | None:
         """Índice (exclusivo) donde termina la primera frase, o ``None``."""
         length = len(buffer)
-        comma_threshold = self._comma_threshold
-        min_cut = self._min_cut
+        comma_threshold = self.first_sentence_comma_chars if hurry else self._comma_threshold
+        min_cut = 0 if hurry else self._min_cut
         for i, char in enumerate(buffer):
             if char == "\n":
                 if i >= min_cut:
