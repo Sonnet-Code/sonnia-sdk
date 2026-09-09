@@ -45,6 +45,7 @@ MSG_HELLO = "hello"
 MSG_STATE = "state"
 MSG_TRANSCRIPT = "transcript"
 MSG_SPEECH_START = "speech_start"
+MSG_ATTENTION = "attention"
 MSG_VISEMES = "visemes"
 MSG_ENVELOPE = "envelope"
 MSG_SPEECH_END = "speech_end"
@@ -119,9 +120,28 @@ def msg_transcript(role: Role | str, text: str, final: bool) -> dict[str, Any]:
     return {"type": MSG_TRANSCRIPT, "role": str(role), "text": text, "final": bool(final)}
 
 
-def msg_speech_start(utterance_id: int, text: str) -> dict[str, Any]:
-    """Empieza una frase sintetizada; a partir de aquí llegan frames binarios."""
-    return {"type": MSG_SPEECH_START, "utterance_id": int(utterance_id), "text": text}
+def msg_speech_start(utterance_id: int, text: str, *, ambient: bool = False) -> dict[str, Any]:
+    """Empieza una frase sintetizada; a partir de aquí llegan frames binarios.
+
+    ``ambient`` marca las frases de la animación de stand: el avatar mueve la
+    boca pero no cambia de estado ni interrumpe el baile o el idle.
+    """
+    msg: dict[str, Any] = {
+        "type": MSG_SPEECH_START,
+        "utterance_id": int(utterance_id),
+        "text": text,
+    }
+    if ambient:
+        msg["ambient"] = True
+    return msg
+
+
+def msg_attention(category: str, clip: str | None = None) -> dict[str, Any]:
+    """Pide al avatar un gesto de atención: ``dance``, ``fourth_wall`` o ``soft``."""
+    msg: dict[str, Any] = {"type": MSG_ATTENTION, "category": category}
+    if clip:
+        msg["clip"] = clip
+    return msg
 
 
 def msg_visemes(utterance_id: int, frames: Iterable[VisemeFrame]) -> dict[str, Any]:

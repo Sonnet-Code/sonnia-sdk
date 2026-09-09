@@ -196,7 +196,9 @@ namespace Sonia
 
             _flash = Mathf.MoveTowards(_flash, 0f, dt * 1.6f);
 
-            float open = lipSync != null && state == AvatarState.Speaking ? lipSync.MouthOpen : 0f;
+            // La boca puede moverse en cualquier estado (frases del stand, bailes
+            // cantados): las cejas y los párpados siguen a la voz siempre.
+            float open = lipSync != null ? lipSync.MouthOpen : 0f;
             _energy = Mathf.Lerp(_energy, open, 1f - Mathf.Exp(-8f * dt));
             float emphasisTarget = open > emphasisThreshold ? 1f : 0f;
             _emphasis = Mathf.Lerp(_emphasis, emphasisTarget, 1f - Mathf.Exp(-(emphasisTarget > _emphasis ? 14f : 4f) * dt));

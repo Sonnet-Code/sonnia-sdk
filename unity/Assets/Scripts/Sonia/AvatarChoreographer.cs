@@ -286,6 +286,39 @@ namespace Sonia
             return true;
         }
 
+        /// <summary>
+        /// Previsualiza un clip del set (panel de animaciones). Un bucle base se
+        /// convierte en el bucle activo; cualquier otro clip se reproduce una vez
+        /// sobre el cuerpo (o sobre el torso, si es un asentimiento) y se vuelve a
+        /// la base del estado actual.
+        /// </summary>
+        public void Preview(AnimationClip clip, bool upperBody = false)
+        {
+            if (!Ready || clip == null)
+            {
+                return;
+            }
+
+            if (upperBody)
+            {
+                _upper = motionPlayer.Play(clip, MotionPlayer.UpperLayer, nodFade);
+                return;
+            }
+
+            if (clip.isLooping)
+            {
+                _phase = Phase.Base;
+                PlayLoop(clip, stateFade);
+                return;
+            }
+
+            bool attentionLike = System.Array.Exists(
+                motionSet.attention, m => m != null && m.clip == clip) || clip == motionSet.greeting;
+            _phase = attentionLike ? Phase.Attention : Phase.Variation;
+            _body = motionPlayer.Play(clip, MotionPlayer.BodyLayer, attentionLike ? attentionFadeIn : variationFade);
+            Log("previsualización: " + clip.name);
+        }
+
         /// <summary>Lanza un gesto de atención al azar (según los pesos). Solo en idle.</summary>
         public void PlayRandomAttention()
         {
@@ -295,6 +328,65 @@ namespace Sonia
             }
 
             PlayAttention(PickAttention());
+        }
+
+        /// <summary>
+        /// Lanza un gesto de atención de una categoría (o un clip concreto por
+        /// nombre, si existe). Lo usa el orquestador para los bailes cantados.
+        /// Solo en idle.
+        /// </summary>
+        public void PlayAttention(AttentionCategory category, string clipName = null)
+        {
+            if (!Ready || _state != AvatarState.Idle)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(clipName))
+            {
+                for (int i = 0; i < motionSet.attention.Length; i++)
+                {
+                    AttentionMotion motion = motionSet.attention[i];
+                    if (motion != null && motion.clip != null && motion.clip.name == clipName)
+                    {
+                        PlayAttention(i);
+                        return;
+                    }
+                }
+            }
+
+            int count = motionSet.CountInCategory(category);
+            if (count == 0)
+            {
+                PlayAttention(PickAttention());
+                return;
+            }
+
+            for (int attempt = 0; attempt < 12; attempt++)
+            {
+                int index = Random.Range(0, motionSet.attention.Length);
+                AttentionMotion motion = motionSet.attention[index];
+                if (motion == null || motion.clip == null || motion.category != category)
+                {
+                    continue;
+                }
+
+                if (index != _lastAttention || count == 1)
+                {
+                    PlayAttention(index);
+                    return;
+                }
+            }
+
+            for (int i = 0; i < motionSet.attention.Length; i++)
+            {
+                if (motionSet.attention[i] != null && motionSet.attention[i].clip != null
+                    && motionSet.attention[i].category == category)
+                {
+                    PlayAttention(i);
+                    return;
+                }
+            }
         }
 
         /// <summary>Lanza el gesto de atención con ese índice del set. Solo en idle.</summary>

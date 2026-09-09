@@ -135,7 +135,7 @@ namespace Sonia
             scaler.matchWidthOrHeight = 0.5f;
             _toggleCanvas.AddComponent<GraphicRaycaster>();
 
-            GameObject go = MakeImage(_toggleCanvas.transform, "Ajustes", new Color(0.2f, 0.35f, 0.7f, 0.85f));
+            GameObject go = SoniaUiKit.MakeImage(_toggleCanvas.transform, "Ajustes", new Color(0.2f, 0.35f, 0.7f, 0.85f));
             RectTransform rect = go.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(1f, 1f);
             rect.anchorMax = new Vector2(1f, 1f);
@@ -144,8 +144,8 @@ namespace Sonia
             rect.sizeDelta = new Vector2(150f, 56f);
             Button button = go.AddComponent<Button>();
             button.onClick.AddListener(Toggle);
-            Text text = MakeText(go.transform, "Texto", "Ajustes", 22, TextAnchor.MiddleCenter);
-            Stretch(text.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
+            Text text = SoniaUiKit.MakeText(go.transform, "Texto", "Ajustes", 22, TextAnchor.MiddleCenter);
+            SoniaUiKit.Stretch(text.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
         }
 
         private void Update()
@@ -229,7 +229,7 @@ namespace Sonia
             scaler.matchWidthOrHeight = 0.5f;
             _canvas.AddComponent<GraphicRaycaster>();
 
-            GameObject panel = MakeImage(_canvas.transform, "Panel", new Color(0.02f, 0.03f, 0.08f, 0.92f));
+            GameObject panel = SoniaUiKit.MakeImage(_canvas.transform, "Panel", new Color(0.02f, 0.03f, 0.08f, 0.92f));
             RectTransform panelRect = panel.GetComponent<RectTransform>();
             // Mitad inferior de la pantalla: la cara queda a la vista mientras se ajusta.
             panelRect.anchorMin = new Vector2(0.03f, 0.07f);
@@ -237,7 +237,7 @@ namespace Sonia
             panelRect.offsetMin = Vector2.zero;
             panelRect.offsetMax = Vector2.zero;
 
-            Text title = MakeText(panel.transform, "Titulo", "Ajustes de Sonia. Guardar escribe " + fileName + " en " + Application.persistentDataPath + " y se aplica al arrancar; Imprimir los saca por consola.", 18, TextAnchor.UpperLeft);
+            Text title = SoniaUiKit.MakeText(panel.transform, "Titulo", "Ajustes de Sonia. Guardar escribe " + fileName + " en " + Application.persistentDataPath + " y se aplica al arrancar; Imprimir los saca por consola.", 18, TextAnchor.UpperLeft);
             RectTransform titleRect = title.GetComponent<RectTransform>();
             titleRect.anchorMin = new Vector2(0f, 1f);
             titleRect.anchorMax = new Vector2(1f, 1f);
@@ -258,10 +258,10 @@ namespace Sonia
             row.spacing = 12f;
             row.childForceExpandWidth = true;
             row.childForceExpandHeight = true;
-            MakeButton(buttons.transform, "Guardar", Save);
-            MakeButton(buttons.transform, "Cargar", Load);
-            MakeButton(buttons.transform, "Restablecer", ResetDefaults);
-            MakeButton(buttons.transform, "Imprimir", Print);
+            SoniaUiKit.MakeButton(buttons.transform, "Guardar", Save);
+            SoniaUiKit.MakeButton(buttons.transform, "Cargar", Load);
+            SoniaUiKit.MakeButton(buttons.transform, "Restablecer", ResetDefaults);
+            SoniaUiKit.MakeButton(buttons.transform, "Imprimir", Print);
 
             // Lista con scroll
             GameObject scrollGo = new GameObject("Scroll", typeof(RectTransform));
@@ -316,7 +316,7 @@ namespace Sonia
                 return;
             }
 
-            Text header = MakeText(parent, "Seccion", title, 24, TextAnchor.MiddleLeft);
+            Text header = SoniaUiKit.MakeText(parent, "Seccion", title, 24, TextAnchor.MiddleLeft);
             header.fontStyle = FontStyle.Bold;
             header.GetComponent<LayoutElement>().preferredHeight = 44f;
 
@@ -380,7 +380,7 @@ namespace Sonia
             layout.childControlHeight = true;
 
             string suffix = axis == 0 ? " (mín)" : axis == 1 ? " (máx)" : "";
-            Text label = MakeText(row.transform, "Etiqueta", field.Name + suffix, 20, TextAnchor.MiddleLeft);
+            Text label = SoniaUiKit.MakeText(row.transform, "Etiqueta", field.Name + suffix, 20, TextAnchor.MiddleLeft);
             label.horizontalOverflow = HorizontalWrapMode.Overflow;
             LayoutElement labelLayout = label.GetComponent<LayoutElement>();
             labelLayout.preferredWidth = 360f;
@@ -390,17 +390,17 @@ namespace Sonia
             sliderGo.transform.SetParent(row.transform, false);
             sliderGo.AddComponent<LayoutElement>().flexibleWidth = 1f;
             Slider slider = sliderGo.AddComponent<Slider>();
-            GameObject bg = MakeImage(sliderGo.transform, "Fondo", new Color(1f, 1f, 1f, 0.15f));
-            Stretch(bg.GetComponent<RectTransform>(), new Vector2(0f, 0.35f), new Vector2(1f, 0.65f));
+            GameObject bg = SoniaUiKit.MakeImage(sliderGo.transform, "Fondo", new Color(1f, 1f, 1f, 0.15f));
+            SoniaUiKit.Stretch(bg.GetComponent<RectTransform>(), new Vector2(0f, 0.35f), new Vector2(1f, 0.65f));
             GameObject fillArea = new GameObject("FillArea", typeof(RectTransform));
             fillArea.transform.SetParent(sliderGo.transform, false);
-            Stretch(fillArea.GetComponent<RectTransform>(), new Vector2(0f, 0.35f), new Vector2(1f, 0.65f));
-            GameObject fill = MakeImage(fillArea.transform, "Fill", new Color(0.35f, 0.6f, 1f, 0.9f));
-            Stretch(fill.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
+            SoniaUiKit.Stretch(fillArea.GetComponent<RectTransform>(), new Vector2(0f, 0.35f), new Vector2(1f, 0.65f));
+            GameObject fill = SoniaUiKit.MakeImage(fillArea.transform, "Fill", new Color(0.35f, 0.6f, 1f, 0.9f));
+            SoniaUiKit.Stretch(fill.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
             GameObject handleArea = new GameObject("HandleArea", typeof(RectTransform));
             handleArea.transform.SetParent(sliderGo.transform, false);
-            Stretch(handleArea.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
-            GameObject handle = MakeImage(handleArea.transform, "Handle", Color.white);
+            SoniaUiKit.Stretch(handleArea.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
+            GameObject handle = SoniaUiKit.MakeImage(handleArea.transform, "Handle", Color.white);
             RectTransform handleRect = handle.GetComponent<RectTransform>();
             handleRect.sizeDelta = new Vector2(28f, 0f);
             slider.fillRect = fill.GetComponent<RectTransform>();
@@ -410,7 +410,7 @@ namespace Sonia
             slider.minValue = min;
             slider.maxValue = max;
 
-            Text value = MakeText(row.transform, "Valor", "", 20, TextAnchor.MiddleRight);
+            Text value = SoniaUiKit.MakeText(row.transform, "Valor", "", 20, TextAnchor.MiddleRight);
             LayoutElement valueLayout = value.GetComponent<LayoutElement>();
             valueLayout.preferredWidth = 90f;
             valueLayout.minWidth = 90f;
@@ -428,47 +428,6 @@ namespace Sonia
             });
             binding.Slider.name = field.Name + ":" + axis;
             _bindings.Add(binding);
-        }
-
-        private static void Stretch(RectTransform rect, Vector2 min, Vector2 max)
-        {
-            rect.anchorMin = min;
-            rect.anchorMax = max;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-        }
-
-        private static GameObject MakeImage(Transform parent, string name, Color color)
-        {
-            GameObject go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            Image image = go.AddComponent<Image>();
-            image.color = color;
-            return go;
-        }
-
-        private static Text MakeText(Transform parent, string name, string content, int size, TextAnchor anchor)
-        {
-            GameObject go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            Text text = go.AddComponent<Text>();
-            text.text = content;
-            text.fontSize = size;
-            text.alignment = anchor;
-            text.color = Color.white;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            go.AddComponent<LayoutElement>();
-            return text;
-        }
-
-        private static void MakeButton(Transform parent, string label, UnityEngine.Events.UnityAction action)
-        {
-            GameObject go = MakeImage(parent, label, new Color(0.2f, 0.35f, 0.7f, 1f));
-            Button button = go.AddComponent<Button>();
-            button.onClick.AddListener(action);
-            Text text = MakeText(go.transform, "Texto", label, 22, TextAnchor.MiddleCenter);
-            Stretch(text.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
         }
 
         // ------------------------------------------------------------------

@@ -49,6 +49,7 @@ from sonia.llm.messages import (
 from sonia.llm.prompt_tools import PromptToolParser, render_tools_prompt
 from sonia.persona import build_system_prompt, describe_stack
 from sonia.sentences import SentenceSplitter
+from sonia.showcase import Showcase, ShowcaseBit
 from sonia.tts.base import aclosing
 from sonia.types import (
     ActionContext,
@@ -226,6 +227,7 @@ class Orchestrator:
         on_speaking_changed: Callable[[bool], None] | None = None,
         max_audio_lead_s: float = MAX_AUDIO_LEAD_S,
         tick_s: float = DEFAULT_TICK_S,
+        showcase: Showcase | None = None,
     ) -> None:
         self._settings = settings
         self._stt = stt
@@ -258,6 +260,20 @@ class Orchestrator:
         #: Se activa cuando no hay eventos pendientes ni turno en curso.
         self._idle_event = asyncio.Event()
         self._idle_event.set()
+
+        # Animación de stand: frases y bailes cantados mientras no hay nadie.
+        show = settings.showcase
+        if showcase is None and show.enabled:
+            showcase = Showcase.from_dir(
+                settings.showcase_dir,
+                dance_chance=show.dance_chance,
+                gesture_chance=show.gesture_chance,
+            )
+        self._showcase = (
+            showcase if (showcase is not None and showcase.enabled and show.enabled) else None
+        )
+        self._ambient_task: asyncio.Task[None] | None = None
+        self._next_showcase_at = time.monotonic() + max(0.0, show.first_delay_seconds)
         self._last_activity = time.monotonic()
 
         hub.on(p.MSG_INTERRUPT, self._on_ws_interrupt)
@@ -370,6 +386,7 @@ class Orchestrator:
                     event = await asyncio.wait_for(self._queue.get(), timeout=self._tick)
                 except TimeoutError:
                     await self._maybe_reset_idle()
+                    await self._maybe_showcase()
                     continue
                 try:
                     await self._handle_event(event)
@@ -388,6 +405,7 @@ class Orchestrator:
     async def _shutdown(self) -> None:
         """Cancela lo que quede en marcha al apagar el orquestador."""
         with contextlib.suppress(Exception):
+            await self._cancel_ambient("shutdown")
             await self._cancel_turn("shutdown")
         self._drop_frame_task()
 
@@ -404,6 +422,7 @@ class Orchestrator:
 
     async def _on_speech_started(self) -> None:
         self._touch()
+        await self._cancel_ambient("interrupted")
         if self._state is AssistantState.SPEAKING:
             if not self._settings.audio.barge_in:
                 return
@@ -424,12 +443,14 @@ class Orchestrator:
 
     async def _on_interrupt(self, reason: str) -> None:
         self._touch()
+        await self._cancel_ambient(reason)
         await self._cancel_turn(reason)
         self._drop_frame_task()
         await self._set_state(AssistantState.IDLE)
 
     async def _start_turn(self, source: Utterance | TextTurn) -> None:
         self._touch()
+        await self._cancel_ambient("interrupted")
         if self.turn_active:
             # Un texto explícito siempre interrumpe; la voz solo con barge-in.
             if isinstance(source, Utterance) and not self._settings.audio.barge_in:
@@ -831,6 +852,111 @@ class Orchestrator:
 
     def _touch(self) -> None:
         self._last_activity = time.monotonic()
+        # Cualquier actividad real pospone el siguiente número del stand.
+        if self._showcase is not None:
+            self._next_showcase_at = max(
+                self._next_showcase_at,
+                self._last_activity + self._settings.showcase.first_delay_seconds,
+            )
+
+    # -- animación de stand -------------------------------------------------
+
+    @property
+    def ambient_active(self) -> bool:
+        """Cierto mientras suena una frase o un baile cantado del stand."""
+        return self._ambient_task is not None and not self._ambient_task.done()
+
+    async def _maybe_showcase(self) -> None:
+        """Lanza un número del stand si Sonia lleva bastante sola."""
+        if self._showcase is None or self.ambient_active or self.turn_active:
+            return
+        if self._state is not AssistantState.IDLE:
+            return
+        if time.monotonic() < self._next_showcase_at:
+            return
+        bit = self._showcase.next_bit()
+        self._schedule_next_showcase()
+        if bit is None:
+            return
+        self._ambient_task = asyncio.create_task(self._run_ambient(bit), name="sonia-ambient")
+
+    def _schedule_next_showcase(self) -> None:
+        show = self._settings.showcase
+        low = max(5.0, show.interval_min_seconds)
+        high = max(low, show.interval_max_seconds)
+        rng = self._showcase.rng if self._showcase is not None else None
+        wait = rng.uniform(low, high) if rng is not None else low
+        self._next_showcase_at = time.monotonic() + wait
+
+    async def _run_ambient(self, bit: ShowcaseBit) -> None:
+        """Gesto (si lo hay) y frase, sin salir de ``idle``.
+
+        La frase viaja como cualquier otra pero marcada ``ambient``: Unity
+        mueve la boca y no toca el estado, así que un baile sigue bailando
+        mientras "canta". Al micrófono se le avisa igual que si hablara, para
+        que no se oiga a sí misma.
+        """
+        hub = self._hub
+        if bit.attention:
+            await hub.broadcast_json(p.msg_attention(bit.attention))
+            # Un baile arranca con un fundido; la voz entra un poco después.
+            await asyncio.sleep(0.6 if bit.is_dance else 0.25)
+        self._utterance_counter += 1
+        utterance_id = self._utterance_counter
+        self._notify_speaking(True)
+        try:
+            await hub.broadcast_json(p.msg_transcript("assistant", bit.text, True))
+            await hub.broadcast_json(p.msg_speech_start(utterance_id, bit.text, ambient=True))
+            pcm = bytearray()
+            sample_rate = self._tts.sample_rate
+            saw_last = False
+            async with aclosing(self._tts.synthesize(bit.text)) as chunks:
+                async for chunk in chunks:
+                    saw_last = saw_last or chunk.is_last
+                    sample_rate = chunk.sample_rate
+                    await hub.send_audio(utterance_id, chunk)
+                    pcm += chunk.pcm
+            if not saw_last:
+                await hub.send_audio(
+                    utterance_id, AudioChunk(pcm=b"", sample_rate=sample_rate, is_last=True)
+                )
+            duration = len(pcm) / 2 / sample_rate if sample_rate > 0 else 0.0
+            await hub.broadcast_json(p.msg_visemes(utterance_id, visemes_for(bit.text, duration)))
+            envelope = envelope_for(bytes(pcm), sample_rate, ENVELOPE_INTERVAL_MS)
+            await hub.broadcast_json(p.msg_envelope(utterance_id, ENVELOPE_INTERVAL_MS, envelope))
+            await hub.broadcast_json(p.msg_speech_end(utterance_id))
+            logger.info("Sonia (stand, %d, %.2f s): %s", utterance_id, duration, bit.text)
+            await self._wait_playback_done(utterance_id, duration + PLAYBACK_GRACE_S)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _log_stage_failure("Fallo del TTS en la animación de stand: %s", exc)
+            with contextlib.suppress(Exception):
+                await hub.send_audio(
+                    utterance_id,
+                    AudioChunk(pcm=b"", sample_rate=self._tts.sample_rate, is_last=True),
+                )
+                await hub.broadcast_json(p.msg_speech_end(utterance_id))
+        finally:
+            self._notify_speaking(False)
+
+    async def _cancel_ambient(self, reason: str) -> bool:
+        """Corta el número del stand en curso (alguien habló o hay turno)."""
+        task, self._ambient_task = self._ambient_task, None
+        if task is None or task.done():
+            return False
+        task.cancel()
+        await self._hub.broadcast_json(p.msg_stop_speaking(reason))
+        await asyncio.wait([task])
+        return True
+
+    def _notify_speaking(self, speaking: bool) -> None:
+        if self._on_speaking_changed is None:
+            return
+        try:
+            self._on_speaking_changed(speaking)
+        except Exception:
+            logger.exception("Fallo en on_speaking_changed")
 
     async def _maybe_reset_idle(self) -> None:
         """Reinicia la conversación tras ``idle_reset_seconds`` sin actividad."""

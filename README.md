@@ -53,6 +53,10 @@ Ambas rutas alimentan el mismo endpoint multimodal, así que el modelo de visió
 
 El modelo dispone de una acción `show_image` para mostrar una imagen dentro del render de Unity, integrada con el avatar: un panel o pantalla en la escena hacia el que Sonia puede girarse o señalar mientras habla. Las imágenes salen de una galería local incluida en el proyecto (logos, diagramas, fotos del equipo, material del stand) o de la captura de cámara más reciente, por ejemplo para enseñarle al visitante lo que Sonia acaba de ver. Un `hide_image` retira el panel.
 
+### Animación de stand
+
+Cuando lleva un rato sin nadie, Sonia no se queda callada: cada 40 a 90 segundos dice una frase corta (saludo, curiosidad de la biblioteca, promoción de Sonnet Code) acompañada a veces de un gesto de cuarta pared, o lanza un baile y "canta" encima. Las frases y los cantos están en `assets/showcase/frases.md` y `assets/showcase/cantos.md`, una por línea, editables sin tocar código. No consumen tokens del modelo. Se configura con las variables `SHOWCASE_*` (activar, primer retardo, intervalo, probabilidad de baile) y se corta en cuanto alguien habla.
+
 ## Stack
 
 | Capa | Tecnología | Notas |
@@ -96,6 +100,7 @@ sonia/
 ├── scripts/          # Descarga de modelos, arranque de servidores, modo kiosco, checks del stand
 ├── docs/             # Arquitectura, protocolo, decisiones de diseño, licencias, guía del stand
 ├── assets/gallery/   # Galería local de imágenes que Sonia puede mostrar
+├── assets/showcase/  # Frases y cantos de la animación de stand (idle)
 ├── CLAUDE.md         # Contexto y convenciones para trabajar con Claude Code
 └── README.md
 ```

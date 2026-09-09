@@ -45,6 +45,15 @@ Empieza una frase sintetizada. A partir de aquí llegarán frames binarios con e
 {"type": "speech_start", "utterance_id": 7, "text": "Hola, ¿cómo estás?"}
 ```
 
+Con `"ambient": true` es una frase de la **animación de stand** (lo que Sonia
+dice sola cuando lleva un rato sin nadie, o lo que "canta" mientras baila): el
+estado no cambia, sigue en `idle`, y Unity solo mueve la boca, las cejas y los
+ojos sin interrumpir el baile ni el gesto en curso.
+
+```json
+{"type": "speech_start", "utterance_id": 8, "text": "¡Lalalá, esto es DevFest!", "ambient": true}
+```
+
 ### `visemes`
 
 Visemas de la frase, con su instante de inicio relativo a `speech_start`. Se calculan sobre la duración total del audio, así que llegan siempre **después** de los frames binarios de esa frase, en cuanto termina de sintetizarse: normalmente cuando Unity apenas ha empezado a reproducirla, pero nunca antes del primer frame. Unity debe alinearlos con el audio ya reproducido de ese `utterance_id` y usar la envolvente o el RMS mientras no los tenga. Los ids son los del conjunto Oculus (compatible con Ready Player Me): `sil`, `PP`, `FF`, `TH`, `DD`, `kk`, `CH`, `SS`, `nn`, `RR`, `aa`, `E`, `ih`, `oh`, `ou`.
@@ -89,6 +98,17 @@ Mostrar una imagen en el panel de la escena. `data_base64` lleva la imagen compl
 
 ```json
 {"type": "hide_image"}
+```
+
+### `attention`
+
+Pide al avatar un gesto de atención: `dance` (baile), `fourth_wall` (señalar,
+saludar, tocar la pantalla) o `soft` (gesto suave). `clip` es opcional y nombra
+un clip concreto del set. Solo se atiende en `idle`. La animación de stand lo
+envía justo antes de una frase `ambient` para que Sonia cante mientras baila.
+
+```json
+{"type": "attention", "category": "dance"}
 ```
 
 ### `error`

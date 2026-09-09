@@ -29,6 +29,7 @@ namespace Sonia
         public const string HideImage = "hide_image";
         public const string Error = "error";
         public const string RequestFrame = "request_frame";
+        public const string Attention = "attention";
 
         // De Unity hacia el orquestador.
         public const string ClientHello = "client_hello";
@@ -119,6 +120,23 @@ namespace Sonia
     {
         [JsonProperty("utterance_id")] public int UtteranceId;
         [JsonProperty("text")] public string Text = string.Empty;
+
+        /// <summary>
+        /// Frase de la animación de stand: se mueve la boca pero el avatar no
+        /// cambia de estado ni interrumpe el baile o el idle.
+        /// </summary>
+        [JsonProperty("ambient")] public bool Ambient;
+    }
+
+    /// <summary>El orquestador pide un gesto de atención (baile, cuarta pared, suave).</summary>
+    [Serializable]
+    public class AttentionMessage
+    {
+        /// <summary>"dance", "fourth_wall" o "soft".</summary>
+        [JsonProperty("category")] public string Category = "soft";
+
+        /// <summary>Nombre de clip concreto, opcional.</summary>
+        [JsonProperty("clip")] public string Clip;
     }
 
     /// <summary>Un visema con su instante de inicio relativo al <c>speech_start</c>.</summary>

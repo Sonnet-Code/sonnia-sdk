@@ -138,6 +138,23 @@ class MCPSettings(BaseSettings):
     port: int = 8766
 
 
+class ShowcaseSettings(BaseSettings):
+    """Animación de stand: frases y bailes cantados cuando no hay nadie."""
+
+    model_config = SettingsConfigDict(env_prefix="SHOWCASE_", extra="ignore", env_ignore_empty=True)
+
+    enabled: bool = True
+    #: Segundos en idle antes del primer número.
+    first_delay_seconds: float = 25.0
+    #: Segundos mínimo y máximo entre números.
+    interval_min_seconds: float = 40.0
+    interval_max_seconds: float = 90.0
+    #: Probabilidad de que el número sea un baile cantado en vez de una frase.
+    dance_chance: float = 0.3
+    #: Probabilidad de que una frase vaya acompañada de un gesto de cuarta pared.
+    gesture_chance: float = 0.5
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(_REPO_ROOT / ".env", ".env"),
@@ -153,6 +170,7 @@ class Settings(BaseSettings):
     vision: VisionSettings = Field(default_factory=VisionSettings)
     ws: WSSettings = Field(default_factory=WSSettings)
     mcp: MCPSettings = Field(default_factory=MCPSettings)
+    showcase: ShowcaseSettings = Field(default_factory=ShowcaseSettings)
 
     assets_dir: str = str(_REPO_ROOT / "assets")
     log_level: str = "INFO"
@@ -162,6 +180,10 @@ class Settings(BaseSettings):
     @property
     def gallery_dir(self) -> Path:
         return Path(self.assets_dir) / "gallery"
+
+    @property
+    def showcase_dir(self) -> Path:
+        return Path(self.assets_dir) / "showcase"
 
 
 def load_settings() -> Settings:

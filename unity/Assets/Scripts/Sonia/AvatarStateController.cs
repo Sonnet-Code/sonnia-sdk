@@ -290,7 +290,7 @@ namespace Sonia
                     // fuertes: una cabeza real nunca se queda clavada mirando un punto.
                     float swayYaw = (Mathf.PerlinNoise(_noiseSeed, Time.time * 0.35f) - 0.5f) * 2f * headSwayDegrees;
                     float swayPitch = (Mathf.PerlinNoise(_noiseSeed + 17f, Time.time * 0.28f) - 0.5f) * 2f * headSwayDegrees;
-                    float open = lipSync != null && _state == AvatarState.Speaking ? lipSync.MouthOpen : 0f;
+                    float open = lipSync != null ? lipSync.MouthOpen : 0f;
                     _nodLevel = Mathf.Lerp(_nodLevel, open, 1f - Mathf.Exp(-6f * deltaTime));
                     Quaternion desired = Quaternion.LookRotation(direction.normalized, Vector3.up)
                                          * Quaternion.Euler(headRotationOffset)

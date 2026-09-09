@@ -41,6 +41,10 @@ namespace Sonia
 
         [Header("Plano abierto")]
         [SerializeField]
+        [Tooltip("Abrir el plano durante bailes y gestos grandes. Apagado: la cámara se queda en el plano medio aunque no quepa el cuerpo entero.")]
+        private bool wideShotEnabled;
+
+        [SerializeField]
         [Tooltip("Posición de la cámara en plano abierto. La calcula Sonia > Colocar avatar con las medidas del modelo.")]
         private Vector3 wideShotPosition = new Vector3(0f, 0.83f, -2.7f);
 
@@ -179,7 +183,7 @@ namespace Sonia
         /// </summary>
         private bool NeedsWideShot()
         {
-            return choreographer != null && choreographer.IsWideShot;
+            return wideShotEnabled && choreographer != null && choreographer.IsWideShot;
         }
     }
 }

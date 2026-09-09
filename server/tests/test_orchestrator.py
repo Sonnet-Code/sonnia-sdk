@@ -28,6 +28,7 @@ from sonia.config import (
     LLMSettings,
     MCPSettings,
     Settings,
+    ShowcaseSettings,
     STTSettings,
     TTSSettings,
     VisionSettings,
@@ -217,6 +218,7 @@ def make_settings(
     barge_in: bool = True,
     idle_reset: float = 120.0,
     max_tool_rounds: int = 3,
+    showcase: ShowcaseSettings | None = None,
 ) -> Settings:
     gallery = tmp_path / "gallery"
     gallery.mkdir(exist_ok=True)
@@ -243,6 +245,8 @@ def make_settings(
         log_level="DEBUG",
         idle_reset_seconds=idle_reset,
     )
+    if showcase is not None:
+        values["showcase"] = showcase
     return Settings(**values)
 
 

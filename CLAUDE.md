@@ -50,6 +50,10 @@ scripts/    Arranque de servicios locales, descarga de modelos, checks del stand
 docs/       Decisiones de diseño (ADR cortos), protocolo WebSocket, licencias de assets.
 ```
 
+## Animación de stand
+
+`server/sonia/showcase.py`: cuando el orquestador lleva `SHOWCASE_FIRST_DELAY_SECONDS` en idle sin nadie, cada `SHOWCASE_INTERVAL_MIN/MAX_SECONDS` dice una frase de `assets/showcase/frases.md` (a veces con un gesto de cuarta pared) o baila con un canto de `assets/showcase/cantos.md`. Va como `speech_start` con `ambient: true` sin cambiar de estado (Unity mueve boca, cejas y ojos y sigue bailando) y con un mensaje `attention` previo. Sin LLM: son textos fijos. Cualquier voz o turno lo corta con `stop_speaking`.
+
 ## Acciones del modelo
 
 Definidas una sola vez en `server/actions` y expuestas por tool calling y por MCP.

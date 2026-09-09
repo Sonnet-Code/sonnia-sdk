@@ -95,6 +95,7 @@ namespace Sonia
                 client.OnStopSpeaking += HandleStopSpeaking;
                 client.OnShowImage += HandleShowImage;
                 client.OnHideImage += HandleHideImage;
+                client.OnAttention += HandleAttention;
                 client.OnError += HandleError;
                 client.OnRequestFrame += HandleRequestFrame;
             }
@@ -122,6 +123,7 @@ namespace Sonia
                 client.OnStopSpeaking -= HandleStopSpeaking;
                 client.OnShowImage -= HandleShowImage;
                 client.OnHideImage -= HandleHideImage;
+                client.OnAttention -= HandleAttention;
                 client.OnError -= HandleError;
                 client.OnRequestFrame -= HandleRequestFrame;
             }
@@ -309,8 +311,11 @@ namespace Sonia
 
         private void HandleSpeechStart(SpeechStartMessage message)
         {
-            // Cada frase estrena una forma de gesticular distinta de la anterior.
-            if (choreographer != null)
+            // Una frase de la animación de stand (ambient) no toca el cuerpo: si
+            // está bailando, sigue bailando mientras "canta". Cada frase de una
+            // respuesta real estrena una forma de gesticular distinta.
+            bool ambient = message != null && message.Ambient;
+            if (choreographer != null && !ambient)
             {
                 choreographer.NotifySpeechStart();
             }
@@ -318,6 +323,33 @@ namespace Sonia
             if (logEvents && message != null)
             {
                 Debug.Log("[Sonia] frase " + message.UtteranceId + ": " + message.Text, this);
+            }
+        }
+
+        /// <summary>El orquestador pide un gesto de atención (por ejemplo un baile para cantar encima).</summary>
+        private void HandleAttention(AttentionMessage message)
+        {
+            if (choreographer == null || message == null)
+            {
+                return;
+            }
+
+            AttentionCategory category = AttentionCategory.Soft;
+            string name = (message.Category ?? string.Empty).ToLowerInvariant();
+            if (name == "dance")
+            {
+                category = AttentionCategory.Dance;
+            }
+            else if (name == "fourth_wall" || name == "fourthwall")
+            {
+                category = AttentionCategory.FourthWall;
+            }
+
+            choreographer.PlayAttention(category, message.Clip);
+
+            if (logEvents)
+            {
+                Debug.Log("[Sonia] atención pedida por el orquestador: " + message.Category, this);
             }
         }
 

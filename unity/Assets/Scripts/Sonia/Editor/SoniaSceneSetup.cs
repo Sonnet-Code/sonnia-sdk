@@ -239,6 +239,7 @@ namespace Sonia.EditorTools
             EnsureEyeGaze(root, avatarState, choreographer, animator);
             EnsureFacialExpressions(root, avatarState);
             EnsureComponent<SoniaTuningUI>(root);
+            EnsureComponent<SoniaAnimationPreviewUI>(root);
 
             SerializedObject framingObject = new SerializedObject(cameraFraming);
             SetReference(framingObject, "choreographer", choreographer);

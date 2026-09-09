@@ -93,6 +93,7 @@ namespace Sonia
 
         /// <summary>Retirar el panel de imágenes.</summary>
         public event Action<HideImageMessage> OnHideImage;
+        public event Action<AttentionMessage> OnAttention;
 
         /// <summary>Error informado por el orquestador.</summary>
         public event Action<ErrorMessage> OnError;
@@ -532,6 +533,8 @@ namespace Sonia
                     return Protocol.Deserialize<ShowImageMessage>(payload);
                 case MessageTypes.HideImage:
                     return Protocol.Deserialize<HideImageMessage>(payload);
+                case MessageTypes.Attention:
+                    return Protocol.Deserialize<AttentionMessage>(payload);
                 case MessageTypes.Error:
                     return Protocol.Deserialize<ErrorMessage>(payload);
                 case MessageTypes.RequestFrame:
@@ -664,6 +667,13 @@ namespace Sonia
             if (hideImage != null)
             {
                 Raise(OnHideImage, hideImage);
+                return;
+            }
+
+            AttentionMessage attention = message as AttentionMessage;
+            if (attention != null)
+            {
+                Raise(OnAttention, attention);
                 return;
             }
 
