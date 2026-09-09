@@ -146,6 +146,41 @@ namespace Sonia.EditorTools
         }
 
         /// <summary>
+        /// Vuelve a construir el Avatar del personaje colocado en la escena (por
+        /// ejemplo tras cambiar los límites musculares) y lo reasigna al Animator.
+        /// </summary>
+        [MenuItem("Sonia/Regenerar Avatar Humanoid")]
+        public static void RebuildSceneAvatar()
+        {
+            GameObject instance = GameObject.Find("Sonia/Avatar");
+            Animator animator = instance != null ? instance.GetComponentInChildren<Animator>(true) : null;
+            if (animator == null)
+            {
+                Debug.LogWarning("[Sonia] No hay un avatar con Animator en la escena (Sonia/Avatar).");
+                return;
+            }
+
+            string modelPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(animator.gameObject);
+            if (string.IsNullOrEmpty(modelPath))
+            {
+                modelPath = animator.avatar != null ? animator.avatar.name.Replace("_Humanoid", "") : instance.name;
+            }
+
+            string avatarPath = GeneratedFolder + "/"
+                + System.IO.Path.GetFileNameWithoutExtension(modelPath) + "_Humanoid.asset";
+            Avatar avatar = BuildAndSave(animator.gameObject, avatarPath);
+            if (avatar == null)
+            {
+                return;
+            }
+
+            Undo.RecordObject(animator, "Regenerar Avatar Humanoid");
+            animator.avatar = avatar;
+            EditorUtility.SetDirty(animator);
+            Debug.Log("[Sonia] Avatar Humanoid regenerado y reasignado: " + avatarPath, avatar);
+        }
+
+        /// <summary>
         /// Construye el Avatar sobre una copia limpia del modelo en el origen (el
         /// constructor de Unity toma la pose actual como T-pose y la jerarquía
         /// no debe estar rotada) y lo guarda como asset.
@@ -228,7 +263,7 @@ namespace Sonia.EditorTools
                 HumanBone entry = new HumanBone();
                 entry.humanName = MixamoToHuman[i, 1];
                 entry.boneName = bone.name;
-                entry.limit.useDefaultValues = true;
+                entry.limit = LimitFor(entry.humanName);
                 human.Add(entry);
                 mapped.Add(entry.humanName);
             }
@@ -270,6 +305,49 @@ namespace Sonia.EditorTools
             description.feetSpacing = 0f;
             description.hasTranslationDoF = false;
             return true;
+        }
+
+        /// <summary>
+        /// Límites musculares por hueso. Los dedos son el caso importante: la
+        /// T-pose de estos modelos ya tiene los dedos rectos, así que cualquier
+        /// "estirado" positivo del retargeting es hiperextensión (dedos doblados
+        /// hacia atrás, manos en garra en los clips de Mixamo). Aquí se recorta
+        /// ese lado a unos pocos grados y se deja el cierre completo; como
+        /// Unity reescala el valor normalizado del clip al rango del destino, el
+        /// resultado es suave y no un tope brusco.
+        /// </summary>
+        private static HumanLimit LimitFor(string humanName)
+        {
+            HumanLimit limit = new HumanLimit();
+            limit.useDefaultValues = true;
+            bool finger = humanName.Contains("Thumb") || humanName.Contains("Index")
+                || humanName.Contains("Middle") || humanName.Contains("Ring") || humanName.Contains("Little");
+            if (!finger)
+            {
+                return limit;
+            }
+
+            // Ejes: y = separación (solo proximal), z = estirado.
+            limit.useDefaultValues = false;
+            limit.center = Vector3.zero;
+            if (humanName.Contains("Thumb"))
+            {
+                // El pulgar sí se extiende de forma natural hacia fuera.
+                limit.min = new Vector3(0f, -25f, humanName.Contains("Proximal") ? -20f : -40f);
+                limit.max = new Vector3(0f, 25f, 15f);
+            }
+            else if (humanName.Contains("Proximal"))
+            {
+                limit.min = new Vector3(0f, -15f, -50f);
+                limit.max = new Vector3(0f, 15f, 8f);
+            }
+            else
+            {
+                limit.min = new Vector3(0f, 0f, -45f);
+                limit.max = new Vector3(0f, 0f, 3f);
+            }
+
+            return limit;
         }
 
         private static string StripPrefix(string name)

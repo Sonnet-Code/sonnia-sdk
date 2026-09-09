@@ -269,9 +269,11 @@ retargeting humanoide, pero no lleva controlador.
 El avatar de la demo es `Assets/Avatar/Babe.glb` (Ready Player Me, importado
 con glTFast: malla única `Wolf3D_Avatar` con 15 visemas Oculus y 52 blendshapes
 ARKit, huesos de ojos, esqueleto Mixamo). Quedan como alternativa los VRM
-`Assets/Avatar/Yae.vrm` y `Snb.vrm`. Las animaciones son la biblioteca femenina
-de Ready Player Me (`Assets/Animations/RPM/`, hecha para este esqueleto: 10
-idles, 6 de hablar, 5 bailes) más los FBX de Mixamo (`Assets/Animations/Mixamo/`).
+`Assets/Avatar/Yae.vrm` y `Snb.vrm`. Las animaciones son la biblioteca de
+Ready Player Me (`Assets/Animations/RPM/`, hecha para este esqueleto: 10 idles
+femeninos, 6 clips de hablar femeninos y 10 masculinos, 1 baile) más los FBX de
+Mixamo (`Assets/Animations/Mixamo/`) para bailes, pensar, asentir y gestos de
+atención. Para hablar solo se usan los de Ready Player Me: ver "Manos y dedos".
 Todo el montaje está automatizado en menús pensados para poder ejecutarse las
 veces que haga falta sin acumular basura:
 
@@ -279,6 +281,7 @@ veces que haga falta sin acumular basura:
 |---|---|
 | **Sonia > Elegir avatar (VRM o GLB)** | Recuerda qué modelo (`.vrm`, `.glb`, `.gltf` o `.fbx`) se va a colocar (se guarda en EditorPrefs) |
 | **Sonia > Crear set de animaciones** | Reimporta los FBX de `RPM/` y `Mixamo/` (Humanoid, sin compresión, bucle solo en los bucles base, centrados), rellena `Assets/Animations/SoniaMotionSet.asset` desde `SoniaAnimations.cs`, genera la máscara de torso y cablea `MotionPlayer` y `AvatarChoreographer` |
+| **Sonia > Regenerar Avatar Humanoid** | Reconstruye `Assets/Avatar/Generated/<modelo>_Humanoid.asset` desde el modelo colocado (tras cambiar los límites musculares de `SoniaHumanoidRig`) y lo reasigna al Animator |
 | **Sonia > Iluminación de estudio** | Monta o actualiza key, fill, rim y hair light, el halo, las motas, el Volume (ACES, bloom, viñeta, color, profundidad de campo) y SMAA |
 | **Sonia > Actualizar componentes** | Añade al objeto `Sonia` de una escena ya creada los componentes que le falten y recablea `SoniaBootstrap` |
 | **Sonia > Colocar avatar** | Instancia el modelo (VRM o GLB), le construye Avatar Humanoid si no lo trae, lo cablea (lip-sync, fonemas, parpadeo, mirada de ojos, coreógrafo) y deja cámara, panel, telón e iluminación de estudio en su sitio |
@@ -516,6 +519,41 @@ Mientras suena un gesto grande (atención o saludo) `IsWideShot` es cierto y
 Se probaron y descartaron: `Counting` (habla mirándose las manos con la cabeza
 agachada, queda mal en plano medio) e `IdleLooking2` como idle (gira el cuerpo
 de perfil demasiado tiempo; se usa como gesto suave de atención, una sola vez).
+
+### Manos y dedos
+
+Los clips de habla de Mixamo (`Talking1-5`, `Speaking`, `Speaking2`,
+`Speaking3`) se retiraron del set tras revisarlos mano a mano con primeros
+planos: ponían los dedos en garra (hiperextendidos hacia atrás) y, como están
+hechos para un cuerpo más estrecho, hundían las manos en la cintura y en los
+muslos de Babe. Dos medidas:
+
+- **Límites de dedos en el rig.** La T-pose de estos modelos ya tiene los dedos
+  rectos, así que cualquier "estirado" positivo del retargeting es
+  hiperextensión. `SoniaHumanoidRig.LimitFor` recorta ese lado a 8° en las
+  falanges proximales y 3° en las demás (el pulgar a 15°) y deja el cierre
+  completo; Unity reescala el valor normalizado del clip al rango del destino,
+  así que el resultado es suave. Sirve para todos los clips, también bailes y
+  gestos. Tras tocar los límites hay que ejecutar **Sonia > Regenerar Avatar
+  Humanoid**.
+- **Solo clips de Ready Player Me para hablar.** `F_Talking_Variations_001,
+  002, 003, 005, 006` y `M_Talking_Variations_006, 007, 009, 010`. Los
+  masculinos están hechos para el mismo esqueleto y retargetean limpios sobre
+  Babe. Se descartan `F_004` (las manos atraviesan el suéter al posarse en el
+  pecho), `M_001-004, 008` (manos caídas casi todo el clip, rozando las
+  caderas) y `M_005` (gira el cuerpo 34° y la cabeza 52°, como si hablara con
+  otra persona).
+
+Queda una limitación conocida: con los brazos caídos, los dedos rozan las
+caderas de Babe en cualquier clip. En el encuadre de cintura para arriba no se
+ve; si algún día se abre el plano, habría que añadir una separación de brazos
+por script o cambiar el cuerpo del avatar.
+
+Para revisar manos, las capturas en modo edición con un `PlayableGraph` tienen
+una trampa: el `SkinnedMeshRenderer` renderiza con las matrices del tick
+anterior, así que la imagen va una pose por detrás de los huesos. Con
+`forceMatrixRecalculationPerRender = true` durante la captura la malla sigue a
+los huesos en el mismo comando.
 
 ### Cara: lip-sync, ojos, parpadeo y cabeza
 

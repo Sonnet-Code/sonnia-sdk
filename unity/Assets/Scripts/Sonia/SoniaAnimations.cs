@@ -6,8 +6,8 @@
 // para decidir qué clips se importan en bucle. Si se añade un clip nuevo hay
 // que tocarlo solo aquí y volver a ejecutar "Sonia > Crear set de animaciones".
 //
-// Los clips vienen de dos fuentes: la biblioteca de Ready Player Me (prefijo
-// F_, hechos para el propio esqueleto de Babe) y Mixamo (retargeting humanoide).
+// Los clips vienen de dos fuentes: la biblioteca de Ready Player Me (prefijos
+// F_ y M_, hechos para el propio esqueleto de Babe) y Mixamo (retargeting humanoide).
 
 using UnityEngine;
 
@@ -93,17 +93,27 @@ namespace Sonia
         /// <summary>Variaciones de pensar, de una sola vez.</summary>
         public static readonly string[] ThinkingVariationClips = { "ThoughtfulHeadShake" };
 
-        /// <summary>Gesticulación al hablar. Se encadenan sin bucle.</summary>
+        /// <summary>
+        /// Gesticulación al hablar. Se encadenan sin bucle. Solo clips de la
+        /// biblioteca de Ready Player Me, hechos para este esqueleto: los de
+        /// habla de Mixamo (Talking1-5, Speaking, Speaking2, Speaking3) ponían
+        /// los dedos en garra y hundían las manos en la cintura y los muslos de
+        /// Babe. F_Talking_Variations_004 se descarta porque las manos
+        /// atraviesan el suéter al posarse en el pecho, y los M_ que quedan
+        /// fuera (001-004, 008) tienen las manos caídas casi todo el tiempo y
+        /// M_005 gira el cuerpo 34° y la cabeza 52°, como si hablara con otro.
+        /// </summary>
         public static readonly string[] TalkingClips =
         {
             "F_Talking_Variations_001",
             "F_Talking_Variations_002",
             "F_Talking_Variations_003",
-            "F_Talking_Variations_004",
             "F_Talking_Variations_005",
             "F_Talking_Variations_006",
-            "Talking1", "Talking2", "Talking3", "Talking4", "Talking5",
-            "Speaking", "Speaking2", "Speaking3"
+            "M_Talking_Variations_006",
+            "M_Talking_Variations_007",
+            "M_Talking_Variations_009",
+            "M_Talking_Variations_010"
         };
 
         /// <summary>Saludo con la mano.</summary>
