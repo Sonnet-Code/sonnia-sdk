@@ -36,7 +36,7 @@ from typing import Any, Protocol
 
 from sonia.actions.gallery import Gallery
 from sonia.actions.registry import ActionRegistry
-from sonia.audio.vad import SpeechDiscarded, SpeechStarted, TurnEvent
+from sonia.audio.vad import BargeIn, SpeechDiscarded, SpeechStarted, TurnEvent
 from sonia.config import Settings
 from sonia.llm.conversation import Conversation
 from sonia.llm.messages import (
@@ -114,6 +114,13 @@ MAX_AUDIO_LEAD_S = 2.0
 #: Margen que se suma a la duración estimada al esperar ``playback_done``.
 PLAYBACK_GRACE_S = 1.0
 
+#: A partir de la segunda frase, caracteres mínimos antes de cortar y umbral
+#: de corte por coma. Cada corte es una petición al TTS y, con uno que
+#: sintetiza a tiempo real (Gemini Live), un hueco de medio segundo en la voz:
+#: mejor unir las frases cortas. La primera frase sigue saliendo cuanto antes.
+SENTENCE_MIN_CHARS = 80
+SENTENCE_COMMA_CHARS = 120
+
 #: Cuánto se espera a la cámara antes de mandar el turno sin imagen.
 FRAME_WAIT_S = 1.5
 
@@ -148,7 +155,7 @@ class Interrupt:
 
 
 #: Todo lo que puede entrar por la cola del orquestador.
-TurnInput = SpeechStarted | Utterance | SpeechDiscarded | TextTurn | Interrupt
+TurnInput = SpeechStarted | BargeIn | Utterance | SpeechDiscarded | TextTurn | Interrupt
 
 
 # ---------------------------------------------------------------------------
@@ -207,9 +214,10 @@ class Orchestrator:
     usar un STT falso, un TTS falso, un cliente de modelo con ``MockTransport``,
     una cámara falsa y un hub real en un puerto libre.
 
-    ``on_speaking_changed`` recibe ``True`` al entrar en ``speaking`` y ``False``
-    al salir; se usa para avisar al detector de turnos (``set_speaking``) sin
-    acoplar el orquestador a la capa de audio.
+    ``on_speaking_changed`` recibe ``True`` cuando sale el primer chunk de audio
+    de Sonia (empieza a sonar de verdad) y ``False`` al salir de ``speaking`` o
+    terminar un número del stand; se usa para avisar al detector de turnos
+    (``set_speaking``) sin acoplar el orquestador a la capa de audio.
     """
 
     def __init__(
@@ -228,6 +236,8 @@ class Orchestrator:
         max_audio_lead_s: float = MAX_AUDIO_LEAD_S,
         tick_s: float = DEFAULT_TICK_S,
         showcase: Showcase | None = None,
+        sentence_min_chars: int = SENTENCE_MIN_CHARS,
+        sentence_comma_chars: int = SENTENCE_COMMA_CHARS,
     ) -> None:
         self._settings = settings
         self._stt = stt
@@ -241,6 +251,8 @@ class Orchestrator:
         self._on_speaking_changed = on_speaking_changed
         self._max_lead = max(0.0, max_audio_lead_s)
         self._tick = max(0.01, tick_s)
+        self._sentence_min_chars = max(0, sentence_min_chars)
+        self._sentence_comma_chars = max(1, sentence_comma_chars)
 
         self._tool_mode = settings.llm.tool_mode
         self._tools: list[dict[str, Any]] | None = None
@@ -255,6 +267,7 @@ class Orchestrator:
         self._frame_task_at = 0.0
         self._last_frame: Frame | None = None
         self._utterance_counter = 0
+        self._mic_hears_sonia = False
         self._playback_done_id = 0
         self._playback_event = asyncio.Event()
         #: Se activa cuando no hay eventos pendientes ni turno en curso.
@@ -413,6 +426,8 @@ class Orchestrator:
         match event:
             case SpeechStarted():
                 await self._on_speech_started()
+            case BargeIn():
+                await self._on_barge_in()
             case SpeechDiscarded():
                 await self._on_speech_discarded()
             case Utterance() | TextTurn():
@@ -421,6 +436,21 @@ class Orchestrator:
                 await self._on_interrupt(event.reason)
 
     async def _on_speech_started(self) -> None:
+        self._touch()
+        if self._mic_hears_sonia:
+            # Puede ser el eco de la propia Sonia: el detector avisará con
+            # ``BargeIn`` si resulta ser una persona.
+            return
+        await self._cancel_ambient("interrupted")
+        if self._state is AssistantState.IDLE:
+            await self._set_state(AssistantState.LISTENING)
+        # En ``thinking`` y ``speaking`` (antes de que suene el audio) no se
+        # cambia de estado: si el habla resulta ser un turno de verdad, la
+        # ``Utterance`` que llegue cancelará el turno.
+        self._maybe_capture(turn_start=True)
+
+    async def _on_barge_in(self) -> None:
+        """Voz confirmada por encima del eco mientras suena Sonia."""
         self._touch()
         await self._cancel_ambient("interrupted")
         if self._state is AssistantState.SPEAKING:
@@ -431,8 +461,6 @@ class Orchestrator:
             await self._set_state(AssistantState.LISTENING)
         elif self._state is AssistantState.IDLE:
             await self._set_state(AssistantState.LISTENING)
-        # En ``thinking`` no se cambia de estado: si el habla resulta ser un
-        # turno de verdad, la ``Utterance`` que llegue cancelará el turno.
         self._maybe_capture(turn_start=True)
 
     async def _on_speech_discarded(self) -> None:
@@ -549,7 +577,9 @@ class Orchestrator:
         max_rounds = self._settings.llm.max_tool_rounds
         rounds = 0
         while True:
-            splitter = SentenceSplitter()
+            splitter = SentenceSplitter(
+                comma_min_chars=self._sentence_comma_chars, min_chars=self._sentence_min_chars
+            )
             parser = PromptToolParser() if self._tool_mode == "prompt" else None
             prompt_calls: list[ToolCall] = []
             turn.round_sentences = []
@@ -720,10 +750,14 @@ class Orchestrator:
         pcm = bytearray()
         sample_rate = self._tts.sample_rate
         saw_last = False
+        first_chunk_at: float | None = None
         async with aclosing(self._tts.synthesize(text)) as chunks:
             async for chunk in chunks:
                 saw_last = saw_last or chunk.is_last
                 sample_rate = chunk.sample_rate
+                if first_chunk_at is None and chunk.pcm:
+                    first_chunk_at = time.monotonic()
+                    self._notify_speaking(True)
                 await hub.send_audio(utterance_id, chunk)
                 pcm += chunk.pcm
         if not saw_last:
@@ -737,12 +771,20 @@ class Orchestrator:
         await hub.broadcast_json(p.msg_envelope(utterance_id, ENVELOPE_INTERVAL_MS, envelope))
         await hub.broadcast_json(p.msg_speech_end(utterance_id))
         logger.info("Sonia (%d, %.2f s): %s", utterance_id, duration, text)
-        await self._pace(turn, duration)
+        await self._pace(turn, duration, first_chunk_at)
 
-    async def _pace(self, turn: _Turn, added: float) -> None:
-        """Limita cuánto audio va por delante del tiempo real de reproducción."""
+    async def _pace(self, turn: _Turn, added: float, started_at: float | None = None) -> None:
+        """Limita cuánto audio va por delante del tiempo real de reproducción.
+
+        La frase empieza a sonar en Unity cuando llega su primer chunk, no
+        cuando termina de sintetizarse: con un TTS que produce a tiempo real
+        (Gemini Live) las dos cosas distan lo que dure la frase, y tomar el
+        final de la síntesis como inicio dejaba huecos de más de dos segundos
+        entre frases. Sin primer chunk (frase vacía o fallo) se usa ahora.
+        """
         now = time.monotonic()
-        turn.playback_end_at = max(turn.playback_end_at, now) + added
+        start = started_at if started_at is not None else now
+        turn.playback_end_at = max(turn.playback_end_at, start) + added
         ahead = turn.playback_end_at - now
         if ahead > self._max_lead:
             await asyncio.sleep(ahead - self._max_lead)
@@ -841,13 +883,10 @@ class Orchestrator:
             return
         previous, self._state = self._state, state
         logger.info("Estado: %s -> %s", previous, state)
-        was_speaking = previous is AssistantState.SPEAKING
-        is_speaking = state is AssistantState.SPEAKING
-        if was_speaking != is_speaking and self._on_speaking_changed is not None:
-            try:
-                self._on_speaking_changed(is_speaking)
-            except Exception:
-                logger.exception("Fallo en on_speaking_changed")
+        if previous is AssistantState.SPEAKING and state is not AssistantState.SPEAKING:
+            # El aviso de "suena Sonia" lo da el primer chunk de audio, no el
+            # estado: así el detector mide el eco sobre eco real.
+            self._notify_speaking(False)
         await self._hub.broadcast_json(p.msg_state(state))
 
     def _touch(self) -> None:
@@ -903,7 +942,6 @@ class Orchestrator:
             await asyncio.sleep(0.6 if bit.is_dance else 0.25)
         self._utterance_counter += 1
         utterance_id = self._utterance_counter
-        self._notify_speaking(True)
         try:
             await hub.broadcast_json(p.msg_transcript("assistant", bit.text, True))
             await hub.broadcast_json(p.msg_speech_start(utterance_id, bit.text, ambient=True))
@@ -914,6 +952,8 @@ class Orchestrator:
                 async for chunk in chunks:
                     saw_last = saw_last or chunk.is_last
                     sample_rate = chunk.sample_rate
+                    if chunk.pcm:
+                        self._notify_speaking(True)
                     await hub.send_audio(utterance_id, chunk)
                     pcm += chunk.pcm
             if not saw_last:
@@ -951,6 +991,10 @@ class Orchestrator:
         return True
 
     def _notify_speaking(self, speaking: bool) -> None:
+        """Avisa al detector de turnos de que empieza o termina de sonar Sonia."""
+        if speaking == self._mic_hears_sonia:
+            return
+        self._mic_hears_sonia = speaking
         if self._on_speaking_changed is None:
             return
         try:

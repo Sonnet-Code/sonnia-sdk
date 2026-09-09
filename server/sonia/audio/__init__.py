@@ -10,6 +10,7 @@ from sonia.audio.capture import (
 )
 from sonia.audio.vad import (
     VAD_WINDOW,
+    BargeIn,
     SpeechDiscarded,
     SpeechStarted,
     TurnDetector,
@@ -23,6 +24,7 @@ __all__ = [
     "VAD_WINDOW",
     "MicCapture",
     "MicStalled",
+    "BargeIn",
     "SpeechDiscarded",
     "SpeechStarted",
     "TurnDetector",

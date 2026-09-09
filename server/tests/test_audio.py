@@ -23,6 +23,7 @@ from sonia.audio.capture import (
     resolve_input_device,
 )
 from sonia.audio.vad import (
+    BargeIn,
     SpeechDiscarded,
     SpeechStarted,
     TurnDetector,
@@ -58,6 +59,9 @@ def make_settings(**overrides: object) -> AudioSettings:
         "end_silence_ms": 96,  # 3 bloques
         "min_speech_ms": 64,  # 2 bloques
         "barge_in_min_speech_ms": 128,  # 4 bloques
+        "barge_in_warmup_ms": 0,
+        "barge_in_over_echo": 2.5,
+        "echo_level_tau_ms": 640,  # 20 bloques
         "max_utterance_s": 10.0,
         "pre_roll_ms": 64,  # 2 bloques
     }
@@ -236,14 +240,92 @@ async def test_mientras_habla_exige_el_minimo_de_barge_in() -> None:
     assert [type(e) for e in events] == [SpeechStarted, Utterance]
 
 
-async def test_barge_in_con_habla_suficiente_produce_utterance() -> None:
-    probabilities = [0.95] * 5 + [0.0] * 4
+def make_leveled_blocks(levels: Sequence[float]) -> list[AudioArray]:
+    """Un bloque por nivel, con ese valor RMS (señal constante)."""
+    return [np.full(BLOCK_SAMPLES, float(level), dtype=np.float32) for level in levels]
+
+
+async def run_leveled(
+    detector: TurnDetector, probabilities: Sequence[float], levels: Sequence[float]
+) -> list[TurnEvent]:
+    blocks = make_leveled_blocks(levels)
+    assert len(blocks) == len(probabilities)
+    return [event async for event in detector.events(_aiter(blocks))]
+
+
+async def test_barge_in_con_voz_por_encima_del_eco_se_confirma() -> None:
+    # Sonia suena y el micrófono la oye a nivel 0.1: el VAD lo toma por voz y
+    # abre turno con el eco. Luego el visitante habla a 0.5 (x5) durante 6
+    # bloques.
+    probabilities = [0.9] * 14 + [0.0] * 4
+    levels = [0.1] * 8 + [0.5] * 6 + [0.0] * 4
     detector = TurnDetector(make_settings(), FakeVad(probabilities))
     detector.set_speaking(True)
 
-    events, _ = await run_detector(detector, probabilities)
+    events = await run_leveled(detector, probabilities, levels)
 
-    assert [type(e) for e in events] == [SpeechStarted, Utterance]
+    assert [type(e) for e in events] == [SpeechStarted, BargeIn, Utterance]
+    barge = events[1]
+    assert isinstance(barge, BargeIn)
+    assert barge.level > barge.echo_level * 2.5
+    # El audio entregado empieza en la voz del visitante, no en el eco.
+    utterance = events[2]
+    assert isinstance(utterance, Utterance)
+    assert float(utterance.audio.max()) == pytest.approx(0.5)
+    leading_echo = int(np.argmax(utterance.audio >= 0.5))
+    assert leading_echo <= BLOCK_SAMPLES * 2, "solo queda un pre-roll corto de eco"
+
+
+async def test_solo_eco_se_descarta_al_cerrar() -> None:
+    # Voz sostenida al mismo nivel que el eco: es Sonia oyéndose.
+    probabilities = [0.9] * 12 + [0.0] * 4
+    levels = [0.1] * 12 + [0.0] * 4
+    detector = TurnDetector(make_settings(), FakeVad(probabilities))
+    detector.set_speaking(True)
+
+    events = await run_leveled(detector, probabilities, levels)
+
+    assert [type(e) for e in events] == [SpeechStarted, SpeechDiscarded]
+
+
+async def test_sin_calentamiento_no_hay_barge_in() -> None:
+    probabilities = [0.9] * 6 + [0.0] * 4
+    levels = [0.5] * 6 + [0.0] * 4
+    settings = make_settings(barge_in_warmup_ms=320)  # 10 bloques de eco antes
+    detector = TurnDetector(settings, FakeVad(probabilities))
+    detector.set_speaking(True)
+
+    events = await run_leveled(detector, probabilities, levels)
+
+    assert [type(e) for e in events] == [SpeechStarted, SpeechDiscarded]
+
+
+async def test_si_sonia_calla_el_turno_de_eco_se_olvida() -> None:
+    probabilities = [0.9] * 3
+    detector = TurnDetector(make_settings(), FakeVad(probabilities))
+    detector.set_speaking(True)
+    events: list[TurnEvent] = []
+    for block in make_leveled_blocks([0.1] * 3):
+        events.extend(detector.feed(block))
+    assert [type(e) for e in events] == [SpeechStarted]
+
+    detector.set_speaking(False)
+    # El turno abierto era eco: se descarta sin evento y el siguiente bloque
+    # con voz abre un turno nuevo.
+    events = detector.feed(make_leveled_blocks([0.3])[0])
+    assert [type(e) for e in events] == [SpeechStarted]
+
+
+async def test_nivel_minimo_absoluto_bloquea_el_barge_in() -> None:
+    probabilities = [0.9] * 10 + [0.0] * 4
+    levels = [0.02] * 4 + [0.2] * 6 + [0.0] * 4
+    settings = make_settings(barge_in_min_rms=0.3)
+    detector = TurnDetector(settings, FakeVad(probabilities))
+    detector.set_speaking(True)
+
+    events = await run_leveled(detector, probabilities, levels)
+
+    assert [type(e) for e in events] == [SpeechStarted, SpeechDiscarded]
 
 
 # ---------------------------------------------------------------------------

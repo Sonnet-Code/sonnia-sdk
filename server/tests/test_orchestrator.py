@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 
 from sonia.actions import build_default_registry
-from sonia.audio.vad import SpeechDiscarded, SpeechStarted
+from sonia.audio.vad import BargeIn, SpeechDiscarded, SpeechStarted
 from sonia.config import (
     AudioSettings,
     LLMSettings,
@@ -303,6 +303,9 @@ async def make_rig(
         registry=registry,
         on_speaking_changed=speaking.append,
         tick_s=tick,
+        # Los tests cuentan frases cortas una a una.
+        sentence_min_chars=0,
+        sentence_comma_chars=60,
     )
 
     async with hub, connect(f"ws://127.0.0.1:{hub.port}/") as client:
@@ -626,8 +629,14 @@ async def test_barge_in_cancela_la_sintesis(tmp_path: Path) -> None:
         assert current_state(rig) == "speaking"
         assert rig.speaking == [True]
 
-        # El usuario empieza a hablar: barge-in.
+        # Un SpeechStarted mientras suena Sonia puede ser su propio eco: no corta.
         await rig.orch.submit(SpeechStarted(at=1.0))
+        await asyncio.sleep(0.05)
+        assert current_state(rig) == "speaking"
+        assert rig.rec.of_type("stop_speaking") == []
+
+        # El detector confirma voz por encima del eco: barge-in.
+        await rig.orch.submit(BargeIn(at=1.1, level=0.4, echo_level=0.1))
         await rig.rec.wait_state("listening", count=2)
         kinds = rig.rec.kinds()
         stop = kinds.index("stop_speaking")

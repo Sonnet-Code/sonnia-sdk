@@ -96,6 +96,10 @@ class SentenceSplitter:
     - ``,`` cuando lo acumulado alcanza ``comma_min_chars`` caracteres.
     - La primera frase del turno usa un umbral de coma más bajo
       (``first_sentence_comma_chars``) para que Sonia empiece a hablar antes.
+    - A partir de la segunda frase no se corta hasta acumular ``min_chars``
+      caracteres: cada corte es una petición al TTS y, con uno que sintetiza
+      a tiempo real, un hueco de medio segundo en la voz. Unir frases cortas
+      reduce los huecos y da mejor prosodia.
 
     No corta en decimales (``3.5``), ni en abreviaturas (``Sr.``, ``p. ej.``,
     ``EE.UU.``), ni en puntos suspensivos a medio llegar.
@@ -107,10 +111,12 @@ class SentenceSplitter:
         comma_min_chars: int = 60,
         first_sentence_comma_chars: int = 40,
         fast_first_sentence: bool = True,
+        min_chars: int = 0,
     ) -> None:
         self.comma_min_chars = comma_min_chars
         self.first_sentence_comma_chars = first_sentence_comma_chars
         self.fast_first_sentence = fast_first_sentence
+        self.min_chars = min_chars
         self._buffer = ""
         self._emitted = 0
 
@@ -165,13 +171,23 @@ class SentenceSplitter:
             return self.first_sentence_comma_chars
         return self.comma_min_chars
 
+    @property
+    def _min_cut(self) -> int:
+        """Longitud mínima antes de cortar; la primera frase no espera."""
+        if self.fast_first_sentence and self._emitted == 0:
+            return 0
+        return self.min_chars
+
     def _find_cut(self, buffer: str) -> int | None:
         """Índice (exclusivo) donde termina la primera frase, o ``None``."""
         length = len(buffer)
         comma_threshold = self._comma_threshold
+        min_cut = self._min_cut
         for i, char in enumerate(buffer):
             if char == "\n":
-                return i
+                if i >= min_cut:
+                    return i
+                continue
             if char == ",":
                 if i + 1 < length and buffer[i + 1].isspace() and i + 1 >= comma_threshold:
                     return self._extend(buffer, i)
@@ -184,7 +200,7 @@ class SentenceSplitter:
             # Solo cerramos si sabemos que detrás viene un espacio: el fin de
             # texto se resuelve en flush(), porque el delta siguiente podría
             # continuar la palabra.
-            if end < length and buffer[end].isspace():
+            if end < length and buffer[end].isspace() and end >= min_cut:
                 return end
         return None
 

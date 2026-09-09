@@ -98,6 +98,20 @@ class AudioSettings(BaseSettings):
     min_speech_ms: int = 250
     #: Habla mínima para interrumpir a Sonia mientras habla.
     barge_in_min_speech_ms: int = 400
+    #: Factor por el que la voz del visitante debe superar el eco de Sonia en el
+    #: micrófono (nivel RMS medio) para contar como interrupción. 2,5 son unos
+    #: 8 dB. Un micrófono de condensador con altavoces cerca capta la voz de
+    #: Sonia como si fuera una persona; esto la distingue por nivel.
+    barge_in_over_echo: float = 2.5
+    #: Nivel RMS mínimo absoluto (0..1) para interrumpir; 0 lo desactiva. Se
+    #: calibra en el stand si el factor sobre el eco no basta.
+    barge_in_min_rms: float = 0.0
+    #: Eco con voz que hay que haber oído desde que suena Sonia antes de
+    #: admitir interrupciones: evita disparos al arrancar, cuando aún no hay
+    #: referencia de nivel.
+    barge_in_warmup_ms: int = 500
+    #: Constante de tiempo de la media móvil del nivel de eco.
+    echo_level_tau_ms: int = 1500
     max_utterance_s: float = 20.0
     #: Audio previo al inicio del habla que se conserva (evita cortar la primera sílaba).
     pre_roll_ms: int = 300

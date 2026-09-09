@@ -165,3 +165,31 @@ def test_lineas_vacias_no_producen_frases() -> None:
     assert splitter.feed("\n\n\n") == []
     assert splitter.flush() is None
     assert splitter.emitted == 0
+
+
+# ---------------------------------------------------------------------------
+# Frases cortas unidas (min_chars)
+# ---------------------------------------------------------------------------
+
+
+def test_min_chars_une_las_frases_cortas_menos_la_primera() -> None:
+    texto = (
+        "Hola. Soy Sonia. Estoy en el stand de Sonnet Code. Pregúntame lo que quieras. ¡Anímate!"
+    )
+    assert _stream(texto, min_chars=40) == [
+        "Hola.",
+        "Soy Sonia. Estoy en el stand de Sonnet Code.",
+        "Pregúntame lo que quieras. ¡Anímate!",
+    ]
+
+
+def test_min_chars_cero_mantiene_el_corte_por_frase() -> None:
+    assert _stream("Hola. Soy Sonia. Adiós.", min_chars=0) == ["Hola.", "Soy Sonia.", "Adiós."]
+
+
+def test_min_chars_respeta_el_salto_de_linea_largo() -> None:
+    texto = "Primera.\nSegunda corta.\nTercera bastante más larga que las otras.\nCuarta."
+    out = _stream(texto, min_chars=30)
+    assert out[0] == "Primera."
+    assert out[1] == "Segunda corta. Tercera bastante más larga que las otras."
+    assert out[2] == "Cuarta."
