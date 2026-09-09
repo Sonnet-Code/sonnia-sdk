@@ -65,7 +65,7 @@ namespace Sonia
         [SerializeField]
         [Range(-10f, 10f)]
         [Tooltip("Separación de las pupilas, en grados por ojo: negativo las separa (mirada más paralela), positivo las junta (converge). 0 deja la geometría pura hacia el punto de enfoque.")]
-        private float convergenceDegrees = 0f;
+        private float convergenceDegrees = -8f;
 
         [SerializeField]
         [Range(5f, 40f)]
