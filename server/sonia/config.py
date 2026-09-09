@@ -1,0 +1,174 @@
+"""Configuración del orquestador. Todo viene de variables de entorno o de `.env`.
+
+Ningún módulo debe leer `os.environ` directamente: recibe un `Settings` (o la
+parte que necesita) por parámetro. Así los tests pueden construir la
+configuración a mano.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+class LLMSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="LLM_", extra="ignore", env_ignore_empty=True)
+
+    base_url: str = "http://localhost:8000/v1"
+    model: str = "kimi-k3"
+    api_key: str = "local"
+    #: Si el modelo acepta imágenes. Si es False, la capa de visión se apaga.
+    supports_vision: bool = True
+    #: native = tool calling de la API; prompt = acciones descritas en el
+    #: system prompt y parseadas del texto; none = sin acciones.
+    tool_mode: Literal["native", "prompt", "none"] = "native"
+    #: Se envía como ``reasoning_effort`` si no está vacío (Kimi K3: low/high/max).
+    reasoning_effort: str = "low"
+    #: Se envía solo si no es None. Algunos modelos (Kimi K3) solo admiten 1 y
+    #: rechazan cualquier otro valor; los servidores locales tienen su propio
+    #: valor por defecto.
+    temperature: float | None = None
+    max_tokens: int = 400
+    #: Máximo de rondas de tool calls por turno del usuario.
+    max_tool_rounds: int = 3
+    #: Turnos de conversación que se conservan en el historial.
+    history_turns: int = 12
+    request_timeout: float = 60.0
+
+
+class STTSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="STT_", extra="ignore", env_ignore_empty=True)
+
+    backend: Literal["faster_whisper", "mock"] = "faster_whisper"
+    model: str = "small"
+    device: str = "auto"
+    compute_type: str = "auto"
+    language: str = "es"
+    beam_size: int = 1
+
+
+class TTSSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="TTS_", extra="ignore", env_ignore_empty=True)
+
+    #: omnivoice = en proceso; http = servidor compatible con /v1/audio/speech;
+    #: gemini = API Live de Gemini (provisional, sin GPU; ver ADR 006);
+    #: system = voz del sistema operativo (say en macOS, SAPI en Windows,
+    #: espeak-ng en Linux): bajo consumo, sin red, para ensayos;
+    #: mock = silencio con la duración del texto, solo para tests.
+    backend: Literal["omnivoice", "http", "gemini", "system", "mock"] = "omnivoice"
+    base_url: str = "http://127.0.0.1:8880/v1"
+    api_key: str = "local"
+    http_model: str = "omnivoice"
+    #: Descripción de la voz (voice design de OmniVoice).
+    voice_instruct: str = "female, young adult, warm, natural, latin american spanish accent"
+    #: Ruta a un audio de referencia para clonar la voz. Si se define, tiene
+    #: prioridad sobre ``voice_instruct``.
+    ref_audio: str = ""
+    ref_text: str = ""
+    language: str = "es"
+    device: str = "auto"
+    speed: float = 1.0
+    num_step: int = 16
+    sample_rate: int = 24_000
+    #: Backend system: nombre de la voz ("" = mejor voz en español disponible).
+    system_voice: str = ""
+    #: Backend system: palabras por minuto (0 = la del sistema).
+    system_rate: int = 0
+
+
+class AudioSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="AUDIO_", extra="ignore", env_ignore_empty=True)
+
+    #: Índice o nombre del dispositivo de entrada de sounddevice ("" = por defecto).
+    input_device: str = ""
+    #: Tamaño del bloque que entra al VAD, en milisegundos (Silero usa 32 ms).
+    block_ms: int = 32
+    vad_threshold: float = 0.5
+    #: Umbral más exigente mientras Sonia habla, para reducir falsos positivos
+    #: por eco del altavoz.
+    vad_threshold_while_speaking: float = 0.8
+    #: Silencio necesario para dar por terminado el turno del usuario.
+    end_silence_ms: int = 600
+    #: Habla mínima para considerar que hay un turno (descarta ruidos).
+    min_speech_ms: int = 250
+    #: Habla mínima para interrumpir a Sonia mientras habla.
+    barge_in_min_speech_ms: int = 400
+    max_utterance_s: float = 20.0
+    #: Audio previo al inicio del habla que se conserva (evita cortar la primera sílaba).
+    pre_roll_ms: int = 300
+    barge_in: bool = True
+
+
+class VisionSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="VISION_", extra="ignore", env_ignore_empty=True)
+
+    #: opencv = captura desde Python; unity = Unity envía frames por WS; none.
+    source: Literal["opencv", "unity", "none"] = "opencv"
+    camera_index: int = 0
+    max_width: int = 768
+    jpeg_quality: int = 80
+    #: Adjuntar una captura al turno cuando el usuario empieza a hablar.
+    on_turn_start: bool = True
+    #: Adjuntar además una captura cada N segundos aunque no la pida el modelo (0 = nunca).
+    interval_seconds: float = 0.0
+    #: Guardar capturas en disco (solo depuración; nunca en el stand).
+    debug_save_frames: bool = False
+    debug_dir: str = str(_REPO_ROOT / "debug_frames")
+
+
+class WSSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="WS_", extra="ignore", env_ignore_empty=True)
+
+    host: str = "127.0.0.1"
+    port: int = 8765
+    #: Tamaño de los chunks de audio hacia Unity, en milisegundos.
+    chunk_ms: int = 100
+
+
+class MCPSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="MCP_", extra="ignore", env_ignore_empty=True)
+
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8766
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=(_REPO_ROOT / ".env", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        env_ignore_empty=True,
+    )
+
+    llm: LLMSettings = Field(default_factory=LLMSettings)
+    stt: STTSettings = Field(default_factory=STTSettings)
+    tts: TTSSettings = Field(default_factory=TTSSettings)
+    audio: AudioSettings = Field(default_factory=AudioSettings)
+    vision: VisionSettings = Field(default_factory=VisionSettings)
+    ws: WSSettings = Field(default_factory=WSSettings)
+    mcp: MCPSettings = Field(default_factory=MCPSettings)
+
+    assets_dir: str = str(_REPO_ROOT / "assets")
+    log_level: str = "INFO"
+    #: Reiniciar la conversación tras N segundos sin actividad (modo kiosco).
+    idle_reset_seconds: float = 120.0
+
+    @property
+    def gallery_dir(self) -> Path:
+        return Path(self.assets_dir) / "gallery"
+
+
+def load_settings() -> Settings:
+    """Carga `.env` (raíz del repo o cwd) y construye la configuración."""
+    from dotenv import load_dotenv
+
+    for candidate in (_REPO_ROOT / ".env", Path(".env")):
+        if candidate.is_file():
+            load_dotenv(candidate, override=False)
+    return Settings()

@@ -59,7 +59,7 @@ El modelo dispone de una acción `show_image` para mostrar una imagen dentro del
 |---|---|---|
 | Modelo de lenguaje | Kimi K3 (por defecto) | Multimodal, servido localmente detrás de una API compatible con OpenAI. Cualquier otro modelo funciona cambiando la configuración. |
 | Servidor de inferencia | llama.cpp, vLLM u Ollama | Cualquiera que exponga `/v1/chat/completions`. |
-| Síntesis de voz | OmniVoice | Corre local, voz femenina en español. |
+| Síntesis de voz | OmniVoice | Corre local, voz femenina en español. Respaldo de bajo consumo: la voz del sistema (`TTS_BACKEND=system`). |
 | Reconocimiento de voz | faster-whisper | Modelo local, español. |
 | Detección de voz | Silero VAD | Determina inicio y fin de cada turno del usuario. |
 | Visión | Cámara USB con OpenCV | Capturas puntuales enviadas al modelo multimodal, nunca vídeo continuo. |
@@ -89,39 +89,68 @@ La demo está pensada para una sola máquina con GPU dedicada, micrófono, altav
 
 ```
 sonia/
-├── server/     # Orquestador en Python: VAD, STT, LLM, TTS y WebSocket
-├── unity/      # Proyecto Unity con el avatar, lip-sync, animaciones y panel de imágenes
-├── assets/     # Galería local de imágenes que Sonia puede mostrar
-├── scripts/    # Utilidades para levantar los servicios locales
-├── docs/       # Decisiones de diseño y guías de montaje del stand
-├── CLAUDE.md   # Contexto y convenciones para trabajar con Claude Code
+├── server/           # Orquestador en Python
+│   ├── sonia/        # Paquete: audio, stt, llm, tts, vision, actions, ws, mcp...
+│   └── tests/        # Pruebas (sin modelos ni hardware, sin red)
+├── unity/            # Proyecto Unity con el avatar, lip-sync, animaciones y panel de imágenes
+├── scripts/          # Descarga de modelos, arranque de servidores, modo kiosco, checks del stand
+├── docs/             # Arquitectura, protocolo, decisiones de diseño, licencias, guía del stand
+├── assets/gallery/   # Galería local de imágenes que Sonia puede mostrar
+├── CLAUDE.md         # Contexto y convenciones para trabajar con Claude Code
 └── README.md
 ```
 
 ## Puesta en marcha
 
-El proyecto está en fase inicial. Estos son los pasos previstos una vez exista el código:
+1. `cd server && uv sync --extra all` — instala las dependencias del orquestador (todos los extras: audio, stt, omnivoice, camera, mcp).
+2. `cp .env.example .env` y edita el archivo con la configuración de tu máquina (modelo de LLM, dispositivo de audio, etc.).
+3. `scripts/download_models.sh` — descarga los modelos locales (faster-whisper, Silero VAD y, si instalaste el extra `omnivoice`, los pesos de OmniVoice).
+4. `scripts/run_llm_server.sh` (con el `BACKEND` que corresponda) para levantar un servidor de LLM local, o deja apuntado en `.env` el endpoint provisional en la nube mientras no haya uno.
+5. `uv run sonia check` — comprueba audio, VAD, STT, cámara, endpoint del LLM (y que acepte imágenes y `tools`), TTS y galería.
+6. `uv run sonia chat` — prueba el pipeline de texto a voz sin necesidad de micrófono ni cámara.
+7. `uv run sonia run` — arranca la demo completa (orquestador + servidor WebSocket).
+8. Abre el proyecto de Unity y dale a Play, o ejecuta la build empaquetada. Ver `docs/unity.md` para el detalle de esa parte.
 
-1. Levantar el servidor de inferencia con el modelo elegido y anotar su URL.
-2. Copiar `.env.example` a `.env` y ajustar las variables del modelo.
-3. Instalar las dependencias del orquestador e iniciarlo.
-4. Conectar la cámara y comprobar que el orquestador la detecta.
-5. Abrir el proyecto de Unity y darle a Play, o ejecutar la build empaquetada.
-6. Hablar.
+Para el día del evento en sí, ver la guía operativa completa en `docs/stand.md` (montaje, checklist de arranque, qué hacer si algo falla, y `scripts/kiosk.sh` para dejar el stand desatendido con reinicio automático).
+
+## Ensayar sin nube ni hardware
+
+Para probar el avatar, el lip-sync y los estados sin gastar tokens ni tener micrófono:
+
+```bash
+cd server
+uv run --no-sync python ../scripts/fake_llm_server.py --port 8001      # modelo falso con frases fijas
+LLM_BASE_URL=http://127.0.0.1:8001/v1 LLM_API_KEY=x LLM_MODEL=fake \
+TTS_BACKEND=gemini STT_BACKEND=mock VISION_SOURCE=none \
+uv run --no-sync sonia run --no-mic                                     # orquestador solo con text_input
+uv run --no-sync python ../scripts/ws_probe.py "Hola Sonia"             # envía texto y registra los mensajes
+```
+
+Con Unity en Play y conectado a `ws://127.0.0.1:8765`, el texto del `ws_probe` (o del HUD de Unity) hace hablar a Sonia con la voz de Gemini Live (free tier; con `TTS_BACKEND=system` se usa la voz del sistema operativo, sin red pero más robótica), y los renders 9:16 se guardan con el menú `Sonia > Captura vertical 9:16`.
 
 ## Hoja de ruta
 
-- [ ] Orquestador con VAD, STT, LLM y TTS en streaming
-- [ ] Servidor WebSocket con protocolo de eventos hacia Unity
-- [ ] Integración de OmniVoice con voz femenina en español
-- [ ] Avatar en Unity con lip-sync por visemas
-- [ ] Animaciones de escucha, pensamiento y habla
-- [ ] Captura de cámara al inicio de cada turno y acción `look` bajo demanda
-- [ ] Acciones `show_image` y `hide_image` con panel de imágenes integrado en la escena
-- [ ] Servidor MCP local como alternativa al tool calling nativo
-- [ ] Interrupción: que Sonia se calle cuando el usuario empieza a hablar
-- [ ] Modo kiosco para el stand: reinicio automático y sin teclado
-- [ ] Guía de montaje y checklist para el día del evento
+- [x] Orquestador: máquina de estados que conecta VAD, STT, LLM y TTS en streaming (`sonia/orchestrator.py`, `sonia run`, `sonia chat`, `sonia check`)
+- [x] Servidor WebSocket con protocolo de eventos hacia Unity
+- [x] Interrupción: Sonia se calla cuando el usuario empieza a hablar (barge-in por VAD e `interrupt` desde Unity)
+- [x] Captura de cámara al inicio de cada turno y acción `look` bajo demanda
+- [x] Acciones `show_image` y `hide_image` con galería local
+- [x] Servidor MCP local con las mismas acciones
+- [x] Persona de Sonia como asistente y staff del DevFest, con base de conocimiento editable en `assets/knowledge/`
+- [x] Descripción dinámica del stack en el prompt (Sonia sabe qué modelo, voz y oídos usa en cada momento)
+- [x] Voz provisional con la API Live de Gemini mientras no hay GPU (ADR 006)
+- [x] Scripts de Unity: cliente WebSocket, audio en streaming, lip-sync, estados, panel de imágenes, webcam, HUD, escena base 9:16
+- [x] Modo kiosco para el stand (`scripts/kiosk.sh`) y guía de montaje (`docs/stand.md`)
+- [ ] Integración de OmniVoice con el modelo real (módulo listo; falta la GPU)
+- [ ] Servidor local del modelo de lenguaje en el mini PC del stand (`scripts/run_llm_server.sh`)
+- [x] Avatar femenino (Yae, VRM) con lip-sync, mirada, parpadeo, 27 animaciones de Mixamo, idle con bailes y gestos de cuarta pared, encuadre 9:16 y marca de Sonnet Code
+- [x] Batería de escenarios en Unity con el orquestador en modo ensayo (habla, interrupción, imágenes, reconexión, reinicio por inactividad)
+- [ ] Prueba completa con micrófono, cámara y Unity en el equipo del stand
+- [x] Imágenes de marca en `assets/gallery/` (logo y fondo de Sonnet Code); faltan servicios y diagrama de Sonia
+
+## Estado provisional
+
+Mientras no llega el mini PC del stand, el modelo de lenguaje se consume desde la API de Kimi en la nube y la voz desde la API Live de Gemini, a través de las mismas interfaces que usarán los modelos locales. Sonia sabe cuándo está en ese modo y lo dice si le preguntan. Los tests nunca llaman a APIs reales.
 
 ## Créditos
 

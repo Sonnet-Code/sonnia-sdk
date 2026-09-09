@@ -1,0 +1,68 @@
+[project]
+name = "sonia"
+version = "0.1.0"
+description = "Asistente de IA por voz en tiempo real con avatar 3D, 100 % local."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { text = "MIT" }
+dependencies = [
+    "httpx>=0.28",
+    "websockets>=13",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "numpy>=1.26",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+# Captura de micrófono y detección de voz.
+audio = [
+    "sounddevice>=0.5",
+    "silero-vad>=5.1",
+]
+# Reconocimiento de voz local.
+stt = ["faster-whisper>=1.1"]
+# Síntesis de voz local en proceso (pesado: torch, transformers, gradio...).
+omnivoice = ["omnivoice>=0.2", "soundfile>=0.12"]
+# Captura de cámara desde Python (alternativa: la cámara la captura Unity).
+camera = ["opencv-python>=4.10"]
+# Servidor MCP local que expone las mismas acciones del modelo.
+mcp = ["mcp>=1.9", "uvicorn>=0.30"]
+# Todo lo necesario para la demo completa.
+all = ["sonia[audio,stt,omnivoice,camera,mcp]"]
+
+[project.scripts]
+sonia = "sonia.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "soundfile>=0.12",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sonia"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true

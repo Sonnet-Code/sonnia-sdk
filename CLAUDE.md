@@ -8,10 +8,24 @@ Sonia es un asistente de IA por voz en tiempo real con avatar 3D, similar a los 
 
 ## Principios que no se negocian
 
-1. **Todo corre local.** Ningún componente puede depender de una API en la nube. No añadas SDKs de OpenAI, Anthropic, Google, ElevenLabs ni similares como dependencia de ejecución. Si un módulo necesita red para funcionar, está mal diseñado.
+1. **Todo corre local.** Ningún componente puede depender de una API en la nube. No añadas SDKs de OpenAI, Anthropic, Google, ElevenLabs ni similares como dependencia de ejecución. Si un módulo necesita red para funcionar, está mal diseñado. Excepción temporal documentada en "Estado provisional": mientras no haya GPU, el LLM y el TTS apuntan a APIs en la nube a través de las mismas interfaces que usarán los modelos locales.
 2. **Agnóstico al modelo.** El orquestador habla con un endpoint compatible con OpenAI configurado por variables de entorno (`LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`). Kimi K3 es el modelo por defecto, pero ningún archivo de código debe mencionarlo por nombre. Nada de prompts, parsers ni ajustes específicos de un modelo. La visión y las acciones usan los formatos estándar de la API (contenido de imagen en `image_url` y tool calling), y deben degradar limpiamente si el modelo configurado no soporta imágenes o herramientas.
 3. **Latencia primero.** Todo el pipeline es streaming. Meta: menos de dos segundos entre que el usuario termina de hablar y Sonia empieza a responder. Cualquier cambio que añada latencia perceptible necesita justificación.
 4. **Demo de stand, no producto.** Prioriza que funcione de forma fiable durante ocho horas seguidas sobre la elegancia arquitectónica. Reinicios automáticos, timeouts y degradación controlada valen más que abstracciones.
+5. **Pantalla vertical.** La demo se muestra en un monitor colocado en vertical, relación 9:16 (1080x1920). Toda la escena de Unity, el HUD, el panel de imágenes y la build se diseñan para ese encuadre.
+6. **Sonia es del staff.** Se presenta como asistente virtual y parte del staff del DevFest, creada por Sonnet Code. El avatar lleva la camiseta del staff del DevFest y la pantalla muestra el logo de Sonnet Code. La persona vive en `server/sonia/persona.py`; los datos del evento, del GDG, de la biblioteca y de Sonnet Code en `assets/knowledge/*.md` (editables sin tocar código).
+7. **Feedback visual obligatorio.** Ningún cambio en la escena, el avatar, las animaciones, el lip-sync o el HUD se da por hecho sin verlo: se renderiza la cámara principal a 1080x1920 (render a `RenderTexture` desde un `RunCommand` del MCP o el menú `Sonia/Render 9:16`), en modo edición y en Play, y quien hace el cambio revisa la imagen (no hace falta enseñársela al usuario salvo que la pida). La herramienta `Unity_Camera_Capture` renderiza en 16:9 y no sirve para juzgar el encuadre. Al verificar el lip-sync se capturan varios frames durante `speaking` para ver la boca abierta. Los bounds de los renderers no sirven para encuadrar (accesorios los deforman): se usan los huesos del Humanoid. Si el editor no tiene el foco, el bucle de juego no avanza en Play: para probar sin nadie delante se conduce a mano con `EditorApplication.Step()` en un bucle (un frame síncrono por llamada, `deltaTime` fijo de 0,02 s) y se capturan frames en los instantes que interesen; el orquestador en modo ensayo (`scripts/fake_llm_server.py` + `TTS_BACKEND=system` + `sonia run --no-mic` + `SoniaClient.SendTextInput`) da una conversación completa sin nube; `TTS_BACKEND=mock` produce silencio y es solo para tests.
+8. **Sin ánimo de lucro y de uso personal.** No hay uso comercial, así que de momento no se gestionan licencias de assets (avatar, animaciones, imágenes). `docs/licencias.md` queda como registro opcional por si algún día cambia el uso.
+
+## Estado provisional (septiembre de 2026)
+
+El equipo definitivo del stand será un mini PC **GMKtec EVO-X2 AI** (AMD Ryzen AI Max+ 395, Radeon 8060S integrada, 128 GB de memoria unificada LPDDR5X, 2 TB SSD, Wi-Fi 7, Windows 11 Pro). Implicaciones: el orquestador debe correr en Windows; el LLM local irá servido con llama.cpp (backend Vulkan o ROCm) aprovechando la memoria unificada; OmniVoice y faster-whisper deben validarse en esa GPU AMD (por confirmar: ROCm en Windows o CPU). Sonia debe presumir de correr 100 % en local en esa máquina, que estará a la vista en el stand.
+
+Todavía no ha llegado ese hardware. Hasta que llegue:
+
+- **LLM:** la API de Kimi en la nube (`LLM_BASE_URL=https://api.moonshot.ai/v1`, modelo `kimi-k3`) a través del mismo cliente compatible con OpenAI. La cuenta tiene pocos tokens: **ningún test ni script automático llama a la API real**; solo `sonia check` (tres peticiones mínimas de 5 tokens) y el uso manual. La clave vive en `.env` y `kimi.txt`, ambos ignorados por git. Nunca los leas ni los imprimas.
+- **TTS:** `TTS_BACKEND=gemini` usa la API Live de Gemini (free tier) como voz provisional (`server/sonia/tts/gemini.py`, ADR 006). Se retira cuando OmniVoice pueda correr en local. Requiere `TTS_GEMINI_API_KEY` en `.env`.
+- **STT y VAD** sí corren en local (faster-whisper en CPU y Silero VAD).
 
 ## Stack
 
@@ -22,7 +36,8 @@ Sonia es un asistente de IA por voz en tiempo real con avatar 3D, similar a los 
 - **Visión:** cámara USB leída con OpenCV. Solo capturas puntuales, reducidas antes de enviarlas al modelo. Nunca streaming de vídeo al LLM.
 - **Acciones del modelo:** tool calling estándar de OpenAI como vía principal. Las mismas acciones se exponen también como servidor MCP local (`server/mcp`) para modelos o servidores sin tool calling nativo. Una única definición de acciones alimenta ambas vías.
 - **Síntesis de voz:** OmniVoice, detrás de una interfaz `TextToSpeech` sustituible.
-- **Avatar:** Unity (LTS más reciente), C#, assets gratuitos. Personaje femenino. Lip-sync por visemas a partir del audio o de los timestamps que envíe el orquestador. Incluye un panel de imágenes integrado en la escena hacia el que el avatar puede orientarse.
+- **Avatar:** Unity 6000.6.0f1 (proyecto en `unity/`, plantilla URP, solo Input System nuevo: `UnityEngine.Input` lanza excepción), C#, assets gratuitos. Personaje femenino. Lip-sync por visemas (convención Ready Player Me/Oculus) a partir de los timestamps que envía el orquestador, con envolvente de amplitud como respaldo. Incluye un panel de imágenes integrado en la escena hacia el que el avatar echa un vistazo al aparecer. JSON con Newtonsoft (`com.unity.nuget.newtonsoft-json`). Avatar actual: `unity/Assets/Avatar/Yae.vrm` con UniVRM 0.131 (VRM10); `Vrm10Instance` debe quedar en `UpdateType = LateUpdate` (orden 11000) y `LipSyncController`/`AvatarStateController` en orden de ejecución 12000 para que la mirada de los ojos sobreviva al Animator y la boca y el parpadeo no los borre UniVRM.
+- **Unity MCP:** el paquete `com.unity.ai.assistant` expone un servidor MCP. Está registrado en Claude Code como `unity-mcp` (relay en `~/.unity/relay`). Requiere el editor abierto y aprobar la conexión en Edit > Project Settings > AI > Unity MCP Server. Úsalo para leer la consola (errores de compilación), inspeccionar la escena y ejecutar el menú Sonia/Crear escena base.
 - **Comunicación:** WebSocket local entre orquestador y Unity. Mensajes JSON para eventos y binario para audio PCM.
 
 ## Estructura
@@ -68,22 +83,30 @@ Si cambias el protocolo, actualiza ambos lados y el documento en el mismo commit
 - Configuración solo por variables de entorno y `.env`. Nunca hardcodear rutas de modelos, puertos ni claves.
 - Los modelos pesados (pesos de LLM, STT, TTS) no se suben al repo. Van en `.gitignore` y se descargan con `scripts/`.
 - Las capturas de cámara no se guardan en disco salvo en modo debug explícito. Es una demo pública con visitantes reales: nada de persistir imágenes de personas.
-- Los assets de Unity de terceros se documentan en `docs/licencias.md` con nombre, autor, licencia y enlace.
+- Los assets de Unity de terceros pueden anotarse en `docs/licencias.md`, pero no es obligatorio: el proyecto es sin ánimo de lucro y de uso personal.
 
 ## Comandos
 
-Se completarán cuando exista el código. Formato esperado:
+Todo desde `server/`. Usa `--no-sync` para no tocar el lockfile en cada ejecución.
 
 ```bash
-uv sync                          # instalar dependencias del orquestador
-uv run sonia                     # arrancar el orquestador
-uv run ruff check . && uv run ruff format .
-uv run pytest
+uv sync --group dev --extra audio --extra stt --extra camera --extra mcp   # entorno de desarrollo (sin omnivoice)
+uv sync --extra all                                                       # demo completa (incluye omnivoice, pesado)
+uv run --no-sync sonia check       # micrófono, VAD, STT, cámara, LLM (3 peticiones mínimas), TTS, galería
+uv run --no-sync sonia chat        # conversar por texto sin micrófono ni cámara
+uv run --no-sync sonia say "Hola"  # probar el TTS
+uv run --no-sync sonia run         # demo completa
+uv run --no-sync ruff check sonia tests && uv run --no-sync ruff format sonia tests
+uv run --no-sync mypy sonia
+uv run --no-sync pytest -q         # sin hardware, sin modelos, sin red
 ```
+
+Los tests usan `httpx.MockTransport`, servidores WebSocket falsos y audio sintético. Las dependencias pesadas (torch, omnivoice, faster_whisper, silero_vad, cv2, sounddevice, mcp) se importan de forma perezosa dentro de funciones para que el paquete importe sin ellas.
 
 ## Cosas que no hay que hacer
 
-- No introducir dependencias de red en tiempo de ejecución.
+- No introducir dependencias de red en tiempo de ejecución (salvo los backends provisionales ya documentados).
+- No llamar a la API de Kimi ni a la de Gemini desde tests, scripts o comprobaciones automáticas. Solo de forma manual y consciente.
 - No acoplar el código a Kimi K3 ni a ningún modelo concreto.
 - No bloquear el hilo de audio con llamadas síncronas al LLM o al TTS.
 - No enviar vídeo continuo ni capturas en cada frame al modelo. Solo fotos puntuales, reducidas, cuando aporten.

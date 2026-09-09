@@ -1,0 +1,40 @@
+kimi.txt
+.env
+
+# Modelos y capturas
+models/
+debug_frames/
+*.pt
+*.onnx
+*.bin
+*.safetensors
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+dist/
+
+# Unity
+unity/Library/
+unity/Temp/
+unity/Logs/
+unity/obj/
+unity/UserSettings/
+unity/Build/
+unity/Builds/
+*.csproj
+*.sln
+.vs/
+.idea/
+.DS_Store
+*.slnx
+unity/.plastic/
+unity/.vscode/
+
+logs/
+aistudio.txt
