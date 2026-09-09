@@ -577,6 +577,16 @@ futuro hiciera falta un tope de verdad, sería un `HumanPoseHandler` en
 El menú **Sonia > Regenerar Avatar Humanoid** reconstruye el Avatar cuando se
 toca `SoniaHumanoidRig`.
 
+**Pose de exportación del GLB.** `SoniaHumanoidRig` construye el Avatar
+Humanoid a partir de la pose de los nodos tal como vienen en el archivo. Babe
+se exporta en T-pose y todo cuadra; un modelo exportado en A-pose (brazos a
+unos 55° hacia abajo, como Zoe 1) hace que el retargeting de los clips de Ready
+Player Me pliegue los brazos dentro del torso hasta desaparecer. Se nota en los
+bounds del `SkinnedMeshRenderer` (unos 0,23 m de ancho plegado frente a 0,52 m
+con los brazos extendidos). Antes de culpar a los clips, comprobar la pose de
+reposo del GLB; `scripts/injerto_glb.py` iguala la del receptor a la del
+donante al injertar cabezas.
+
 Queda una limitación conocida: con los brazos caídos, los dedos rozan las
 caderas de Babe en cualquier clip. En el encuadre de cintura para arriba no se
 ve; si algún día se abre el plano, habría que añadir una separación de brazos
