@@ -82,11 +82,37 @@ def borde_cuello(p):
 Y_CUELLO = 1.52          # por encima de esto están la cabeza, el pelo, los ojos y los dientes
 FUERA = ('EyeLeft', 'EyeRight', 'Wolf3D_Head', 'Wolf3D_Teeth', 'Wolf3D_Hair')
 
+def copia_pose(js, ca_js, result_log):
+    """Copia la pose de reposo del esqueleto del donante al receptor.
+
+    Los avatares de RPM se exportan en T-pose o en A-pose segun como se pidieran.
+    Las matrices de bind son las mismas, pero el rig Humanoid que genera Unity se
+    construye a partir de la pose de los nodos: si el cuerpo esta en A-pose y los
+    clips estan hechos para la T-pose, el retargeting pliega los brazos dentro del
+    torso. Igualar la pose a la del donante lo arregla.
+    """
+    donante = {n.get('name'): n for n in ca_js['nodes'] if n.get('name')}
+    cambiados = 0
+    for n in js['nodes']:
+        d = donante.get(n.get('name'))
+        if d is None or 'mesh' in n or 'mesh' in d:
+            continue
+        antes = (n.get('translation'), n.get('rotation'), n.get('scale'))
+        for k in ('translation', 'rotation', 'scale', 'matrix'):
+            n.pop(k, None)
+            if k in d:
+                n[k] = list(d[k])
+        if (n.get('translation'), n.get('rotation'), n.get('scale')) != antes:
+            cambiados += 1
+    result_log("  pose de reposo igualada a la del donante: %d huesos" % cambiados)
+
+
 def injerto_cabeza(cuerpo_path, cabeza_path, out_path):
     cu_js, cu_bn = read(cuerpo_path)
     ca_js, ca_bn = read(cabeza_path)
 
     js = json.loads(json.dumps(cu_js))
+    copia_pose(js, ca_js, result_log=lambda m: print(m))
     blob = bytearray(cu_bn)
 
     def add_view(data, target=None):
@@ -124,14 +150,39 @@ def injerto_cabeza(cuerpo_path, cabeza_path, out_path):
         js['accessors'].append(a)
         return len(js['accessors']) - 1
 
-    # 1. Fuera la cabeza del cuerpo receptor
+    # 1. Fuera la cabeza del cuerpo receptor. Hay dos casos: multi-malla (cada
+    #    pieza es una malla con nombre) y atlas de malla unica (todo junto, y
+    #    entonces solo se recortan los triangulos por encima del cuello).
     quitar = {i for i, m in enumerate(cu_js['meshes']) if m.get('name') in FUERA}
-    for n in js['nodes']:
-        if 'children' in n:
-            n['children'] = [c for c in n['children'] if cu_js['nodes'][c].get('mesh') not in quitar]
-    for s in js['scenes']:
-        s['nodes'] = [c for c in s['nodes'] if cu_js['nodes'][c].get('mesh') not in quitar]
-    print(f"  retiradas del cuerpo: {[cu_js['meshes'][i].get('name') for i in sorted(quitar)]}")
+    if quitar:
+        for n in js['nodes']:
+            if 'children' in n:
+                n['children'] = [c for c in n['children'] if cu_js['nodes'][c].get('mesh') not in quitar]
+        for s in js['scenes']:
+            s['nodes'] = [c for c in s['nodes'] if cu_js['nodes'][c].get('mesh') not in quitar]
+        print(f"  retiradas del cuerpo: {[cu_js['meshes'][i].get('name') for i in sorted(quitar)]}")
+    else:
+        cpr = js['meshes'][0]['primitives'][0]
+        ctri = acc(cu_js, cu_bn, cpr['indices']).astype(np.int64).ravel().reshape(-1, 3)
+        cfuera = np.zeros(len(acc(cu_js, cu_bn, cpr['attributes']['POSITION'])), dtype=bool)
+        quitados = 0
+        for pz in partes(cuerpo_path):
+            if pz['bbox'][1][1] >= Y_CUELLO:
+                cfuera[np.nonzero(pz['sel'])[0]] = True
+                quitados += pz['tris']
+        ckeep = ~cfuera[ctri].any(axis=1)
+        ctri_new = ctri[ckeep].astype(np.uint32)
+        print(f"  cuerpo de atlas: recortada la cabeza, {quitados} triángulos fuera "
+              f"({len(ctri)} → {len(ctri_new)})")
+        cpr['_indices_recortados'] = ctri_new      # se escribe abajo, con el resto
+
+    cpr0 = js['meshes'][0]['primitives'][0]
+    if '_indices_recortados' in cpr0:
+        datos = cpr0.pop('_indices_recortados')
+        bvc = add_view(datos.ravel().tobytes(), 34963)
+        js['accessors'].append({'bufferView': bvc, 'componentType': 5125,
+                                'count': int(datos.size), 'type': 'SCALAR'})
+        cpr0['indices'] = len(js['accessors']) - 1
 
     # 2. De la cabeza donante, solo los triangulos por encima del cuello
     pr = ca_js['meshes'][0]['primitives'][0]

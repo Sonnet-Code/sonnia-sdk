@@ -267,6 +267,48 @@ Cómo funciona, por si hay que repetirlo con otro par:
 4. El nodo nuevo cuelga del mismo padre y reutiliza el `skin` del cuerpo, que es
    legítimo porque los dos esqueletos son el mismo.
 
+### La trampa de la T-pose
+
+El primer injerto llegó a Unity con **los brazos desaparecidos**. La causa no
+era la cirugía sino la pose de exportación: **Babe viene en T-pose** (brazos a
+1° de la horizontal) y **Zoe 1 en A-pose** (55° hacia abajo). Ready Player Me
+servía las dos según el parámetro `pose` de la petición.
+
+Las matrices de bind son idénticas entre modelos, pero el rig Humanoid que
+genera `SoniaHumanoidRig` se construye a partir de **la pose de los nodos**. Con
+el cuerpo en A-pose y los clips de la biblioteca de RPM hechos para la T-pose,
+el retargeting plegaba los brazos dentro del torso hasta hacerlos invisibles.
+
+`injerto_glb.py` lo arregla solo: copia la pose de reposo de los 67 huesos del
+donante al receptor antes de nada. Se ve en los bounds del
+`SkinnedMeshRenderer`, que pasan de 0,23 m de ancho (brazos plegados) a 0,52 m
+(brazos extendidos).
+
+Ojo con verificarlo: el rasterizador offline de `hunt/stylized/render_glb.py`
+**ignora el skinning y dibuja siempre la pose de bind**, así que da igual lo que
+se haga con los nodos, siempre pinta la A-pose. Esto solo se comprueba en Unity.
+
+### Resultado en el stand
+
+![Babe con la camisa de Zoe 1 en Play, 9:16](img/avatar-babecamisa-play.jpg)
+
+`unity/Assets/Avatar/BabeCamisa.glb` colocado con **Sonia > Colocar avatar**:
+rig Humanoid regenerado, `LipSyncController.faceRenderer` apuntando a
+`Sonia_Cabeza` con sus 15 visemas cableados, `jawOpen` y `eyeBlinkLeft/Right`
+detectados, y los brazos animando bien.
+
+### Segundo injerto: sobre Avatar 1
+
+![Babe sobre el cuerpo de Avatar 1](img/avatar-injerto-avatar1.jpg)
+
+`unity/Assets/Avatar/BabeCamiseta.glb`: la misma cabeza sobre
+`rv_avatar1_f.glb`, que es **el único del catálogo con licencia MIT en el
+repo**. Camiseta lisa, vaqueros y zapatillas. Aquí el receptor es una
+exportación de atlas, sin mallas con nombre, así que el script recorta la
+cabeza del cuerpo por el mismo criterio de altura (6 768 triángulos fuera) en
+vez de borrar nodos. El cuerpo aporta 52 blendshapes ARKit que se descartan; los
+67 con visemas los pone la cabeza de Babe.
+
 ### Lo que no funcionó: injertar solo la prenda
 
 ![Babe con la camisa de Zoe injertada](img/avatar-injerto-prenda.jpg)
