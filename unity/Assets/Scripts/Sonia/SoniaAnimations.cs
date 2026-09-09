@@ -133,12 +133,12 @@ namespace Sonia
             new AttentionClip("Dance_RunningMan", AttentionCategory.Dance),
             new AttentionClip("Dance_Gangnam", AttentionCategory.Dance),
 
-            // Cuarta pared: se dirigen a quien mira la pantalla.
+            // Cuarta pared: se dirigen a quien mira la pantalla. Fuera Wave2 (el
+            // FBX trae 16 fotogramas, medio segundo: un tic) y Point_Forward (la
+            // mano tapa la cara durante casi todo el clip en el plano de la demo).
             new AttentionClip("Touch_Screen", AttentionCategory.FourthWall),
-            new AttentionClip("Point_Forward", AttentionCategory.FourthWall),
             new AttentionClip("Point_ThisGuy", AttentionCategory.FourthWall),
             new AttentionClip("Blow_Kiss", AttentionCategory.FourthWall),
-            new AttentionClip("Wave2", AttentionCategory.FourthWall),
             new AttentionClip("Salute", AttentionCategory.FourthWall),
             new AttentionClip("Thumbs_Up", AttentionCategory.FourthWall),
 

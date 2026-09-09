@@ -53,13 +53,9 @@ MonoBehaviour:
     category: 0
   - clip: {fileID: -203655887218126122, guid: 86fcece01a2b3472ea3ec4bd76a9e6fa, type: 3}
     category: 1
-  - clip: {fileID: -203655887218126122, guid: 321c5e59e26154b0ca48b5d1a410f80a, type: 3}
-    category: 1
   - clip: {fileID: -203655887218126122, guid: afd5535ef3b1d4fe493bee0896aa2115, type: 3}
     category: 1
   - clip: {fileID: -203655887218126122, guid: b3ba94f9837fd4e68b6c397caa147b4f, type: 3}
-    category: 1
-  - clip: {fileID: -203655887218126122, guid: e0e7a069ffe1746e6b8dc5dbd259c757, type: 3}
     category: 1
   - clip: {fileID: -203655887218126122, guid: 919d2595efed845639479ffd94dc92ea, type: 3}
     category: 1
