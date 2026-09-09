@@ -561,14 +561,35 @@ los huesos en el mismo comando.
 ### Cara: lip-sync, ojos, parpadeo y cabeza
 
 - **Lip-sync** (`LipSyncController`): tres fuentes por orden de preferencia.
-  Visemas con timestamp del orquestador si llegan; si no, **fonemas en tiempo
-  real** con uLipSync (MIT, MFCC) a través de `PhonemeLipSyncBridge`, que le
-  pasa cada bloque de audio de `AudioStreamPlayer` (evento `OnAudioFrame`) y
-  traduce A/I/U/E/O a `viseme_aa/I/U/E/O` escalados por el volumen con una
-  curva suave (abre un poco con voz floja, nunca del todo); si no, envolvente o
-  RMS. Suavizado con ataque 20/s y caída 10/s, peso máximo 65 %. Con Gemini en
-  streaming los visemas del servidor no llegan a tiempo (se calculan con la
-  frase entera), así que en la práctica manda el modo de fonemas.
+  Primero **fonemas en tiempo real** con uLipSync (MIT, MFCC) a través de
+  `PhonemeLipSyncBridge`, que le pasa cada bloque de audio de
+  `AudioStreamPlayer` (evento `OnAudioFrame`) y traduce A/I/U/E/O a
+  `viseme_aa/I/U/E/O` escalados por el volumen con una curva suave (abre un
+  poco con voz floja, nunca del todo); si no hay analizador
+  (`preferRealtimePhonemes` apagado o sin perfil), los visemas con timestamp
+  del orquestador, que hoy son una estimación por texto repartida uniformemente
+  en la duración del audio; y si tampoco, envolvente o RMS. Suavizado con
+  ataque 28/s y caída 11/s, peso máximo 65 %. Antes los visemas del orquestador
+  tenían prioridad y, como llegan al terminar la síntesis (en las frases
+  segunda y siguientes de una respuesta, antes de que empiecen a sonar), la
+  boca cambiaba a la estimación por texto y se desincronizaba, sobre todo en
+  la cola: seguía moviéndose unos 400 ms después de la voz.
+- **Sincronía boca-voz** (`AudioStreamPlayer.lipSyncLeadMs`, 60 ms): el
+  análisis de fonemas ve el audio fresco y la salida real sale por una línea
+  de retardo de 60 ms. Medido con la voz de Gemini: la boca iba 75 ms por
+  detrás del bloque generado (ventana de 64 ms de uLipSync, un frame de espera
+  del job y el suavizado), unos 40-50 ms tarde respecto al altavoz, que es
+  justo el rango en que el oído nota que el audio va por delante. Con el
+  adelanto la boca cae a la par o unos milisegundos antes, que pasa
+  desapercibido. Importante: el componente uLipSync vive en el objeto hijo
+  `Fonemas`, sin AudioSource; en el raíz Unity le pasaría además por su propio
+  `OnAudioFilterRead` la salida ya retardada y analizaría una mezcla.
+- **Arranque de "hablando"** (`SoniaBootstrap.waitAudioBeforeSpeaking`): el
+  orquestador manda `speech_start` y el estado `speaking` al empezar a
+  sintetizar, y la voz tarda entre 0,3 y 1,5 s en llegar. Sonia se queda en
+  "pensando" y aplica el estado y la gesticulación con el primer chunk de audio
+  de esa frase (tope de 2,5 s por si el TTS falla). Las frases ambientales del
+  stand no cambian de estado y no pasan por aquí.
 - **Escala de blendshapes**: los GLB de glTFast definen los blendshapes de 0 a 1
   y los FBX/VRM de 0 a 100. `LipSyncController.BlendShapeScale` lee el peso del
   frame y se escribe siempre en la escala de la malla; sin esto la cara de Babe

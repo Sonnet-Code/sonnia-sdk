@@ -119,6 +119,56 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &178338011
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 178338013}
+  - component: {fileID: 178338012}
+  m_Layer: 0
+  m_Name: Fonemas
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &178338012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 178338011}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87560e04aa74c7a41acb9c87051c3b02, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: uLipSync.Runtime::uLipSync.uLipSync
+  profile: {fileID: 11400000, guid: 04d8d7db6114a384aaabeb1d02dd2013, type: 2}
+  onLipSyncUpdate:
+    m_PersistentCalls:
+      m_Calls: []
+  outputSoundGain: 1
+  audioSourceProxy: {fileID: 0}
+--- !u!4 &178338013
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 178338011}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1767658860}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &205968873 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 3070216559101246297, guid: fe946f4dc5d2a47d1b80dd1d47ab50ad, type: 3}
@@ -6768,7 +6818,6 @@ GameObject:
   - component: {fileID: 1767658863}
   - component: {fileID: 1767658865}
   - component: {fileID: 1767658864}
-  - component: {fileID: 1767658868}
   - component: {fileID: 1767658867}
   - component: {fileID: 1767658866}
   - component: {fileID: 1767658870}
@@ -6806,6 +6855,8 @@ MonoBehaviour:
   preventScreenSleep: 1
   showCursor: 1
   targetFrameRate: 60
+  waitAudioBeforeSpeaking: 1
+  speakingAudioTimeout: 2.5
   logEvents: 1
 --- !u!114 &1767658853
 MonoBehaviour:
@@ -6941,6 +6992,7 @@ MonoBehaviour:
   timeOffsetSeconds: 0
   visemeMaxWeight: 65
   phonemeFrameTimeout: 0.25
+  preferRealtimePhonemes: 1
   jawOpenBlendShape: jawOpen
   mouthOpenBlendShape: jawOpen
   jawBone: {fileID: 0}
@@ -6966,6 +7018,7 @@ MonoBehaviour:
   maxBufferSeconds: 120
   volume: 1
   logUnderruns: 0
+  lipSyncLeadMs: 60
 --- !u!82 &1767658858
 AudioSource:
   m_ObjectHideFlags: 0
@@ -7098,6 +7151,7 @@ Transform:
   - {fileID: 1904352484}
   - {fileID: 1633677120}
   - {fileID: 248570523}
+  - {fileID: 178338013}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1767658863
@@ -7214,29 +7268,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Sonia::Sonia.PhonemeLipSyncBridge
   audioPlayer: {fileID: 1767658857}
-  analyzer: {fileID: 1767658868}
+  analyzer: {fileID: 178338012}
   lipSync: {fileID: 1767658856}
   rawVolumeRange: {x: 0.01, y: 0.3}
   volumeCurve: 0.7
   minOpenWhileVoiced: 0.18
---- !u!114 &1767658868
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1767658851}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 87560e04aa74c7a41acb9c87051c3b02, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: uLipSync.Runtime::uLipSync.uLipSync
-  profile: {fileID: 11400000, guid: 04d8d7db6114a384aaabeb1d02dd2013, type: 2}
-  onLipSyncUpdate:
-    m_PersistentCalls:
-      m_Calls: []
-  outputSoundGain: 1
-  audioSourceProxy: {fileID: 0}
 --- !u!114 &1767658869
 MonoBehaviour:
   m_ObjectHideFlags: 0

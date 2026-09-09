@@ -271,17 +271,41 @@ namespace Sonia.EditorTools
         private const string DefaultPhonemeProfilePath =
             "Packages/com.hecomi.ulipsync/Assets/Profiles/uLipSync-Profile-Sample-Female.asset";
 
+        /// <summary>Nombre del objeto hijo que aloja el analizador de fonemas.</summary>
+        public const string PhonemeAnalyzerObjectName = "Fonemas";
+
         /// <summary>
-        /// Deja en el objeto raíz el analizador de fonemas y su puente al lip-sync.
-        /// El analizador recibe el audio desde AudioStreamPlayer, no del
-        /// AudioSource, así que no importa el orden de los componentes.
+        /// Deja el analizador de fonemas en un objeto hijo sin AudioSource y su
+        /// puente al lip-sync en el raíz. El analizador recibe el audio desde
+        /// AudioStreamPlayer (el bloque que sonará dentro de lipSyncLeadMs); si
+        /// estuviera en el mismo objeto que el AudioSource, Unity le pasaría
+        /// además por su propio OnAudioFilterRead la salida ya retardada y
+        /// analizaría una mezcla de las dos.
         /// </summary>
         public static void EnsurePhonemeLipSync(GameObject root, AvatarStateController avatarState)
         {
-            uLipSync.uLipSync analyzer = EnsureComponent<uLipSync.uLipSync>(root);
+            uLipSync.uLipSync stray = root.GetComponent<uLipSync.uLipSync>();
+            uLipSync.Profile keepProfile = stray != null ? stray.profile : null;
+            if (stray != null)
+            {
+                Undo.DestroyObjectImmediate(stray);
+            }
+
+            Transform holder = root.transform.Find(PhonemeAnalyzerObjectName);
+            if (holder == null)
+            {
+                GameObject holderObject = new GameObject(PhonemeAnalyzerObjectName);
+                Undo.RegisterCreatedObjectUndo(holderObject, "Crear analizador de fonemas");
+                holderObject.transform.SetParent(root.transform, false);
+                holder = holderObject.transform;
+            }
+
+            uLipSync.uLipSync analyzer = EnsureComponent<uLipSync.uLipSync>(holder.gameObject);
             if (analyzer.profile == null)
             {
-                analyzer.profile = AssetDatabase.LoadAssetAtPath<uLipSync.Profile>(DefaultPhonemeProfilePath);
+                analyzer.profile = keepProfile != null
+                    ? keepProfile
+                    : AssetDatabase.LoadAssetAtPath<uLipSync.Profile>(DefaultPhonemeProfilePath);
                 EditorUtility.SetDirty(analyzer);
             }
 

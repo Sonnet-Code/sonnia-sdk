@@ -67,10 +67,27 @@ namespace Sonia
         [Tooltip("Fotogramas por segundo objetivo. 0 deja el valor por defecto de la plataforma.")]
         private int targetFrameRate = 60;
 
+        [Header("Sincronía")]
+        [SerializeField]
+        [Tooltip("Retrasar el estado 'hablando' (gestos, cejas) hasta que llegue el primer audio de la frase. El orquestador manda speech_start y el estado al empezar a sintetizar, y la voz tarda entre 0,3 y 1,5 s en llegar: sin esto Sonia gesticula con la boca cerrada.")]
+        private bool waitAudioBeforeSpeaking = true;
+
+        [SerializeField]
+        [Range(0.5f, 5f)]
+        [Tooltip("Segundos máximos de espera del audio antes de aplicar 'hablando' igualmente (por si el TTS falla en silencio).")]
+        private float speakingAudioTimeout = 2.5f;
+
         [Header("Registro")]
         [SerializeField]
         [Tooltip("Escribir en la consola los eventos importantes del protocolo.")]
         private bool logEvents = true;
+
+        // Frase anunciada por speech_start cuyo audio aún no ha llegado.
+        private int _pendingUtteranceId = -1;
+        private bool _pendingSpeechStart;
+        private bool _pendingSpeakingState;
+        private float _pendingSince;
+        private int _lastAudioUtteranceId = -1;
 
         private void Awake()
         {
@@ -215,6 +232,9 @@ namespace Sonia
 
         private void HandleDisconnected()
         {
+            _pendingSpeakingState = false;
+            _pendingSpeechStart = false;
+            _pendingUtteranceId = -1;
             if (logEvents)
             {
                 Debug.Log("[Sonia] Conexión perdida; el cliente reintentará.", this);
@@ -286,7 +306,18 @@ namespace Sonia
             }
 
             AvatarState state = AvatarStateController.ParseState(message.State);
-            ApplyAvatarState(state);
+            if (state == AvatarState.Speaking && waitAudioBeforeSpeaking && _pendingUtteranceId >= 0
+                && _lastAudioUtteranceId < _pendingUtteranceId)
+            {
+                // La voz todavía no ha llegado: se mantiene el estado anterior
+                // (pensando) y se aplica 'hablando' con el primer chunk de audio.
+                _pendingSpeakingState = true;
+            }
+            else
+            {
+                _pendingSpeakingState = false;
+                ApplyAvatarState(state);
+            }
 
             // Si alguien se acerca después de un buen rato sin nadie, Sonia saluda
             // con la mano. El propio componente decide si toca o si acaba de hacerlo.
@@ -315,14 +346,59 @@ namespace Sonia
             // está bailando, sigue bailando mientras "canta". Cada frase de una
             // respuesta real estrena una forma de gesticular distinta.
             bool ambient = message != null && message.Ambient;
-            if (choreographer != null && !ambient)
+            if (!ambient && message != null)
             {
-                choreographer.NotifySpeechStart();
+                _pendingUtteranceId = message.UtteranceId;
+                _pendingSince = Time.time;
+                if (waitAudioBeforeSpeaking && _lastAudioUtteranceId < message.UtteranceId)
+                {
+                    _pendingSpeechStart = true;
+                }
+                else
+                {
+                    _pendingSpeechStart = false;
+                    if (choreographer != null)
+                    {
+                        choreographer.NotifySpeechStart();
+                    }
+                }
             }
 
             if (logEvents && message != null)
             {
                 Debug.Log("[Sonia] frase " + message.UtteranceId + ": " + message.Text, this);
+            }
+        }
+
+        /// <summary>Aplica lo que esperaba al audio: estado 'hablando' y arranque de la gesticulación.</summary>
+        private void ReleasePendingSpeech(string why)
+        {
+            if (_pendingSpeakingState)
+            {
+                _pendingSpeakingState = false;
+                ApplyAvatarState(AvatarState.Speaking);
+            }
+
+            if (_pendingSpeechStart)
+            {
+                _pendingSpeechStart = false;
+                if (choreographer != null)
+                {
+                    choreographer.NotifySpeechStart();
+                }
+            }
+
+            if (logEvents && why != null)
+            {
+                Debug.Log("[Sonia] 'hablando' aplicado " + why, this);
+            }
+        }
+
+        private void Update()
+        {
+            if ((_pendingSpeakingState || _pendingSpeechStart) && Time.time - _pendingSince > speakingAudioTimeout)
+            {
+                ReleasePendingSpeech("por tiempo de espera sin audio");
             }
         }
 
@@ -359,6 +435,16 @@ namespace Sonia
             {
                 audioPlayer.Enqueue(frame);
             }
+
+            if (frame.UtteranceId > _lastAudioUtteranceId)
+            {
+                _lastAudioUtteranceId = frame.UtteranceId;
+            }
+
+            if ((_pendingSpeakingState || _pendingSpeechStart) && frame.UtteranceId >= _pendingUtteranceId)
+            {
+                ReleasePendingSpeech(null);
+            }
         }
 
         private void HandleVisemes(VisemesMessage message)
@@ -393,6 +479,8 @@ namespace Sonia
 
         private void HandleStopSpeaking(StopSpeakingMessage message)
         {
+            _pendingSpeakingState = false;
+            _pendingSpeechStart = false;
             if (audioPlayer != null)
             {
                 audioPlayer.Flush();

@@ -56,7 +56,7 @@ ojos sin interrumpir el baile ni el gesto en curso.
 
 ### `visemes`
 
-Visemas de la frase, con su instante de inicio relativo a `speech_start`. Se calculan sobre la duración total del audio, así que llegan siempre **después** de los frames binarios de esa frase, en cuanto termina de sintetizarse: normalmente cuando Unity apenas ha empezado a reproducirla, pero nunca antes del primer frame. Unity debe alinearlos con el audio ya reproducido de ese `utterance_id` y usar la envolvente o el RMS mientras no los tenga. Los ids son los del conjunto Oculus (compatible con Ready Player Me): `sil`, `PP`, `FF`, `TH`, `DD`, `kk`, `CH`, `SS`, `nn`, `RR`, `aa`, `E`, `ih`, `oh`, `ou`.
+Visemas de la frase, con su instante de inicio relativo a `speech_start`. Se calculan sobre la duración total del audio, así que llegan siempre **después** de los frames binarios de esa frase, en cuanto termina de sintetizarse: normalmente cuando Unity apenas ha empezado a reproducirla, pero nunca antes del primer frame. Hoy son una **estimación por texto** (grafema a visema, repartida uniformemente en la duración): Unity los usa solo como respaldo cuando no puede analizar fonemas en tiempo real sobre el audio, porque tomarlos como fuente principal desincronizaba la boca en la cola de cada frase. Si algún día el TTS entrega tiempos reales por fonema, este mensaje es el sitio para mandarlos. Los ids son los del conjunto Oculus (compatible con Ready Player Me): `sil`, `PP`, `FF`, `TH`, `DD`, `kk`, `CH`, `SS`, `nn`, `RR`, `aa`, `E`, `ih`, `oh`, `ou`.
 
 ```json
 {"type": "visemes", "utterance_id": 7, "frames": [{"t": 0.00, "v": "oh", "w": 1.0}, {"t": 0.12, "v": "aa", "w": 1.0}]}

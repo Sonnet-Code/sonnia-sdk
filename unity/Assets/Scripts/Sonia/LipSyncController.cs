@@ -1,13 +1,15 @@
 // Lip-sync del avatar.
 //
 // Tres fuentes, por orden de preferencia:
-//  1. Visemas con timestamp que envía el orquestador, alineados con el audio
-//     realmente reproducido (AudioStreamPlayer.CurrentUtteranceTime). Solo
-//     llegan cuando el TTS entrega la frase entera antes de sonar.
-//  2. Fonemas analizados en tiempo real sobre el audio que suena (uLipSync a
+//  1. Fonemas analizados en tiempo real sobre el audio que suena (uLipSync a
 //     través de PhonemeLipSyncBridge): vocales A/I/U/E/O y nasal, con
 //     proporciones que ya vienen mezcladas, así que la boca pasa de una forma a
-//     otra sin saltos.
+//     otra sin saltos. Es lo único que va de verdad al compás de la voz.
+//  2. Visemas con timestamp que envía el orquestador, alineados con el tiempo
+//     del audio reproducido (AudioStreamPlayer.CurrentUtteranceTime). Hoy son
+//     una estimación por texto repartida uniformemente en la duración, así que
+//     solo se usan si no hay fonemas (preferRealtimePhonemes apagado o sin
+//     analizador).
 //  3. Apertura de boca según la envolvente de amplitud de la frase o, si
 //     tampoco hay envolvente, según el nivel RMS del audio que suena.
 //
@@ -80,6 +82,10 @@ namespace Sonia
         [SerializeField]
         [Tooltip("Segundos de validez de un frame de fonemas. Pasado ese tiempo sin noticias se vuelve al respaldo.")]
         private float phonemeFrameTimeout = 0.25f;
+
+        [SerializeField]
+        [Tooltip("Con fonemas frescos, usarlos aunque el orquestador haya enviado visemas. Los visemas del orquestador son una estimación por texto repartida uniformemente en la duración del audio y llegan al terminar la síntesis; si tomaran el mando a mitad de frase la boca se desincroniza, sobre todo en la cola.")]
+        private bool preferRealtimePhonemes = true;
 
         [Header("Respaldo por envolvente")]
         [SerializeField]
@@ -524,8 +530,10 @@ namespace Sonia
 
             float openTarget = 0f;
             bool usedVisemes = false;
+            bool phonemesFresh = Time.time - _phonemeFrameTime <= Mathf.Max(0.05f, phonemeFrameTimeout);
+            bool phonemesFirst = preferRealtimePhonemes && phonemesFresh;
 
-            if (_hasVisemeShapes && utteranceId >= 0)
+            if (_hasVisemeShapes && utteranceId >= 0 && !phonemesFirst)
             {
                 List<VisemeFrame> frames;
                 if (_visemesByUtterance.TryGetValue(utteranceId, out frames) && frames.Count > 0)
@@ -544,7 +552,6 @@ namespace Sonia
                 }
             }
 
-            bool phonemesFresh = Time.time - _phonemeFrameTime <= Mathf.Max(0.05f, phonemeFrameTimeout);
             _usingPhonemes = false;
             if (!usedVisemes && _hasVisemeShapes && utteranceId >= 0 && phonemesFresh)
             {

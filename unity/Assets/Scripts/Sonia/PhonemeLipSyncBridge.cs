@@ -2,10 +2,11 @@
 //
 // El audio de la voz llega en streaming y no existe como AudioClip, así que
 // uLipSync no puede analizar el AudioSource por su cuenta: aquí se le pasa cada
-// bloque que AudioStreamPlayer acaba de reproducir (evento OnAudioFrame, en el
-// hilo de audio) y, en cada frame, se traduce su resultado (fonema dominante,
-// proporciones A/I/U/E/O/silencio y volumen) a los visemas del protocolo, que
-// LipSyncController convierte en blendshapes con su suavizado.
+// bloque que AudioStreamPlayer va a reproducir (evento OnAudioFrame, en el hilo
+// de audio, con el audio que sonará dentro de lipSyncLeadMs) y, en cada frame,
+// se traduce su resultado (fonema dominante, proporciones A/I/U/E/O/silencio y
+// volumen) a los visemas del protocolo, que LipSyncController convierte en
+// blendshapes con su suavizado.
 //
 // uLipSync es MIT (github.com/hecomi/uLipSync). El perfil de fonemas se puede
 // calibrar con la propia voz de Sonia desde su inspector.
@@ -48,6 +49,12 @@ namespace Sonia
 
         private bool _subscribed;
 
+        // El hilo de audio no puede tocar la API de Unity (ni siquiera
+        // isActiveAndEnabled): el estado del analizador se cachea aquí desde el
+        // hilo principal y el hilo de audio solo lee este campo.
+        private volatile bool _analyzerReady;
+        private uLipSync.uLipSync _analyzerForAudioThread;
+
         /// <summary>Último fonema dominante que devolvió el analizador.</summary>
         public string CurrentPhoneme { get; private set; }
 
@@ -66,7 +73,9 @@ namespace Sonia
 
             if (analyzer == null)
             {
-                analyzer = GetComponent<uLipSync.uLipSync>();
+                // El analizador vive en un objeto hijo, lejos del AudioSource: si
+                // compartiera objeto, Unity le pasaría también la salida retardada.
+                analyzer = GetComponentInChildren<uLipSync.uLipSync>(true);
             }
 
             if (lipSync == null)
@@ -92,6 +101,8 @@ namespace Sonia
                 _subscribed = false;
             }
 
+            _analyzerReady = false;
+            _analyzerForAudioThread = null;
             if (lipSync != null)
             {
                 lipSync.ClearPhonemeFrame();
@@ -101,15 +112,19 @@ namespace Sonia
         /// <summary>Hilo de audio: se le pasa el bloque al analizador.</summary>
         private void HandleAudioFrame(float[] data, int channels)
         {
-            if (analyzer != null && analyzer.isActiveAndEnabled)
+            uLipSync.uLipSync target = _analyzerForAudioThread;
+            if (_analyzerReady && target != null)
             {
-                analyzer.OnDataReceived(data, channels);
+                target.OnDataReceived(data, channels);
             }
         }
 
         private void Update()
         {
-            if (analyzer == null || lipSync == null || analyzer.profile == null)
+            bool ready = analyzer != null && analyzer.isActiveAndEnabled && analyzer.profile != null;
+            _analyzerForAudioThread = ready ? analyzer : null;
+            _analyzerReady = ready;
+            if (!ready || lipSync == null)
             {
                 return;
             }

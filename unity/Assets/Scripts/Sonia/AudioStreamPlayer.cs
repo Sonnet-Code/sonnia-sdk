@@ -7,6 +7,12 @@
 //  - El buffer, la lista de segmentos y los contadores se protegen con un lock.
 //    Las secciones críticas son copias de memoria: no se llama a la API de Unity
 //    dentro del lock desde el hilo de audio.
+//
+// Sincronía con la boca: el análisis de fonemas (oyentes de OnAudioFrame) ve
+// el audio "fresco" y la salida real sale lipSyncLeadMs por detrás a través de
+// una pequeña línea de retardo. Medido con la voz de Gemini: sin adelanto la
+// boca llegaba unos 75 ms tarde respecto al bloque generado (análisis, frame de
+// espera y suavizado), es decir, 40-50 ms tarde respecto al altavoz.
 
 using System;
 using System.Collections.Generic;
@@ -47,6 +53,12 @@ namespace Sonia
         [Tooltip("Avisa en la consola cuando el buffer se queda vacío en mitad de una frase.")]
         private bool logUnderruns;
 
+        [Header("Lip-sync")]
+        [SerializeField]
+        [Range(0f, 200f)]
+        [Tooltip("Milisegundos que la salida de audio va por detrás del análisis de fonemas. El análisis, el frame de espera y el suavizado de la boca suman unos 75 ms; con este adelanto la boca llega a la vez que la voz (medido: sin él va 40-50 ms tarde respecto al altavoz). 0 lo desactiva.")]
+        private float lipSyncLeadMs = 60f;
+
         /// <summary>
         /// Se dispara en el hilo principal cuando se ha consumido la última muestra
         /// de una frase marcada como terminada. El argumento es el utterance_id.
@@ -81,6 +93,15 @@ namespace Sonia
         private AudioClip _silence;
         private volatile bool _hadUnderrun;
         private bool _droppedAudio;
+
+        // Línea de retardo mono entre el análisis (lo que ven los oyentes de
+        // OnAudioFrame) y la salida real. Solo la toca el hilo de audio salvo en
+        // Flush y al reconfigurar, siempre con el lock.
+        private float[] _fresh = new float[0];
+        private float[] _analysis = new float[0];
+        private float[] _delayLine = new float[0];
+        private int _delayWrite;
+        private int _delaySamples;
 
         // ------------------------------------------------------------------
         // Propiedades para el lip-sync y la interfaz de depuración
@@ -189,6 +210,7 @@ namespace Sonia
             _audioSource = GetComponent<AudioSource>();
             RefreshOutputSampleRate();
             AllocateRing(initialBufferSeconds);
+            ConfigureDelayLine();
 
             // OnAudioFilterRead solo se llama si el AudioSource está sonando, así
             // que se reproduce en bucle un clip de silencio de un segundo.
@@ -226,6 +248,7 @@ namespace Sonia
             RefreshOutputSampleRate();
             Flush();
             AllocateRing(initialBufferSeconds);
+            ConfigureDelayLine();
             if (_audioSource != null && !_audioSource.isPlaying)
             {
                 _audioSource.Play();
@@ -236,6 +259,39 @@ namespace Sonia
         {
             int rate = AudioSettings.outputSampleRate;
             _outputSampleRate = rate > 0 ? rate : 48000;
+        }
+
+        /// <summary>Milisegundos de adelanto del lip-sync sobre la salida de audio.</summary>
+        public float LipSyncLeadMs
+        {
+            get { return lipSyncLeadMs; }
+            set
+            {
+                lipSyncLeadMs = Mathf.Clamp(value, 0f, 200f);
+                ConfigureDelayLine();
+            }
+        }
+
+        /// <summary>Dimensiona la línea de retardo según el adelanto pedido. Hilo principal.</summary>
+        private void ConfigureDelayLine()
+        {
+            int samples = Mathf.RoundToInt(Mathf.Clamp(lipSyncLeadMs, 0f, 200f) / 1000f * _outputSampleRate);
+            lock (_lock)
+            {
+                _delaySamples = samples;
+                // Capacidad: retardo más el bloque más grande que Unity pide de una vez.
+                int capacity = samples + 8192;
+                if (_delayLine.Length != capacity)
+                {
+                    _delayLine = new float[capacity];
+                }
+                else
+                {
+                    Array.Clear(_delayLine, 0, _delayLine.Length);
+                }
+
+                _delayWrite = 0;
+            }
         }
 
         private void AllocateRing(float seconds)
@@ -439,6 +495,7 @@ namespace Sonia
                 _previousSourceSample = 0f;
                 _currentRms = 0f;
                 _lastReportedDoneId = -1;
+                Array.Clear(_delayLine, 0, _delayLine.Length);
             }
         }
 
@@ -559,6 +616,17 @@ namespace Sonia
 
             lock (_lock)
             {
+                if (_fresh.Length < frames)
+                {
+                    _fresh = new float[Mathf.Max(frames, 4096)];
+                }
+
+                if (_analysis.Length != data.Length)
+                {
+                    // Mismo tamaño exacto que data: los oyentes recorren el bloque entero.
+                    _analysis = new float[data.Length];
+                }
+
                 if (_ring.Length > 0)
                 {
                     while (written < frames && _available > 0)
@@ -608,12 +676,7 @@ namespace Sonia
                                 _readPosition = 0;
                             }
 
-                            int baseIndex = (written + i) * channels;
-                            for (int c = 0; c < channels; c++)
-                            {
-                                data[baseIndex + c] = sample;
-                            }
-
+                            _fresh[written + i] = sample;
                             sumSquares += sample * sample;
                         }
 
@@ -642,14 +705,72 @@ namespace Sonia
                 }
 
                 _currentRms = (float)Math.Sqrt(sumSquares / frames);
-            }
 
-            if (written < frames)
-            {
-                Array.Clear(data, written * channels, (frames - written) * channels);
-                if (written > 0)
+                if (written < frames)
                 {
-                    _hadUnderrun = true;
+                    Array.Clear(_fresh, written, frames - written);
+                    if (written > 0)
+                    {
+                        _hadUnderrun = true;
+                    }
+                }
+
+                // Lo que ve el análisis es el audio fresco; lo que suena sale con
+                // _delaySamples de retraso, para que la boca no llegue tarde.
+                int delay = _delaySamples;
+                if (delay > 0 && _delayLine.Length >= delay + frames)
+                {
+                    int capacity = _delayLine.Length;
+                    int read = _delayWrite - delay;
+                    if (read < 0)
+                    {
+                        read += capacity;
+                    }
+
+                    for (int i = 0; i < frames; i++)
+                    {
+                        _delayLine[_delayWrite] = _fresh[i];
+                        _delayWrite++;
+                        if (_delayWrite >= capacity)
+                        {
+                            _delayWrite = 0;
+                        }
+
+                        float sample = _delayLine[read];
+                        read++;
+                        if (read >= capacity)
+                        {
+                            read = 0;
+                        }
+
+                        int baseIndex = i * channels;
+                        for (int c = 0; c < channels; c++)
+                        {
+                            data[baseIndex + c] = sample;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < frames; i++)
+                    {
+                        float sample = _fresh[i];
+                        int baseIndex = i * channels;
+                        for (int c = 0; c < channels; c++)
+                        {
+                            data[baseIndex + c] = sample;
+                        }
+                    }
+                }
+
+                for (int i = 0; i < frames; i++)
+                {
+                    float sample = _fresh[i];
+                    int baseIndex = i * channels;
+                    for (int c = 0; c < channels; c++)
+                    {
+                        _analysis[baseIndex + c] = sample;
+                    }
                 }
             }
 
@@ -658,7 +779,9 @@ namespace Sonia
             {
                 try
                 {
-                    listeners(data, channels);
+                    // Los oyentes reciben un bloque del mismo tamaño y forma que
+                    // data, pero con el audio que sonará dentro de lipSyncLeadMs.
+                    listeners(_analysis, channels);
                 }
                 catch (Exception)
                 {
