@@ -152,6 +152,97 @@ Visemas VRM estándar (`Aa`/`Ih`/`Ou`/`Ee`/`Oh`, cinco formas en vez de quince),
 así que el lip-sync es más tosco. Siguen funcionando (`Sonia > Elegir avatar`),
 pero el registro visual es anime, no el estilo Apple/Meta que se buscaba.
 
+## Diferencias de calidad entre modelos
+
+Medido sobre los ficheros, no a ojo. El script está en el scratchpad
+(`calidad.py`): abre cada GLB, mide las texturas y calcula el **área UV de la
+cabeza** (los vértices que mueven los blendshapes de cara) multiplicada por el
+tamaño de su textura. Eso da los píxeles reales que le tocan a la cara, que es
+lo que se ve en un plano medio de 1080x1920.
+
+![Nitidez de cara: Babe frente a dos multi-malla](img/avatares-nitidez-cara.jpg)
+
+| Tipo de exportación | Píxeles de cara (lado equivalente) | Ejemplos |
+|---|---|---|
+| Medio cuerpo (la cabeza se queda casi todo el atlas) | **901** | `women.avatar.glb` |
+| **Multi-malla**: `Wolf3D_Head` con textura propia de 1024 | **768** | Zoe 1/2/6/7, las cinco de DialogLab, Brunette, digital-persona |
+| **Atlas de malla única**, reparto normal | **681** | Chickie, Ciri, Grace, Rizzo, ravas, fool |
+| Reexportado por Blender con la cabeza a 512 | **482** | los seis de DiegoTovar, `aido_2` |
+| **Atlas de malla única con reparto malo** | **325** | **Babe** |
+
+**Babe es la peor del catálogo en resolución de cara.** Su atlas mete la cabeza
+en el 10 % de una textura de 1024, así que la cara vive en unos 325x325 píxeles
+reales; una Zoe tiene 768x768, es decir **5,6 veces más área de textura**. En la
+comparación de arriba se nota en cejas, pestañas y el borde de los labios.
+
+Otros ejes, por orden de importancia:
+
+- **Juego de blendshapes** (marca la generación del exportador): **72** (los 15
+  visemas de Oculus + los 57 de ARKit) > **67** (visemas + 52) > **63** > **57**
+  (solo ARKit; es lo que devolvía el CDN por defecto) > **52** > **15** (solo
+  visemas, sin parpadeo) > 5 / 2 / 0. Babe tiene 67; las de DialogLab,
+  TalkingHead y V-Tubing tienen 72.
+- **Quién exportó el fichero.** `generator: Ready Player Me` es la exportación
+  original y fiel. `Khronos glTF Blender I/O` significa que alguien lo pasó por
+  Blender, y ahí se pierden cosas: los de DiegoTovar bajaron la cabeza a 512 y
+  uno tiene el anillo del cuello desplazado 9,15 mm. `glTF-Transform` es una
+  pasada de optimización que a veces se lleva por delante los morph targets
+  (`readyplayer2.glb` se quedó con dos).
+- **Tamaño de textura.** Casi todos, 1024. Algún reexportado tiene 2048 en la
+  ropa pero 512 en la cara, que es lo contrario de lo que interesa.
+- **Formato.** PNG (sin pérdida) o JPEG (más ligero, con artefactos). A 1024
+  apenas se nota.
+- **La antigüedad no predice nada.** Los nombres que son ObjectId de MongoDB
+  llevan la fecha dentro: el catálogo va de **noviembre de 2022 a marzo de
+  2026** y no hay correlación entre fecha y calidad. Lo que manda son los
+  parámetros con los que se pidió el fichero, no cuándo se creó el avatar.
+- **El peso del fichero tampoco.** `fool.glb` pesa 15,3 MB y tiene 681 px de
+  cara; Zoe 6 pesa 2,6 MB y tiene 768. El peso lo mandan los triángulos y el
+  número de texturas.
+
+## Trasplantar cabezas entre avatares
+
+Comprobado sobre la geometría, no supuesto:
+
+- La cabeza de Babe es una pieza suelta de **3 838 triángulos y 1 979
+  vértices**. El `Wolf3D_Head` de Zoe 1 tiene **exactamente los mismos** 3 838 y
+  1 979. Todos los avatares de RPM usan la misma malla de cabeza; lo que cambia
+  son las posiciones de los vértices de la cara y la textura.
+- El **anillo del cuello son 17 vértices** y coincide **al 0,00 mm** entre Babe,
+  Zoe 1, Zoe 6, Chickie, Female 3, Brunette y las de digital-persona. RPM dejaba
+  el cuello fijo a propósito para poder intercambiar cabezas y cuerpos. La única
+  excepción medida es `c47ba0a6` (DiegoTovar), desplazado 9,15 mm en bloque por
+  el reexportado de Blender: se arregla moviendo la pieza.
+- En una exportación de **malla única** como la de Babe las piezas siguen siendo
+  componentes desconectados: en Blender, `P > By Loose Parts` recupera cabeza,
+  dientes, ojos, cuerpo, top, pantalón, zapatillas y pelo por separado.
+
+Receta, en Blender:
+
+1. Importar los dos GLB. Separar el `Wolf3D_Avatar` del de malla única por
+   piezas sueltas.
+2. Borrar del receptor la cabeza, los dientes y los dos ojos.
+3. Emparentar las piezas del donante al armature del receptor (`Ctrl+P > With
+   Empty Groups` no; hay que conservar los grupos de vértices, que ya vienen con
+   los mismos nombres de hueso de Mixamo).
+4. Exportar como GLB y pasarlo por **Sonia > Elegir avatar** y **Colocar
+   avatar**.
+
+Dos avisos:
+
+- **El cuello canta si los tonos de piel no coinciden.** La cabeza se lleva su
+  textura y el cuerpo la suya. La forma de no tener ese problema es trasplantar
+  **cabeza y cuerpo juntos** y quedarse solo con la ropa del otro avatar.
+- **Cambiar de cuerpo no arregla la cara.** Si se pone la cabeza de Babe sobre
+  otro cuerpo, la cara sigue teniendo sus 325 píxeles. Para ganar nitidez hay
+  que ir al revés: quedarse con una cabeza multi-malla (Zoe 1, Brunette,
+  Female 3) y vestirla como haga falta.
+
+Por eso, para la camiseta del staff, la operación recomendada no es cambiar la
+cabeza sino **la ropa**: quedarse con Babe entera y traerle el top de otro
+avatar. Sin costuras, sin desajuste de piel, y con una prenda lisa y grande
+donde el logo del DevFest se pinta sin pelear con el atlas.
+
 ## Personalización
 
 ### Cambiar de personaje
