@@ -9,11 +9,14 @@
 // interpolación suave para que se lea como un movimiento de cámara:
 //
 //   abierto  bailes, gestos de atención y saludo (lo dice el coreógrafo)
-//   panel    mientras hay una imagen puesta: se echa atrás y sube para dejar
-//            libre la mitad de arriba de la pantalla
+//   panel    mientras hay una imagen puesta: se echa un poco atrás y sube para
+//            que la imagen, fija en la franja alta de la pantalla, no tape a
+//            Sonia (que sigue de cintura para arriba)
 //   base     el plano medio de siempre, con la cara grande
 //
 // La prioridad es esa: si Sonia baila mientras hay una imagen, manda el baile.
+// El plano abierto está apagado por defecto (en el stand la cámara no se mueve
+// por bailes ni reverencias); el de panel es un retroceso suave.
 
 using UnityEngine;
 
@@ -54,7 +57,15 @@ namespace Sonia
 
         [Header("Plano de panel")]
         [SerializeField]
-        [Tooltip("Posición de la cámara mientras hay una imagen puesta. La calcula Sonia > Colocar avatar.")]
+        [Tooltip("Echar la cámara un poco atrás mientras hay una imagen puesta, para que la imagen (fija arriba en pantalla) no tape a Sonia.")]
+        private bool panelShotEnabled = true;
+
+        [SerializeField]
+        [Tooltip("Desplazamiento de la cámara respecto al plano base mientras hay una imagen: un poco más alta y más atrás. Sonia sigue de cintura para arriba, algo más pequeña.")]
+        private Vector3 panelShotOffset = new Vector3(0f, 0.13f, -0.45f);
+
+        [SerializeField]
+        [Tooltip("Posición absoluta de la cámara con imagen (solo si el desplazamiento es cero). La calculaba Sonia > Colocar avatar.")]
         private Vector3 panelShotPosition = new Vector3(0f, 1.62f, -1.42f);
 
         [SerializeField]
@@ -147,7 +158,7 @@ namespace Sonia
             }
 
             _wide = NeedsWideShot();
-            _panel = !_wide && imagePanel != null && imagePanel.IsVisible;
+            _panel = panelShotEnabled && !_wide && imagePanel != null && imagePanel.IsVisible;
 
             Vector3 targetPosition = _basePosition;
             float targetFieldOfView = _baseFieldOfView;
@@ -162,7 +173,9 @@ namespace Sonia
             }
             else if (_panel)
             {
-                targetPosition = panelShotPosition;
+                targetPosition = panelShotOffset.sqrMagnitude > 0.0001f
+                    ? _basePosition + panelShotOffset
+                    : panelShotPosition;
                 if (panelShotFieldOfView > 0f)
                 {
                     targetFieldOfView = panelShotFieldOfView;

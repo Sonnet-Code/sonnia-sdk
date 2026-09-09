@@ -190,6 +190,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     #: Reiniciar la conversación tras N segundos sin actividad (modo kiosco).
     idle_reset_seconds: float = 120.0
+    #: Retirar sola una imagen mostrada tras N segundos (0 = nunca). El modelo
+    #: la retira al cambiar de tema, pero si se olvida no se queda ahí.
+    image_auto_hide_seconds: float = 30.0
 
     @property
     def gallery_dir(self) -> Path:

@@ -94,6 +94,15 @@ namespace Sonia
             {
                 get { return Clip == null || Clip.isLooping ? 0f : Mathf.Max(0f, Clip.length - Time); }
             }
+
+            /// <summary>Velocidad de reproducción (0 congela el clip donde está).</summary>
+            public void SetSpeed(float speed)
+            {
+                if (Owner != null)
+                {
+                    Owner.SetSpeedOf(this, speed);
+                }
+            }
         }
 
         private sealed class SlotState
@@ -505,6 +514,16 @@ namespace Sonia
             }
 
             return (float)_layerStates[handle.Layer].Slots[handle.Slot].Playable.GetTime();
+        }
+
+        private void SetSpeedOf(Handle handle, float speed)
+        {
+            if (!IsAlive(handle))
+            {
+                return;
+            }
+
+            _layerStates[handle.Layer].Slots[handle.Slot].Playable.SetSpeed(speed);
         }
     }
 }

@@ -190,6 +190,7 @@ namespace Sonia.EditorTools
             set.thinkingVariations = LoadClips(SoniaAnimations.ThinkingVariationClips, missing);
             set.talking = LoadClips(SoniaAnimations.TalkingClips, missing);
             set.greeting = LoadClip(SoniaAnimations.GreetingClip, missing);
+            set.present = LoadClip(SoniaAnimations.PresentClip, missing);
 
             List<AttentionMotion> attention = new List<AttentionMotion>();
             for (int i = 0; i < SoniaAnimations.AttentionClips.Length; i++)

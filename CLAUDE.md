@@ -66,6 +66,8 @@ Definidas una sola vez en `server/actions` y expuestas por tool calling y por MC
 
 Además de la acción `look`, el orquestador adjunta automáticamente una captura al turno cuando detecta que alguien empieza a hablar, y opcionalmente cada cierto tiempo mientras hay presencia. Esa política vive en `server/vision` y se controla por variables de entorno (`VISION_ON_TURN_START`, `VISION_INTERVAL_SECONDS`). Si `LLM_SUPPORTS_VISION=false`, la capa de visión se desactiva entera y `look` deja de anunciarse al modelo.
 
+`show_image` en Unity: Sonia señala con el índice (gesto congelado en la capa de torso) y la imagen sale fija en la franja alta de la pantalla cuando la mano llega arriba; la cámara se echa un poco atrás. El orquestador la retira sola a los `IMAGE_AUTO_HIDE_SECONDS` (30).
+
 Al añadir una acción nueva: definirla en `server/actions`, escribir su handler, añadir el mensaje correspondiente al protocolo WebSocket si afecta a Unity, e implementar el lado de Unity en el mismo commit.
 
 ## Protocolo entre orquestador y Unity

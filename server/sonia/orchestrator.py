@@ -276,6 +276,7 @@ class Orchestrator:
         self._last_frame: Frame | None = None
         self._utterance_counter = 0
         self._mic_hears_sonia = False
+        self._image_hide_task: asyncio.Task[None] | None = None
         self._playback_done_id = 0
         self._playback_event = asyncio.Event()
         #: Se activa cuando no hay eventos pendientes ni turno en curso.
@@ -730,9 +731,36 @@ class Orchestrator:
                 result = await self._registry.execute(call.name, call.arguments, ctx)
             logger.info("Acción %s(%s) -> %s", call.name, call.arguments, result.text)
             results.append((call, result))
+            if call.name == "show_image" and result.text.startswith("Mostrando"):
+                self._schedule_image_auto_hide()
+            elif call.name == "hide_image":
+                self._cancel_image_auto_hide()
         if ctx.last_frame is not None:
             self._last_frame = ctx.last_frame
         return results
+
+    # -- imagen en pantalla ---------------------------------------------------
+
+    def _schedule_image_auto_hide(self) -> None:
+        """Programa retirar la imagen sola pasado ``image_auto_hide_seconds``."""
+        self._cancel_image_auto_hide()
+        seconds = self._settings.image_auto_hide_seconds
+        if seconds <= 0:
+            return
+        self._image_hide_task = asyncio.create_task(
+            self._auto_hide_image(seconds), name="sonia-image-auto-hide"
+        )
+
+    def _cancel_image_auto_hide(self) -> None:
+        task, self._image_hide_task = self._image_hide_task, None
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def _auto_hide_image(self, seconds: float) -> None:
+        await asyncio.sleep(seconds)
+        logger.info("Imagen retirada sola tras %.0f s", seconds)
+        self._image_hide_task = None
+        await self._hub.hide_image()
 
     # -- bucle de síntesis --------------------------------------------------
 
@@ -1058,6 +1086,7 @@ class Orchestrator:
         self._conversation.set_system_prompt(self._build_system_prompt())
         self._last_frame = None
         self._touch()
+        self._cancel_image_auto_hide()
         await self._hub.hide_image()
 
     def _build_system_prompt(self) -> str:

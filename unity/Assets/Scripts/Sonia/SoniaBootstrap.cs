@@ -82,6 +82,7 @@ namespace Sonia
         [Tooltip("Si en mitad de una respuesta se acaba el audio y no llega más en estos segundos, los gestos de hablar se pausan (espera atenta) hasta que vuelva la voz. 0 lo desactiva.")]
         private float speechGapPauseSeconds = 0.4f;
 
+
         [Header("Registro")]
         [SerializeField]
         [Tooltip("Escribir en la consola los eventos importantes del protocolo.")]
@@ -95,6 +96,8 @@ namespace Sonia
         private int _lastAudioUtteranceId = -1;
         // Momento en que se agotó el audio en mitad de 'hablando' (-1 si suena).
         private float _audioDrainedAt = -1f;
+        // Imagen anunciada que espera a que la mano llegue arriba.
+        private ShowImageMessage _pendingImage;
 
         private void Awake()
         {
@@ -421,6 +424,23 @@ namespace Sonia
                 }
             }
 
+            if (_pendingImage != null && choreographer != null)
+            {
+                if (choreographer.IsPresentHolding)
+                {
+                    ShowImageMessage message = _pendingImage;
+                    _pendingImage = null;
+                    ShowImageNow(message);
+                }
+                else if (!choreographer.IsPresenting)
+                {
+                    // El gesto se cortó (otro estado, otro clip): la imagen sale igual.
+                    ShowImageMessage message = _pendingImage;
+                    _pendingImage = null;
+                    ShowImageNow(message);
+                }
+            }
+
             if (_audioDrainedAt >= 0f && speechGapPauseSeconds > 0f && choreographer != null
                 && !choreographer.SpeechPaused && Time.time - _audioDrainedAt > speechGapPauseSeconds
                 && avatarState != null && avatarState.State == AvatarState.Speaking)
@@ -534,21 +554,37 @@ namespace Sonia
 
         private void HandleShowImage(ShowImageMessage message)
         {
-            if (imagePanel == null)
+            if (imagePanel == null || message == null)
             {
                 return;
             }
 
+            // Sonia levanta la mano y señala; la imagen aparece encima del dedo
+            // cuando la mano llega arriba (ver Update), no antes.
+            if (choreographer != null && choreographer.BeginPresent())
+            {
+                _pendingImage = message;
+            }
+            else
+            {
+                _pendingImage = null;
+                ShowImageNow(message);
+            }
+
+            if (logEvents)
+            {
+                Debug.Log("[Sonia] show_image: " + message.ImageId + " (" + message.Source + ")", this);
+            }
+        }
+
+        private void ShowImageNow(ShowImageMessage message)
+        {
+            // Elemento de pantalla: el panel se coloca en su sitio fijo al mostrarse.
             imagePanel.Show(message);
 
             if (avatarState != null)
             {
                 avatarState.SetImagePanel(imagePanel.PanelTransform, imagePanel.IsVisible);
-            }
-
-            if (logEvents && message != null)
-            {
-                Debug.Log("[Sonia] show_image: " + message.ImageId + " (" + message.Source + ")", this);
             }
         }
 
@@ -559,7 +595,12 @@ namespace Sonia
                 return;
             }
 
+            _pendingImage = null;
             imagePanel.Hide();
+            if (choreographer != null)
+            {
+                choreographer.EndPresent();
+            }
 
             if (avatarState != null)
             {

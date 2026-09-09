@@ -51,6 +51,9 @@ namespace Sonia
         [Tooltip("Saludo con la mano al acercarse alguien tras un rato sola.")]
         public AnimationClip greeting;
 
+        [Tooltip("Gesto de presentar una imagen (se congela señalando mientras la imagen está puesta).")]
+        public AnimationClip present;
+
         [Header("Atención en el idle")]
         [Tooltip("Bailes, gestos de cuarta pared y gestos suaves que rompen el idle.")]
         public AttentionMotion[] attention = new AttentionMotion[0];

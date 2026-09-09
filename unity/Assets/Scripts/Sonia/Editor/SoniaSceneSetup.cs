@@ -434,6 +434,15 @@ namespace Sonia.EditorTools
             SoniaDebugUiRefs subtitleRefs = default(SoniaDebugUiRefs);
             EnsureSubtitles(debugGroup, ref subtitleRefs);
 
+            // El panel de imágenes lo dibuja la cámara del HUD, sin postprocesado
+            // y por encima del avatar: la imagen se ve tal cual es.
+            Transform panel = root.transform.Find(PanelName);
+            if (panel != null)
+            {
+                Undo.RecordObject(panel.gameObject, "Actualizar componentes de Sonia");
+                SetLayerRecursively(panel.gameObject, LayerMask.NameToLayer("UI"));
+            }
+
             SoniaDebugUI debugUI = root.GetComponentInChildren<SoniaDebugUI>(true);
             if (debugUI != null)
             {
@@ -563,6 +572,8 @@ namespace Sonia.EditorTools
             }
 
             captionObject.SetActive(false);
+
+            SetLayerRecursively(panelRoot, LayerMask.NameToLayer("UI"));
 
             ImagePanelController controller = panelRoot.AddComponent<ImagePanelController>();
             SerializedObject serialized = new SerializedObject(controller);
@@ -919,6 +930,21 @@ namespace Sonia.EditorTools
             text.textWrappingMode = TextWrappingModes.Normal;
             text.raycastTarget = false;
             return bubble;
+        }
+
+        /// <summary>Pone la capa a un objeto y a todos sus hijos (si la capa existe).</summary>
+        private static void SetLayerRecursively(GameObject root, int layer)
+        {
+            if (root == null || layer < 0)
+            {
+                return;
+            }
+
+            root.layer = layer;
+            for (int i = 0; i < root.transform.childCount; i++)
+            {
+                SetLayerRecursively(root.transform.GetChild(i).gameObject, layer);
+            }
         }
 
         /// <summary>Deja un RectTransform ocupando todo su padre.</summary>

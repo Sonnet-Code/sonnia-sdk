@@ -120,6 +120,16 @@ namespace Sonia
         public const string GreetingClip = "Greeting";
 
         /// <summary>
+        /// Gesto de presentar una imagen: levanta la mano y señala con el índice.
+        /// Se reproduce en la capa de torso y se congela en su punto álgido
+        /// (<see cref="PresentHoldTime"/>) mientras la imagen está puesta.
+        /// </summary>
+        public const string PresentClip = "Point_ThisGuy";
+
+        /// <summary>Segundo del clip de presentar en el que la mano está arriba señalando.</summary>
+        public const float PresentHoldTime = 0.45f;
+
+        /// <summary>
         /// Gestos de atención que Sonia lanza sola mientras está en idle, para
         /// que el stand no parezca una estatua. Todos se reproducen una sola vez.
         /// </summary>

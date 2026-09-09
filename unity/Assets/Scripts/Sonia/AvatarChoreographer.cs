@@ -134,6 +134,11 @@ namespace Sonia
         private Phase _phase = Phase.Base;
         private MotionPlayer.Handle _body;
         private MotionPlayer.Handle _upper;
+
+        // Gesto de presentar (imagen): mano arriba congelada en el punto álgido.
+        private MotionPlayer.Handle _present;
+        private bool _presentHolding;
+        private bool _presentReleasing;
         private AnimationClip _lastTalking;
         private bool _speechPaused;
         private AnimationClip _lastVariation;
@@ -234,7 +239,8 @@ namespace Sonia
             bool cutting = _phase == Phase.Attention || _phase == Phase.Greeting;
             EnterState(state, cutting ? Mathf.Max(fade, attentionFadeOut * 0.6f) : fade, false);
 
-            if (previous == AvatarState.Listening && state != AvatarState.Listening && motionPlayer != null)
+            if (previous == AvatarState.Listening && state != AvatarState.Listening && motionPlayer != null
+                && !IsPresenting)
             {
                 motionPlayer.FadeOut(MotionPlayer.UpperLayer, nodFade);
                 _upper = null;
@@ -329,6 +335,116 @@ namespace Sonia
             _attentionTimer = Random.Range(attentionInterval.x, attentionInterval.y);
             Log("saludo tras " + Mathf.RoundToInt(idleSeconds) + " s en idle");
             return true;
+        }
+
+        /// <summary>
+        /// Empieza a presentar una imagen: levanta la mano y señala con el índice
+        /// (capa de torso, así sigue hablando o en reposo con las piernas y el
+        /// resto). El gesto se congela al llegar arriba y se sostiene hasta
+        /// <see cref="EndPresent"/>. Devuelve falso si no hay clip.
+        /// </summary>
+        public bool BeginPresent()
+        {
+            if (!Ready || motionSet.present == null)
+            {
+                return false;
+            }
+
+            _presentHolding = false;
+            _presentReleasing = false;
+            _present = motionPlayer.Play(motionSet.present, MotionPlayer.UpperLayer, nodFade);
+            _upper = null;
+            Log("presenta una imagen: " + motionSet.present.name);
+            return true;
+        }
+
+        /// <summary>Suelta el gesto de presentar: la mano termina de bajar y la capa de torso se apaga.</summary>
+        public void EndPresent()
+        {
+            if (_present == null)
+            {
+                return;
+            }
+
+            if (_present.IsAlive)
+            {
+                _present.SetSpeed(1f);
+                _presentReleasing = true;
+            }
+            else
+            {
+                _present = null;
+            }
+
+            _presentHolding = false;
+        }
+
+        /// <summary>Cierto mientras la mano está arriba, congelada señalando.</summary>
+        public bool IsPresentHolding
+        {
+            get { return _presentHolding && _present != null && _present.IsAlive; }
+        }
+
+        /// <summary>Cierto mientras dura el gesto de presentar (subiendo, sostenido o bajando).</summary>
+        public bool IsPresenting
+        {
+            get { return _present != null && _present.IsAlive; }
+        }
+
+        /// <summary>Animator humano que mueve el reproductor (para huesos de referencia).</summary>
+        public Animator MotionPlayerAnimator
+        {
+            get { return motionPlayer != null ? motionPlayer.Animator : null; }
+        }
+
+        /// <summary>Punta del índice de la mano que presenta, o null si no hay Animator humano.</summary>
+        public Transform PresentAnchor
+        {
+            get
+            {
+                Animator animator = motionPlayer != null ? motionPlayer.Animator : null;
+                if (animator == null || !animator.isHuman)
+                {
+                    return null;
+                }
+
+                Transform tip = animator.GetBoneTransform(HumanBodyBones.RightIndexDistal);
+                return tip != null ? tip : animator.GetBoneTransform(HumanBodyBones.RightHand);
+            }
+        }
+
+        private void UpdatePresent()
+        {
+            if (_present == null)
+            {
+                return;
+            }
+
+            if (!_present.IsAlive)
+            {
+                _present = null;
+                _presentHolding = false;
+                _presentReleasing = false;
+                return;
+            }
+
+            if (_presentReleasing)
+            {
+                if (_present.Remaining <= nodFade)
+                {
+                    motionPlayer.FadeOut(MotionPlayer.UpperLayer, nodFade);
+                    _present = null;
+                    _presentReleasing = false;
+                }
+
+                return;
+            }
+
+            if (!_presentHolding && _present.Time >= SoniaAnimations.PresentHoldTime)
+            {
+                _present.SetSpeed(0f);
+                _presentHolding = true;
+            }
         }
 
         /// <summary>
@@ -471,6 +587,8 @@ namespace Sonia
                 return;
             }
 
+            UpdatePresent();
+
             // Un gesto de una sola vez ha terminado (o casi): vuelta a la base.
             if (_phase != Phase.Base)
             {
@@ -551,6 +669,11 @@ namespace Sonia
         private void UpdateListening(float dt)
         {
             EnsureLoop(motionSet.listeningLoop, stateFade);
+
+            if (IsPresenting)
+            {
+                return;
+            }
 
             if (_upper != null && _upper.IsAlive)
             {

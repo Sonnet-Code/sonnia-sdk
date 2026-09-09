@@ -219,6 +219,7 @@ def make_settings(
     idle_reset: float = 120.0,
     max_tool_rounds: int = 3,
     showcase: ShowcaseSettings | None = None,
+    image_auto_hide: float = 0.0,
 ) -> Settings:
     gallery = tmp_path / "gallery"
     gallery.mkdir(exist_ok=True)
@@ -244,6 +245,7 @@ def make_settings(
         assets_dir=str(tmp_path),
         log_level="DEBUG",
         idle_reset_seconds=idle_reset,
+        image_auto_hide_seconds=image_auto_hide,
     )
     if showcase is not None:
         values["showcase"] = showcase
@@ -891,3 +893,25 @@ async def test_el_glosario_corrige_la_transcripcion_antes_del_modelo(tmp_path: P
         user = rig.rec.of_type("transcript")[0]
         assert user["text"] == "quiero saber de Alexander Vegazo"
         assert last_user_message(captured[0])["content"] == "quiero saber de Alexander Vegazo"
+
+
+async def test_la_imagen_se_retira_sola_pasado_el_tiempo(tmp_path: Path) -> None:
+    add_gallery_image(tmp_path, "logo-sonnet.png", b"\x89PNG\r\n\x1a\nlogo-de-prueba")
+    captured: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        captured.append(body)
+        if any(m["role"] == "tool" for m in body["messages"]):
+            return sse_response(text_stream("Ahí lo tienes."))
+        return sse_response(tool_stream("show_image", {"image_id": "logo-sonnet"}))
+
+    async with make_rig(
+        tmp_path, handler, captured=captured, vision_source="none", image_auto_hide=0.3
+    ) as rig:
+        await rig.orch.submit(TextTurn("enséñame el logo"))
+        await rig.rec.wait_type("show_image")
+        assert rig.rec.of_type("hide_image") == []
+        await rig.rec.wait_type("hide_image", limit=3.0)
+        kinds = rig.rec.kinds()
+        assert kinds.index("show_image") < kinds.index("hide_image")

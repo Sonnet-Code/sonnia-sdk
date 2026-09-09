@@ -299,6 +299,20 @@ blanca con "SONIA" en el azul de la marca; cada una crece con su texto y se
 oculta vacía. El texto de Sonia aparece con su primer chunk de audio, no con
 `speech_start`.
 
+**Imágenes** (`show_image`): el panel es un elemento de pantalla, no un objeto
+que siga al personaje. Al llegar la imagen, Sonia levanta la mano y señala con
+el índice (`Point_ThisGuy` en la capa de torso, congelado en su punto álgido con
+`Handle.SetSpeed(0)` mientras dura la imagen); la imagen aparece cuando la mano
+llega arriba (señal real del coreógrafo, `IsPresentHolding`), en una franja fija
+de la parte alta de la pantalla (`ImagePanelController.PlaceOnScreen`: margen
+superior del 12 % para no chocar con el logo ni con los botones, hasta el 70 %
+del ancho y el 22 % del alto), y la cámara se echa un poco atrás y sube
+(`CameraFramingController.panelShotOffset`, 0,13 m y 0,45 m) para que no la
+tape; el panel se recoloca cada frame durante ese movimiento. Está en la capa
+UI: lo dibuja la cámara del HUD, sin postprocesado, con el pie dentro del panel.
+El orquestador retira la imagen sola a los `IMAGE_AUTO_HIDE_SECONDS` (30) si el
+modelo no lo hace antes.
+
 Un montaje desde cero se hace en ese orden. Cualquier comprobación de encuadre
 se mira con la captura vertical: las capturas normales del editor salen en 16:9
 y engañan, porque en 9:16 se ve mucho menos a lo ancho.
