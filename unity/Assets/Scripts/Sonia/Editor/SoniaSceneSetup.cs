@@ -134,8 +134,8 @@ namespace Sonia.EditorTools
             AudioStreamPlayer audioPlayer = root.AddComponent<AudioStreamPlayer>();
             LipSyncController lipSync = root.AddComponent<LipSyncController>();
             AvatarStateController avatarState = root.AddComponent<AvatarStateController>();
-            IdleAttentionController idleAttention = root.AddComponent<IdleAttentionController>();
-            SpeakingGestureController speakingGestures = root.AddComponent<SpeakingGestureController>();
+            MotionPlayer motionPlayer = root.AddComponent<MotionPlayer>();
+            AvatarChoreographer choreographer = root.AddComponent<AvatarChoreographer>();
             CameraFramingController cameraFraming = root.AddComponent<CameraFramingController>();
             WebcamFrameSender webcam = root.AddComponent<WebcamFrameSender>();
             SoniaDebugUI debugUI = root.AddComponent<SoniaDebugUI>();
@@ -155,8 +155,8 @@ namespace Sonia.EditorTools
                 audioPlayer,
                 lipSync,
                 avatarState,
-                idleAttention,
-                speakingGestures,
+                motionPlayer,
+                choreographer,
                 cameraFraming,
                 panel,
                 webcam,
@@ -217,8 +217,8 @@ namespace Sonia.EditorTools
             GameObject root = bootstrap.gameObject;
             int undoGroup = Undo.GetCurrentGroup();
 
-            IdleAttentionController idleAttention = EnsureComponent<IdleAttentionController>(root);
-            SpeakingGestureController speakingGestures = EnsureComponent<SpeakingGestureController>(root);
+            MotionPlayer motionPlayer = EnsureComponent<MotionPlayer>(root);
+            AvatarChoreographer choreographer = EnsureComponent<AvatarChoreographer>(root);
             CameraFramingController cameraFraming = EnsureComponent<CameraFramingController>(root);
             AvatarStateController avatarState = root.GetComponentInChildren<AvatarStateController>(true);
             LipSyncController lipSync = root.GetComponentInChildren<LipSyncController>(true);
@@ -230,23 +230,22 @@ namespace Sonia.EditorTools
                 ? avatarState.GetComponentInChildren<Animator>(true)
                 : root.GetComponentInChildren<Animator>(true);
 
-            SerializedObject idleObject = new SerializedObject(idleAttention);
-            SetReference(idleObject, "animator", animator);
-            idleObject.ApplyModifiedPropertiesWithoutUndo();
+            // Reproductor y coreógrafo: set de clips y máscara de torso ya generados.
+            SoniaMotionSetBuilder.Wire(
+                root, animator, SoniaMotionSetBuilder.LoadOrBuildMotionSet(), SoniaMotionSetBuilder.LoadOrBuildMask());
 
-            SerializedObject speakingObject = new SerializedObject(speakingGestures);
-            SetReference(speakingObject, "animator", animator);
-            speakingObject.ApplyModifiedPropertiesWithoutUndo();
+            // Fonemas en tiempo real (uLipSync) y mirada de los ojos.
+            EnsurePhonemeLipSync(root, avatarState);
+            EnsureEyeGaze(root, avatarState, choreographer, animator);
 
             SerializedObject framingObject = new SerializedObject(cameraFraming);
-            SetReference(framingObject, "animator", animator);
+            SetReference(framingObject, "choreographer", choreographer);
             SetReference(framingObject, "targetCamera", Camera.main);
             SetReference(framingObject, "imagePanel", panel);
             framingObject.ApplyModifiedPropertiesWithoutUndo();
 
             SerializedObject bootstrapObject = new SerializedObject(bootstrap);
-            SetReference(bootstrapObject, "idleAttention", idleAttention);
-            SetReference(bootstrapObject, "speakingGestures", speakingGestures);
+            SetReference(bootstrapObject, "choreographer", choreographer);
             SetReference(bootstrapObject, "cameraFraming", cameraFraming);
             SetReference(bootstrapObject, "avatarState", avatarState);
             SetReference(bootstrapObject, "lipSync", lipSync);
@@ -263,6 +262,75 @@ namespace Sonia.EditorTools
                 "[Sonia] Componentes actualizados en \"" + root.name + "\". Animator: "
                 + (animator != null ? animator.name : "sin asignar, coloca antes el avatar") + ".",
                 root);
+        }
+
+        /// <summary>Perfil de fonemas de uLipSync que se usa mientras no haya uno calibrado con la voz de Sonia.</summary>
+        private const string DefaultPhonemeProfilePath =
+            "Packages/com.hecomi.ulipsync/Assets/Profiles/uLipSync-Profile-Sample-Female.asset";
+
+        /// <summary>
+        /// Deja en el objeto raíz el analizador de fonemas y su puente al lip-sync.
+        /// El analizador recibe el audio desde AudioStreamPlayer, no del
+        /// AudioSource, así que no importa el orden de los componentes.
+        /// </summary>
+        public static void EnsurePhonemeLipSync(GameObject root, AvatarStateController avatarState)
+        {
+            uLipSync.uLipSync analyzer = EnsureComponent<uLipSync.uLipSync>(root);
+            if (analyzer.profile == null)
+            {
+                analyzer.profile = AssetDatabase.LoadAssetAtPath<uLipSync.Profile>(DefaultPhonemeProfilePath);
+                EditorUtility.SetDirty(analyzer);
+            }
+
+            PhonemeLipSyncBridge bridge = EnsureComponent<PhonemeLipSyncBridge>(root);
+            SerializedObject bridgeObject = new SerializedObject(bridge);
+            SetReference(bridgeObject, "audioPlayer", root.GetComponent<AudioStreamPlayer>());
+            SetReference(bridgeObject, "analyzer", analyzer);
+            SetReference(bridgeObject, "lipSync", root.GetComponent<LipSyncController>());
+            bridgeObject.ApplyModifiedPropertiesWithoutUndo();
+
+            if (avatarState != null)
+            {
+                SerializedObject stateObject = new SerializedObject(avatarState);
+                SetReference(stateObject, "lipSync", root.GetComponent<LipSyncController>());
+                stateObject.ApplyModifiedPropertiesWithoutUndo();
+            }
+        }
+
+        /// <summary>Deja en el objeto raíz la mirada de los ojos apuntando a la cabeza del avatar.</summary>
+        public static void EnsureEyeGaze(
+            GameObject root, AvatarStateController avatarState, AvatarChoreographer choreographer, Animator animator)
+        {
+            EyeGazeController gaze = EnsureComponent<EyeGazeController>(root);
+            SerializedObject gazeObject = new SerializedObject(gaze);
+            SetReference(gazeObject, "stateController", avatarState);
+            SetReference(gazeObject, "choreographer", choreographer);
+            Transform head = animator != null && animator.isHuman
+                ? animator.GetBoneTransform(HumanBodyBones.Head)
+                : null;
+            SetReference(gazeObject, "headBone", head);
+            SetReference(gazeObject, "leftEye", FindEye(head, "LeftEye"));
+            SetReference(gazeObject, "rightEye", FindEye(head, "RightEye"));
+            gazeObject.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static Transform FindEye(Transform head, string name)
+        {
+            if (head == null)
+            {
+                return null;
+            }
+
+            Transform[] all = head.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i].name == name || all[i].name.EndsWith(":" + name))
+                {
+                    return all[i];
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -827,8 +895,8 @@ namespace Sonia.EditorTools
             AudioStreamPlayer audioPlayer,
             LipSyncController lipSync,
             AvatarStateController avatarState,
-            IdleAttentionController idleAttention,
-            SpeakingGestureController speakingGestures,
+            MotionPlayer motionPlayer,
+            AvatarChoreographer choreographer,
             CameraFramingController cameraFraming,
             ImagePanelController panel,
             WebcamFrameSender webcam,
@@ -867,8 +935,13 @@ namespace Sonia.EditorTools
             SetReference(debugObject, "interruptButton", refs.Interrupt);
             debugObject.ApplyModifiedPropertiesWithoutUndo();
 
+            SerializedObject choreoObject = new SerializedObject(choreographer);
+            SetReference(choreoObject, "motionPlayer", motionPlayer);
+            choreoObject.ApplyModifiedPropertiesWithoutUndo();
+
             SerializedObject framingObject = new SerializedObject(cameraFraming);
             SetReference(framingObject, "imagePanel", panel);
+            SetReference(framingObject, "choreographer", choreographer);
             Camera mainCamera = Camera.main;
             if (mainCamera != null)
             {
@@ -882,8 +955,7 @@ namespace Sonia.EditorTools
             SetReference(bootstrapObject, "audioPlayer", audioPlayer);
             SetReference(bootstrapObject, "lipSync", lipSync);
             SetReference(bootstrapObject, "avatarState", avatarState);
-            SetReference(bootstrapObject, "idleAttention", idleAttention);
-            SetReference(bootstrapObject, "speakingGestures", speakingGestures);
+            SetReference(bootstrapObject, "choreographer", choreographer);
             SetReference(bootstrapObject, "cameraFraming", cameraFraming);
             SetReference(bootstrapObject, "imagePanel", panel);
             SetReference(bootstrapObject, "webcam", webcam);

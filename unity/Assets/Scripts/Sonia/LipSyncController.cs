@@ -1,9 +1,18 @@
 // Lip-sync del avatar.
 //
-// Modo principal: visemas con timestamp que envía el orquestador, alineados con
-// el audio realmente reproducido (AudioStreamPlayer.CurrentUtteranceTime).
-// Modo de respaldo: apertura de boca según la envolvente de amplitud de la frase
-// o, si tampoco hay envolvente, según el nivel RMS del audio que suena.
+// Tres fuentes, por orden de preferencia:
+//  1. Visemas con timestamp que envía el orquestador, alineados con el audio
+//     realmente reproducido (AudioStreamPlayer.CurrentUtteranceTime). Solo
+//     llegan cuando el TTS entrega la frase entera antes de sonar.
+//  2. Fonemas analizados en tiempo real sobre el audio que suena (uLipSync a
+//     través de PhonemeLipSyncBridge): vocales A/I/U/E/O y nasal, con
+//     proporciones que ya vienen mezcladas, así que la boca pasa de una forma a
+//     otra sin saltos.
+//  3. Apertura de boca según la envolvente de amplitud de la frase o, si
+//     tampoco hay envolvente, según el nivel RMS del audio que suena.
+//
+// Los pesos se suavizan con ataque rápido y caída más lenta, que es como se
+// mueve una boca real, y se acotan para que nunca se abra del todo.
 
 using System;
 using System.Collections.Generic;
@@ -49,9 +58,14 @@ namespace Sonia
         private VisemeBinding[] visemeBindings = CreateDefaultBindings();
 
         [SerializeField]
-        [Range(1f, 40f)]
-        [Tooltip("Velocidad de interpolación de los pesos. Más alto, boca más nerviosa.")]
-        private float smoothing = 14f;
+        [Range(1f, 60f)]
+        [Tooltip("Velocidad con la que un visema sube (ataque). Más alto, boca más nerviosa.")]
+        private float attackSpeed = 28f;
+
+        [SerializeField]
+        [Range(1f, 60f)]
+        [Tooltip("Velocidad con la que un visema baja (caída). Más bajo, transiciones más suaves.")]
+        private float releaseSpeed = 11f;
 
         [SerializeField]
         [Tooltip("Desfase en segundos entre el audio y los visemas. Negativo adelanta la boca.")]
@@ -59,8 +73,13 @@ namespace Sonia
 
         [SerializeField]
         [Range(0f, 100f)]
-        [Tooltip("Peso máximo que se aplica a un visema con w = 1.")]
-        private float visemeMaxWeight = 100f;
+        [Tooltip("Peso máximo que se aplica a un visema con w = 1. Al 100 la boca se abre del todo y parece un grito.")]
+        private float visemeMaxWeight = 75f;
+
+        [Header("Fonemas en tiempo real")]
+        [SerializeField]
+        [Tooltip("Segundos de validez de un frame de fonemas. Pasado ese tiempo sin noticias se vuelve al respaldo.")]
+        private float phonemeFrameTimeout = 0.25f;
 
         [Header("Respaldo por envolvente")]
         [SerializeField]
@@ -89,6 +108,11 @@ namespace Sonia
         private float envelopeGain = 1.2f;
 
         [SerializeField]
+        [Range(0.1f, 1f)]
+        [Tooltip("Apertura máxima de la mandíbula en el respaldo por envolvente. Con jawOpen al 100 % parece un grito.")]
+        private float maxMouthOpen = 0.6f;
+
+        [SerializeField]
         [Range(0f, 40f)]
         [Tooltip("Ganancia aplicada al RMS cuando no hay ni visemas ni envolvente.")]
         private float rmsGain = 12f;
@@ -107,8 +131,18 @@ namespace Sonia
         private int _jawShapeIndex = -1;
         private int _mouthShapeIndex = -1;
         private bool _hasVisemeShapes;
+
+        // Los FBX y VRM definen los blendshapes de 0 a 100; los GLB de glTFast
+        // (Ready Player Me) de 0 a 1. Se escribe siempre en la escala de la malla.
+        private float _shapeScale = 1f;
         private float _openCurrent;
         private int _lastUtteranceId = -1;
+
+        // Frame de fonemas en tiempo real: pesos 0..1 por vocal (ya escalados por
+        // el volumen) y momento en que llegó.
+        private float _phA, _phI, _phU, _phE, _phO, _phN;
+        private float _phonemeFrameTime = -999f;
+        private bool _usingPhonemes;
         private int _frameCursor;
         private Quaternion _jawInitialRotation = Quaternion.identity;
         private bool _hasJawBone;
@@ -117,6 +151,52 @@ namespace Sonia
         public bool HasVisemeShapes
         {
             get { return _hasVisemeShapes; }
+        }
+
+        /// <summary>Apertura actual de la boca, 0..1, sea cual sea la fuente. Sirve para acompasar gestos a la voz.</summary>
+        public float MouthOpen
+        {
+            get
+            {
+                float best = _openCurrent;
+                for (int i = 0; i < _currentWeights.Length; i++)
+                {
+                    if (_shapeIndices[i] >= 0 && _currentWeights[i] > best * 100f)
+                    {
+                        best = _currentWeights[i] / 100f;
+                    }
+                }
+
+                return Mathf.Clamp01(best);
+            }
+        }
+
+        /// <summary>Cierto mientras la boca se mueve por los fonemas analizados en tiempo real.</summary>
+        public bool UsingPhonemes
+        {
+            get { return _usingPhonemes; }
+        }
+
+        /// <summary>
+        /// Recibe un frame de fonemas en tiempo real (PhonemeLipSyncBridge). Cada
+        /// valor es la fuerza 0..1 de esa vocal ya escalada por el volumen; la
+        /// nasal (n) cierra casi la boca.
+        /// </summary>
+        public void SetPhonemeFrame(float a, float i, float u, float e, float o, float n)
+        {
+            _phA = Mathf.Clamp01(a);
+            _phI = Mathf.Clamp01(i);
+            _phU = Mathf.Clamp01(u);
+            _phE = Mathf.Clamp01(e);
+            _phO = Mathf.Clamp01(o);
+            _phN = Mathf.Clamp01(n);
+            _phonemeFrameTime = Time.time;
+        }
+
+        /// <summary>Olvida el último frame de fonemas (por ejemplo al desactivar el analizador).</summary>
+        public void ClearPhonemeFrame()
+        {
+            _phonemeFrameTime = -999f;
         }
 
         /// <summary>Malla de la cara. Al cambiarla se vuelven a resolver los blendshapes.</summary>
@@ -215,6 +295,24 @@ namespace Sonia
             {
                 _mouthShapeIndex = FindBlendShape(mesh, mouthOpenBlendShape);
             }
+
+            _shapeScale = BlendShapeScale(mesh);
+        }
+
+        /// <summary>
+        /// Factor que convierte un peso de 0..100 a la escala real de la malla:
+        /// 1 para FBX/VRM (frames a 100) y 0,01 para GLB de glTFast (frames a 1).
+        /// </summary>
+        public static float BlendShapeScale(Mesh mesh)
+        {
+            if (mesh == null || mesh.blendShapeCount == 0)
+            {
+                return 1f;
+            }
+
+            int frames = mesh.GetBlendShapeFrameCount(0);
+            float full = frames > 0 ? mesh.GetBlendShapeFrameWeight(0, frames - 1) : 100f;
+            return full > 0.0001f ? full / 100f : 1f;
         }
 
         /// <summary>
@@ -362,7 +460,7 @@ namespace Sonia
                 }
             }
 
-            sb.Append("] open=").Append(_openCurrent.ToString("F2"));
+            sb.Append("] open=").Append(_openCurrent.ToString("F2")).Append(" fonemas=").Append(_usingPhonemes);
             List<VisemeFrame> frames;
             if (utteranceId >= 0 && _visemesByUtterance.TryGetValue(utteranceId, out frames) && frames.Count > 0)
             {
@@ -446,18 +544,35 @@ namespace Sonia
                 }
             }
 
+            bool phonemesFresh = Time.time - _phonemeFrameTime <= Mathf.Max(0.05f, phonemeFrameTimeout);
+            _usingPhonemes = false;
+            if (!usedVisemes && _hasVisemeShapes && utteranceId >= 0 && phonemesFresh)
+            {
+                AddPhonemeTarget(VisemeIds.AA, _phA);
+                AddPhonemeTarget(VisemeIds.IH, _phI);
+                AddPhonemeTarget(VisemeIds.OU, _phU);
+                AddPhonemeTarget(VisemeIds.E, _phE);
+                AddPhonemeTarget(VisemeIds.OH, _phO);
+                AddPhonemeTarget(VisemeIds.NN, _phN);
+                usedVisemes = true;
+                _usingPhonemes = true;
+            }
+
             if (!usedVisemes && utteranceId >= 0)
             {
                 openTarget = ComputeFallbackOpen(utteranceId, time, rms);
             }
 
-            float step = 1f - Mathf.Exp(-Mathf.Max(0.01f, smoothing) * Time.deltaTime);
+            float attack = 1f - Mathf.Exp(-Mathf.Max(0.01f, attackSpeed) * Time.deltaTime);
+            float release = 1f - Mathf.Exp(-Mathf.Max(0.01f, releaseSpeed) * Time.deltaTime);
             for (int i = 0; i < _currentWeights.Length; i++)
             {
-                _currentWeights[i] = Mathf.Lerp(_currentWeights[i], _targetWeights[i], step);
+                float target = _targetWeights[i];
+                float step = target > _currentWeights[i] ? attack : release;
+                _currentWeights[i] = Mathf.Lerp(_currentWeights[i], target, step);
             }
 
-            _openCurrent = Mathf.Lerp(_openCurrent, openTarget, step);
+            _openCurrent = Mathf.Lerp(_openCurrent, openTarget, openTarget > _openCurrent ? attack : release);
 
             // El blendshape de "boca abierta" del respaldo puede ser el mismo que
             // el de un visema (por ejemplo "Aa"). Con visemas activos, el respaldo
@@ -472,6 +587,21 @@ namespace Sonia
             {
                 ApplyWeights();
                 ApplyMouthOpen(_openCurrent);
+            }
+        }
+
+        /// <summary>Suma el peso de una vocal al visema que le corresponde.</summary>
+        private void AddPhonemeTarget(string viseme, float weight01)
+        {
+            if (weight01 <= 0f)
+            {
+                return;
+            }
+
+            int slot = FindBindingSlot(viseme);
+            if (slot >= 0 && slot < _targetWeights.Length)
+            {
+                _targetWeights[slot] = Mathf.Min(visemeMaxWeight, _targetWeights[slot] + weight01 * visemeMaxWeight);
             }
         }
 
@@ -566,24 +696,24 @@ namespace Sonia
                 int index = _shapeIndices[i];
                 if (index >= 0)
                 {
-                    faceRenderer.SetBlendShapeWeight(index, _currentWeights[i]);
+                    faceRenderer.SetBlendShapeWeight(index, _currentWeights[i] * _shapeScale);
                 }
             }
         }
 
         private void ApplyMouthOpen(float amount)
         {
-            float clamped = Mathf.Clamp01(amount);
+            float clamped = Mathf.Clamp01(amount) * Mathf.Clamp(maxMouthOpen, 0.1f, 1f);
 
             if (faceRenderer != null)
             {
                 if (_jawShapeIndex >= 0)
                 {
-                    faceRenderer.SetBlendShapeWeight(_jawShapeIndex, clamped * 100f);
+                    faceRenderer.SetBlendShapeWeight(_jawShapeIndex, clamped * 100f * _shapeScale);
                 }
                 else if (_mouthShapeIndex >= 0)
                 {
-                    faceRenderer.SetBlendShapeWeight(_mouthShapeIndex, clamped * 100f);
+                    faceRenderer.SetBlendShapeWeight(_mouthShapeIndex, clamped * 100f * _shapeScale);
                 }
             }
 

@@ -31,12 +31,8 @@ namespace Sonia
         private AvatarStateController avatarState;
 
         [SerializeField]
-        [Tooltip("Animaciones de atención mientras está en idle. Opcional.")]
-        private IdleAttentionController idleAttention;
-
-        [SerializeField]
-        [Tooltip("Gesticulación al hablar y asentimientos al escuchar. Opcional.")]
-        private SpeakingGestureController speakingGestures;
+        [Tooltip("Coreógrafo: elige el clip de cada estado, los gestos del idle y el saludo. Opcional.")]
+        private AvatarChoreographer choreographer;
 
         [SerializeField]
         [Tooltip("Abre el plano de la cámara durante los bailes y el saludo. Opcional.")]
@@ -158,14 +154,9 @@ namespace Sonia
                 avatarState = GetComponentInChildren<AvatarStateController>(true);
             }
 
-            if (idleAttention == null)
+            if (choreographer == null)
             {
-                idleAttention = GetComponentInChildren<IdleAttentionController>(true);
-            }
-
-            if (speakingGestures == null)
-            {
-                speakingGestures = GetComponentInChildren<SpeakingGestureController>(true);
+                choreographer = GetComponentInChildren<AvatarChoreographer>(true);
             }
 
             if (cameraFraming == null)
@@ -258,14 +249,9 @@ namespace Sonia
                 avatarState.SetState(state);
             }
 
-            if (idleAttention != null)
+            if (choreographer != null)
             {
-                idleAttention.SetState(state);
-            }
-
-            if (speakingGestures != null)
-            {
-                speakingGestures.SetState(state);
+                choreographer.SetState(state);
             }
         }
 
@@ -302,9 +288,9 @@ namespace Sonia
 
             // Si alguien se acerca después de un buen rato sin nadie, Sonia saluda
             // con la mano. El propio componente decide si toca o si acaba de hacerlo.
-            if (state == AvatarState.Listening && idleAttention != null)
+            if (state == AvatarState.Listening && choreographer != null)
             {
-                idleAttention.PlayGreeting();
+                choreographer.PlayGreeting();
             }
 
             if (logEvents)
@@ -324,9 +310,9 @@ namespace Sonia
         private void HandleSpeechStart(SpeechStartMessage message)
         {
             // Cada frase estrena una forma de gesticular distinta de la anterior.
-            if (speakingGestures != null)
+            if (choreographer != null)
             {
-                speakingGestures.NotifySpeechStart();
+                choreographer.NotifySpeechStart();
             }
 
             if (logEvents && message != null)

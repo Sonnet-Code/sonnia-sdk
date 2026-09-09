@@ -143,7 +143,7 @@ Con Unity en Play y conectado a `ws://127.0.0.1:8765`, el texto del `ws_probe` (
 - [x] Modo kiosco para el stand (`scripts/kiosk.sh`) y guía de montaje (`docs/stand.md`)
 - [ ] Integración de OmniVoice con el modelo real (módulo listo; falta la GPU)
 - [ ] Servidor local del modelo de lenguaje en el mini PC del stand (`scripts/run_llm_server.sh`)
-- [x] Avatar femenino (Yae, VRM) con lip-sync, mirada, parpadeo, 27 animaciones de Mixamo, idle con bailes y gestos de cuarta pared, encuadre 9:16 y marca de Sonnet Code
+- [x] Avatar femenino (Babe, Ready Player Me) con lip-sync por fonemas en tiempo real (uLipSync) o visemas del orquestador, mirada de ojos con sacadas, parpadeo, animación por código (Playables) con 60 clips de Ready Player Me y Mixamo encadenados sin cortes, idle con bailes y gestos de cuarta pared, iluminación de estudio, encuadre 9:16 y marca de Sonnet Code
 - [x] Batería de escenarios en Unity con el orquestador en modo ensayo (habla, interrupción, imágenes, reconexión, reinicio por inactividad)
 - [ ] Prueba completa con micrófono, cámara y Unity en el equipo del stand
 - [x] Imágenes de marca en `assets/gallery/` (logo y fondo de Sonnet Code); faltan servicios y diagrama de Sonia

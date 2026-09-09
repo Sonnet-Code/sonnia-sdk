@@ -1,6 +1,6 @@
 // Coloca un avatar VRM en la escena, lo cablea y ajusta el encuadre del stand.
 //
-// El menú vale para cualquier VRM: la ruta se elige con "Sonia/Elegir avatar VRM"
+// El menú vale para cualquier VRM o GLB: la ruta se elige con "Sonia/Elegir avatar (VRM o GLB)"
 // y la convención de blendshapes de la cara se detecta sola (VRM estándar,
 // VRoid, Seed-san u Oculus / Ready Player Me).
 //
@@ -25,7 +25,6 @@
 
 using TMPro;
 using UnityEditor;
-using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -36,7 +35,7 @@ namespace Sonia.EditorTools
     public static class SoniaAvatarSetup
     {
         /// <summary>Avatar por defecto si nadie ha elegido otro.</summary>
-        private const string DefaultAvatarPath = "Assets/Avatar/Yae.vrm";
+        private const string DefaultAvatarPath = "Assets/Avatar/Babe.glb";
 
         /// <summary>Clave de EditorPrefs donde se recuerda el avatar elegido.</summary>
         private const string AvatarPathKey = "Sonia.AvatarPath";
@@ -337,11 +336,12 @@ namespace Sonia.EditorTools
         // Menús
         // ------------------------------------------------------------------
 
-        [MenuItem("Sonia/Elegir avatar VRM")]
+        [MenuItem("Sonia/Elegir avatar (VRM o GLB)")]
         public static void ChooseAvatar()
         {
-            string absolute = EditorUtility.OpenFilePanel(
-                "Elegir avatar VRM", Application.dataPath + "/Avatar", "vrm");
+            string absolute = EditorUtility.OpenFilePanelWithFilters(
+                "Elegir avatar", Application.dataPath + "/Avatar",
+                new[] { "Avatares", "vrm,glb,gltf,fbx", "Todos", "*" });
             if (string.IsNullOrEmpty(absolute))
             {
                 return;
@@ -384,7 +384,7 @@ namespace Sonia.EditorTools
                 EditorUtility.DisplayDialog(
                     "Sonia",
                     "No se encontró " + assetPath + ". Importa el VRM o elige otro con "
-                    + "Sonia > Elegir avatar VRM.",
+                    + "Sonia > Elegir avatar (VRM o GLB).",
                     "Vale");
                 return null;
             }
@@ -427,9 +427,16 @@ namespace Sonia.EditorTools
             avatar.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             avatar.transform.localScale = Vector3.one;
 
-            Animator animator = avatar.GetComponentInChildren<Animator>(true);
-            AnimatorController controller = LoadOrBuildController();
-            ConfigureAnimator(animator, controller);
+            // Los VRM y los FBX Humanoid ya traen Animator con Avatar; a los GLB
+            // (Ready Player Me y similares) se les construye uno a partir del
+            // esqueleto de Mixamo.
+            Animator animator = SoniaHumanoidRig.EnsureHumanoidAnimator(avatar, assetPath);
+            if (animator == null)
+            {
+                animator = avatar.GetComponentInChildren<Animator>(true);
+            }
+
+            ConfigureAnimator(animator);
             ConfigureVrm10Instance(avatar);
 
             BlendShapeConvention convention;
@@ -438,7 +445,13 @@ namespace Sonia.EditorTools
 
             WireAvatarState(root, animator, head, face, convention);
             WireLipSync(root, face, convention);
-            WireGestureControllers(root, animator);
+            WireChoreography(root, animator);
+            SoniaSceneSetup.EnsurePhonemeLipSync(root.gameObject, root.GetComponentInChildren<AvatarStateController>(true));
+            SoniaSceneSetup.EnsureEyeGaze(
+                root.gameObject,
+                root.GetComponentInChildren<AvatarStateController>(true),
+                root.GetComponentInChildren<AvatarChoreographer>(true),
+                animator);
 
             float headTop;
             float hipsY;
@@ -452,6 +465,11 @@ namespace Sonia.EditorTools
             SetUpImagePanel(root, avatar, animator, camera, panelPosition);
             SetUpBackdrop(root, camera, widePosition, panelPosition);
             SetUpLighting(scene);
+            if (head != null && camera != null)
+            {
+                SoniaStageLighting.Apply(scene, head.position, camera);
+            }
+
             WireCameraFraming(root, animator, camera, widePosition, panelPosition);
 
             Selection.activeGameObject = avatar;
@@ -477,19 +495,7 @@ namespace Sonia.EditorTools
         // Avatar
         // ------------------------------------------------------------------
 
-        private static AnimatorController LoadOrBuildController()
-        {
-            AnimatorController controller =
-                AssetDatabase.LoadAssetAtPath<AnimatorController>(SoniaAnimations.ControllerPath);
-            if (controller == null)
-            {
-                controller = SoniaAnimatorBuilder.Build();
-            }
-
-            return controller;
-        }
-
-        private static void ConfigureAnimator(Animator animator, AnimatorController controller)
+        private static void ConfigureAnimator(Animator animator)
         {
             if (animator == null)
             {
@@ -498,7 +504,10 @@ namespace Sonia.EditorTools
             }
 
             Undo.RecordObject(animator, UndoName);
-            animator.runtimeAnimatorController = controller;
+
+            // Los clips los reproduce MotionPlayer con la Playables API; el
+            // Animator solo aporta el retargeting humanoide y no lleva controlador.
+            animator.runtimeAnimatorController = null;
 
             // Las animaciones de Mixamo se reproducen en el sitio: el avatar no se
             // mueve del origen de la escena.
@@ -1227,9 +1236,8 @@ namespace Sonia.EditorTools
             }
 
             SerializedObject serialized = new SerializedObject(framing);
-            SetReference(serialized, "animator", animator);
+            SetReference(serialized, "choreographer", root.GetComponentInChildren<AvatarChoreographer>(true));
             SetReference(serialized, "targetCamera", camera);
-            SetString(serialized, "wideShotTag", SoniaAnimations.WideShotTag);
 
             SerializedProperty position = serialized.FindProperty("wideShotPosition");
             if (position != null)
@@ -1262,7 +1270,6 @@ namespace Sonia.EditorTools
             }
 
             SerializedObject serialized = new SerializedObject(state);
-            SetReference(serialized, "animator", animator);
             SetReference(serialized, "headBone", head);
             SetReference(serialized, "faceRenderer", face);
 
@@ -1344,30 +1351,11 @@ namespace Sonia.EditorTools
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void WireGestureControllers(Transform root, Animator animator)
+        private static void WireChoreography(Transform root, Animator animator)
         {
-            IdleAttentionController idle = root.GetComponentInChildren<IdleAttentionController>(true);
-            if (idle != null)
-            {
-                SerializedObject serialized = new SerializedObject(idle);
-                SetReference(serialized, "animator", animator);
-                serialized.ApplyModifiedPropertiesWithoutUndo();
-            }
-
-            SpeakingGestureController speaking = root.GetComponentInChildren<SpeakingGestureController>(true);
-            if (speaking != null)
-            {
-                SerializedObject serialized = new SerializedObject(speaking);
-                SetReference(serialized, "animator", animator);
-                serialized.ApplyModifiedPropertiesWithoutUndo();
-            }
-
-            if (idle == null || speaking == null)
-            {
-                Debug.LogWarning(
-                    "[Sonia] Faltan los componentes de gesticulación en el objeto Sonia. "
-                    + "Ejecuta Sonia > Actualizar componentes.");
-            }
+            SoniaMotionSet set = SoniaMotionSetBuilder.LoadOrBuildMotionSet();
+            AvatarMask mask = SoniaMotionSetBuilder.LoadOrBuildMask();
+            SoniaMotionSetBuilder.Wire(root.gameObject, animator, set, mask);
         }
 
         // ------------------------------------------------------------------

@@ -53,6 +53,13 @@ namespace Sonia
         /// </summary>
         public event Action<int> OnUtterancePlaybackDone;
 
+        /// <summary>
+        /// Audio que acaba de salir por el AudioSource, en el hilo de audio:
+        /// muestras intercaladas y número de canales. Lo consume el análisis de
+        /// fonemas del lip-sync. No tocar Unity desde aquí.
+        /// </summary>
+        public event Action<float[], int> OnAudioFrame;
+
         private readonly object _lock = new object();
         private readonly List<Segment> _segments = new List<Segment>();
         private readonly List<int> _pendingDone = new List<int>();
@@ -643,6 +650,19 @@ namespace Sonia
                 if (written > 0)
                 {
                     _hadUnderrun = true;
+                }
+            }
+
+            Action<float[], int> listeners = OnAudioFrame;
+            if (listeners != null)
+            {
+                try
+                {
+                    listeners(data, channels);
+                }
+                catch (Exception)
+                {
+                    // Un fallo del análisis no debe cortar el audio.
                 }
             }
         }

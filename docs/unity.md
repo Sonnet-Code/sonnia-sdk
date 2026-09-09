@@ -160,7 +160,7 @@ sus blendshapes de boca. La vía rápida es no tener que conseguir nada:
    blendshapes, cablea el lip-sync y el parpadeo, y ajusta cámara, panel y
    fondo (todo el detalle está en la sección 6b).
 2. Si se prefiere el otro modelo incluido, `Assets/Avatar/Snb.vrm`, elegirlo
-   antes con **Sonia > Elegir avatar VRM** y volver a ejecutar **Colocar
+   antes con **Sonia > Elegir avatar (VRM o GLB)** y volver a ejecutar **Colocar
    avatar**.
 
 El requisito real es que la malla de la cara tenga **blendshapes de boca**;
@@ -199,9 +199,15 @@ consola y hay que rellenar `LipSyncController` a mano (sección 7).
   Creator de Avatar SDK, que da el primer avatar gratis) se arrastra
   directamente a `Assets/Avatar`. El proyecto tiene instalado
   `com.unity.cloud.gltfast` (6.20.0), que importa GLB/glTF con morph targets
-  sin paquetes adicionales. El selector de **Sonia > Elegir avatar VRM** solo
-  admite archivos `.vrm`, así que un GLB hay que colocarlo en la escena y
-  cablear sus campos a mano (sección 5).
+  sin paquetes adicionales. **Sonia > Elegir avatar (VRM o GLB)** acepta
+  también `.glb`, `.gltf` y `.fbx`, y **Colocar avatar** hace el resto: si el
+  modelo llega sin Animator Humanoid (glTFast no lo crea), `SoniaHumanoidRig`
+  construye un Avatar a partir de los nombres de hueso de Mixamo (`Hips`,
+  `Spine1`, `LeftArm`, `LeftForeArm`..., con o sin prefijo `mixamorig:`), lo
+  guarda en `Assets/Avatar/Generated/<modelo>_Humanoid.asset` y añade el
+  Animator. Los avatares de Ready Player Me usan exactamente ese esqueleto.
+  Los blendshapes se detectan con la convención Oculus (`viseme_*`,
+  `eyeBlinkLeft/Right`, `jawOpen`) cuando existen.
 
 Las animaciones son las de Mixamo de `Assets/Animations/Mixamo/`, que ya
 están en el proyecto (sección 6b). Un avatar nuevo con rig Humanoid las
@@ -227,7 +233,7 @@ ajustar el resultado a ojo.
 | Menú | Qué cablea |
 |---|---|
 | **Sonia > Crear escena base** | `LipSyncController.Audio Player`; en `AvatarStateController`: `Avatar Root`, `Look Target` (cámara principal), `Image Look Target` (panel); `WebcamFrameSender.Client`; todas las referencias del HUD y de `SoniaBootstrap` |
-| **Sonia > Colocar avatar** | El `Animator` del avatar y su controlador; en `AvatarStateController`: `Animator`, `Head Bone`, `Face Renderer`, `Blink Left/Right Blend Shape`; en `LipSyncController`: `Face Renderer`, `Jaw Open/Mouth Open Blend Shape` y las 15 `Viseme Bindings`; `Animator` en `IdleAttentionController` y `SpeakingGestureController`; `Animator`, `Target Camera`, `Wide Shot Tag` y `Wide Shot Position` en `CameraFramingController`; y la posición de cámara, panel, telón y luz |
+| **Sonia > Colocar avatar** | El `Animator` del avatar (sin controlador; Avatar Humanoid generado si hace falta); en `AvatarStateController`: `Head Bone`, `Face Renderer`, `Blink Left/Right Blend Shape`, `Lip Sync`; en `LipSyncController`: `Face Renderer`, `Jaw Open/Mouth Open Blend Shape` y las 15 `Viseme Bindings`; `MotionPlayer` (Animator y máscara) y `AvatarChoreographer` (reproductor y set); uLipSync y `PhonemeLipSyncBridge`; `EyeGazeController` (cabeza y ojos); `Choreographer`, `Target Camera` y `Wide Shot Position` en `CameraFramingController`; y la posición de cámara, panel, telón e iluminación |
 | **Sonia > Actualizar componentes** | Añade los componentes de gesticulación que falten en el objeto `Sonia` y vuelve a cablear `SoniaBootstrap` |
 
 Lo único que ningún menú toca:
@@ -249,57 +255,33 @@ Si algo sale vacío que debería estar cableado, revisar la consola: tanto
 **Sonia > Colocar avatar** como **Sonia > Crear escena base** avisan con
 `[Sonia]` de cualquier campo o componente que no hayan podido rellenar.
 
-## 6. Animaciones con Mixamo
+## 6. Animaciones: cómo funcionan ahora
 
-> El avatar y las animaciones del stand ya están montados y automatizados: ver
-> [6b. Avatar y animaciones](#6b-avatar-y-animaciones). Esta sección queda como
-> referencia para montar el Animator a mano con otro modelo.
-
-1. En [mixamo.com](https://www.mixamo.com) (gratuito con cuenta de Adobe),
-   subir el `.fbx`/`.glb` del avatar o usar un personaje de la biblioteca.
-2. Descargar cuatro animaciones sin skin (`FBX for Unity`, `Without Skin`):
-   - **idle**: `Breathing Idle` o `Standing Idle`.
-   - **listening**: `Standing Listening` o una idle más atenta.
-   - **thinking**: `Thinking` o `Head Nod Yes` lento.
-   - **speaking**: `Talking` o `Standing Talking`.
-3. En Unity, en cada `.fbx`: pestaña **Rig** → `Animation Type = Humanoid`,
-   `Avatar Definition = Copy From Other Avatar` y elegir el avatar del modelo.
-   Pestaña **Animation** → marcar `Loop Time`.
-4. Crear un **Animator Controller** (`Assets/Sonia/Animations/Sonia.controller`).
-5. Añadir un parámetro entero llamado **`State`**.
-6. Crear cuatro estados con las cuatro animaciones y transiciones desde
-   `Any State` a cada uno, con la condición `State Equals` correspondiente:
-
-   | Estado del protocolo | Valor de `State` | Animación |
-   |---|---|---|
-   | `idle` | 0 | idle |
-   | `listening` | 1 | listening |
-   | `thinking` | 2 | thinking |
-   | `speaking` | 3 | speaking |
-
-7. En las transiciones desde `Any State`, desmarcar `Can Transition To Self` y
-   poner `Transition Duration` en torno a 0,25 s para que el cambio no dé un
-   salto.
-8. Asignar el controlador al `Animator` del avatar.
-
-Si el `Animator` no tiene un parámetro entero llamado `State`, el componente
-avisa una vez en la consola y sigue funcionando sin animaciones.
+No hay Animator Controller. Los clips los reproduce `MotionPlayer` con la
+Playables API de Unity (fundidos por código, dos capas: cuerpo entero y torso
+con máscara) y `AvatarChoreographer` decide qué clip suena en cada momento.
+Ver [6b. Avatar y animaciones](#6b-avatar-y-animaciones). El `Animator` del
+avatar sigue existiendo porque es la salida del grafo y quien hace el
+retargeting humanoide, pero no lleva controlador.
 
 ## 6b. Avatar y animaciones
 
-El avatar de la demo es `Assets/Avatar/Yae.vrm` (VRM importado con UniVRM) y las
-animaciones son los FBX de Mixamo de `Assets/Animations/Mixamo/`. Hay una
-alternativa equivalente en `Assets/Avatar/Snb.vrm` y el modelo anterior en
-`Assets/Avatar/Seed-san.vrm`. Todo el montaje está automatizado en menús
-pensados para poder ejecutarse las veces que haga falta sin acumular basura:
+El avatar de la demo es `Assets/Avatar/Babe.glb` (Ready Player Me, importado
+con glTFast: malla única `Wolf3D_Avatar` con 15 visemas Oculus y 52 blendshapes
+ARKit, huesos de ojos, esqueleto Mixamo). Quedan como alternativa los VRM
+`Assets/Avatar/Yae.vrm` y `Snb.vrm`. Las animaciones son la biblioteca femenina
+de Ready Player Me (`Assets/Animations/RPM/`, hecha para este esqueleto: 10
+idles, 6 de hablar, 5 bailes) más los FBX de Mixamo (`Assets/Animations/Mixamo/`).
+Todo el montaje está automatizado en menús pensados para poder ejecutarse las
+veces que haga falta sin acumular basura:
 
 | Menú | Qué hace |
 |---|---|
-| **Sonia > Elegir avatar VRM** | Recuerda qué `.vrm` se va a colocar (se guarda en EditorPrefs) |
-| **Sonia > Centrar animaciones de Mixamo** | Reimporta los FBX con el personaje centrado en el origen |
-| **Sonia > Crear Animator Controller** | Regenera `Assets/Animations/SoniaAnimator.controller` entero (27 estados) desde el catálogo de `SoniaAnimations.cs` |
+| **Sonia > Elegir avatar (VRM o GLB)** | Recuerda qué modelo (`.vrm`, `.glb`, `.gltf` o `.fbx`) se va a colocar (se guarda en EditorPrefs) |
+| **Sonia > Crear set de animaciones** | Reimporta los FBX de `RPM/` y `Mixamo/` (Humanoid, sin compresión, bucle solo en los bucles base, centrados), rellena `Assets/Animations/SoniaMotionSet.asset` desde `SoniaAnimations.cs`, genera la máscara de torso y cablea `MotionPlayer` y `AvatarChoreographer` |
+| **Sonia > Iluminación de estudio** | Monta o actualiza key, fill, rim y hair light, el halo, las motas, el Volume (ACES, bloom, viñeta, color, profundidad de campo) y SMAA |
 | **Sonia > Actualizar componentes** | Añade al objeto `Sonia` de una escena ya creada los componentes que le falten y recablea `SoniaBootstrap` |
-| **Sonia > Colocar avatar** | Instancia el VRM, lo cablea, y deja cámara, panel de imágenes, telón de fondo y luz en su sitio |
+| **Sonia > Colocar avatar** | Instancia el modelo (VRM o GLB), le construye Avatar Humanoid si no lo trae, lo cablea (lip-sync, fonemas, parpadeo, mirada de ojos, coreógrafo) y deja cámara, panel, telón e iluminación de estudio en su sitio |
 | **Sonia > Captura vertical 9:16** | Guarda un PNG 1080x1920 de la cámara principal en `unity/Temp` |
 
 Un montaje desde cero se hace en ese orden. Cualquier comprobación de encuadre
@@ -405,26 +387,40 @@ por 0,70 x 2160 da una relación de 0,561 y el telón tiene 0,562.
 
 ### Fondo y luz
 
-La plantilla de URP dejaba el horizonte del skybox cruzando el pecho del avatar y
-una luz a intensidad 2 que quemaba la cara y la camiseta blanca. **Sonia >
-Colocar avatar** arregla las dos cosas:
+La cámara usa fondo sólido `#1B1F2A` sin skybox y un telón (`Backdrop`) con
+degradado vertical `#2A3142` a `#12151C` detrás del avatar, escalado para tapar
+los encuadres. Encima de eso, **Sonia > Iluminación de estudio** (que también
+ejecuta **Colocar avatar**) monta un retrato de tres puntos bajo el objeto
+`SoniaStage`, con posiciones calculadas a partir de la cabeza y la cámara:
 
-| Ajuste | Valor |
-|---|---|
-| Cámara, fondo | Solid Color `#1B1F2A`, sin skybox |
-| `Backdrop`, telón | Quad detrás del avatar, escalado para tapar los dos encuadres |
-| Material del telón | Unlit con degradado vertical de `#2A3142` arriba a `#12151C` abajo |
-| Luz direccional | Intensidad 1, color `#FFF4E6`, rotación `(25, 340, 0)` |
-| Tonemapping | Neutral |
-| Bloom | Intensidad 0,25, umbral 1,1 |
+| Luz | Tipo | Dónde | Color | Intensidad | Sombras |
+|---|---|---|---|---|---|
+| `KeyLight` | Spot 62° | 1,1 m a la izquierda de cámara, 0,75 m sobre los ojos | cálida `#FFF2E0` | 6 | suaves, fuerza 0,7 |
+| `FillLight` | Spot 80° | al otro lado, casi en el eje de cámara | fría `#D1E0FF` | 2,2 | no |
+| `RimLight` | Spot 48° | detrás y arriba, a la derecha | azul `#9EC7FF` | 9 | no |
+| `HairLight` | Spot 40° | detrás y arriba, a la izquierda | azul | 5 | no |
+| direccional de la plantilla | | queda como ambiente tenue (0,25) | | | suaves, 0,35 |
 
-La rotación de la luz es frontal a propósito. Como el avatar mira hacia -Z, una
-luz apuntando hacia -Z lo deja a contraluz y la cara a oscuras; la Y tiene que
-rondar los 0 grados, no los 180.
+Ambiente en modo Trilight (cielo azul marino, ecuador gris azulado, suelo casi
+negro). Las intensidades de foco en URP no están en lux: con 22 en la key la
+cara salía quemada, con 6 queda modelada. Ajustar a ojo con la captura 9:16.
 
-El degradado se genera por código como una `Texture2D` de 4x256 guardada en
-`Assets/Sonia/Textures/SoniaBackdrop.asset`, con su material en
-`Assets/Sonia/Materials/SoniaBackdrop.mat`. Se crean solos la primera vez.
+Efectos gratuitos, todos bajo `SoniaStage`:
+
+- `Halo`: quad de 2,2 x 2,8 m entre el avatar y el telón, material aditivo con
+  degradado radial (`Assets/UI/Generated/halo_3_2.png`) y tinte azul de marca al
+  22 %. Simula el haz de un foco sobre el telón.
+- `Motes`: sistema de partículas de 70 motas aditivas de 0,8 a 2,2 cm, vida de
+  9 a 16 s, ruido lento, entre el avatar y el telón. Apenas se ven, que es la
+  idea.
+- Volume: tonemapping ACES, bloom 0,22 con umbral 1,0, viñeta 0,28, contraste
+  +10, saturación +8, profundidad de campo Bokeh enfocada a la cabeza con
+  apertura 9 (desenfoca un poco el telón, no el panel).
+- Cámara: SMAA alta, postprocesado activado.
+
+Los materiales aditivos de halo y motas usan `Particles/Unlit` en modo
+**Additive** (`_Blend = 2`, SrcAlpha/One). Con premultiplicado se pintaban
+cuadrados blancos porque la textura es blanca y solo lleva la forma en el alfa.
 
 Las medidas salen del rig humanoide, **nunca de los bounds de los renderers**:
 los accesorios (mochilas, armas, el brazo robótico de Seed-san) los ensanchan
@@ -466,66 +462,89 @@ del panel. Estaba en z 2,5 con el panel en z 2,6 y tapaba la imagen entera sin
 dar ningún error. Ahora su Z se calcula a partir de la del panel y el telón se
 escala para cubrir los tres encuadres.
 
-### Por qué hay que centrar las animaciones de Mixamo
+### Cómo se importan los clips
 
-Los FBX de Mixamo llegan con **Root Transform Position (XZ) > Based Upon:
-Original**. Cada clip trae al personaje unos centímetros desplazado de su propio
-origen, y con `applyRootMotion` desactivado ese desplazamiento se queda en la
-pose: Sonia se iba 13 cm a la izquierda del encuadre en cuanto empezaba el idle.
+Los FBX llegan como **Generic**, con un clip llamado `mixamo.com` y con **Root
+Transform Position (XZ) > Based Upon: Original**; cada clip trae al personaje
+unos centímetros desplazado de su origen y Sonia se iba del encuadre.
+**Sonia > Crear set de animaciones** deja cada FBX de `Assets/Animations/RPM/`
+y `Assets/Animations/Mixamo/` como **Humanoid** (avatar del propio modelo), con
+el clip llamado como el archivo, **sin compresión de fotogramas** (la
+compresión aplana dedos y muñecas, que es donde se lee la gesticulación), con
+`Loop Time` solo en los tres bucles base (`F_Standing_Idle_001`, `Listening`,
+`Thinking`) y con el root motion en **Center of Mass** (se extrae y, con
+`applyRootMotion` apagado, se descarta). Todo lo demás se reproduce una sola
+vez: así el coreógrafo sabe cuándo termina un gesto y encadena el siguiente en
+lugar de cortarlo a mitad, que era lo que hacía el Animator Controller antiguo
+(478 transiciones sin tiempo de salida y clips de habla forzados a bucle).
 
-**Sonia > Centrar animaciones de Mixamo** los reimporta con **Center of Mass**,
-que extrae el desplazamiento como root motion y, al estar `applyRootMotion`
-desactivado, lo descarta. El personaje se queda quieto en el sitio, que es lo
-que hace falta en un plano fijo. Hay que ejecutarlo una vez después de importar
-clips nuevos.
+### MotionPlayer y AvatarChoreographer
 
-### Parámetros del Animator
+`MotionPlayer` construye un `PlayableGraph`: un `AnimationClipPlayable` por clip
+vivo, un `AnimationMixerPlayable` por capa (fundidos cruzados con pesos
+normalizados, así nunca pasa por una pose hundida) y un
+`AnimationLayerMixerPlayable` con dos capas: cuerpo entero y torso con la
+máscara `Assets/Animations/SoniaUpperBody.mask` (todo menos raíz, piernas y sus
+IK). `Play(clip, capa, fundido)` devuelve un handle con progreso, tiempo
+restante y si terminó.
 
-| Parámetro | Tipo | Para qué |
-|---|---|---|
-| `State` | int | 0 idle, 1 listening, 2 thinking, 3 speaking. Manda sobre todo lo demás |
-| `IdleVariant` | int | Índice de la animación de atención que se va a lanzar |
-| `Attention` | trigger | Lanza esa animación de atención |
-| `GestureVariant` | int | 0..2, variante de gesticulación al hablar |
-| `Gesture` | trigger | Cambia a esa variante, o dispara el asentimiento al escuchar |
-| `Greet` | trigger | Saludo con la mano |
+`AvatarChoreographer` recibe el estado del orquestador y las señales de cada
+frase y decide qué suena, con fundidos elegidos caso por caso (campos
+serializados, ajustables en el inspector):
 
-La capa base tiene `Idle` y `IdleAlt` (se relevan cada dos vueltas para que no
-se note el bucle), `Listening` con `ListeningNod`, `Thinking`, `Speaking0/1/2`,
-`Greeting` y una submáquina `Attention` con un estado por animación de atención.
-Las transiciones por `State` no tienen tiempo de salida, así que un baile se
-corta en cuanto alguien empieza a hablar. Se evita `Any State` a propósito: con
-un parámetro entero que no cambia, reentraría en el mismo estado en bucle.
+| Estado | Qué hace |
+|---|---|
+| idle | bucle base + una variación de reposo (una sola vez, fundido 0,6 s) cada 7-16 s + un gesto de atención (baile, cuarta pared o suave; entrada 0,4 s, salida 0,7 s) a los 6 s y luego cada 12-30 s, repartidos 45/30/25 % sin repetir |
+| listening | bucle de escucha + un asentimiento en la capa de torso (fundido 0,3 s) cada 4-8 s |
+| thinking | bucle de pensar + una variación cada 4-8 s |
+| speaking | clips de gesticulación encadenados sin bucle (fundido 0,5 s entre ellos); cada `speech_start` cambia de gesto solo si el actual va por más de la mitad |
+| saludo | `PlayGreeting()` al primer listening tras 25 s sola (y 20 s entre saludos); se deja terminar salvo que toque pensar o hablar |
 
-### Quién dispara qué
+Mientras suena un gesto grande (atención o saludo) `IsWideShot` es cierto y
+`CameraFramingController` abre el plano. Las listas de clips viven en
+`SoniaAnimations.cs` y el asset `SoniaMotionSet` las materializa.
 
-- `IdleAttentionController` programa una animación de atención mientras el
-  estado es idle: la primera a los 6 s y luego cada 12-30 s, repartidas 45 %
-  gestos de cuarta pared, 30 % bailes y 25 % gestos suaves, sin repetir la
-  anterior. También expone `PlayGreeting()`, que `SoniaBootstrap` llama al
-  primer `listening` después de un rato largo sin nadie.
-- `SpeakingGestureController` elige en cada `speech_start` una variante de
-  gesticulación distinta de la anterior, y mientras escucha dispara un
-  asentimiento cada 4-8 s.
+### Añadir una animación nueva
 
-Los dos limpian sus triggers al cambiar de estado. Sin eso, un trigger que nadie
-consume se queda pendiente y salta al volver al idle, con lo que Sonia se ponía
-a bailar sin venir a cuento. Los rangos de tiempo y los pesos son campos
-serializados: se ajustan en el inspector sin tocar código.
+1. Dejar el FBX en `Assets/Animations/Mixamo/` (o `RPM/`) con el nombre del
+   clip.
+2. Añadir el nombre a la lista que toque en `Assets/Scripts/Sonia/SoniaAnimations.cs`
+   (`IdleVariationClips`, `TalkingClips`, `NodClips`, `AttentionClips` con su
+   categoría...).
+3. Ejecutar **Sonia > Crear set de animaciones**.
 
-### Añadir una animación de atención nueva
+Se probaron y descartaron: `Counting` (habla mirándose las manos con la cabeza
+agachada, queda mal en plano medio) e `IdleLooking2` como idle (gira el cuerpo
+de perfil demasiado tiempo; se usa como gesto suave de atención, una sola vez).
 
-1. Descargar el FBX de Mixamo en `Assets/Animations/Mixamo/`, como Humanoid y
-   con el mismo nombre de archivo que de clip. Marcar `Loop Time` solo si es un
-   bucle.
-2. Añadir una línea al final del array `AttentionClips` de
-   `Assets/Scripts/Sonia/SoniaAnimations.cs`, con **el siguiente índice libre** y
-   su categoría (`Dance`, `FourthWall` o `Soft`).
-3. Ejecutar **Sonia > Centrar animaciones de Mixamo** y luego
-   **Sonia > Crear Animator Controller**.
+### Cara: lip-sync, ojos, parpadeo y cabeza
 
-Los índices son fijos porque se graban como condiciones `IdleVariant Equals N`
-dentro del controlador: se añade siempre al final y no se reordena la lista.
+- **Lip-sync** (`LipSyncController`): tres fuentes por orden de preferencia.
+  Visemas con timestamp del orquestador si llegan; si no, **fonemas en tiempo
+  real** con uLipSync (MIT, MFCC) a través de `PhonemeLipSyncBridge`, que le
+  pasa cada bloque de audio de `AudioStreamPlayer` (evento `OnAudioFrame`) y
+  traduce A/I/U/E/O a `viseme_aa/I/U/E/O` escalados por el volumen con una
+  curva suave (abre un poco con voz floja, nunca del todo); si no, envolvente o
+  RMS. Suavizado con ataque 20/s y caída 10/s, peso máximo 65 %. Con Gemini en
+  streaming los visemas del servidor no llegan a tiempo (se calculan con la
+  frase entera), así que en la práctica manda el modo de fonemas.
+- **Escala de blendshapes**: los GLB de glTFast definen los blendshapes de 0 a 1
+  y los FBX/VRM de 0 a 100. `LipSyncController.BlendShapeScale` lee el peso del
+  frame y se escribe siempre en la escala de la malla; sin esto la cara de Babe
+  se estiraba hasta el pecho.
+- **Ojos** (`EyeGazeController`): los huesos `LeftEye`/`RightEye` no van en el
+  rig humanoide (el retargeting los dejaba bizcos). Cada ojo apunta al objetivo
+  de `AvatarStateController` (cámara, panel o punto de pensar) desde su
+  posición, con el punto de enfoque alejado a 2,5 m como mínimo, **ganancia
+  0,65** (con ojos grandes estilizados, compensar toda la rotación de la cabeza
+  lee como mirar de reojo), límites de 10° de guiñada y 8° de cabeceo, sacadas
+  de hasta 2,5°, vistazos de 5° cada 4-9 s, desviación total acotada a 7°,
+  microtemblor y parpadeo en los saltos grandes. Durante bailes y gestos grandes
+  es un 60 % más vivo.
+- **Cabeza** (`AvatarStateController`): mira al objetivo con peso 0,7 y hasta
+  40°, con vaivén lento de 1,4° (ruido Perlin) y un asentimiento de hasta 2,5°
+  en las sílabas fuertes (según `LipSyncController.MouthOpen`). Parpadeo cada
+  2,5-6 s.
 
 ### Detalles del VRM que no son obvios
 
@@ -535,7 +554,8 @@ dentro del controlador: se añade siempre al final y no se reordena la lista.
   Si no, sus expresiones, todas a peso cero, pisarían los visemas que
   `LipSyncController` escribe en `LateUpdate` y la boca no se movería.
 - El `LookAt` del `Vrm10Instance` apunta a la cámara (`SpecifiedTransform`), así
-  que los ojos siguen al visitante además de la cabeza.
+  que en un VRM los ojos siguen al visitante además de la cabeza. Con un GLB
+  (Babe) no hay `Vrm10Instance` y de los ojos se ocupa `EyeGazeController`.
 - Seed-san lleva un brazo robótico (`robo_arm`) colgado de la mochila, movido por
   spring bones y ajeno al rig humanoide. Cuenta para los bounds del avatar, que
   llegan hasta x ≈ 1,5.
@@ -710,18 +730,23 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `Protocol.cs` | Espejo en C# de `docs/protocolo.md`: constantes, clases de mensaje, decodificador del frame binario y constructores de los mensajes salientes |
 | `SoniaClient.cs` | WebSocket con reconexión automática. Recibe en un hilo de fondo, despacha eventos en el hilo principal |
 | `AudioStreamPlayer.cs` | Buffer circular de PCM, remuestreo lineal, contabilidad por frase y aviso de `playback_done` |
-| `LipSyncController.cs` | Visemas sobre blendshapes, con respaldo por envolvente o RMS |
-| `AvatarStateController.cs` | Parámetro `State` del Animator, mirada suave y parpadeo |
-| `SoniaAnimations.cs` | Nombres de los parámetros del Animator y catálogo de animaciones de atención con su índice y categoría |
-| `IdleAttentionController.cs` | Bailes y gestos de cuarta pared mientras está en idle, y el saludo de bienvenida |
-| `SpeakingGestureController.cs` | Variante de gesticulación en cada frase y asentimientos mientras escucha |
+| `LipSyncController.cs` | Visemas sobre blendshapes: del orquestador, de los fonemas en tiempo real o de la envolvente/RMS; escala 0-1 o 0-100 según la malla |
+| `PhonemeLipSyncBridge.cs` | Alimenta uLipSync con el audio en streaming y traduce sus fonemas (A/I/U/E/O) a visemas |
+| `AvatarStateController.cs` | Estado, mirada de la cabeza (con vaivén y asentimientos al hablar) y parpadeo |
+| `EyeGazeController.cs` | Huesos de los ojos: fijación, sacadas, vistazos, microtemblor; más vivo en bailes |
+| `SoniaAnimations.cs` | Catálogo de clips por estado y gestos de atención con su categoría; carpetas y rutas |
+| `SoniaMotionSet.cs` | ScriptableObject con los clips ya resueltos, generado por el menú |
+| `MotionPlayer.cs` | Reproductor de clips con la Playables API: fundidos por código, capa de cuerpo y capa de torso con máscara |
+| `AvatarChoreographer.cs` | Decide qué clip suena en cada estado: idle con variaciones y atención, escuchar con asentimientos, pensar, hablar encadenando gestos, saludo |
 | `CameraFramingController.cs` | Abre el plano de la cámara durante los bailes y el saludo, y vuelve al plano medio |
 | `ImagePanelController.cs` | Decodifica el base64 de `show_image` y lo muestra con animación de escala |
 | `WebcamFrameSender.cs` | Captura de `WebCamTexture` y envío en JPEG cuando llega `request_frame` |
 | `SoniaDebugUI.cs` | HUD de conexión, subtítulos, entrada de texto y botón de interrumpir |
 | `SoniaBootstrap.cs` | Enlaza todo y aplica los ajustes de kiosco |
 | `Editor/SoniaSceneSetup.cs` | Menús **Sonia > Crear escena base**, **Configurar build 9:16** y **Actualizar componentes** |
-| `Editor/SoniaAnimatorBuilder.cs` | Menús **Sonia > Crear Animator Controller** y **Centrar animaciones de Mixamo** |
-| `Editor/SoniaAvatarSetup.cs` | Menús **Sonia > Colocar avatar** y **Elegir avatar VRM**: instancia el VRM, detecta sus blendshapes, rellena las referencias y ajusta cámara y panel |
+| `Editor/SoniaMotionSetBuilder.cs` | Menú **Sonia > Crear set de animaciones**: importa los FBX, rellena el set, genera la máscara y cablea la escena |
+| `Editor/SoniaStageLighting.cs` | Menú **Sonia > Iluminación de estudio**: tres puntos de luz, halo, motas, Volume y SMAA |
+| `Editor/SoniaAvatarSetup.cs` | Menús **Sonia > Colocar avatar** y **Elegir avatar (VRM o GLB)**: instancia el modelo, detecta sus blendshapes, rellena las referencias y ajusta cámara y panel |
+| `Editor/SoniaHumanoidRig.cs` | Construye y guarda un Avatar Humanoid para modelos con esqueleto de Mixamo que llegan sin él (GLB de Ready Player Me) |
 | `Editor/SoniaCapture.cs` | Menú **Sonia > Captura vertical 9:16**: PNG 1080x1920 de la cámara principal |
 | `Editor/SoniaBrandAssets.cs` | Rutas y ajustes de importación de los assets de marca de Sonnet Code |

@@ -8,7 +8,7 @@
 // Este componente maneja tres encuadres y va al que toque, siempre con una
 // interpolación suave para que se lea como un movimiento de cámara:
 //
-//   abierto  bailes, gestos de atención y saludo (etiqueta en el Animator)
+//   abierto  bailes, gestos de atención y saludo (lo dice el coreógrafo)
 //   panel    mientras hay una imagen puesta: se echa atrás y sube para dejar
 //            libre la mitad de arriba de la pantalla
 //   base     el plano medio de siempre, con la cara grande
@@ -21,7 +21,7 @@ namespace Sonia
 {
     /// <summary>
     /// Aleja la cámara mientras Sonia hace una animación grande y la devuelve al
-    /// plano medio al acabar. Sin cámara o sin Animator no hace nada.
+    /// plano medio al acabar. Sin cámara o sin coreógrafo no hace nada.
     /// </summary>
     [DisallowMultipleComponent]
     public class CameraFramingController : MonoBehaviour
@@ -32,22 +32,14 @@ namespace Sonia
         private Camera targetCamera;
 
         [SerializeField]
-        [Tooltip("Animator del avatar. Se mira su estado para decidir el encuadre.")]
-        private Animator animator;
+        [Tooltip("Coreógrafo del avatar. Dice cuándo suena un gesto grande que pide plano abierto.")]
+        private AvatarChoreographer choreographer;
 
         [SerializeField]
         [Tooltip("Panel de imágenes. Mientras esté visible se usa el encuadre de panel.")]
         private ImagePanelController imagePanel;
 
-        [SerializeField]
-        [Tooltip("Capa del Animator que se consulta.")]
-        private int layerIndex;
-
         [Header("Plano abierto")]
-        [SerializeField]
-        [Tooltip("Etiqueta de los estados que piden plano abierto. La pone el generador del controlador.")]
-        private string wideShotTag = SoniaAnimations.WideShotTag;
-
         [SerializeField]
         [Tooltip("Posición de la cámara en plano abierto. La calcula Sonia > Colocar avatar con las medidas del modelo.")]
         private Vector3 wideShotPosition = new Vector3(0f, 0.83f, -2.7f);
@@ -97,9 +89,9 @@ namespace Sonia
                 targetCamera = Camera.main;
             }
 
-            if (animator == null)
+            if (choreographer == null)
             {
-                animator = GetComponentInChildren<Animator>(true);
+                choreographer = GetComponentInChildren<AvatarChoreographer>(true);
             }
 
             if (imagePanel == null)
@@ -187,19 +179,7 @@ namespace Sonia
         /// </summary>
         private bool NeedsWideShot()
         {
-            if (animator == null || animator.runtimeAnimatorController == null
-                || string.IsNullOrEmpty(wideShotTag))
-            {
-                return false;
-            }
-
-            if (animator.GetCurrentAnimatorStateInfo(layerIndex).IsTag(wideShotTag))
-            {
-                return true;
-            }
-
-            return animator.IsInTransition(layerIndex)
-                   && animator.GetNextAnimatorStateInfo(layerIndex).IsTag(wideShotTag);
+            return choreographer != null && choreographer.IsWideShot;
         }
     }
 }

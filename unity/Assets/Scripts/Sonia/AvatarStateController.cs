@@ -1,8 +1,9 @@
-// Estado del avatar: animaciones, mirada y parpadeo.
+// Estado del avatar: mirada y parpadeo.
 //
-// El estado llega por el protocolo (idle, listening, thinking, speaking) y se
-// traduce al parámetro entero "State" del Animator. La mirada se aplica en
-// LateUpdate para que no la pise el Animator.
+// El estado llega por el protocolo (idle, listening, thinking, speaking). Las
+// animaciones del cuerpo las lleva AvatarChoreographer; aquí se decide hacia
+// dónde mira Sonia según el estado y se añade el parpadeo. La mirada se aplica
+// en LateUpdate para que no la pise la animación.
 
 using System;
 using UnityEngine;
@@ -19,9 +20,9 @@ namespace Sonia
     }
 
     /// <summary>
-    /// Traduce el estado del orquestador a animaciones, orienta la cabeza hacia
-    /// donde toca y añade parpadeo aleatorio. Todo es opcional: sin Animator, sin
-    /// hueso de cabeza o sin blendshapes de ojos el componente no hace nada.
+    /// Orienta la cabeza hacia donde toca según el estado y añade parpadeo
+    /// aleatorio. Todo es opcional: sin hueso de cabeza o sin blendshapes de
+    /// ojos el componente no hace nada.
     /// </summary>
     // Corre después del LateUpdate de Vrm10Instance (orden 11000), que aplica sus
     // expresiones (a cero) y la mirada; así los blendshapes de boca y parpadeo
@@ -30,15 +31,6 @@ namespace Sonia
     [DisallowMultipleComponent]
     public class AvatarStateController : MonoBehaviour
     {
-        [Header("Animator")]
-        [SerializeField]
-        [Tooltip("Animator del avatar. El controlador debe tener un parámetro entero llamado State.")]
-        private Animator animator;
-
-        [SerializeField]
-        [Tooltip("Nombre del parámetro entero del Animator: 0 idle, 1 listening, 2 thinking, 3 speaking.")]
-        private string stateParameter = "State";
-
         [Header("Mirada")]
         [SerializeField]
         [Tooltip("Hueso de la cabeza. Si está vacío no se toca la mirada.")]
@@ -91,6 +83,20 @@ namespace Sonia
         [Tooltip("Corrección en grados si el eje hacia delante del hueso de la cabeza no es Z+.")]
         private Vector3 headRotationOffset = Vector3.zero;
 
+        [SerializeField]
+        [Range(0f, 5f)]
+        [Tooltip("Amplitud en grados del vaivén lento y continuo de la cabeza, para que nunca esté clavada.")]
+        private float headSwayDegrees = 1.4f;
+
+        [SerializeField]
+        [Range(0f, 8f)]
+        [Tooltip("Grados que baja la cabeza en las sílabas fuertes mientras habla (según la boca del lip-sync).")]
+        private float speechNodDegrees = 2.5f;
+
+        [SerializeField]
+        [Tooltip("Lip-sync, para acompasar los pequeños asentimientos a la voz. Opcional.")]
+        private LipSyncController lipSync;
+
         [Header("Parpadeo")]
         [SerializeField]
         [Tooltip("Malla con los blendshapes de los ojos. Si está vacía se usa la del lip-sync o ninguna.")]
@@ -113,17 +119,17 @@ namespace Sonia
         private float blinkDuration = 0.14f;
 
         private AvatarState _state = AvatarState.Idle;
-        private int _stateParameterHash;
-        private bool _hasStateParameter;
-        private RuntimeAnimatorController _checkedController;
         private Quaternion _smoothedLook = Quaternion.identity;
         private bool _lookInitialized;
         private bool _imageVisible;
         private float _imageShownAt = -999f;
         private int _blinkLeftIndex = -1;
         private int _blinkRightIndex = -1;
+        private float _blinkScale = 1f;
         private float _timeToNextBlink;
         private float _blinkRemaining;
+        private float _noiseSeed;
+        private float _nodLevel;
 
         /// <summary>Estado actual del avatar.</summary>
         public AvatarState State
@@ -138,12 +144,13 @@ namespace Sonia
                 avatarRoot = transform;
             }
 
-            if (animator == null)
+            if (lipSync == null)
             {
-                animator = GetComponentInChildren<Animator>();
+                lipSync = GetComponentInChildren<LipSyncController>(true);
             }
 
-            _stateParameterHash = string.IsNullOrEmpty(stateParameter) ? 0 : Animator.StringToHash(stateParameter);
+            _noiseSeed = UnityEngine.Random.value * 100f;
+
             RefreshBlendShapes();
             ScheduleNextBlink();
         }
@@ -162,6 +169,7 @@ namespace Sonia
 
             _blinkLeftIndex = mesh.GetBlendShapeIndex(blinkLeftBlendShape);
             _blinkRightIndex = mesh.GetBlendShapeIndex(blinkRightBlendShape);
+            _blinkScale = LipSyncController.BlendShapeScale(mesh);
         }
 
         // ------------------------------------------------------------------
@@ -178,7 +186,6 @@ namespace Sonia
         public void SetState(AvatarState state)
         {
             _state = state;
-            ApplyStateToAnimator();
         }
 
         /// <summary>Convierte el nombre del protocolo al enum; lo desconocido queda en idle.</summary>
@@ -205,51 +212,6 @@ namespace Sonia
             }
 
             return AvatarState.Idle;
-        }
-
-        private void ApplyStateToAnimator()
-        {
-            if (animator == null || _stateParameterHash == 0)
-            {
-                return;
-            }
-
-            RuntimeAnimatorController controller = animator.runtimeAnimatorController;
-            if (controller == null)
-            {
-                _hasStateParameter = false;
-                _checkedController = null;
-                return;
-            }
-
-            if (!ReferenceEquals(controller, _checkedController))
-            {
-                _checkedController = controller;
-                _hasStateParameter = false;
-                AnimatorControllerParameter[] parameters = animator.parameters;
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    if (parameters[i].type == AnimatorControllerParameterType.Int
-                        && parameters[i].nameHash == _stateParameterHash)
-                    {
-                        _hasStateParameter = true;
-                        break;
-                    }
-                }
-
-                if (!_hasStateParameter)
-                {
-                    Debug.LogWarning(
-                        "[Sonia] El Animator no tiene un parámetro entero llamado \"" + stateParameter
-                        + "\"; no se cambiarán las animaciones.",
-                        this);
-                }
-            }
-
-            if (_hasStateParameter)
-            {
-                animator.SetInteger(_stateParameterHash, (int)_state);
-            }
         }
 
         /// <summary>Le dice al avatar si el panel de imágenes está visible y dónde está.</summary>
@@ -307,8 +269,15 @@ namespace Sonia
                 return;
             }
 
+            // Vaivén lento (ruido Perlin) y un asentimiento leve en las sílabas
+            // fuertes: una cabeza real nunca se queda clavada mirando un punto.
+            float swayYaw = (Mathf.PerlinNoise(_noiseSeed, Time.time * 0.35f) - 0.5f) * 2f * headSwayDegrees;
+            float swayPitch = (Mathf.PerlinNoise(_noiseSeed + 17f, Time.time * 0.28f) - 0.5f) * 2f * headSwayDegrees;
+            float open = lipSync != null && _state == AvatarState.Speaking ? lipSync.MouthOpen : 0f;
+            _nodLevel = Mathf.Lerp(_nodLevel, open, 1f - Mathf.Exp(-6f * deltaTime));
             Quaternion desired = Quaternion.LookRotation(direction.normalized, Vector3.up)
-                                 * Quaternion.Euler(headRotationOffset);
+                                 * Quaternion.Euler(headRotationOffset)
+                                 * Quaternion.Euler(swayPitch + _nodLevel * speechNodDegrees, swayYaw, 0f);
             Quaternion limited = Quaternion.RotateTowards(baseRotation, desired, maxLookAngle);
             _smoothedLook = Quaternion.Slerp(_smoothedLook, limited, StepFor(deltaTime));
             headBone.rotation = Quaternion.Slerp(baseRotation, _smoothedLook, lookWeight);
@@ -319,7 +288,8 @@ namespace Sonia
             return 1f - Mathf.Exp(-Mathf.Max(0.1f, lookSmoothing) * deltaTime);
         }
 
-        private bool TryGetLookPosition(out Vector3 position)
+        /// <summary>Punto del mundo al que mira ahora mismo (visitante, panel o el punto de pensar).</summary>
+        public bool TryGetLookPosition(out Vector3 position)
         {
             // Un vistazo breve al panel cuando aparece la imagen; después la
             // mirada vuelve al visitante, que es lo natural en una conversación.
@@ -394,6 +364,15 @@ namespace Sonia
             }
         }
 
+        /// <summary>Parpadea ahora mismo (si no está ya parpadeando). Lo usan las sacadas grandes.</summary>
+        public void TriggerBlink()
+        {
+            if (_blinkRemaining <= 0f)
+            {
+                _blinkRemaining = Mathf.Max(0.02f, blinkDuration);
+            }
+        }
+
         private void ScheduleNextBlink()
         {
             float min = Mathf.Max(0.2f, Mathf.Min(blinkIntervalRange.x, blinkIntervalRange.y));
@@ -405,12 +384,12 @@ namespace Sonia
         {
             if (_blinkLeftIndex >= 0)
             {
-                faceRenderer.SetBlendShapeWeight(_blinkLeftIndex, weight);
+                faceRenderer.SetBlendShapeWeight(_blinkLeftIndex, weight * _blinkScale);
             }
 
             if (_blinkRightIndex >= 0)
             {
-                faceRenderer.SetBlendShapeWeight(_blinkRightIndex, weight);
+                faceRenderer.SetBlendShapeWeight(_blinkRightIndex, weight * _blinkScale);
             }
         }
     }
