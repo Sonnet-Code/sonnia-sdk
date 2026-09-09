@@ -67,7 +67,7 @@ namespace Sonia
                 typeof(EyeGazeController),
                 new[]
                 {
-                    "gazeGain", "maxYaw", "maxPitch", "minFocusDistance", "maxOffsetDegrees", "wideShotLiveliness",
+                    "gazeGain", "convergenceDegrees", "maxYaw", "maxPitch", "minFocusDistance", "maxOffsetDegrees", "wideShotLiveliness",
                     "speed", "jitterDegrees", "saccadeInterval", "saccadeAmplitude", "glanceInterval",
                     "glanceDuration", "glanceAmplitude"
                 }
@@ -90,9 +90,19 @@ namespace Sonia
             }
         };
 
+        // [NonSerialized] a propósito: Unity conserva los campos privados en la
+        // recarga de dominio tras recompilar en Play, pero los enlaces de los
+        // deslizadores (reflexión, listeners) no sobreviven. Al perderse estas
+        // referencias, Update reconstruye el panel entero.
         private readonly List<Binding> _bindings = new List<Binding>();
+
+        [NonSerialized]
         private GameObject _canvas;
+
+        [NonSerialized]
         private GameObject _toggleCanvas;
+
+        [NonSerialized]
         private bool _built;
 
         private string SavePath
@@ -145,11 +155,25 @@ namespace Sonia
             // sus listeners: se reconstruye todo.
             if (_toggleCanvas == null)
             {
+                bool wasOpen = false;
+                for (int i = 0; i < transform.childCount; i++)
+                {
+                    Transform child = transform.GetChild(i);
+                    if (child.name == "SoniaTuning" && child.gameObject.activeSelf)
+                    {
+                        wasOpen = true;
+                    }
+                }
+
                 DestroyStale("SoniaTuningToggle");
                 DestroyStale("SoniaTuning");
                 _built = false;
                 _canvas = null;
                 BuildToggleButton();
+                if (wasOpen)
+                {
+                    Toggle();
+                }
             }
 
             Keyboard keyboard = Keyboard.current;

@@ -63,6 +63,11 @@ namespace Sonia
         private float gazeGain = 0.65f;
 
         [SerializeField]
+        [Range(-10f, 10f)]
+        [Tooltip("Separación de las pupilas, en grados por ojo: negativo las separa (mirada más paralela), positivo las junta (converge). 0 deja la geometría pura hacia el punto de enfoque.")]
+        private float convergenceDegrees = 0f;
+
+        [SerializeField]
         [Range(5f, 40f)]
         private float maxYaw = 10f;
 
@@ -237,8 +242,10 @@ namespace Sonia
             Vector3 target;
             bool hasTarget = TryGetTarget(out target);
 
-            Aim(leftEye, _leftRest, hasTarget, target, offset);
-            Aim(rightEye, _rightRest, hasTarget, target, offset);
+            // Hacia dentro es +X local (derecha de la cabeza) para el ojo izquierdo
+            // y -X para el derecho: la convergencia se aplica con signo opuesto.
+            Aim(leftEye, _leftRest, hasTarget, target, offset, convergenceDegrees);
+            Aim(rightEye, _rightRest, hasTarget, target, offset, -convergenceDegrees);
         }
 
         private void UpdateSaccades(float dt, float mult)
@@ -353,7 +360,7 @@ namespace Sonia
         /// eje Z local del hueso es hacia delante (así vienen Ready Player Me,
         /// Mixamo y VRM).
         /// </summary>
-        private void Aim(Transform eye, Quaternion rest, bool hasTarget, Vector3 target, Vector2 offset)
+        private void Aim(Transform eye, Quaternion rest, bool hasTarget, Vector3 target, Vector2 offset, float inwardDegrees)
         {
             if (eye == null || eye.parent == null)
             {
@@ -376,7 +383,7 @@ namespace Sonia
             // Yaw y pitch respecto a la mirada de reposo, más la desviación.
             Quaternion restInverse = Quaternion.Inverse(rest);
             Vector3 inRest = restInverse * desiredLocal;
-            float yaw = Mathf.Atan2(inRest.x, inRest.z) * Mathf.Rad2Deg * gazeGain + offset.x;
+            float yaw = Mathf.Atan2(inRest.x, inRest.z) * Mathf.Rad2Deg * gazeGain + offset.x + inwardDegrees;
             float pitch = -Mathf.Asin(Mathf.Clamp(inRest.y, -1f, 1f)) * Mathf.Rad2Deg * gazeGain + offset.y;
             yaw = Mathf.Clamp(yaw, -maxYaw, maxYaw);
             pitch = Mathf.Clamp(pitch, -maxPitch, maxPitch);
