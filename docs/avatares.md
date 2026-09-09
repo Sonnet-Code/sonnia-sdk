@@ -70,10 +70,77 @@ Se puede, pero es peor que mapear visemas uno a uno.
 | `hc_Zoe.glb` | Igual que `zoe6` pero con `KHR_draco_mesh_compression`: obligaría a añadir el paquete Draco en Unity sin ganar nada |
 | `rpm_feminine000.glb` | Atuendo táctico militar, inadecuado para el stand |
 
-Fuentes exploradas sin resultado: CDN de Ready Player Me (muerto), Union
+Fuentes exploradas sin resultado en aquel barrido: CDN de Ready Player Me
+(muerto; ver "La mina" más abajo), Union
 Avatars y MetaPerson (sin muestras públicas sin cuenta), Sketchfab CC0
 (descarga con login), Kenney y Quaternius (personajes sin cara), Mozilla Hubs
 (solo medio cuerpo), Blender Studio (solo `.blend`).
+
+## Segunda búsqueda (9 de septiembre de 2026)
+
+Barrido de GitHub por repos que contengan GLB de Ready Player Me: 33 proyectos
+inspeccionados, **55 modelos descargados y renderizados**. De ahí salen catorce
+mujeres nuevas con blendshapes suficientes:
+
+| Archivo | Repo | Blendshapes | Triángulos | Look |
+|---|---|---|---|---|
+| `brunette.glb` | [met4citizen/TalkingHead](https://github.com/met4citizen/TalkingHead/tree/main/avatars) | 72 (15 visemas + 57 ARKit) | 13 317 | Gafas, flequillo, top deportivo azul y burdeos. **Licencia CC BY-NC 4.0 documentada**, la más limpia del barrido. Repetida en DialogLab como `avatar1.glb` |
+| `female-avatar1.glb` | [ecruhue/DialogLab](https://github.com/ecruhue/DialogLab/tree/main/client/public/assets) | 72 | 21 182 | Sudadera beige con estampado, moño alto |
+| `female-avatar2.glb` | ecruhue/DialogLab | 72 | 17 518 | Pelo rizado, gafas, jersey gris de cuello alto |
+| `female-avatar3.glb` | ecruhue/DialogLab | 72 | 14 320 | Rubia con coleta y **sudadera amarilla lisa**: el mejor lienzo del lote para el logo del DevFest |
+| `female-avatar4.glb` | ecruhue/DialogLab | 72 | 12 634 | Melena negra, top corto verde azulado con logo al pecho, vaqueros |
+| `female-avatar5.glb` | ecruhue/DialogLab | 72 | 13 546 | Rubia con gafas, vestido amarillo con cinturón, botas altas |
+| `63ba9de7….glb` | [itskhagendra/V-Tubing-APP](https://github.com/itskhagendra/V-Tubing-APP/tree/master/Assets/Avatars) | 72 | 15 050 | Gafas de sol, vestido verde, chaqueta blanca. Malla única con atlas |
+| `69b1976b….glb` | [Kshitijm7/digital-persona](https://github.com/Kshitijm7/digital-persona/tree/main/public/avatars) | 67 | 12 020 | Chaleco de rombos, pantalón corto |
+| `69b19dfb….glb` | Kshitijm7/digital-persona | 67 | 14 710 | Abrigo negro largo, guantes, pelo recogido |
+| `dlm_zoe2.glb` | [rorosaga/holo-cierge](https://github.com/rorosaga/holo-cierge/tree/main/concierge-frontend/public/models/zoe) | 67 | 13 967 | Otra Zoe que se nos pasó: camisa blanca, vaqueros negros |
+| `29689621….glb` | [DiegoTovar/RealidadVirtual2022](https://github.com/DiegoTovar/RealidadVirtual2022-ARKit-ReadyPlayerMe) | 63 | 15 044 | Camisa tostada, pantalón de cuadros |
+| `c47ba0a6….glb` | DiegoTovar/RealidadVirtual2022 | 63 | 14 818 | Camisa blanca, vaqueros negros, bob, gafas |
+| `avatar2.glb` | [nagarajpandith/aido](https://github.com/nagarajpandith/aido/tree/master/public/assets/models) | 15 (solo visemas) | 14 301 | Cárdigan largo crema y botas. Sin blendshape de parpadeo |
+| `women.avatar.glb` | [gitchaell/ngx-profile-avatar](https://github.com/gitchaell/ngx-profile-avatar) | 72 | 11 598 | Medio cuerpo: solo cabeza y cuello |
+
+Los otros 41 son hombres, duplicados (`user_avatar.glb` de XRCupid **es Babe**),
+medios cuerpos o modelos con dos blendshapes.
+
+Aparecen tres exportaciones nuevas que no había en la primera tanda: la de **72
+blendshapes** (los 15 visemas de Oculus más los 57 de ARKit, una vuelta de tuerca
+sobre los 67 de Babe), la de **63** y la de **15** (solo visemas, sin parpadeo).
+
+### La mina: 1 075 avatares en la Wayback Machine
+
+El CDN de Ready Player Me está muerto, pero el archivo de internet guardó copias.
+La API CDX los lista:
+
+```bash
+curl "http://web.archive.org/cdx/search/cdx?url=models.readyplayer.me*&fl=original,timestamp,length,statuscode&filter=original:.*\.glb.*&filter=statuscode:200&collapse=urlkey&page=0"
+```
+
+Salen **1 213 identificadores distintos**, 1 075 con tamaño de avatar completo
+(1,5 a 14 MB). Cada uno se descarga con el prefijo `id_` para saltarse el visor
+del archivo:
+
+```bash
+curl -sSL -o avatar.glb "https://web.archive.org/web/<timestamp>id_/https://models.readyplayer.me/<id>.glb"
+```
+
+El pero: la exportación por defecto de RPM traía los **57 blendshapes de ARKit
+sin los 15 visemas de Oculus**, que había que pedir con `?morphTargets=Oculus
+Visemes`. Solo 18 de las copias archivadas lo llevan. Los otros sirven igual para
+el lip-sync por fonemas de uLipSync (con un mapa a ARKit: `jawOpen`,
+`mouthFunnel`, `mouthPucker`, `mouthClose`, `mouthSmile*`) y traen
+`eyeBlinkLeft/Right`, así que el parpadeo está cubierto.
+
+El archivo también se corta si se le piden muchas descargas a la vez: va bien
+secuencial con dos segundos de pausa.
+
+### Trasplantar ropa entre avatares
+
+Todos los avatares de Ready Player Me comparten cuerpo base, topología y
+esqueleto. Eso abre la vía que RPM cerró: **coger la prenda de un avatar y
+ponérsela a otro en Blender**. La sudadera lisa de `female-avatar3` sobre el
+cuerpo de Babe, por ejemplo, da una superficie grande y plana donde el logo del
+DevFest se pinta sin pelear con el atlas del top corto. Es más trabajo que
+repintar una textura, pero mucho menos que modelar una prenda desde cero.
 
 ## Las dos VRM que siguen en el repo
 
