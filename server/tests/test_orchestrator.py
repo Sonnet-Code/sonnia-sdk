@@ -274,6 +274,7 @@ async def make_rig(
     *,
     captured: list[dict[str, Any]] | None = None,
     stt_texts: Iterable[str] = ("hola sonia",),
+    glossary: list[str] | None = None,
     tts: MockTTS | None = None,
     camera: FakeCamera | None = None,
     tick: float = 1.0,
@@ -306,6 +307,7 @@ async def make_rig(
         # Los tests cuentan frases cortas una a una.
         sentence_min_chars=0,
         sentence_comma_chars=60,
+        glossary=glossary if glossary is not None else [],
     )
 
     async with hub, connect(f"ws://127.0.0.1:{hub.port}/") as client:
@@ -871,3 +873,21 @@ async def test_sin_barge_in_la_voz_no_interrumpe(tmp_path: Path) -> None:
         assert rig.rec.of_type("stop_speaking") == []
         assert current_state(rig) == "speaking"
         assert rig.stt.calls == []  # el turno de voz se descartó sin transcribir
+
+
+async def test_el_glosario_corrige_la_transcripcion_antes_del_modelo(tmp_path: Path) -> None:
+    captured: list[dict[str, Any]] = []
+    handler = text_handler(captured, "Claro que sí.")
+    async with make_rig(
+        tmp_path,
+        handler,
+        captured=captured,
+        stt_texts=("quiero saber de Alexander Begasov",),
+        glossary=["Alexander Vegazo"],
+        vision_source="none",
+    ) as rig:
+        await rig.orch.submit(utterance())
+        await rig.rec.wait_type("speech_end", limit=5.0)
+        user = rig.rec.of_type("transcript")[0]
+        assert user["text"] == "quiero saber de Alexander Vegazo"
+        assert last_user_message(captured[0])["content"] == "quiero saber de Alexander Vegazo"

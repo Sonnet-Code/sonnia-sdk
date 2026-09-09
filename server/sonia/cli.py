@@ -34,10 +34,12 @@ from sonia.actions import Gallery, build_default_registry
 from sonia.actions.registry import ActionRegistry
 from sonia.audio.capture import list_input_devices, resolve_input_device
 from sonia.config import Settings, load_settings
+from sonia.glossary import load_glossary
 from sonia.llm.client import LLMClient
 from sonia.mcp.server import MCPServer
 from sonia.mcp.server import is_available as mcp_available
 from sonia.orchestrator import Orchestrator
+from sonia.persona import DEFAULT_KNOWLEDGE_DIR
 from sonia.stt import build_stt
 from sonia.stt.mock import MockSTT
 from sonia.tts import build_tts
@@ -361,6 +363,17 @@ def _log_summary(settings: Settings, components: Components) -> None:
     )
 
 
+def _apply_glossary(stt: Any) -> None:
+    """Pasa los nombres del glosario al reconocedor como palabras clave, si lo admite."""
+    names = load_glossary(DEFAULT_KNOWLEDGE_DIR)
+    setter = getattr(stt, "set_hotwords", None)
+    if names and callable(setter):
+        setter(names)
+        logging.getLogger(__name__).info(
+            "Glosario: %d nombres como palabras clave del reconocedor", len(names)
+        )
+
+
 # ---------------------------------------------------------------------------
 # sonia run
 # ---------------------------------------------------------------------------
@@ -369,6 +382,7 @@ def _log_summary(settings: Settings, components: Components) -> None:
 async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
     components = build_components(settings)
     stt = build_stt(settings)
+    _apply_glossary(stt)
     _log_summary(settings, components)
 
     detector: Any = None

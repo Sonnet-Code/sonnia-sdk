@@ -72,6 +72,10 @@ namespace Sonia
         [Tooltip("Último texto que dice Sonia.")]
         private UiLabel assistantLabel = new UiLabel();
 
+        // Subtítulo anunciado por speech_start, a la espera de su primer audio.
+        private int _pendingSubtitleId = -1;
+        private string _pendingSubtitle;
+
         [Header("Entrada")]
         [SerializeField]
         [Tooltip("Campo de texto para enviar un turno escrito con Enter.")]
@@ -110,6 +114,7 @@ namespace Sonia
                 client.OnState += HandleState;
                 client.OnTranscript += HandleTranscript;
                 client.OnSpeechStart += HandleSpeechStart;
+                client.OnAudioFrame += HandleAudioFrame;
             }
 
             if (inputField != null)
@@ -132,6 +137,7 @@ namespace Sonia
                 client.OnState -= HandleState;
                 client.OnTranscript -= HandleTranscript;
                 client.OnSpeechStart -= HandleSpeechStart;
+                client.OnAudioFrame -= HandleAudioFrame;
             }
 
             if (inputField != null)
@@ -225,19 +231,30 @@ namespace Sonia
 
             if (message.Role == "assistant")
             {
-                assistantLabel.Set(message.Text);
+                // El texto de Sonia se enseña cuando empieza a sonar (ver
+                // HandleAudioFrame), no cuando el orquestador lo decide: el
+                // subtítulo va con la voz, no por delante.
+                return;
             }
-            else
-            {
-                userLabel.Set(message.Text);
-            }
+
+            userLabel.Set(message.Text);
         }
 
         private void HandleSpeechStart(SpeechStartMessage message)
         {
             if (message != null && !string.IsNullOrEmpty(message.Text))
             {
-                assistantLabel.Set(message.Text);
+                _pendingSubtitleId = message.UtteranceId;
+                _pendingSubtitle = message.Text;
+            }
+        }
+
+        private void HandleAudioFrame(AudioFrame frame)
+        {
+            if (_pendingSubtitle != null && frame.UtteranceId >= _pendingSubtitleId)
+            {
+                assistantLabel.Set(_pendingSubtitle);
+                _pendingSubtitle = null;
             }
         }
 

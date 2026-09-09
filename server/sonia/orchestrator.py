@@ -38,6 +38,7 @@ from sonia.actions.gallery import Gallery
 from sonia.actions.registry import ActionRegistry
 from sonia.audio.vad import BargeIn, SpeechDiscarded, SpeechStarted, TurnEvent
 from sonia.config import Settings
+from sonia.glossary import correct_transcript, load_glossary
 from sonia.llm.conversation import Conversation
 from sonia.llm.messages import (
     assistant_text,
@@ -47,7 +48,7 @@ from sonia.llm.messages import (
     user_with_image,
 )
 from sonia.llm.prompt_tools import PromptToolParser, render_tools_prompt
-from sonia.persona import build_system_prompt, describe_stack
+from sonia.persona import DEFAULT_KNOWLEDGE_DIR, build_system_prompt, describe_stack
 from sonia.sentences import SentenceSplitter
 from sonia.showcase import Showcase, ShowcaseBit
 from sonia.tts.base import aclosing
@@ -242,6 +243,7 @@ class Orchestrator:
         showcase: Showcase | None = None,
         sentence_min_chars: int = SENTENCE_MIN_CHARS,
         sentence_comma_chars: int = SENTENCE_COMMA_CHARS,
+        glossary: list[str] | None = None,
     ) -> None:
         self._settings = settings
         self._stt = stt
@@ -263,6 +265,8 @@ class Orchestrator:
         if self._tool_mode == "native" and registry is not None and len(registry) > 0:
             self._tools = registry.to_openai_tools()
 
+        #: Nombres propios para corregir lo que transcribe el reconocedor.
+        self._glossary = glossary if glossary is not None else load_glossary(DEFAULT_KNOWLEDGE_DIR)
         self._conversation = Conversation(self._build_system_prompt(), settings.llm.history_turns)
         self._queue: asyncio.Queue[TurnInput] = asyncio.Queue()
         self._state = AssistantState.IDLE
@@ -510,6 +514,10 @@ class Orchestrator:
                 logger.info("Turno sin texto reconocible; se vuelve a idle")
                 self._drop_frame_task()
                 return
+            if isinstance(source, Utterance) and self._glossary:
+                text, changes = correct_transcript(text, self._glossary)
+                for before, after in changes:
+                    logger.info("Nombre corregido por el glosario: %r -> %r", before, after)
             logger.info("Usuario: %s", text)
             await self._hub.broadcast_json(p.msg_transcript("user", text, True))
             frame = await self._collect_frame(frame_task)

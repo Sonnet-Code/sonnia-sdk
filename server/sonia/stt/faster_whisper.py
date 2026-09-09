@@ -89,10 +89,21 @@ class FasterWhisperSTT:
         #: hilo sigue transcribiendo: sin esto, la transcripción huérfana
         #: competiría por la CPU con la del turno nuevo y duplicaría su latencia.
         self._thread_lock = threading.Lock()
+        self._hotwords: str | None = None
 
     @property
     def settings(self) -> STTSettings:
         return self._settings
+
+    @property
+    def hotwords(self) -> str | None:
+        """Nombres propios que sesgan al decodificador (glosario)."""
+        return self._hotwords
+
+    def set_hotwords(self, terms: list[str]) -> None:
+        """Fija las palabras clave: nombres del glosario que Whisper suele destrozar."""
+        cleaned = [term.strip() for term in terms if term and term.strip()]
+        self._hotwords = ", ".join(cleaned) if cleaned else None
 
     @property
     def loaded(self) -> bool:
@@ -151,6 +162,8 @@ class FasterWhisperSTT:
             vad_filter=False,
             # Cada turno es independiente; el contexto anterior provoca bucles.
             condition_on_previous_text=False,
+            # Nombres del glosario: sesgan al decodificador hacia esas grafías.
+            hotwords=self._hotwords,
         )
         parts = [segment.text for segment in segments]
         return _WHITESPACE_RE.sub(" ", " ".join(parts)).strip()

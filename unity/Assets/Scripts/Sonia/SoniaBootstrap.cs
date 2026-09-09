@@ -73,9 +73,9 @@ namespace Sonia
         private bool waitAudioBeforeSpeaking = true;
 
         [SerializeField]
-        [Range(0.5f, 5f)]
-        [Tooltip("Segundos máximos de espera del audio antes de aplicar 'hablando' igualmente (por si el TTS falla en silencio).")]
-        private float speakingAudioTimeout = 2.5f;
+        [Range(0.5f, 10f)]
+        [Tooltip("Segundos de espera del audio antes de aplicar el estado 'hablando' igualmente (por si el TTS falla en silencio). Los gestos de hablar siguen en pausa hasta que llegue audio de verdad.")]
+        private float speakingAudioTimeout = 4f;
 
         [SerializeField]
         [Range(0f, 3f)]
@@ -404,9 +404,21 @@ namespace Sonia
 
         private void Update()
         {
-            if ((_pendingSpeakingState || _pendingSpeechStart) && Time.time - _pendingSince > speakingAudioTimeout)
+            if (_pendingSpeakingState && Time.time - _pendingSince > speakingAudioTimeout)
             {
-                ReleasePendingSpeech("por tiempo de espera sin audio");
+                // El TTS tarda demasiado: se aplica el estado (cejas, cabeza) pero
+                // sin gesticular; los gestos esperan al primer chunk de audio.
+                _pendingSpeakingState = false;
+                ApplyAvatarState(AvatarState.Speaking);
+                if (choreographer != null)
+                {
+                    choreographer.SetSpeechPaused(true);
+                }
+
+                if (logEvents)
+                {
+                    Debug.Log("[Sonia] 'hablando' sin audio tras " + speakingAudioTimeout + " s: gestos en pausa", this);
+                }
             }
 
             if (_audioDrainedAt >= 0f && speechGapPauseSeconds > 0f && choreographer != null

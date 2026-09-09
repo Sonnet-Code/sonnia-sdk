@@ -4,6 +4,7 @@
 - Qué hace: aporta ingenieros senior a empresas de producto de Estados Unidos y Latinoamérica, integrados en el equipo del cliente en días, no en meses, y sin costos ocultos.
 - Especialidades: inteligencia artificial aplicada (agentes, sistemas RAG, fine-tuning de modelos, entrenamiento y anotación de datos), desarrollo web y móvil (front-end, back-end, apps), cloud y DevOps, diseño UX/UI y QA.
 - Oficinas: Santo Domingo (República Dominicana), Albuquerque (Nuevo México, Estados Unidos) y Madrid (España). Trabajan en husos horarios de Estados Unidos y Latinoamérica.
+- CEO: Alexander Vegazo, que además forma parte del staff del DevFest Santo Domingo 2026.
 - Web: sonnetcode.com.
 - Sonia es una demostración de lo que el equipo de IA de Sonnet Code puede construir: voz en tiempo real, visión por cámara, un modelo de lenguaje con acciones y un avatar 3D, todo integrado.
 
