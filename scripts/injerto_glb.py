@@ -79,8 +79,32 @@ def borde_cuello(p):
     return P
 
 
-Y_CUELLO = 1.52          # por encima de esto están la cabeza, el pelo, los ojos y los dientes
 FUERA = ('EyeLeft', 'EyeRight', 'Wolf3D_Head', 'Wolf3D_Teeth', 'Wolf3D_Hair')
+
+def grupo_cabeza(js, bn, pr):
+    """Devuelve una funcion que dice si una pieza suelta es parte de la cabeza.
+
+    El criterio por altura no vale: en algunos avatares el cuello de la prenda
+    sube por encima de la barbilla y se lo lleva por delante. Lo que si separa
+    limpiamente es el skinning: la cabeza, el pelo, las pestañas y los dientes
+    van al hueso Head (92-100 % del peso) y los ojos a LeftEye/RightEye,
+    mientras que la ropa va a Neck, Spine2 y los hombros (0 %).
+    """
+    nombres = [js['nodes'][j].get('name', '') for j in js['skins'][0]['joints']]
+    grupo = [i for i, n in enumerate(nombres) if n in ('Head', 'HeadTop_End') or 'Eye' in n]
+    J = acc(js, bn, pr['attributes']['JOINTS_0']).astype(np.int64)
+    W = acc(js, bn, pr['attributes']['WEIGHTS_0']).astype(np.float64)
+
+    def es_cabeza(sel):
+        idx = np.nonzero(sel)[0]
+        w = W[idx]
+        total = w.sum()
+        if total <= 0:
+            return False
+        return w[np.isin(J[idx], grupo)].sum() / total >= 0.5
+
+    return es_cabeza
+
 
 def copia_pose(js, ca_js, result_log):
     """Copia la pose de reposo del esqueleto del donante al receptor.
@@ -165,9 +189,10 @@ def injerto_cabeza(cuerpo_path, cabeza_path, out_path):
         cpr = js['meshes'][0]['primitives'][0]
         ctri = acc(cu_js, cu_bn, cpr['indices']).astype(np.int64).ravel().reshape(-1, 3)
         cfuera = np.zeros(len(acc(cu_js, cu_bn, cpr['attributes']['POSITION'])), dtype=bool)
+        es_cabeza_cuerpo = grupo_cabeza(cu_js, cu_bn, cu_js['meshes'][0]['primitives'][0])
         quitados = 0
         for pz in partes(cuerpo_path):
-            if pz['bbox'][1][1] >= Y_CUELLO:
+            if es_cabeza_cuerpo(pz['sel']):
                 cfuera[np.nonzero(pz['sel'])[0]] = True
                 quitados += pz['tris']
         ckeep = ~cfuera[ctri].any(axis=1)
@@ -188,9 +213,10 @@ def injerto_cabeza(cuerpo_path, cabeza_path, out_path):
     pr = ca_js['meshes'][0]['primitives'][0]
     pos = acc(ca_js, ca_bn, pr['attributes']['POSITION']).astype(np.float64)
     dentro = np.zeros(len(pos), dtype=bool)
+    es_cabeza_donante = grupo_cabeza(ca_js, ca_bn, pr)
     piezas = 0
     for p in partes(cabeza_path):
-        if p['bbox'][1][1] >= Y_CUELLO:
+        if es_cabeza_donante(p['sel']):
             dentro[np.nonzero(p['sel'])[0]] = True
             piezas += p['tris']
     tri = acc(ca_js, ca_bn, pr['indices']).astype(np.int64).ravel().reshape(-1, 3)
