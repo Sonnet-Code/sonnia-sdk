@@ -301,8 +301,12 @@ oculta vacía. El texto de Sonia aparece con su primer chunk de audio, no con
 
 **Imágenes** (`show_image`): el panel es un elemento de pantalla, no un objeto
 que siga al personaje. Al llegar la imagen, Sonia levanta la mano y señala con
-el índice (`Point_ThisGuy` en la capa de torso, congelado en su punto álgido con
-`Handle.SetSpeed(0)` mientras dura la imagen); la imagen aparece cuando la mano
+el índice (`Point_ThisGuy` en una capa solo del brazo derecho,
+`MotionPlayer.RightArmLayer`, congelado en su punto álgido con
+`Handle.SetSpeed(0)` mientras dura la imagen; el torso, la cabeza y el otro
+brazo siguen el bucle base del estado, y mientras presenta no hay variaciones
+de reposo, gestos de atención, asentimientos ni gestos de habla: quieta y
+atenta); la imagen aparece cuando la mano
 llega arriba (señal real del coreógrafo, `IsPresentHolding`), en una franja fija
 de la parte alta de la pantalla (`ImagePanelController.PlaceOnScreen`: margen
 superior del 12 % para no chocar con el logo ni con los botones, hasta el 70 %

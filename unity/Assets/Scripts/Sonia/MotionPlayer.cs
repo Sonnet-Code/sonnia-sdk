@@ -39,6 +39,12 @@ namespace Sonia
         /// <summary>Capa de torso, brazos y cabeza; deja pasar las piernas de la capa de cuerpo.</summary>
         public const int UpperLayer = 1;
 
+        /// <summary>Capa del brazo derecho solo (señalar una imagen); el resto sigue lo que haya debajo.</summary>
+        public const int RightArmLayer = 2;
+
+        /// <summary>Número de capas del grafo.</summary>
+        public const int LayerCount = 3;
+
         /// <summary>Referencia a un clip en reproducción.</summary>
         public sealed class Handle
         {
@@ -141,6 +147,7 @@ namespace Sonia
 
         private PlayableGraph _graph;
         private AnimationLayerMixerPlayable _layers;
+        private AvatarMask _rightArmMask;
         private LayerState[] _layerStates = new LayerState[0];
         private int _serial;
         private bool _ready;
@@ -191,9 +198,9 @@ namespace Sonia
             _graph = PlayableGraph.Create("Sonia.MotionPlayer");
             _graph.SetTimeUpdateMode(DirectorUpdateMode.GameTime);
 
-            _layers = AnimationLayerMixerPlayable.Create(_graph, 2);
-            _layerStates = new LayerState[2];
-            for (int layer = 0; layer < 2; layer++)
+            _layers = AnimationLayerMixerPlayable.Create(_graph, LayerCount);
+            _layerStates = new LayerState[LayerCount];
+            for (int layer = 0; layer < LayerCount; layer++)
             {
                 LayerState state = new LayerState();
                 state.Mixer = AnimationMixerPlayable.Create(_graph, slotsPerLayer);
@@ -217,6 +224,13 @@ namespace Sonia
 
             _layers.SetLayerMaskFromAvatarMask(UpperLayer, upperBodyMask);
             _layers.SetLayerAdditive(UpperLayer, false);
+            if (_rightArmMask == null)
+            {
+                _rightArmMask = CreateRightArmMask();
+            }
+
+            _layers.SetLayerMaskFromAvatarMask(RightArmLayer, _rightArmMask);
+            _layers.SetLayerAdditive(RightArmLayer, false);
 
             AnimationPlayableOutput output = AnimationPlayableOutput.Create(_graph, "Sonia.Animation", animator);
             output.SetSourcePlayable(_layers);
@@ -236,6 +250,21 @@ namespace Sonia
         }
 
         /// <summary>Máscara de torso por defecto: todo menos raíz, piernas y sus IK.</summary>
+        /// <summary>Máscara del brazo derecho con sus dedos, para señalar sin tocar el resto.</summary>
+        public static AvatarMask CreateRightArmMask()
+        {
+            AvatarMask mask = new AvatarMask();
+            mask.name = "SoniaRightArm";
+            for (int i = 0; i < (int)AvatarMaskBodyPart.LastBodyPart; i++)
+            {
+                mask.SetHumanoidBodyPartActive((AvatarMaskBodyPart)i, false);
+            }
+
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.RightArm, true);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.RightFingers, true);
+            return mask;
+        }
+
         public static AvatarMask CreateUpperBodyMask()
         {
             AvatarMask mask = new AvatarMask();
@@ -263,7 +292,7 @@ namespace Sonia
         /// torso, además, sube el peso de la capa.
         /// </summary>
         /// <param name="clip">Clip a reproducir. Si es null, no hace nada.</param>
-        /// <param name="layer">0 cuerpo entero, 1 torso.</param>
+        /// <param name="layer">0 cuerpo entero, 1 torso, 2 brazo derecho.</param>
         /// <param name="fadeSeconds">Duración del fundido cruzado.</param>
         /// <param name="speed">Velocidad de reproducción.</param>
         /// <param name="startTime">Segundo del clip por el que empezar.</param>
@@ -311,7 +340,7 @@ namespace Sonia
             }
 
             state.Current = slot;
-            if (layer == UpperLayer)
+            if (layer != BodyLayer)
             {
                 state.LayerTarget = 1f;
                 state.LayerFadeSpeed = s.FadeSpeed;
@@ -344,7 +373,7 @@ namespace Sonia
                 }
             }
 
-            if (layer == UpperLayer)
+            if (layer != BodyLayer)
             {
                 state.LayerTarget = 0f;
                 state.LayerFadeSpeed = speed;
@@ -426,7 +455,7 @@ namespace Sonia
                 state.Mixer.SetInputWeight(i, w);
             }
 
-            if (layer == UpperLayer)
+            if (layer != BodyLayer)
             {
                 _layers.SetInputWeight(layer, sum > 0.0001f ? state.LayerWeight : 0f);
             }

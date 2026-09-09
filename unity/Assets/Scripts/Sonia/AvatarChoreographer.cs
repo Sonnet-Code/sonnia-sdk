@@ -239,8 +239,7 @@ namespace Sonia
             bool cutting = _phase == Phase.Attention || _phase == Phase.Greeting;
             EnterState(state, cutting ? Mathf.Max(fade, attentionFadeOut * 0.6f) : fade, false);
 
-            if (previous == AvatarState.Listening && state != AvatarState.Listening && motionPlayer != null
-                && !IsPresenting)
+            if (previous == AvatarState.Listening && state != AvatarState.Listening && motionPlayer != null)
             {
                 motionPlayer.FadeOut(MotionPlayer.UpperLayer, nodFade);
                 _upper = null;
@@ -261,6 +260,11 @@ namespace Sonia
             if (_speechPaused)
             {
                 SetSpeechPaused(false);
+                return;
+            }
+
+            if (IsPresenting)
+            {
                 return;
             }
 
@@ -301,7 +305,7 @@ namespace Sonia
                 PlayLoop(motionSet.listeningLoop != null ? motionSet.listeningLoop : motionSet.idleLoop, speakFade);
                 Log("gestos de hablar en pausa: sin audio");
             }
-            else
+            else if (!IsPresenting)
             {
                 PlayNextTalking(speakFade);
             }
@@ -352,8 +356,17 @@ namespace Sonia
 
             _presentHolding = false;
             _presentReleasing = false;
-            _present = motionPlayer.Play(motionSet.present, MotionPlayer.UpperLayer, nodFade);
-            _upper = null;
+            // Solo el brazo derecho: el torso, la cabeza y el otro brazo siguen el
+            // bucle base del estado, que además se queda sin variaciones ni
+            // gestos mientras dure la presentación (ver UpdateIdle/UpdateSpeaking).
+            _present = motionPlayer.Play(motionSet.present, MotionPlayer.RightArmLayer, nodFade);
+            if (_phase != Phase.Base && _phase != Phase.Greeting)
+            {
+                // Una variación o un gesto de atención a medias se corta: el cuerpo
+                // vuelve a la base para no bailar mientras señala.
+                EndOneShot();
+            }
+
             Log("presenta una imagen: " + motionSet.present.name);
             return true;
         }
@@ -432,7 +445,7 @@ namespace Sonia
             {
                 if (_present.Remaining <= nodFade)
                 {
-                    motionPlayer.FadeOut(MotionPlayer.UpperLayer, nodFade);
+                    motionPlayer.FadeOut(MotionPlayer.RightArmLayer, nodFade);
                     _present = null;
                     _presentReleasing = false;
                 }
@@ -638,6 +651,13 @@ namespace Sonia
         {
             EnsureLoop(motionSet.idleLoop, stateFade);
 
+            if (IsPresenting)
+            {
+                // Presentando una imagen: solo el bucle base, sin variaciones ni
+                // gestos de atención, que con el brazo señalando quedan absurdos.
+                return;
+            }
+
             _attentionTimer -= dt;
             if (_attentionTimer <= 0f)
             {
@@ -672,6 +692,7 @@ namespace Sonia
 
             if (IsPresenting)
             {
+                // Presentando una imagen se queda quieta y atenta: sin asentimientos.
                 return;
             }
 
@@ -701,6 +722,12 @@ namespace Sonia
 
         private void UpdateThinking(float dt)
         {
+            if (IsPresenting)
+            {
+                EnsureLoop(motionSet.thinkingLoop, stateFade);
+                return;
+            }
+
             EnsureLoop(motionSet.thinkingLoop, stateFade);
 
             _variationTimer -= dt;
@@ -720,8 +747,9 @@ namespace Sonia
 
         private void UpdateSpeaking()
         {
-            if (_speechPaused)
+            if (_speechPaused || IsPresenting)
             {
+                // Sin audio, o señalando una imagen: espera atenta en vez de gesticular.
                 EnsureLoop(motionSet.listeningLoop != null ? motionSet.listeningLoop : motionSet.idleLoop, speakFade);
                 return;
             }
