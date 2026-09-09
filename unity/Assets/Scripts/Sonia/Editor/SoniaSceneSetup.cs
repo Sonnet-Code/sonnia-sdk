@@ -234,9 +234,11 @@ namespace Sonia.EditorTools
             SoniaMotionSetBuilder.Wire(
                 root, animator, SoniaMotionSetBuilder.LoadOrBuildMotionSet(), SoniaMotionSetBuilder.LoadOrBuildMask());
 
-            // Fonemas en tiempo real (uLipSync) y mirada de los ojos.
+            // Fonemas en tiempo real (uLipSync), mirada de los ojos, expresiones y panel de ajuste.
             EnsurePhonemeLipSync(root, avatarState);
             EnsureEyeGaze(root, avatarState, choreographer, animator);
+            EnsureFacialExpressions(root, avatarState);
+            EnsureComponent<SoniaTuningUI>(root);
 
             SerializedObject framingObject = new SerializedObject(cameraFraming);
             SetReference(framingObject, "choreographer", choreographer);
@@ -293,6 +295,25 @@ namespace Sonia.EditorTools
             {
                 SerializedObject stateObject = new SerializedObject(avatarState);
                 SetReference(stateObject, "lipSync", root.GetComponent<LipSyncController>());
+                stateObject.ApplyModifiedPropertiesWithoutUndo();
+            }
+        }
+
+        /// <summary>Deja en el objeto raíz el controlador de cejas, párpados y sonrisa, con la malla del lip-sync.</summary>
+        public static void EnsureFacialExpressions(GameObject root, AvatarStateController avatarState)
+        {
+            FacialExpressionController expressions = EnsureComponent<FacialExpressionController>(root);
+            LipSyncController lipSync = root.GetComponent<LipSyncController>();
+            SerializedObject expressionObject = new SerializedObject(expressions);
+            SetReference(expressionObject, "faceRenderer", lipSync != null ? lipSync.FaceRenderer : null);
+            SetReference(expressionObject, "stateController", avatarState);
+            SetReference(expressionObject, "lipSync", lipSync);
+            expressionObject.ApplyModifiedPropertiesWithoutUndo();
+
+            if (avatarState != null)
+            {
+                SerializedObject stateObject = new SerializedObject(avatarState);
+                SetReference(stateObject, "choreographer", root.GetComponent<AvatarChoreographer>());
                 stateObject.ApplyModifiedPropertiesWithoutUndo();
             }
         }

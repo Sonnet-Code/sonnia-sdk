@@ -541,10 +541,33 @@ de perfil demasiado tiempo; se usa como gesto suave de atención, una sola vez).
   de hasta 2,5°, vistazos de 5° cada 4-9 s, desviación total acotada a 7°,
   microtemblor y parpadeo en los saltos grandes. Durante bailes y gestos grandes
   es un 60 % más vivo.
-- **Cabeza** (`AvatarStateController`): mira al objetivo con peso 0,7 y hasta
-  40°, con vaivén lento de 1,4° (ruido Perlin) y un asentimiento de hasta 2,5°
-  en las sílabas fuertes (según `LipSyncController.MouthOpen`). Parpadeo cada
-  2,5-6 s.
+- **Cabeza** (`AvatarStateController`): mira al objetivo con peso 0,7 (0,3
+  durante bailes y gestos grandes) y hasta 40°, con vaivén lento de 1,4° (ruido
+  Perlin) y un asentimiento de hasta 2,5° en las sílabas fuertes (según
+  `LipSyncController.MouthOpen`). El desvío se calcula y suaviza **en el
+  espacio local de la cabeza**: si se suavizara en el mundo, al girar el cuerpo
+  deprisa la cabeza se quedaría clavada mirando al sitio antiguo (pasó con un
+  baile). Parpadeo cada 2,5-6 s.
+- **Expresiones** (`FacialExpressionController`): sobre los blendshapes ARKit,
+  cejas que suben con la energía de la voz y un levantamiento breve al empezar
+  a escuchar o hablar, ceño al pensar, sonrisa de base distinta por estado con
+  mejillas, párpados que se entornan al sonreír y al hablar fuerte y se abren
+  en los énfasis, y un vaivén aleatorio permanente. No toca visemas, mandíbula
+  ni parpadeo, así que no se pisa con el lip-sync.
+- **Panel de ajuste** (`SoniaTuningUI`): el botón **Ajustes** arriba a la
+  derecha (o F2) abre en la mitad inferior de la pantalla deslizadores para los
+  parámetros de ojos, cabeza, expresiones, boca y fonemas, leídos de los
+  componentes en vivo. **Guardar** escribe `sonia-tuning.json` en
+  `Application.persistentDataPath` y se aplica al arrancar; **Imprimir** saca
+  los valores por consola para pasarlos a la escena; **Restablecer** vuelve a
+  los valores de la escena y borra el archivo. Sobrevive a recompilaciones en
+  Play (reconstruye el panel si pierde las referencias). El cursor del ratón
+  está visible (`showCursor` en `SoniaBootstrap`).
+- **Clips que giran el cuerpo**: se midió el giro máximo de caderas de cada
+  clip evaluándolo con un `PlayableGraph` en edición; los bailes de Ready
+  Player Me 001/004/005/007 y `Dance_House` giran de 87° a 179° (dan la espalda
+  al visitante) y la variación de reposo 005 mira 117° hacia atrás: fuera del
+  catálogo.
 
 ### Detalles del VRM que no son obvios
 

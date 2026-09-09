@@ -61,7 +61,7 @@ namespace Sonia
 
         [SerializeField]
         [Tooltip("Mostrar el cursor del ratón.")]
-        private bool showCursor;
+        private bool showCursor = true;
 
         [SerializeField]
         [Tooltip("Fotogramas por segundo objetivo. 0 deja el valor por defecto de la plataforma.")]

@@ -70,6 +70,15 @@ namespace Sonia
         private float lookWeight = 0.7f;
 
         [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Peso de la mirada durante bailes y gestos grandes: la animación de la cabeza manda más.")]
+        private float wideShotLookWeight = 0.3f;
+
+        [SerializeField]
+        [Tooltip("Coreógrafo, para saber cuándo hay un gesto grande. Opcional.")]
+        private AvatarChoreographer choreographer;
+
+        [SerializeField]
         [Range(0f, 90f)]
         [Tooltip("Grados máximos que la cabeza se aparta de la pose de la animación.")]
         private float maxLookAngle = 40f;
@@ -119,7 +128,12 @@ namespace Sonia
         private float blinkDuration = 0.14f;
 
         private AvatarState _state = AvatarState.Idle;
-        private Quaternion _smoothedLook = Quaternion.identity;
+        // Desvío de la mirada respecto a la animación, en el espacio local de la
+        // cabeza. Se suaviza en local a propósito: si se suavizara la rotación en
+        // el mundo, al girar el cuerpo deprisa la cabeza se quedaría "clavada"
+        // mirando al sitio antiguo.
+        private Quaternion _lookOffset = Quaternion.identity;
+        private float _currentWeight;
         private bool _lookInitialized;
         private bool _imageVisible;
         private float _imageShownAt = -999f;
@@ -147,6 +161,11 @@ namespace Sonia
             if (lipSync == null)
             {
                 lipSync = GetComponentInChildren<LipSyncController>(true);
+            }
+
+            if (choreographer == null)
+            {
+                choreographer = GetComponentInChildren<AvatarChoreographer>(true);
             }
 
             _noiseSeed = UnityEngine.Random.value * 100f;
@@ -251,36 +270,40 @@ namespace Sonia
             Quaternion baseRotation = headBone.rotation;
             if (!_lookInitialized)
             {
-                _smoothedLook = baseRotation;
+                _lookOffset = Quaternion.identity;
+                _currentWeight = lookWeight;
                 _lookInitialized = true;
             }
 
+            bool wide = choreographer != null && choreographer.IsWideShot;
+            float targetWeight = wide ? wideShotLookWeight : lookWeight;
+            _currentWeight = Mathf.Lerp(_currentWeight, targetWeight, 1f - Mathf.Exp(-3f * deltaTime));
+
+            Quaternion desiredOffset = Quaternion.identity;
             Vector3 targetPosition;
-            if (!TryGetLookPosition(out targetPosition))
+            if (TryGetLookPosition(out targetPosition))
             {
-                _smoothedLook = Quaternion.Slerp(_smoothedLook, baseRotation, StepFor(deltaTime));
-                headBone.rotation = Quaternion.Slerp(baseRotation, _smoothedLook, lookWeight);
-                return;
+                Vector3 direction = targetPosition - headBone.position;
+                if (direction.sqrMagnitude > 0.0001f)
+                {
+                    // Vaivén lento (ruido Perlin) y un asentimiento leve en las sílabas
+                    // fuertes: una cabeza real nunca se queda clavada mirando un punto.
+                    float swayYaw = (Mathf.PerlinNoise(_noiseSeed, Time.time * 0.35f) - 0.5f) * 2f * headSwayDegrees;
+                    float swayPitch = (Mathf.PerlinNoise(_noiseSeed + 17f, Time.time * 0.28f) - 0.5f) * 2f * headSwayDegrees;
+                    float open = lipSync != null && _state == AvatarState.Speaking ? lipSync.MouthOpen : 0f;
+                    _nodLevel = Mathf.Lerp(_nodLevel, open, 1f - Mathf.Exp(-6f * deltaTime));
+                    Quaternion desired = Quaternion.LookRotation(direction.normalized, Vector3.up)
+                                         * Quaternion.Euler(headRotationOffset)
+                                         * Quaternion.Euler(swayPitch + _nodLevel * speechNodDegrees, swayYaw, 0f);
+                    Quaternion limited = Quaternion.RotateTowards(baseRotation, desired, maxLookAngle);
+
+                    // Desvío respecto a la animación, en local: viaja con el cuerpo.
+                    desiredOffset = Quaternion.Inverse(baseRotation) * limited;
+                }
             }
 
-            Vector3 direction = targetPosition - headBone.position;
-            if (direction.sqrMagnitude < 0.0001f)
-            {
-                return;
-            }
-
-            // Vaivén lento (ruido Perlin) y un asentimiento leve en las sílabas
-            // fuertes: una cabeza real nunca se queda clavada mirando un punto.
-            float swayYaw = (Mathf.PerlinNoise(_noiseSeed, Time.time * 0.35f) - 0.5f) * 2f * headSwayDegrees;
-            float swayPitch = (Mathf.PerlinNoise(_noiseSeed + 17f, Time.time * 0.28f) - 0.5f) * 2f * headSwayDegrees;
-            float open = lipSync != null && _state == AvatarState.Speaking ? lipSync.MouthOpen : 0f;
-            _nodLevel = Mathf.Lerp(_nodLevel, open, 1f - Mathf.Exp(-6f * deltaTime));
-            Quaternion desired = Quaternion.LookRotation(direction.normalized, Vector3.up)
-                                 * Quaternion.Euler(headRotationOffset)
-                                 * Quaternion.Euler(swayPitch + _nodLevel * speechNodDegrees, swayYaw, 0f);
-            Quaternion limited = Quaternion.RotateTowards(baseRotation, desired, maxLookAngle);
-            _smoothedLook = Quaternion.Slerp(_smoothedLook, limited, StepFor(deltaTime));
-            headBone.rotation = Quaternion.Slerp(baseRotation, _smoothedLook, lookWeight);
+            _lookOffset = Quaternion.Slerp(_lookOffset, desiredOffset, StepFor(deltaTime));
+            headBone.rotation = baseRotation * Quaternion.Slerp(Quaternion.identity, _lookOffset, _currentWeight);
         }
 
         private float StepFor(float deltaTime)

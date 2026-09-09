@@ -452,6 +452,8 @@ namespace Sonia.EditorTools
                 root.GetComponentInChildren<AvatarStateController>(true),
                 root.GetComponentInChildren<AvatarChoreographer>(true),
                 animator);
+            SoniaSceneSetup.EnsureFacialExpressions(
+                root.gameObject, root.GetComponentInChildren<AvatarStateController>(true));
 
             float headTop;
             float hipsY;

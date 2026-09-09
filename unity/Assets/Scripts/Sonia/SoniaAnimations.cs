@@ -65,14 +65,16 @@ namespace Sonia
         /// <summary>Bucle base de reposo.</summary>
         public const string IdleLoopClip = "F_Standing_Idle_001";
 
-        /// <summary>Variaciones de reposo, de una sola vez: empiezan y acaban en la pose base.</summary>
+        /// <summary>
+        /// Variaciones de reposo, de una sola vez: empiezan y acaban en la pose base.
+        /// Fuera la 005, que mira 117° hacia atrás.
+        /// </summary>
         public static readonly string[] IdleVariationClips =
         {
             "F_Standing_Idle_Variations_001",
             "F_Standing_Idle_Variations_002",
             "F_Standing_Idle_Variations_003",
             "F_Standing_Idle_Variations_004",
-            "F_Standing_Idle_Variations_005",
             "F_Standing_Idle_Variations_006",
             "F_Standing_Idle_Variations_007",
             "F_Standing_Idle_Variations_008",
@@ -113,14 +115,10 @@ namespace Sonia
         /// </summary>
         public static readonly AttentionClip[] AttentionClips =
         {
-            // Bailes.
-            new AttentionClip("F_Dances_001", AttentionCategory.Dance),
-            new AttentionClip("F_Dances_004", AttentionCategory.Dance),
-            new AttentionClip("F_Dances_005", AttentionCategory.Dance),
+            // Bailes. Fuera los que giran el cuerpo más de 80° (F_Dances_001/004/005/007,
+            // Dance_House): dar la espalda al visitante no sirve en un stand.
             new AttentionClip("F_Dances_006", AttentionCategory.Dance),
-            new AttentionClip("F_Dances_007", AttentionCategory.Dance),
             new AttentionClip("Dance_HipHop", AttentionCategory.Dance),
-            new AttentionClip("Dance_House", AttentionCategory.Dance),
             new AttentionClip("Dance_Jazz", AttentionCategory.Dance),
             new AttentionClip("Dance_RunningMan", AttentionCategory.Dance),
             new AttentionClip("Dance_Gangnam", AttentionCategory.Dance),
