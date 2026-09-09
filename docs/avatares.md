@@ -238,10 +238,53 @@ Dos avisos:
   que ir al revés: quedarse con una cabeza multi-malla (Zoe 1, Brunette,
   Female 3) y vestirla como haga falta.
 
-Por eso, para la camiseta del staff, la operación recomendada no es cambiar la
-cabeza sino **la ropa**: quedarse con Babe entera y traerle el top de otro
-avatar. Sin costuras, sin desajuste de piel, y con una prenda lisa y grande
-donde el logo del DevFest se pinta sin pelear con el atlas.
+### Hecho: la cabeza de Babe sobre el cuerpo de Zoe 1
+
+`scripts/injerto_glb.py` hace la operación sin Blender, con numpy y nada más.
+El resultado está en `unity/Assets/Avatar/BabeCamisa.glb` (11,5 MB): cara, pelo,
+ojos y dientes de Babe sobre el cuerpo, la camisa blanca, la falda y los zapatos
+de Zoe 1. Conserva los **67 blendshapes** (comprobado: `viseme_aa` mueve 1 349
+vértices de la boca, `eyeBlinkLeft` 283 del párpado).
+
+![Cabeza de Babe sobre el cuerpo de Zoe 1](img/avatar-injerto-cabeza.jpg)
+
+```bash
+python3 scripts/injerto_glb.py cabeza cuerpo.glb cabeza.glb salida.glb
+```
+
+Cómo funciona, por si hay que repetirlo con otro par:
+
+1. Del cuerpo se borran los **nodos** de `Wolf3D_Head`, `Wolf3D_Teeth`,
+   `EyeLeft`, `EyeRight` y `Wolf3D_Hair`. Las mallas se quedan en el fichero
+   pero, sin nodo, no se instancian.
+2. Del donante de atlas se conservan solo los triángulos cuyas piezas sueltas
+   tienen el techo por encima de y = 1,52, que son exactamente cabeza, pelo,
+   ojos y dientes. **No se borran vértices**: solo se reescribe el búfer de
+   índices, así que los 67 morph targets siguen apuntando a donde apuntaban.
+3. Los accessors del donante (atributos y blendshapes, incluidos los dispersos)
+   se copian **byte a byte** a base de duplicar sus bufferViews. Nada se
+   recodifica.
+4. El nodo nuevo cuelga del mismo padre y reutiliza el `skin` del cuerpo, que es
+   legítimo porque los dos esqueletos son el mismo.
+
+### Lo que no funcionó: injertar solo la prenda
+
+![Babe con la camisa de Zoe injertada](img/avatar-injerto-prenda.jpg)
+
+Primero se probó lo contrario: dejar a Babe entera y traerle solo la camisa
+(`injerto_glb.py prenda`). La camisa entra y se dobla bien con el esqueleto,
+pero salen dos costuras, y las dos son culpa de la misma decisión de RPM: **borra
+la geometría que queda oculta bajo la ropa**.
+
+- A Babe le falta la piel del torso y del antebrazo, porque su top corto las
+  tapaba. Con otra prenda encima el problema no se ve, pero en las muñecas sí:
+  la manga de Zoe termina en otro sitio y deja un hueco.
+- La camisa de Zoe viene cortada por la cintura, donde su falda la tapaba. Sobre
+  los vaqueros de tiro bajo de Babe, ese corte queda a la vista.
+
+Se puede arreglar trayendo también el `Wolf3D_Body` del donante y ajustando el
+tono de piel, pero el trasplante de cabeza da el mismo resultado con una pieza
+menos y sin retoques de textura.
 
 ## Personalización
 
