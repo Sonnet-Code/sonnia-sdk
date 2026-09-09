@@ -6769,6 +6769,7 @@ GameObject:
   - component: {fileID: 1767658866}
   - component: {fileID: 1767658870}
   - component: {fileID: 1767658869}
+  - component: {fileID: 1767658871}
   m_Layer: 0
   m_Name: Sonia
   m_TagString: Untagged
@@ -7110,6 +7111,7 @@ MonoBehaviour:
   targetCamera: {fileID: 330585545}
   choreographer: {fileID: 1767658864}
   imagePanel: {fileID: 509738639}
+  wideShotEnabled: 0
   wideShotPosition: {x: 0, y: 0.96448034, z: -3.7854133}
   wideShotFieldOfView: 0
   panelShotPosition: {x: 0, y: 1.8998687, z: -1.4986017}
@@ -7183,6 +7185,7 @@ MonoBehaviour:
   blinkOnBigSaccade: 1
   minFocusDistance: 2.5
   gazeGain: 0.65
+  convergenceDegrees: -8
   maxYaw: 10
   maxPitch: 8
   saccadeInterval: {x: 0.7, y: 2.6}
@@ -7272,6 +7275,20 @@ MonoBehaviour:
   wideOnEmphasis: 0.4
   smoothing: 6
   emphasisThreshold: 0.5
+--- !u!114 &1767658871
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1767658851}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5400597beb8df486683bf4ada46c1281, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.SoniaAnimationPreviewUI
+  choreographer: {fileID: 0}
+  stateController: {fileID: 0}
 --- !u!1 &1890986732
 GameObject:
   m_ObjectHideFlags: 0

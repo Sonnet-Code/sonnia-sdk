@@ -111,10 +111,18 @@ namespace Sonia
         private readonly ConcurrentQueue<object> _inbox = new ConcurrentQueue<object>();
         private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
 
+        // [NonSerialized]: tras recompilar en Play, Unity conserva los campos
+        // privados serializables pero mata el hilo de fondo; si _isConnected
+        // sobreviviera como "true", el cliente parecería conectado sin recibir
+        // nada. Con los campos a cero, Update vuelve a conectar.
         private volatile ClientWebSocket _socket;
         private CancellationTokenSource _cancellation;
         private Task _connectionTask;
+
+        [NonSerialized]
         private bool _shuttingDown;
+
+        [NonSerialized]
         private bool _isConnected;
 
         /// <summary>Cierto entre <see cref="OnConnected"/> y <see cref="OnDisconnected"/>.</summary>
@@ -168,6 +176,12 @@ namespace Sonia
 
         private void Update()
         {
+            // Sin tarea de conexión (arranque, o recarga de dominio en Play) se reconecta.
+            if (_connectionTask == null && !_shuttingDown && autoConnect)
+            {
+                Connect();
+            }
+
             object message;
             int processed = 0;
             while (_inbox.TryDequeue(out message))
