@@ -19,6 +19,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -430,11 +431,18 @@ namespace Sonia.EditorTools
             MoveHudLabel(debugGroup, "Connection", HudConnectionPosition);
             MoveHudLabel(debugGroup, "State", HudStatePosition);
 
+            SoniaDebugUiRefs subtitleRefs = default(SoniaDebugUiRefs);
+            EnsureSubtitles(debugGroup, ref subtitleRefs);
+
             SoniaDebugUI debugUI = root.GetComponentInChildren<SoniaDebugUI>(true);
             if (debugUI != null)
             {
                 SerializedObject serialized = new SerializedObject(debugUI);
                 SetReference(serialized, "hudRoot", debugGroup.gameObject);
+                SetNestedReference(serialized, "userLabel", "tmp", subtitleRefs.User);
+                SetNestedReference(serialized, "userLabel", "container", subtitleRefs.UserBubble);
+                SetNestedReference(serialized, "assistantLabel", "tmp", subtitleRefs.Assistant);
+                SetNestedReference(serialized, "assistantLabel", "container", subtitleRefs.AssistantBubble);
                 serialized.ApplyModifiedPropertiesWithoutUndo();
             }
 
@@ -638,15 +646,24 @@ namespace Sonia.EditorTools
             public TextMeshProUGUI State;
             public TextMeshProUGUI User;
             public TextMeshProUGUI Assistant;
+            public GameObject UserBubble;
+            public GameObject AssistantBubble;
             public TMP_InputField Input;
             public Button Interrupt;
             public GameObject DebugGroup;
         }
 
+        /// <summary>Nombre de la cámara superpuesta que dibuja el HUD.</summary>
+        private const string HudCameraName = "HudCamera";
+
         /// <summary>
-        /// Deja el Canvas del HUD en Screen Space - Camera. Es lo que hace que el
-        /// HUD salga en las capturas 1080x1920: un Canvas en Overlay no aparece
-        /// cuando se renderiza a una RenderTexture, que es como se verifica todo.
+        /// Deja el Canvas del HUD en Screen Space - Camera sobre una cámara
+        /// superpuesta (URP camera stacking) sin postprocesado. Con la cámara
+        /// principal, el HUD pasaba por el tonemapping ACES, el bloom, la viñeta
+        /// y la profundidad de campo: el logo de la esquina salía oscuro y el
+        /// texto, lavado. En Overlay no pasaría por nada, pero tampoco saldría en
+        /// las capturas 1080x1920 con las que se verifica todo; la cámara apilada
+        /// sí se renderiza con la principal.
         /// </summary>
         private static void ConfigureHudCanvas(Canvas canvas)
         {
@@ -666,10 +683,80 @@ namespace Sonia.EditorTools
                 return;
             }
 
+            Camera hudCamera = EnsureHudCamera(main);
             canvas.renderMode = RenderMode.ScreenSpaceCamera;
-            canvas.worldCamera = main;
+            canvas.worldCamera = hudCamera != null ? hudCamera : main;
             canvas.planeDistance = HudPlaneDistance;
             canvas.sortingOrder = 100;
+        }
+
+        /// <summary>
+        /// Cámara superpuesta hija de la principal: solo la capa UI y sin
+        /// postprocesado. La principal deja de dibujar la capa UI.
+        /// </summary>
+        private static Camera EnsureHudCamera(Camera main)
+        {
+            int uiLayer = LayerMask.NameToLayer("UI");
+            if (uiLayer < 0)
+            {
+                Debug.LogWarning("[Sonia] No existe la capa UI; el HUD se dibuja con la cámara principal.");
+                return null;
+            }
+
+            Transform existing = main.transform.Find(HudCameraName);
+            GameObject cameraObject;
+            if (existing != null)
+            {
+                cameraObject = existing.gameObject;
+            }
+            else
+            {
+                cameraObject = new GameObject(HudCameraName, typeof(Camera));
+                cameraObject.transform.SetParent(main.transform, false);
+                Undo.RegisterCreatedObjectUndo(cameraObject, "Crear cámara del HUD");
+            }
+
+            cameraObject.transform.localPosition = Vector3.zero;
+            cameraObject.transform.localRotation = Quaternion.identity;
+            cameraObject.transform.localScale = Vector3.one;
+
+            Camera hudCamera = cameraObject.GetComponent<Camera>();
+            hudCamera.cullingMask = 1 << uiLayer;
+            hudCamera.orthographic = main.orthographic;
+            hudCamera.fieldOfView = main.fieldOfView;
+            hudCamera.nearClipPlane = 0.05f;
+            hudCamera.farClipPlane = 5f;
+            hudCamera.depth = main.depth + 1;
+            AudioListener listener = cameraObject.GetComponent<AudioListener>();
+            if (listener != null)
+            {
+                Object.DestroyImmediate(listener);
+            }
+
+            UniversalAdditionalCameraData hudData = hudCamera.GetUniversalAdditionalCameraData();
+            hudData.renderType = CameraRenderType.Overlay;
+            hudData.renderPostProcessing = false;
+            hudData.renderShadows = false;
+            hudData.requiresColorOption = CameraOverrideOption.Off;
+            hudData.requiresDepthOption = CameraOverrideOption.Off;
+
+            UniversalAdditionalCameraData mainData = main.GetUniversalAdditionalCameraData();
+            if (mainData.renderType != CameraRenderType.Base)
+            {
+                mainData.renderType = CameraRenderType.Base;
+            }
+
+            if (!mainData.cameraStack.Contains(hudCamera))
+            {
+                mainData.cameraStack.Add(hudCamera);
+            }
+
+            // Los canvas en Overlay (paneles de ajustes y animaciones) no usan
+            // cámara; el resto de la UI es este HUD, que ya no dibuja la principal.
+            main.cullingMask &= ~(1 << uiLayer);
+            EditorUtility.SetDirty(main);
+            EditorUtility.SetDirty(hudCamera);
+            return hudCamera;
         }
 
         /// <summary>Crea o actualiza el logo de Sonnet Code, arriba a la izquierda del HUD.</summary>
@@ -711,6 +798,127 @@ namespace Sonia.EditorTools
             logoObject.transform.SetAsFirstSibling();
             EditorUtility.SetDirty(logoObject);
             return image;
+        }
+
+        /// <summary>Nombre del contenedor de subtítulos dentro del grupo de depuración.</summary>
+        private const string SubtitlesName = "Subtitles";
+
+        /// <summary>
+        /// Subtítulos como dos burbujas apiladas sobre la fila de texto: la del
+        /// visitante (pequeña, gris, etiqueta "TÚ") y la de Sonia (grande, blanca,
+        /// etiqueta "SONIA" en el azul de la marca). Cada burbuja crece con su
+        /// texto y se oculta cuando está vacía, así nunca se pisan.
+        /// </summary>
+        private static void EnsureSubtitles(Transform debugGroup, ref SoniaDebugUiRefs refs)
+        {
+            // Las etiquetas sueltas de versiones anteriores sobran.
+            foreach (string stale in new[] { "UserSubtitle", "AssistantSubtitle" })
+            {
+                Transform old = debugGroup.Find(stale);
+                if (old != null)
+                {
+                    Undo.DestroyObjectImmediate(old.gameObject);
+                }
+            }
+
+            Transform existing = debugGroup.Find(SubtitlesName);
+            if (existing != null)
+            {
+                Undo.DestroyObjectImmediate(existing.gameObject);
+            }
+
+            GameObject container = new GameObject(SubtitlesName, typeof(RectTransform));
+            container.transform.SetParent(debugGroup, false);
+            container.layer = debugGroup.gameObject.layer;
+            Undo.RegisterCreatedObjectUndo(container, "Crear subtítulos");
+            RectTransform containerRect = container.GetComponent<RectTransform>();
+            containerRect.anchorMin = new Vector2(0.5f, 0f);
+            containerRect.anchorMax = new Vector2(0.5f, 0f);
+            containerRect.pivot = new Vector2(0.5f, 0f);
+            containerRect.anchoredPosition = new Vector2(0f, 150f);
+            containerRect.sizeDelta = new Vector2(980f, 0f);
+            VerticalLayoutGroup stack = container.AddComponent<VerticalLayoutGroup>();
+            stack.spacing = 14f;
+            stack.childAlignment = TextAnchor.LowerCenter;
+            stack.childControlWidth = true;
+            stack.childControlHeight = true;
+            stack.childForceExpandWidth = true;
+            stack.childForceExpandHeight = false;
+            container.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            refs.UserBubble = CreateSubtitleBubble(
+                container.transform,
+                "UserBubble",
+                "TÚ",
+                new Color(0.62f, 0.70f, 0.82f, 1f),
+                new Color(0.04f, 0.07f, 0.14f, 0.55f),
+                26f,
+                new Color(0.86f, 0.89f, 0.95f, 1f),
+                out refs.User);
+            refs.AssistantBubble = CreateSubtitleBubble(
+                container.transform,
+                "AssistantBubble",
+                "SONIA",
+                new Color(0.44f, 0.66f, 1f, 1f),
+                new Color(0.02f, 0.05f, 0.12f, 0.72f),
+                36f,
+                Color.white,
+                out refs.Assistant);
+
+            // Empiezan vacías y ocultas; SoniaDebugUI las enciende con el texto.
+            refs.UserBubble.SetActive(false);
+            refs.AssistantBubble.SetActive(false);
+        }
+
+        private static GameObject CreateSubtitleBubble(
+            Transform parent,
+            string name,
+            string tag,
+            Color tagColor,
+            Color background,
+            float fontSize,
+            Color textColor,
+            out TextMeshProUGUI text)
+        {
+            GameObject bubble = new GameObject(name, typeof(RectTransform));
+            bubble.transform.SetParent(parent, false);
+            bubble.layer = parent.gameObject.layer;
+            Image image = bubble.AddComponent<Image>();
+            image.color = background;
+            image.raycastTarget = false;
+            VerticalLayoutGroup layout = bubble.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(28, 28, 12, 14);
+            layout.spacing = 2f;
+            layout.childAlignment = TextAnchor.UpperCenter;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            bubble.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            GameObject tagObject = new GameObject("Tag", typeof(RectTransform));
+            tagObject.transform.SetParent(bubble.transform, false);
+            tagObject.layer = bubble.layer;
+            TextMeshProUGUI tagText = tagObject.AddComponent<TextMeshProUGUI>();
+            tagText.text = tag;
+            tagText.fontSize = 19f;
+            tagText.characterSpacing = 6f;
+            tagText.fontStyle = FontStyles.Bold;
+            tagText.color = tagColor;
+            tagText.alignment = TextAlignmentOptions.Center;
+            tagText.raycastTarget = false;
+
+            GameObject textObject = new GameObject("Text", typeof(RectTransform));
+            textObject.transform.SetParent(bubble.transform, false);
+            textObject.layer = bubble.layer;
+            text = textObject.AddComponent<TextMeshProUGUI>();
+            text.text = string.Empty;
+            text.fontSize = fontSize;
+            text.color = textColor;
+            text.alignment = TextAlignmentOptions.Center;
+            text.textWrappingMode = TextWrappingModes.Normal;
+            text.raycastTarget = false;
+            return bubble;
         }
 
         /// <summary>Deja un RectTransform ocupando todo su padre.</summary>
@@ -782,29 +990,7 @@ namespace Sonia.EditorTools
                 "idle");
 
             // Subtítulos abajo, encima de la fila de entrada de texto.
-            refs.User = CreateLabel(
-                debugGroup.transform,
-                "UserSubtitle",
-                new Vector2(0.5f, 0f),
-                new Vector2(0.5f, 0f),
-                new Vector2(0.5f, 0f),
-                new Vector2(0f, 290f),
-                new Vector2(1000f, 70f),
-                30f,
-                TextAlignmentOptions.Bottom,
-                string.Empty);
-
-            refs.Assistant = CreateLabel(
-                debugGroup.transform,
-                "AssistantSubtitle",
-                new Vector2(0.5f, 0f),
-                new Vector2(0.5f, 0f),
-                new Vector2(0.5f, 0f),
-                new Vector2(0f, 160f),
-                new Vector2(1000f, 120f),
-                38f,
-                TextAlignmentOptions.Bottom,
-                string.Empty);
+            EnsureSubtitles(debugGroup.transform, ref refs);
 
             TMP_DefaultControls.Resources resources = BuildResources();
 
@@ -976,7 +1162,9 @@ namespace Sonia.EditorTools
             SetNestedReference(debugObject, "connectionLabel", "tmp", refs.Connection);
             SetNestedReference(debugObject, "stateLabel", "tmp", refs.State);
             SetNestedReference(debugObject, "userLabel", "tmp", refs.User);
+            SetNestedReference(debugObject, "userLabel", "container", refs.UserBubble);
             SetNestedReference(debugObject, "assistantLabel", "tmp", refs.Assistant);
+            SetNestedReference(debugObject, "assistantLabel", "container", refs.AssistantBubble);
             SetReference(debugObject, "inputField", refs.Input);
             SetReference(debugObject, "interruptButton", refs.Interrupt);
             debugObject.ApplyModifiedPropertiesWithoutUndo();

@@ -285,7 +285,17 @@ veces que haga falta sin acumular basura:
 | **Sonia > Iluminación de estudio** | Monta o actualiza key, fill, rim y hair light, el halo, las motas, el Volume (ACES, bloom, viñeta, color, profundidad de campo) y SMAA |
 | **Sonia > Actualizar componentes** | Añade al objeto `Sonia` de una escena ya creada los componentes que le falten y recablea `SoniaBootstrap` |
 | **Sonia > Colocar avatar** | Instancia el modelo (VRM o GLB), le construye Avatar Humanoid si no lo trae, lo cablea (lip-sync, fonemas, parpadeo, mirada de ojos, coreógrafo) y deja cámara, panel, telón e iluminación de estudio en su sitio |
-| **Sonia > Captura vertical 9:16** | Guarda un PNG 1080x1920 de la cámara principal en `unity/Temp` |
+| **Sonia > Captura vertical 9:16** | Guarda un PNG 1080x1920 de la cámara principal en `unity/Temp`, con el HUD compuesto encima (`SoniaCapture.Render` renderiza aparte la cámara superpuesta del HUD, porque fuera del bucle de juego URP no dibuja la pila) |
+
+El HUD (`SoniaHUD`, Screen Space - Camera) se dibuja con `HudCamera`, una
+cámara superpuesta hija de la principal (URP camera stacking) que solo ve la
+capa UI y no lleva postprocesado: con la principal, el tonemapping, la viñeta y
+la profundidad de campo oscurecían el logo de la esquina y lavaban el texto. Los
+subtítulos son dos burbujas apiladas sobre la fila de texto (`Debug/Subtitles`):
+la del visitante, pequeña y gris con la etiqueta "TÚ", y la de Sonia, grande y
+blanca con "SONIA" en el azul de la marca; cada una crece con su texto y se
+oculta vacía. El texto de Sonia aparece con su primer chunk de audio, no con
+`speech_start`.
 
 Un montaje desde cero se hace en ese orden. Cualquier comprobación de encuadre
 se mira con la captura vertical: las capturas normales del editor salen en 16:9

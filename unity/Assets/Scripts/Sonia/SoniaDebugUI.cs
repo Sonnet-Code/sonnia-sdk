@@ -31,6 +31,9 @@ namespace Sonia
             [Tooltip("Etiqueta Text clásica de uGUI. Opcional.")]
             public Text legacy;
 
+            [Tooltip("Burbuja que se enciende con texto y se apaga sin él. Opcional.")]
+            public GameObject container;
+
             /// <summary>Escribe el mismo texto en las etiquetas que estén asignadas.</summary>
             public void Set(string value)
             {
@@ -42,6 +45,11 @@ namespace Sonia
                 if (legacy != null)
                 {
                     legacy.text = value;
+                }
+
+                if (container != null)
+                {
+                    container.SetActive(!string.IsNullOrEmpty(value));
                 }
             }
         }
