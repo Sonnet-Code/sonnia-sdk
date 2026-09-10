@@ -34,6 +34,7 @@ class Utterance:
     sample_rate: int = INPUT_SAMPLE_RATE
     started_at: float = 0.0  # time.monotonic() cuando empezó a hablar
     ended_at: float = 0.0  # time.monotonic() cuando terminó
+    level: float = 0.0  # RMS medio de los bloques con voz (0..1)
 
     @property
     def duration(self) -> float:

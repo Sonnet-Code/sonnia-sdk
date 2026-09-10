@@ -103,6 +103,7 @@ namespace Sonia
         {
             ResolveReferences();
             ApplyKioskSettings();
+            ScreenshotService.InstallFromCommandLine(gameObject);
         }
 
         private void OnEnable()

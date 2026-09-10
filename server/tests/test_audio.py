@@ -328,6 +328,31 @@ async def test_nivel_minimo_absoluto_bloquea_el_barge_in() -> None:
     assert [type(e) for e in events] == [SpeechStarted, SpeechDiscarded]
 
 
+async def test_turno_por_debajo_del_nivel_minimo_se_descarta_como_fondo() -> None:
+    probabilities = [0.9] * 10 + [0.0] * 4
+    levels = [0.02] * 10 + [0.0] * 4
+    settings = make_settings(min_turn_rms=0.05)
+    detector = TurnDetector(settings, FakeVad(probabilities))
+
+    events = await run_leveled(detector, probabilities, levels)
+
+    assert [type(e) for e in events] == [SpeechStarted, SpeechDiscarded]
+
+
+async def test_turno_con_nivel_suficiente_lleva_su_nivel_medio() -> None:
+    probabilities = [0.9] * 10 + [0.0] * 4
+    levels = [0.1] * 5 + [0.2] * 5 + [0.0] * 4
+    settings = make_settings(min_turn_rms=0.05)
+    detector = TurnDetector(settings, FakeVad(probabilities))
+
+    events = await run_leveled(detector, probabilities, levels)
+
+    assert [type(e) for e in events] == [SpeechStarted, Utterance]
+    utterance = events[-1]
+    assert isinstance(utterance, Utterance)
+    assert utterance.level == pytest.approx(0.15, abs=1e-3)
+
+
 # ---------------------------------------------------------------------------
 # Utilidades
 # ---------------------------------------------------------------------------

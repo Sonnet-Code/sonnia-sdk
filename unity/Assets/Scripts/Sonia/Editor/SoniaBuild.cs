@@ -37,6 +37,12 @@ namespace Sonia.EditorTools
         private static void Build(BuildTarget target, string folder, string fileName)
         {
             SoniaSceneSetup.ConfigureVerticalBuild();
+            // macOS exige explicar para qué se usan la cámara y el micrófono; sin
+            // el texto de la cámara el build falla porque WebcamFrameSender usa WebCamTexture.
+            PlayerSettings.macOS.cameraUsageDescription =
+                "Sonia mira por la cámara para saludar a quien se acerca al stand.";
+            PlayerSettings.macOS.microphoneUsageDescription =
+                "Sonia escucha por el micrófono para conversar.";
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
 
             string outputDir = Path.Combine(BuildRoot, folder);

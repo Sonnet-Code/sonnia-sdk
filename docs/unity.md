@@ -138,6 +138,39 @@ distribución, en coordenadas de esa referencia:
 El menú **Crear escena base** ya los aplica; el ítem separado sirve para volver
 a ponerlos si alguien los toca.
 
+### Compilar la app
+
+**Sonia > Build macOS** (o **Build Windows**) aplica los ajustes de arriba,
+añade la descripción de uso de cámara y micrófono que exige macOS (sin ella el
+build falla porque `WebcamFrameSender` usa `WebCamTexture`) y deja el
+resultado en `unity/Build/<plataforma>/` (ignorado por git) junto a un
+`build-report.txt` con el resumen. Sin abrir el editor:
+
+```bash
+/Applications/Unity/Hub/Editor/6000.6.0f1/Unity.app/Contents/MacOS/Unity \
+  -batchmode -quit -projectPath unity \
+  -executeMethod Sonia.EditorTools.SoniaBuild.BuildMac -logFile build.log
+```
+
+El primer build compila todas las variantes de shaders de URP (unos 7 minutos
+en un MacBook Pro M-series); los siguientes salen de la caché en 2 minutos.
+Batch mode necesita que el editor esté cerrado sobre ese proyecto.
+
+Para probarla en ventana y no a pantalla completa, y para verificarla sin
+editor, la app admite estos argumentos:
+
+```bash
+unity/Build/macOS/Sonia.app/Contents/MacOS/Sonia \
+  -screen-fullscreen 0 -screen-width 540 -screen-height 960 \
+  -capture-dir /tmp/capturas -capture-every 5 -logFile player.log
+```
+
+`-capture-dir` guarda un PNG de la pantalla cada `-capture-every` segundos
+(`ScreenshotService`); sin ese argumento no se instala y no cuesta nada.
+Pendiente: el log del build avisa de que el shader de post-procesado
+(`PaniniProjection`) se recorta y URP desactiva entonces todos los pases de
+post-procesado en la app, así que el Volume (ACES, bloom) solo se ve en el editor.
+
 ### Probar en el editor
 
 La Game view no se configura desde el script, así que se elige a mano una vez:

@@ -106,6 +106,12 @@ class AudioSettings(BaseSettings):
     #: Nivel RMS mínimo absoluto (0..1) para interrumpir; 0 lo desactiva. Se
     #: calibra en el stand si el factor sobre el eco no basta.
     barge_in_min_rms: float = 0.0
+    #: Nivel RMS medio (0..1) que debe alcanzar la voz de un turno para que
+    #: cuente; por debajo se descarta como conversación de fondo. 0 lo
+    #: desactiva. Cada turno deja su nivel en el log ("nivel 0.031") para
+    #: calibrarlo en el sitio: la gente a un metro del micro suele quedar
+    #: bastante por encima de las voces del pasillo.
+    min_turn_rms: float = 0.0
     #: Eco con voz que hay que haber oído desde que suena Sonia antes de
     #: admitir interrupciones: evita disparos al arrancar, cuando aún no hay
     #: referencia de nivel.

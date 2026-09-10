@@ -238,6 +238,8 @@ class TurnDetector:
         self._speech_samples = 0
         self._silence_samples = 0
         self._started_at = 0.0
+        # Nivel de la voz del turno: suma de RMS·muestras de los bloques con voz.
+        self._level_sum = 0.0
         #: Mínimo de voz exigido a este turno, fijado al empezarlo.
         self._min_speech_samples = 0
 
@@ -322,6 +324,7 @@ class TurnDetector:
                 self._remember_pre_roll(data)
                 return events
             events.append(self._begin_turn(data))
+            self._level_sum = rms * data.size
             if self._started_while_speaking:
                 self._track_recent(rms, data.size)
             return events
@@ -331,6 +334,7 @@ class TurnDetector:
         if voiced:
             self._speech_samples += data.size
             self._silence_samples = 0
+            self._level_sum += rms * data.size
             if self._started_while_speaking and not self._confirmed:
                 self._track_recent(rms, data.size)
                 confirmation = self._try_confirm(echo_reference)
@@ -446,7 +450,17 @@ class TurnDetector:
         audio = np.concatenate(self._buffer) if self._buffer else np.zeros(0, dtype=np.float32)
         speech_samples = self._speech_samples
         started_at = self._started_at
+        level = self._level_sum / speech_samples if speech_samples else 0.0
         enough = speech_samples >= self._min_speech_samples
+        min_rms = self._settings.min_turn_rms
+        if enough and min_rms > 0.0 and level < min_rms:
+            enough = False
+            _log.info(
+                "Habla descartada por nivel bajo (%.3f < %.3f, %.0f ms): voz de fondo",
+                level,
+                min_rms,
+                speech_samples / INPUT_SAMPLE_RATE * 1000,
+            )
         if self._started_while_speaking and not self._confirmed:
             # Empezó mientras sonaba Sonia y nunca superó el eco: era ella misma.
             enough = False
@@ -467,6 +481,7 @@ class TurnDetector:
             sample_rate=INPUT_SAMPLE_RATE,
             started_at=started_at,
             ended_at=ended_at,
+            level=level,
         )
 
     def _discard_turn(self) -> None:

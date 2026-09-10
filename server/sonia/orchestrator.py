@@ -519,7 +519,10 @@ class Orchestrator:
                 text, changes = correct_transcript(text, self._glossary)
                 for before, after in changes:
                     logger.info("Nombre corregido por el glosario: %r -> %r", before, after)
-            logger.info("Usuario: %s", text)
+            if isinstance(source, Utterance):
+                logger.info("Usuario (nivel %.3f): %s", source.level, text)
+            else:
+                logger.info("Usuario: %s", text)
             await self._hub.broadcast_json(p.msg_transcript("user", text, True))
             frame = await self._collect_frame(frame_task)
             await self.handle_user_text(text, frame)
