@@ -133,6 +133,90 @@ el lip-sync por fonemas de uLipSync (con un mapa a ARKit: `jawOpen`,
 El archivo también se corta si se le piden muchas descargas a la vez: va bien
 secuencial con dos segundos de pausa.
 
+### Barrido completo del archivo (10 de septiembre de 2026)
+
+Descargados **952 de los 1 075** avatares (3,3 GB). Los que faltan están en el
+índice CDX pero no llegaron a archivarse: devuelven 404. El archivo también
+corta a ráfagas, así que la descarga va con tres hilos y reintentos con espera.
+
+**Ready Player Me solo tiene dos esqueletos**, uno por tipo de cuerpo. La pose de
+reposo es idéntica dentro de cada tipo, así que sirve de huella para clasificar
+sin renderizar nada:
+
+| huella (largo de brazo, altura del cuello) | tipo | cuántos |
+|---|---|---|
+| `0,2035` / `0,1244` | femenino (el de Babe) | 303 |
+| `0,1662` / `0,1556` | masculino | 649 |
+
+Basta con leer el chunk JSON del GLB: medio segundo para los 952.
+
+Dos medidas más, sobre la malla, evitan mirar 303 renders uno a uno. Como RPM
+borra la piel que la ropa tapa, **los vértices del torso son la tela**, así que
+sus anchos miden la prenda directamente:
+
+- **ajuste** = ancho de cintura ÷ ancho de pecho. Menor es más entallado.
+  BabeCamiseta da 1,083; una camiseta deportiva ceñida, 0,84.
+- **manga** = distancia de color entre la textura del bíceps y la de la mano,
+  y lo mismo con el antebrazo. Bíceps alto y antebrazo bajo es manga corta.
+
+`ajuste` tiene ruido (una camiseta entallada con el bajo suelto puntúa alto) y
+`manga` da falsos positivos con los abrigos, pero juntas dejan el barrido en
+unas pocas decenas de renders que sí merece la pena mirar.
+
+**Resultado: de 303 avatares femeninos, solo dos llevan camiseta ajustada de
+manga corta.** El resto son presets estándar de RPM: americanas, gabardinas,
+abrigos largos, sudaderas y monos. Las dos:
+
+| id | prenda | ajuste | el pero |
+|---|---|---|---|
+| `66d03cdd` | camiseta deportiva azul | 0,842 | estampado grande, leggings y gafas en el atlas |
+| `63f3a834` | camiseta negra entallada | 1,219* | pantalón tartán verde y mitones |
+
+\* el número engaña: la camiseta va ceñida arriba y suelta en el bajo.
+
+Lo más ajustado del catálogo son crop tops, halters y uniformes de animadora, que
+no encajan con el papel de Sonia en el stand.
+
+### Ceñir la prenda en vez de cambiar de avatar
+
+Sale mejor apretar la camiseta que ya lleva: `scripts/cenir_prenda.py` contrae su
+geometría hacia el eje del torso. La prenda se localiza por **componentes
+conexas** —viene partida en cuello, dos mangas, delantero y espalda, 675
+vértices en total—, no por pesos de skinning, que en el atlas mezclan tela y
+piel.
+
+El factor va por altura: **1,0 en los hombros** (moverlos abriría la costura con
+el cuello y las sisas), mínimo en la cintura, y algo más suelto en el bajo para
+que abrace la cadera en vez de acabar en punta. Las mangas se contraen hacia su
+propio eje, sin tocar la sisa.
+
+Dos detalles que hay que respetar:
+
+- Donde la camiseta cae sobre el pantalón hay que poner un **tope**: si el bajo
+  se contrae por debajo del radio del vaquero, se mete dentro y asoman la
+  cinturilla y las trabillas. El script compara radios en una rejilla de altura
+  por ángulo y deja cinco milímetros de holgura.
+- Las **normales se rehacen solo en la prenda**. Recalcularlas para toda la
+  primitiva tira las que horneó RPM en la piel y en el resto de la ropa.
+
+```bash
+python3 scripts/cenir_prenda.py entrada.glb salida.glb 0.80 0.95 0.86 0.88
+#                                                      cintura busto bajo manga
+```
+
+| variante | cintura/busto/bajo/manga | ajuste |
+|---|---|---|
+| original | — | 1,083 |
+| suave | 0,88 / 0,97 / 0,92 / 0,93 | 1,009 |
+| media | 0,80 / 0,95 / 0,86 / 0,88 | 0,959 |
+| fuerte | 0,72 / 0,92 / 0,80 / 0,84 | 0,911 |
+
+Los blendshapes no se tocan: son de la cara y van en otra primitiva.
+
+**Pendiente de comprobar en Play:** el rasterizador offline dibuja la pose de
+reposo sin skinning, así que no puede enseñar si las mangas ceñidas atraviesan
+la piel del brazo al animar.
+
 ### Trasplantar ropa entre avatares
 
 Todos los avatares de Ready Player Me comparten cuerpo base, topología y
