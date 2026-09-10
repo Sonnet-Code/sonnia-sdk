@@ -14,7 +14,7 @@ Uso: parche_logo.py modelo.glb logo.png salida.glb u0 u1 v0 v1 [ancho_px]
 import io, json, struct, sys
 import numpy as np
 from PIL import Image
-import tlib as T
+import injerto_glb as T  # read() y acc() del lector de GLB
 
 
 def main(glb, logo_path, salida, x0, x1, y0, y1, ancho_logo=110):
