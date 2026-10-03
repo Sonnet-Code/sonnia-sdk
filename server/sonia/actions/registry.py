@@ -141,6 +141,22 @@ class ActionRegistry:
             for spec in self._specs.values()
         ]
 
+    def to_responses_tools(self) -> list[dict[str, Any]]:
+        """Traduce el registro al formato ``tools`` de la API Responses.
+
+        Es el que usa el backend al que delega GPT-Live: la función va plana,
+        sin el objeto ``function`` intermedio de Chat Completions.
+        """
+        return [
+            {
+                "type": "function",
+                "name": spec.name,
+                "description": spec.description,
+                "parameters": spec.parameters,
+            }
+            for spec in self._specs.values()
+        ]
+
     def to_mcp_tools(self) -> list[dict[str, Any]]:
         """Traduce el registro al formato de tools de MCP."""
         return [

@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -34,6 +34,10 @@ class LLMSettings(BaseSettings):
     #: valor por defecto.
     temperature: float | None = None
     max_tokens: int = 400
+    #: Nombre del campo con el que se envía ``max_tokens``. La API de OpenAI
+    #: rechaza ``max_tokens`` en sus modelos de razonamiento y pide
+    #: ``max_completion_tokens``; los servidores locales usan ``max_tokens``.
+    max_tokens_param: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
     #: Máximo de rondas de tool calls por turno del usuario.
     max_tool_rounds: int = 3
     #: Turnos de conversación que se conservan en el historial.
@@ -158,6 +162,61 @@ class MCPSettings(BaseSettings):
     port: int = 8766
 
 
+class LiveSettings(BaseSettings):
+    """Motor de voz a voz con GPT-Live (``VOICE_ENGINE=live``, ver ADR 007).
+
+    GPT-Live oye el micrófono y habla con su propia voz por un único WebSocket:
+    sustituye al detector de voz, al reconocedor, al modelo de texto y al TTS.
+    Las acciones las ejecuta un backend de la API Responses al que GPT-Live
+    delega (``backend_*``).
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="LIVE_", extra="ignore", env_ignore_empty=True, populate_by_name=True
+    )
+
+    url: str = "wss://api.openai.com/v1/live/sessions"
+    #: Clave de la API. Si ``LIVE_API_KEY`` no está, se usa ``OPENAI_API_KEY``.
+    api_key: str = Field(
+        default="", validation_alias=AliasChoices("LIVE_API_KEY", "OPENAI_API_KEY")
+    )
+    model: str = "gpt-live-1"
+    #: Voz integrada (marin, cedar, coral, sage, shimmer...). Fija durante la sesión.
+    voice: str = "marin"
+    #: Tasa del PCM en los dos sentidos. La API acepta 16000 o 24000.
+    sample_rate: Literal[16000, 24000] = 24_000
+    #: Modelo de la API Responses que ejecuta las tareas delegadas y las acciones.
+    backend_model: str = "gpt-6-luna"
+    #: ``reasoning.effort`` del backend (vacío = el del modelo).
+    backend_reasoning_effort: str = "low"
+    #: ``service_tier`` del backend (vacío = no se envía; ``priority`` = más rápido).
+    backend_service_tier: str = ""
+    backend_max_output_tokens: int = 400
+    #: Rondas de acciones que se le permiten al backend por tarea delegada.
+    backend_max_tool_rounds: int = 3
+    #: Silencio en la voz de Sonia que cierra una frase hacia Unity.
+    segment_gap_ms: int = 800
+    #: Silencio en lo que transcribe del visitante que da su turno por cerrado.
+    user_turn_gap_ms: int = 1_200
+    #: Con ``AUDIO_BARGE_IN=false`` el micrófono sigue mudo este tiempo después
+    #: de que Sonia termine, para que no se oiga la cola de su propia voz.
+    echo_tail_ms: int = 400
+    #: Puerta de ruido: nivel RMS (0..1) por debajo del cual se envía silencio
+    #: en lugar del micrófono. 0 la desactiva. Sirve para que GPT-Live no oiga
+    #: las conversaciones de fondo del pasillo; se calibra en el stand.
+    gate_rms: float = 0.0
+    #: Tiempo que la puerta sigue abierta después de la última voz por encima del umbral.
+    gate_hold_ms: int = 900
+    #: Mínimo entre dos descripciones de la cámara (cada una es una petición al modelo de visión).
+    vision_min_interval_seconds: float = 10.0
+    #: Reiniciar la sesión en el siguiente momento de calma si el contexto pasa de esta fracción.
+    context_restart_ratio: float = 0.85
+    connect_timeout: float = 15.0
+    #: Esperas entre reconexiones (crecen del mínimo al máximo).
+    reconnect_min_seconds: float = 1.0
+    reconnect_max_seconds: float = 15.0
+
+
 class ShowcaseSettings(BaseSettings):
     """Animación de stand: frases y bailes cantados cuando no hay nadie."""
 
@@ -183,6 +242,9 @@ class Settings(BaseSettings):
         env_ignore_empty=True,
     )
 
+    #: live = GPT-Live voz a voz (ADR 007); pipeline = VAD + STT + LLM + TTS.
+    voice_engine: Literal["live", "pipeline"] = "live"
+    live: LiveSettings = Field(default_factory=LiveSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
     stt: STTSettings = Field(default_factory=STTSettings)
     tts: TTSSettings = Field(default_factory=TTSSettings)

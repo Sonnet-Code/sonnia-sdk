@@ -346,6 +346,19 @@ async def test_body_sin_tools_ni_reasoning() -> None:
     assert "stream_options" not in sent
 
 
+async def test_max_completion_tokens_para_la_api_de_openai() -> None:
+    captured: list[dict[str, Any]] = []
+    body = sse(chunk({"content": "ok"}, finish_reason="stop"), "[DONE]")
+    client = LLMClient(
+        make_settings(max_tokens_param="max_completion_tokens"),
+        transport=streaming_transport(body, captured=captured),
+    )
+    await collect(client, messages=[user_text("hola")])
+    await client.aclose()
+    assert captured[0]["max_completion_tokens"] == 128
+    assert "max_tokens" not in captured[0]
+
+
 async def test_body_con_tools_y_reasoning_effort() -> None:
     captured: list[dict[str, Any]] = []
     body = sse(chunk({"content": "ok"}, finish_reason="stop"), "[DONE]")

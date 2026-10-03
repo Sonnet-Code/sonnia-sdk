@@ -239,9 +239,16 @@ namespace Sonia
 
             if (message.Role == "assistant")
             {
-                // El texto de Sonia se enseña cuando empieza a sonar (ver
-                // HandleAudioFrame), no cuando el orquestador lo decide: el
-                // subtítulo va con la voz, no por delante.
+                // El texto completo de Sonia se enseña cuando empieza a sonar
+                // (ver HandleAudioFrame), no cuando el orquestador lo decide: el
+                // subtítulo va con la voz, no por delante. Con GPT-Live el texto
+                // llega a trozos (final = false) a la vez que su audio, así que
+                // esos trozos sí se pintan según llegan.
+                if (!message.Final && !string.IsNullOrEmpty(message.Text))
+                {
+                    assistantLabel.Set(message.Text);
+                }
+
                 return;
             }
 

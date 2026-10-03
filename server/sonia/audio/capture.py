@@ -29,9 +29,6 @@ QUEUE_MAXSIZE = 50
 #: Segundos mínimos entre dos avisos iguales, para no inundar el log.
 _WARN_INTERVAL_S = 5.0
 
-#: Muestras por milisegundo a la tasa de entrada (16 kHz -> 16).
-_SAMPLES_PER_MS = INPUT_SAMPLE_RATE // 1000
-
 #: Si PortAudio deja de entregar bloques durante este tiempo, se da el
 #: micrófono por muerto. Mientras el stream vive el callback sigue llegando
 #: aunque haya silencio absoluto, así que un hueco de segundos solo pasa cuando
@@ -127,7 +124,10 @@ def resolve_input_device(spec: str) -> int | None:
 
 
 class MicCapture:
-    """Micrófono a 16 kHz mono float32 como flujo asíncrono de bloques.
+    """Micrófono mono float32 como flujo asíncrono de bloques.
+
+    Por defecto a 16 kHz, la tasa del VAD y del reconocedor. El motor GPT-Live
+    lo abre a la tasa de su sesión (24 kHz) para no remuestrear.
 
     Uso::
 
@@ -137,11 +137,16 @@ class MicCapture:
     """
 
     def __init__(
-        self, settings: AudioSettings, *, stall_timeout: float = DEFAULT_STALL_TIMEOUT_S
+        self,
+        settings: AudioSettings,
+        *,
+        stall_timeout: float = DEFAULT_STALL_TIMEOUT_S,
+        sample_rate: int = INPUT_SAMPLE_RATE,
     ) -> None:
         self._settings = settings
         self._stall_timeout = stall_timeout
-        self._block_samples = max(1, settings.block_ms * _SAMPLES_PER_MS)
+        self._sample_rate = sample_rate
+        self._block_samples = max(1, settings.block_ms * sample_rate // 1000)
         self._queue: asyncio.Queue[AudioArray | None] = asyncio.Queue(maxsize=QUEUE_MAXSIZE)
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stream: Any = None
@@ -153,11 +158,11 @@ class MicCapture:
 
     @property
     def sample_rate(self) -> int:
-        return INPUT_SAMPLE_RATE
+        return self._sample_rate
 
     @property
     def block_samples(self) -> int:
-        """Muestras por bloque (``block_ms`` a 16 kHz)."""
+        """Muestras por bloque (``block_ms`` a la tasa del micrófono)."""
         return self._block_samples
 
     @property
@@ -177,7 +182,7 @@ class MicCapture:
 
         device = resolve_input_device(self._settings.input_device)
         self._stream = sd.InputStream(
-            samplerate=INPUT_SAMPLE_RATE,
+            samplerate=self._sample_rate,
             blocksize=self._block_samples,
             device=device,
             channels=1,
@@ -188,7 +193,7 @@ class MicCapture:
         _log.info(
             "Micrófono abierto (dispositivo=%s, %d Hz, bloques de %d muestras)",
             "por defecto" if device is None else device,
-            INPUT_SAMPLE_RATE,
+            self._sample_rate,
             self._block_samples,
         )
         return self

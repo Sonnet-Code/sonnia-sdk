@@ -107,6 +107,15 @@ sonia/
 
 ## Puesta en marcha
 
+Con GPT-Live (`VOICE_ENGINE=live`, el modo por defecto desde el 3 de octubre de 2026, ADR 007) basta con:
+
+1. `cd server && uv sync --extra audio --extra camera --extra mcp`.
+2. `cp .env.example .env` y poner `LIVE_API_KEY` (clave de OpenAI) y, para los ojos, `LLM_*` apuntando a un modelo con visión.
+3. `uv run sonia check`, `uv run sonia say "Hola"` para oír la voz y `uv run sonia run`.
+4. Unity en Play o la build.
+
+Con el motor anterior (`VOICE_ENGINE=pipeline`):
+
 1. `cd server && uv sync --extra all` — instala las dependencias del orquestador (todos los extras: audio, stt, omnivoice, camera, mcp).
 2. `cp .env.example .env` y edita el archivo con la configuración de tu máquina (modelo de LLM, dispositivo de audio, etc.).
 3. `scripts/download_models.sh` — descarga los modelos locales (faster-whisper, Silero VAD y, si instalaste el extra `omnivoice`, los pesos de OmniVoice).
@@ -125,7 +134,7 @@ Para probar el avatar, el lip-sync y los estados sin gastar tokens ni tener micr
 ```bash
 cd server
 uv run --no-sync python ../scripts/fake_llm_server.py --port 8001      # modelo falso con frases fijas
-LLM_BASE_URL=http://127.0.0.1:8001/v1 LLM_API_KEY=x LLM_MODEL=fake \
+VOICE_ENGINE=pipeline LLM_BASE_URL=http://127.0.0.1:8001/v1 LLM_API_KEY=x LLM_MODEL=fake \
 TTS_BACKEND=gemini STT_BACKEND=mock VISION_SOURCE=none \
 uv run --no-sync sonia run --no-mic                                     # orquestador solo con text_input
 uv run --no-sync python ../scripts/ws_probe.py "Hola Sonia"             # envía texto y registra los mensajes
@@ -144,6 +153,8 @@ Con Unity en Play y conectado a `ws://127.0.0.1:8765`, el texto del `ws_probe` (
 - [x] Persona de Sonia como asistente y staff del DevFest, con base de conocimiento editable en `assets/knowledge/`
 - [x] Descripción dinámica del stack en el prompt (Sonia sabe qué modelo, voz y oídos usa en cada momento)
 - [x] Voz provisional con la API Live de Gemini mientras no hay GPU (ADR 006)
+- [x] Motor voz a voz con GPT-Live de OpenAI, acciones por delegación en un backend Responses y ojos por notas de la cámara (ADR 007)
+- [ ] Prueba real de GPT-Live con clave: voz, `text_input`, acciones, números del stand y Unity
 - [x] Scripts de Unity: cliente WebSocket, audio en streaming, lip-sync, estados, panel de imágenes, webcam, HUD, escena base 9:16
 - [x] Modo kiosco para el stand (`scripts/kiosk.sh`) y guía de montaje (`docs/stand.md`)
 - [ ] Integración de OmniVoice con el modelo real (módulo listo; falta la GPU)
@@ -154,6 +165,8 @@ Con Unity en Play y conectado a `ws://127.0.0.1:8765`, el texto del `ws_probe` (
 - [x] Imágenes de marca en `assets/gallery/` (logo y fondo de Sonnet Code); faltan servicios y diagrama de Sonia
 
 ## Estado provisional
+
+Desde el 3 de octubre de 2026 el motor por defecto es GPT-Live de OpenAI (ADR 007): voz y conversación en la nube, con el avatar y la cámara en el equipo del stand. El motor anterior sigue disponible con `VOICE_ENGINE=pipeline` y lo que sigue se refiere a él.
 
 Mientras no llega el mini PC del stand, el modelo de lenguaje se consume desde la API de Kimi en la nube y la voz desde la API Live de Gemini, a través de las mismas interfaces que usarán los modelos locales. Sonia sabe cuándo está en ese modo y lo dice si le preguntan. Los tests nunca llaman a APIs reales.
 

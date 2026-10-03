@@ -36,6 +36,24 @@ el stand sin depender de quien escribió el código.
 
 ## Checklist de arranque
 
+### Con GPT-Live (`VOICE_ENGINE=live`, el modo por defecto)
+
+No hay servidor de LLM ni de TTS que levantar: la voz y la conversación las
+pone GPT-Live de OpenAI (ADR 007). Hace falta internet estable todo el día.
+
+1. `.env` con `LIVE_API_KEY`, `AUDIO_BARGE_IN=false` (con altavoces abiertos
+   GPT-Live se oiría a sí mismo) y, si hay cámara, `LLM_*` apuntando a un
+   modelo con visión.
+2. `scripts/check_stand.sh`: abre y cierra una sesión de GPT-Live y prueba
+   el modelo de visión. Todo en OK antes de seguir.
+3. `uv run sonia say "Hola, soy Sonia"` desde `server/` para oír la voz
+   (`LIVE_VOICE`) por el altavoz del stand.
+4. `uv run sonia run` desde `server/` (o `scripts/kiosk.sh`).
+5. Abrir el build de Unity y confirmar en el HUD (`F1`) la conexión y los
+   estados.
+
+### Con el motor anterior (`VOICE_ENGINE=pipeline`)
+
 Desde la raíz del repositorio, en este orden:
 
 1. `scripts/check_stand.sh` — corre primero, con todo lo demás apagado. Si
@@ -65,6 +83,10 @@ se cae y deja logs con fecha en `logs/`.
 
 | Síntoma | Acción |
 |---|---|
+| GPT-Live: `sonia check` falla con HTTP 401 o 403 | La clave (`LIVE_API_KEY`) no es válida o el proyecto de OpenAI no tiene acceso a `gpt-live-1`. |
+| GPT-Live: el log repite `Sesión de GPT-Live caída` | Sin internet o la API está caída: el motor reintenta solo con espera creciente. Si no vuelve, cambia a `VOICE_ENGINE=pipeline` y reinicia. |
+| GPT-Live: contesta a las conversaciones del pasillo | Sube la puerta de ruido `LIVE_GATE_RMS` (por debajo de ese nivel se manda silencio). Los turnos dejan su nivel en el log (`Usuario (nivel X)`): la voz de fondo debe quedar por debajo del umbral y una persona a un metro del micro, por encima. |
+| GPT-Live: se interrumpe sola o se contesta a sí misma | Eco del altavoz en el micrófono: `AUDIO_BARGE_IN=false` (el micro manda silencio mientras habla Sonia y `LIVE_ECHO_TAIL_MS` después). |
 | `scripts/check_stand.sh` falla en el endpoint del LLM | Revisa que el servidor del LLM esté arriba (paso 2) y que `LLM_BASE_URL` en `.env` apunte al puerto correcto. |
 | Sonia no reacciona a la voz / se queda en `listening` | Revisa el micrófono seleccionado (`AUDIO_INPUT_DEVICE`) y que no esté silenciado por el sistema operativo. Si se desconectó el micro, el orquestador lo reabre solo cada pocos segundos: busca en el log `El micrófono falló`. Prueba `uv run sonia chat` para descartar que el problema sea el pipeline de audio. |
 | Sonia responde a conversaciones ajenas o se le cancela la respuesta sin que nadie le hable | El micrófono oye voces de fondo y el VAD abre turnos con ellas. `AUDIO_MIN_TURN_RMS` (0,03) descarta los turnos cuya voz no llegue a ese nivel medio; el log dice `Habla descartada por nivel bajo (X < Y)` y, en los turnos aceptados, `Usuario (nivel X)`. Calibrar en el stand: las voces de fondo deben quedar por debajo y una persona a un metro del micro claramente por encima. |

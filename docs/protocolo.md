@@ -206,6 +206,18 @@ Si el usuario habla en mitad de la respuesta y `AUDIO_BARGE_IN=true`:
   |<--- state: listening ------------------|
 ```
 
+## Con el motor GPT-Live
+
+Con `VOICE_ENGINE=live` (ADR 007) el protocolo es el mismo, con estas diferencias de uso:
+
+- `hello` anuncia `LIVE_SAMPLE_RATE` (24000 por defecto).
+- Cada tramo de voz de GPT-Live separado por un silencio de `LIVE_SEGMENT_GAP_MS` es una frase. `speech_start` puede llegar con `text` vacío, porque la transcripción va un poco por detrás del audio.
+- El texto de Sonia viaja como `transcript` de `assistant` con `final: false`, creciendo a la vez que suena la voz, y un último `final: true` justo antes de `speech_end`. El HUD pinta los trozos según llegan; el motor anterior nunca manda `final: false` para Sonia.
+- Lo que dice el visitante llega igual: `transcript` de `user` con `final: false` mientras habla y `final: true` al cerrar su turno.
+- No se envían `visemes` ni `envelope`: el lip-sync sale de los fonemas del audio (uLipSync).
+- `stop_speaking` solo se envía cuando Unity manda `interrupt`: GPT-Live deja de hablar por sí mismo cuando le interrumpen por voz.
+- Los estados se deducen: `listening` mientras llega transcripción del visitante, `thinking` tras su turno o mientras el backend ejecuta una acción, `speaking` con el primer audio de Sonia, `idle` después.
+
 ## Reglas
 
 - Unity nunca debe bloquearse esperando un mensaje concreto. Cualquier mensaje puede llegar en cualquier momento.

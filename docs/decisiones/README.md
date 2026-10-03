@@ -16,6 +16,8 @@ quedan escritas.
 - [003. Acciones por tool calling y por MCP](003-acciones-tool-calling-y-mcp.md)
 - [004. Visión por capturas puntuales](004-vision-por-capturas.md)
 - [005. Captura de cámara: OpenCV o Unity](005-captura-de-camara-opencv-o-unity.md)
+- [006. TTS provisional en la nube con Gemini](006-tts-provisional-gemini.md)
+- [007. Voz a voz con GPT-Live de OpenAI](007-voz-a-voz-gpt-live.md)
 
 ## Cuándo añadir una nueva
 

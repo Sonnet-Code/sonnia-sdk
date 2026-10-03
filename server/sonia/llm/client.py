@@ -121,7 +121,7 @@ class LLMClient:
             "model": settings.model,
             "messages": messages,
             "stream": stream,
-            "max_tokens": settings.max_tokens if max_tokens is None else max_tokens,
+            settings.max_tokens_param: settings.max_tokens if max_tokens is None else max_tokens,
         }
         if settings.temperature is not None:
             body["temperature"] = settings.temperature

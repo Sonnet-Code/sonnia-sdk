@@ -2,13 +2,17 @@
 
 Subcomandos:
 
-- ``sonia run``: demo completa (micrófono, cámara, modelo, TTS, WebSocket).
+- ``sonia run``: demo completa (micrófono, cámara, modelo, voz, WebSocket).
 - ``sonia chat``: conversar por texto desde la consola, sin micrófono ni cámara.
   Con ``--speak`` reproduce el audio localmente con sounddevice.
 - ``sonia say "texto"``: sintetiza y reproduce (o guarda a WAV con ``--out``).
-- ``sonia check``: comprueba micrófono, VAD, STT, cámara, modelo (peticiones
-  mínimas de cinco tokens), TTS y galería, e imprime OK/FALLO por línea.
+- ``sonia check``: comprueba micrófono, cámara, voz, modelo y galería, e
+  imprime OK/FALLO por línea.
 - ``sonia mcp``: arranca solo el servidor MCP con las acciones.
+
+``VOICE_ENGINE`` elige el motor: ``live`` (GPT-Live voz a voz, ADR 007) o
+``pipeline`` (VAD + STT + LLM + TTS). ``run``, ``chat``, ``say`` y ``check``
+funcionan con los dos.
 
 Todas las dependencias pesadas (sounddevice, torch, cv2, mcp...) se importan
 dentro de las funciones que las usan: importar este módulo es barato.
@@ -35,6 +39,10 @@ from sonia.actions.registry import ActionRegistry
 from sonia.audio.capture import list_input_devices, resolve_input_device
 from sonia.config import Settings, load_settings
 from sonia.glossary import load_glossary
+from sonia.live.audio import silence_blocks
+from sonia.live.engine import LiveEngine
+from sonia.live.oneshot import probe_session, speak_text
+from sonia.live.vision import VisionNarrator
 from sonia.llm.client import LLMClient
 from sonia.mcp.server import MCPServer
 from sonia.mcp.server import is_available as mcp_available
@@ -252,7 +260,9 @@ class ConsoleTap:
         kind = msg.get("type")
         if kind == p.MSG_STATE:
             print(f"  [{msg['state']}]", flush=True)
-        elif kind == p.MSG_TRANSCRIPT and msg.get("role") == "assistant":
+        elif kind == p.MSG_TRANSCRIPT and msg.get("role") == "assistant" and msg.get("final", True):
+            # GPT-Live manda el texto a trozos (``final`` falso) mientras habla:
+            # en consola solo se imprime la frase completa.
             print(f"Sonia: {msg['text']}", flush=True)
         elif kind == p.MSG_ERROR:
             print(f"  [error] {msg['message']}", flush=True)
@@ -375,11 +385,254 @@ def _apply_glossary(stt: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Motor GPT-Live
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class LiveComponents:
+    """Lo que necesita el motor GPT-Live: no hay STT, TTS ni VAD."""
+
+    settings: Settings
+    hub: Hub
+    camera: CameraSource
+    policy: VisionPolicy
+    registry: ActionRegistry
+    #: Modelo de visión que describe la cámara (``LLM_*``), si la visión está activa.
+    llm: LLMClient | None
+    narrator: VisionNarrator | None
+
+    def action_context(self) -> ActionContext:
+        return ActionContext(
+            camera=self.camera,
+            avatar=self.hub,
+            gallery_dir=str(self.settings.gallery_dir),
+        )
+
+    async def close(self) -> None:
+        if self.llm is not None:
+            await self.llm.aclose()
+        await _aclose(self.camera)
+
+
+def build_live_components(settings: Settings, *, with_camera: bool = True) -> LiveComponents:
+    hub = Hub(settings.ws, sample_rate=settings.live.sample_rate)
+
+    async def request_frame() -> None:
+        await hub.broadcast_json(p.msg_request_frame())
+
+    vision = settings.vision
+    if not with_camera:
+        vision = vision.model_copy(update={"source": "none"})
+    camera = build_camera(vision, request_frame, has_clients=lambda: hub.client_count > 0)
+    policy = VisionPolicy(vision, settings.llm.supports_vision)
+    registry = build_default_registry(include_look=policy.enabled)
+    llm = LLMClient(settings.llm) if policy.enabled else None
+    return LiveComponents(
+        settings=settings,
+        hub=hub,
+        camera=camera,
+        policy=policy,
+        registry=registry,
+        llm=llm,
+        narrator=VisionNarrator(llm) if llm is not None else None,
+    )
+
+
+def _missing_live_key(settings: Settings) -> bool:
+    if settings.live.api_key:
+        return False
+    print(
+        "Falta LIVE_API_KEY (u OPENAI_API_KEY) en .env para usar GPT-Live. "
+        "Para el motor anterior: VOICE_ENGINE=pipeline.",
+        file=sys.stderr,
+    )
+    return True
+
+
+def _log_live_summary(settings: Settings, components: LiveComponents) -> None:
+    live = settings.live
+    logger.info(
+        "Sonia %s | WS ws://%s:%d | GPT-Live %s (voz %s, %d Hz) | backend %s | visión %s | cámara %s",
+        __version__,
+        settings.ws.host,
+        settings.ws.port,
+        live.model,
+        live.voice,
+        live.sample_rate,
+        live.backend_model,
+        settings.llm.model if components.narrator is not None else "no",
+        settings.vision.source if components.policy.enabled else "no",
+    )
+
+
+async def _feed_silence(engine: LiveEngine, settings: Settings, seconds: float | None) -> None:
+    """Silencio a tiempo real hacia GPT-Live (sin micrófono o mientras se reabre)."""
+    deadline = None if seconds is None else time.monotonic() + seconds
+    async for block in silence_blocks(settings.live.sample_rate, settings.audio.block_ms):
+        if deadline is not None and time.monotonic() >= deadline:
+            return
+        await engine.push_mic(block)
+
+
+async def _live_mic_loop(settings: Settings, engine: LiveEngine) -> None:
+    """Micrófono → GPT-Live, reabriendo si falla.
+
+    Igual que el bucle del otro motor, reintenta indefinidamente; mientras el
+    micrófono está caído se manda silencio para que la sesión siga viva y
+    ``text_input`` siga funcionando.
+    """
+    from sonia.audio.capture import MicCapture
+
+    while True:
+        try:
+            async with MicCapture(settings.audio, sample_rate=settings.live.sample_rate) as mic:
+                async for block in mic.blocks():
+                    await engine.push_mic(block)
+            logger.warning("El micrófono se cerró solo; se reabre en %.0f s", MIC_RETRY_DELAY_S)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "El micrófono falló (%s); se reintenta en %.0f s. Mientras tanto, "
+                "Sonia solo responde a text_input por WebSocket",
+                exc,
+                MIC_RETRY_DELAY_S,
+                exc_info=logger.isEnabledFor(logging.DEBUG),
+            )
+        await _feed_silence(engine, settings, MIC_RETRY_DELAY_S)
+
+
+async def cmd_run_live(settings: Settings, *, use_mic: bool = True) -> int:
+    if _missing_live_key(settings):
+        return 1
+    components = build_live_components(settings)
+    _log_live_summary(settings, components)
+    engine = LiveEngine(
+        settings,
+        hub=components.hub,
+        registry=components.registry,
+        camera=components.camera,
+        vision_policy=components.policy,
+        narrator=components.narrator,
+    )
+
+    mcp: MCPServer | None = None
+    if settings.mcp.enabled:
+        if mcp_available():
+            mcp = MCPServer(components.registry, components.action_context, settings.mcp)
+        else:
+            logger.warning("MCP_ENABLED=true pero el extra 'mcp' no está instalado")
+
+    tasks: list[asyncio.Task[None]] = []
+    try:
+        async with components.hub:
+            if mcp is not None:
+                try:
+                    await mcp.start()
+                except Exception:
+                    logger.exception("No se pudo arrancar el servidor MCP; se sigue sin él")
+                    mcp = None
+            tasks.append(asyncio.create_task(engine.run(), name="live-engine"))
+            source = (
+                _live_mic_loop(settings, engine)
+                if use_mic
+                else _feed_silence(engine, settings, None)
+            )
+            tasks.append(asyncio.create_task(source, name="microphone"))
+            logger.info("Sonia lista con GPT-Live. Ctrl+C para salir.")
+            await tasks[0]
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        if mcp is not None:
+            await mcp.stop()
+        await components.close()
+    return 0
+
+
+async def cmd_chat_live(settings: Settings, *, speak: bool = False) -> int:
+    if _missing_live_key(settings):
+        return 1
+    components = build_live_components(settings, with_camera=False)
+    player: LocalPlayer | None = None
+    if speak:
+        player = LocalPlayer(settings.live.sample_rate, lambda uid: tap.notify_playback_done(uid))
+    tap = ConsoleTap(components.hub, player=player)
+    engine = LiveEngine(
+        settings,
+        hub=tap,
+        registry=components.registry,
+        camera=None,
+        vision_policy=components.policy,
+        narrator=None,
+    )
+    tap.playback_done = engine.notify_playback_done
+
+    tasks: list[asyncio.Task[None]] = []
+    try:
+        try:
+            await components.hub.start()
+        except OSError as exc:
+            print(f"(sin WebSocket: {exc}; ¿hay otra Sonia corriendo?)", file=sys.stderr)
+        if player is not None:
+            await player.start()
+        tasks.append(asyncio.create_task(engine.run(), name="live-engine"))
+        tasks.append(asyncio.create_task(_feed_silence(engine, settings, None), name="silence"))
+        print("Conectando con GPT-Live...", flush=True)
+        for _ in range(int(settings.live.connect_timeout * 10)):
+            if engine.connected:
+                break
+            await asyncio.sleep(0.1)
+        print("Escribe y pulsa Enter. 'salir' o Ctrl+D para terminar.", flush=True)
+        async for line in _stdin_lines():
+            text = line.strip()
+            if not text:
+                continue
+            if text.lower() in _CHAT_EXIT_WORDS:
+                break
+            await engine.submit_text(text)
+        await engine.wait_idle(limit_s=CHAT_EXIT_GRACE_S)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        if player is not None:
+            await player.stop()
+        await components.hub.stop()
+        await components.close()
+    return 0
+
+
+async def cmd_say_live(settings: Settings, text: str, out: Path | None = None) -> int:
+    if _missing_live_key(settings):
+        return 1
+    started = time.monotonic()
+    pcm = await speak_text(settings.live, text)
+    elapsed = time.monotonic() - started
+    rate = settings.live.sample_rate
+    print(
+        f"{len(pcm) / 2 / rate:.2f} s de audio a {rate} Hz con la voz {settings.live.voice} "
+        f"en {elapsed:.2f} s",
+        flush=True,
+    )
+    if out is not None:
+        _write_wav(out, pcm, rate)
+        print(f"Guardado en {out}", flush=True)
+    elif pcm:
+        await asyncio.to_thread(_play_pcm_blocking, pcm, rate)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # sonia run
 # ---------------------------------------------------------------------------
 
 
 async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
+    if settings.voice_engine == "live":
+        return await cmd_run_live(settings, use_mic=use_mic)
     components = build_components(settings)
     stt = build_stt(settings)
     _apply_glossary(stt)
@@ -505,6 +758,8 @@ async def _stdin_lines() -> Any:
 
 
 async def cmd_chat(settings: Settings, *, speak: bool = False) -> int:
+    if settings.voice_engine == "live":
+        return await cmd_chat_live(settings, speak=speak)
     components = build_components(settings, with_camera=False)
     player: LocalPlayer | None = None
     if speak:
@@ -560,6 +815,8 @@ async def cmd_chat(settings: Settings, *, speak: bool = False) -> int:
 
 
 async def cmd_say(settings: Settings, text: str, out: Path | None = None) -> int:
+    if settings.voice_engine == "live":
+        return await cmd_say_live(settings, text, out)
     tts = build_tts(settings)
     try:
         started = time.monotonic()
@@ -701,7 +958,59 @@ async def check_llm(settings: Settings) -> CheckResult:
     return CheckResult("LLM", True, f"{target}: '{reply}' en {elapsed * 1000:.0f} ms")
 
 
-async def check_llm_features(settings: Settings, registry: ActionRegistry) -> CheckResult | None:
+async def check_live(settings: Settings) -> CheckResult:
+    """Abre y cierra una sesión de GPT-Live (unos segundos de sesión, céntimos)."""
+    live = settings.live
+    target = f"{live.model} (voz {live.voice})"
+    if not live.api_key:
+        return CheckResult("GPT-Live", False, f"{target}: falta LIVE_API_KEY u OPENAI_API_KEY")
+    try:
+        result = await probe_session(live)
+    except Exception as exc:
+        return CheckResult("GPT-Live", False, f"{target}: {exc}")
+    expiry = (
+        f"; la sesión dura {result.expires_in_s / 60:.0f} min"
+        if result.expires_in_s is not None
+        else ""
+    )
+    return CheckResult(
+        "GPT-Live",
+        True,
+        f"{live.model} (voz {result.voice}): sesión abierta en "
+        f"{result.elapsed_s * 1000:.0f} ms{expiry}; backend {live.backend_model}",
+    )
+
+
+async def check_vision_model(settings: Settings) -> CheckResult:
+    """Con GPT-Live, ``LLM_*`` solo describe la cámara: ping y una imagen mínima."""
+    policy = VisionPolicy(settings.vision, settings.llm.supports_vision)
+    if not policy.enabled:
+        return CheckResult(
+            "Visión", True, "desactivada (sin cámara o LLM_SUPPORTS_VISION=false)", False
+        )
+    llm = await check_llm(settings)
+    if not llm.ok:
+        return CheckResult("Visión", False, llm.detail, False)
+    features = await check_llm_features(settings, build_default_registry(), want_tools=False)
+    if features is not None and not features.ok:
+        return CheckResult("Visión", False, features.detail, False)
+    return CheckResult("Visión", True, f"{llm.detail}; acepta imágenes", False)
+
+
+async def run_live_checks(settings: Settings) -> list[CheckResult]:
+    """Comprobaciones del motor GPT-Live: no hay VAD, STT ni TTS locales."""
+    return [
+        await check_audio(settings),
+        await check_camera(settings),
+        await check_live(settings),
+        await check_vision_model(settings),
+        check_gallery(settings),
+    ]
+
+
+async def check_llm_features(
+    settings: Settings, registry: ActionRegistry, *, want_tools: bool = True
+) -> CheckResult | None:
     """Comprueba que el endpoint acepta imágenes y ``tools``, como en cada turno.
 
     ``ping`` solo manda texto plano: un servidor sin ``mmproj`` o sin tool
@@ -713,7 +1022,7 @@ async def check_llm_features(settings: Settings, registry: ActionRegistry) -> Ch
     wanted: list[str] = []
     if settings.llm.supports_vision:
         wanted.append("visión")
-    if settings.llm.tool_mode == "native" and len(registry) > 0:
+    if want_tools and settings.llm.tool_mode == "native" and len(registry) > 0:
         wanted.append("acciones")
     if not wanted:
         return None
@@ -796,6 +1105,8 @@ def check_gallery(settings: Settings) -> CheckResult:
 
 async def run_checks(settings: Settings) -> list[CheckResult]:
     """Ejecuta todas las comprobaciones en orden y devuelve sus resultados."""
+    if settings.voice_engine == "live":
+        return await run_live_checks(settings)
     policy = VisionPolicy(settings.vision, settings.llm.supports_vision)
     registry = build_default_registry(include_look=policy.enabled)
     llm = await check_llm(settings)
@@ -868,7 +1179,7 @@ async def cmd_mcp(settings: Settings) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sonia",
-        description="Asistente de voz con avatar 3D, 100 % local.",
+        description="Asistente de voz con avatar 3D para el stand de Sonnet Code.",
     )
     parser.add_argument("--version", action="version", version=f"sonia {__version__}")
     parser.add_argument(
@@ -892,7 +1203,7 @@ def build_parser() -> argparse.ArgumentParser:
     say.add_argument("text", help="texto a sintetizar")
     say.add_argument("--out", type=Path, default=None, help="guardar a WAV en vez de reproducir")
 
-    commands.add_parser("check", help="comprobar micrófono, VAD, STT, cámara, LLM, TTS y galería")
+    commands.add_parser("check", help="comprobar micrófono, cámara, voz, modelo y galería")
     commands.add_parser("mcp", help="arrancar solo el servidor MCP con las acciones")
     return parser
 

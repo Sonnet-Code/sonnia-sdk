@@ -2,6 +2,15 @@
 
 El orquestador es un paquete Python (`server/sonia`) que corre como un único proceso `asyncio`. Cada etapa vive en su módulo y se comunica con las demás únicamente a través de los tipos de `sonia/types.py` y la configuración de `sonia/config.py`.
 
+Hay dos motores de voz, elegidos con `VOICE_ENGINE`:
+
+- `live` (por defecto, ADR 007): GPT-Live de OpenAI oye y habla por un único WebSocket; ver [Motor GPT-Live](#motor-gpt-live).
+- `pipeline`: el motor en cascada que describe el diagrama de abajo (VAD, STT, LLM, TTS). Se conserva como respaldo.
+
+Los dos hablan con Unity por el mismo protocolo (`sonia/ws`) y usan las mismas acciones (`sonia/actions`), cámara (`sonia/vision`) y persona (`sonia/persona.py`).
+
+### Motor pipeline
+
 ```
 micrófono ─► audio.capture ─► audio.vad ─► Utterance
                                               │
@@ -95,10 +104,36 @@ Subcomandos con `argparse`:
 - `sonia check`: comprueba dispositivos de audio, Silero VAD, el modelo de STT (que el extra esté instalado y los pesos descargados), cámara, endpoint del LLM (una petición mínima de 5 tokens), sus capacidades tal como se usan en cada turno (una petición con imagen y otra con `tools`, de 5 tokens cada una), TTS y galería. Imprime una tabla con OK/FALLO.
 - `sonia mcp`: arranca solo el servidor MCP con las acciones (útil para probar con otros clientes).
 
+Con `VOICE_ENGINE=live`, `run` abre el micrófono a `LIVE_SAMPLE_RATE` y arranca `LiveEngine` (con `--no-mic` manda silencio y solo atiende `text_input`); `chat` pasa cada línea a GPT-Live como texto escrito e imprime lo que dice; `say` hace que GPT-Live lea el texto con `LIVE_VOICE`; y `check` comprueba micrófono, cámara, una sesión de GPT-Live (abrir y cerrar), el modelo de visión (si hay cámara) y la galería.
+
+## Motor GPT-Live
+
+```
+micrófono ─► audio.capture (24 kHz) ─► live.engine ──session.input_audio.append──► GPT-Live
+                                          ▲  │                                     │ voz, transcripción,
+cámara ─► vision.camera ─► live.vision ───┘  │ thinking.append "[Cámara] ..."      │ delegación
+           (modelo LLM_* describe la foto)   │                                     ▼
+                                             └◄── response.event (function_call) ── backend Responses
+                                    actions.registry ──► function_call_output ──►  (gpt-6-luna)
+                                             │
+                                             └──► ws.hub ──► Unity (speech_start, PCM, transcript, state)
+```
+
+### `sonia/live`
+
+- `client.py`: `LiveClient`, WebSocket crudo contra `wss://api.openai.com/v1/live/sessions` (sin SDK). `start()` manda `session.start` y espera `session.started`; `events()` entrega los eventos del servidor; `append_audio`, `append_instructions`, `append_thinking`, `append_commentary`, `create_item` y `create_response` son los comandos; `close()` hace el cierre ordenado.
+- `prompts.py`: `build_session_config()` construye el `session` de `session.start`: modelo, voz, `audio.format`, instrucciones de la voz (la persona de `persona.py` más las reglas de este modo, el conocimiento y `describe_live_stack()`) y la delegación en el backend Responses con las herramientas de `ActionRegistry.to_responses_tools()`.
+- `engine.py`: `LiveEngine`, la pieza que sustituye al orquestador. Reenvía el micrófono (silencio mientras suena Sonia sin barge-in o con la puerta de ruido cerrada), convierte la voz de GPT-Live en frases para Unity, deduce los estados, ejecuta las acciones delegadas y devuelve sus resultados (`function_call_output`, la foto de `look` como `input_image`, `response.create`), describe la cámara al empezar cada turno, atiende `text_input` e `interrupt`, pide los números del stand con `session.commentary.append`, reconecta con espera creciente y abre una sesión limpia tras `IDLE_RESET_SECONDS` sin nadie, si el contexto se llena o si la sesión va a caducar.
+- `vision.py`: `VisionNarrator`, una petición al modelo de visión de `LLM_*` que describe la foto en una o dos frases sin rasgos personales.
+- `audio.py`: conversión a PCM, puerta de ruido (`LIVE_GATE_RMS`) y silencio a tiempo real cuando no hay micrófono.
+- `oneshot.py`: sesiones cortas para `sonia check` (abrir y cerrar) y `sonia say` (leer un texto con la voz de GPT-Live).
+
 ## Pruebas
 
 Los tests no necesitan modelos ni hardware y jamás llaman a APIs reales. Para el LLM se usa `httpx.MockTransport` con respuestas SSE simuladas (texto, tool calls fragmentadas por chunks, `reasoning_content`). Para audio, arrays sintéticos. Para el VAD, un detector falso inyectado. Para Unity, un cliente `websockets` de prueba conectado al `Hub`.
 
 ## Latencia
 
-Objetivo: menos de dos segundos entre el fin del habla y el primer audio de Sonia. Contribuciones esperadas: fin de silencio 600 ms, STT `small` 300 a 500 ms, primera frase del modelo 300 a 800 ms, TTS de la primera frase 200 a 400 ms. Por eso la primera frase se corta corto (la coma cuenta como corte si ya hay más de 60 caracteres) y el TTS usa `num_step=16`.
+Con GPT-Live no hay etapas que sumar: el propio modelo decide cuándo contestar y empieza a hablar en streaming. Las acciones añaden la ida y vuelta al backend Responses; mientras, GPT-Live suele decir algo breve ("mira, te lo enseño").
+
+Con el motor pipeline, objetivo: menos de dos segundos entre el fin del habla y el primer audio de Sonia. Contribuciones esperadas: fin de silencio 600 ms, STT `small` 300 a 500 ms, primera frase del modelo 300 a 800 ms, TTS de la primera frase 200 a 400 ms. Por eso la primera frase se corta corto (la coma cuenta como corte si ya hay más de 60 caracteres) y el TTS usa `num_step=16`.

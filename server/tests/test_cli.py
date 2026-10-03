@@ -18,6 +18,7 @@ import pytest
 from sonia import cli
 from sonia.config import (
     AudioSettings,
+    LiveSettings,
     LLMSettings,
     MCPSettings,
     Settings,
@@ -36,6 +37,7 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
     gallery = tmp_path / "gallery"
     gallery.mkdir(exist_ok=True)
     values: dict[str, Any] = {
+        "voice_engine": "pipeline",
         "llm": LLMSettings(
             base_url="http://llm.test/v1",
             model="modelo-de-prueba",
@@ -373,5 +375,85 @@ async def test_build_components_sin_camara(tmp_path: Path) -> None:
         ctx = components.action_context()
         assert ctx.gallery_dir == str(tmp_path / "gallery")
         assert json.dumps(components.registry.to_openai_tools())  # serializable
+    finally:
+        await components.close()
+
+
+# ---------------------------------------------------------------------------
+# Motor GPT-Live
+# ---------------------------------------------------------------------------
+
+
+async def test_check_con_gpt_live_no_mira_vad_stt_ni_tts(
+    tmp_path: Path,
+    fake_llm: type[FakeLLMClient],
+    fake_audio: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sonia.live.oneshot import ProbeResult
+
+    probes: list[LiveSettings] = []
+
+    async def fake_probe(settings: LiveSettings) -> ProbeResult:
+        probes.append(settings)
+        return ProbeResult("sess_1", 0.42, "marin", 3600.0)
+
+    monkeypatch.setattr(cli, "probe_session", fake_probe)
+    add_gallery_image(tmp_path, "logo.png")
+    settings = make_settings(
+        tmp_path,
+        voice_engine="live",
+        live=LiveSettings(api_key="clave"),
+        vision=VisionSettings(source="unity"),
+    )
+
+    results = await cli.run_checks(settings)
+    assert [(r.name, r.ok) for r in results] == [
+        ("Micrófono", True),
+        ("Cámara", True),
+        ("GPT-Live", True),
+        ("Visión", True),
+        ("Galería", True),
+    ]
+    detail = {r.name: r.detail for r in results}
+    assert "420 ms" in detail["GPT-Live"] and "60 min" in detail["GPT-Live"]
+    assert "gpt-6-luna" in detail["GPT-Live"]
+    assert len(probes) == 1
+    # El modelo de visión solo se prueba con imagen: con GPT-Live no hace acciones.
+    assert len(fake_llm.probes) == 1 and fake_llm.probes[0]["tools"] is None
+
+
+async def test_check_con_gpt_live_sin_clave_es_fallo(
+    tmp_path: Path, fake_llm: type[FakeLLMClient], fake_audio: list[dict[str, Any]]
+) -> None:
+    settings = make_settings(tmp_path, voice_engine="live", live=LiveSettings(api_key=""))
+    results = await cli.run_checks(settings)
+    live = next(r for r in results if r.name == "GPT-Live")
+    assert not live.ok and live.critical
+    assert "LIVE_API_KEY" in live.detail
+    assert next(r for r in results if r.name == "Visión").ok  # sin cámara: desactivada
+
+
+def test_run_con_gpt_live_sin_clave_sale_con_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings = make_settings(tmp_path, voice_engine="live", live=LiveSettings(api_key=""))
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    assert cli.main(["run", "--no-mic"]) == 1
+    assert "LIVE_API_KEY" in capsys.readouterr().err
+
+
+async def test_build_live_components(tmp_path: Path) -> None:
+    settings = make_settings(
+        tmp_path,
+        voice_engine="live",
+        live=LiveSettings(api_key="clave", sample_rate=16_000),
+        vision=VisionSettings(source="unity"),
+    )
+    components = cli.build_live_components(settings)
+    try:
+        assert components.hub.sample_rate == 16_000
+        assert components.registry.names() == ["look", "show_image", "hide_image"]
+        assert components.narrator is not None
     finally:
         await components.close()
