@@ -19,7 +19,7 @@ El motor GPT-Live (`VOICE_ENGINE=live`, ADR 007) está escrito y probado contra 
 
 ## 2. Panel de control (`docs/panel.md`)
 
-El panel vive en Cloudflare (`https://sonia.sonnetcode.com`, Worker `sonia-panel`, código en `cloud/panel/`) y cada Sonia se conecta a él hacia fuera. El panel local (`http://127.0.0.1:8780`) queda de respaldo sin internet.
+El panel vive en Cloudflare (`https://sonia.sonnetcode.com`, Worker `sonia-panel`, código en `cloud/panel/`) y cada Sonia se conecta a él hacia fuera. Desplegado y probado de punta a punta el 3 de octubre (login, lista de Sonias, acción y conexión de una Sonia real). El panel local (`http://127.0.0.1:8780`) queda de respaldo sin internet. Para volver a desplegar: `cd cloud/panel && npm install && npm run deploy` con la sesión de wrangler.
 
 - [ ] Poner `PANEL_CLOUD_TOKEN` (y un `PANEL_INSTANCE_NAME` reconocible) en el `.env` del equipo del stand. El valor está en `~/.config/sonia/panel-secrets.env` del Mac de Jean, junto con la contraseña del panel.
 - [ ] Repartir la contraseña del panel al personal del stand (o cambiarla con `npx wrangler secret put PANEL_PASSWORD` en `cloud/panel/`).
