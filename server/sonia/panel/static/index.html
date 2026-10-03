@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#142752">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Panel de Sonia</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/panel.css">
+  <script src="/static/panel.js" defer></script>
+</head>
+<body>
+  <!-- Barra superior fija: marca, título y resumen del modo para cuando se baja por la página -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <img class="brand-logo" src="/static/sonnet-code-logo.svg" alt="Sonnet Code" width="146" height="22">
+      <span class="topbar-title">Panel de Sonia</span>
+      <span class="topbar-status" id="topbar-status" data-mode="">
+        <span class="mode-dot" aria-hidden="true"></span>
+        <span id="topbar-text">Conectando…</span><span class="topbar-state" id="topbar-state"></span>
+      </span>
+    </div>
+
+    <!-- Aviso grande cuando el panel no puede hablar con el orquestador -->
+    <div class="conn-banner conn-banner--offline" id="offline-banner" role="alert" hidden>
+      <strong class="conn-title">Sin conexión con Sonia</strong>
+      <span class="conn-detail" id="offline-detail">Reintentando…</span>
+    </div>
+    <!-- Aviso pequeño cuando falla la conexión en vivo pero el sondeo sigue funcionando -->
+    <div class="conn-banner conn-banner--slow" id="slow-banner" role="status" hidden>
+      Conexión inestable: lo que ves se actualiza cada pocos segundos. Reconectando…
+    </div>
+    <!-- La sesión de Cloudflare Access caducó: hay que recargar para volver a entrar -->
+    <div class="conn-banner conn-banner--offline" id="auth-banner" role="alert" hidden>
+      <strong class="conn-title">Tu acceso al panel caducó</strong>
+      <span class="conn-detail">Recarga la página para volver a entrar.</span>
+      <button type="button" class="btn btn-light" id="reload-btn">Recargar</button>
+    </div>
+  </header>
+
+  <main class="layout" id="layout">
+    <!-- ===== Estado de un vistazo y cambio de modo ===== -->
+    <section class="card hero" id="hero" data-mode="" aria-labelledby="hero-mode">
+      <div class="hero-status">
+        <p class="kicker">Ahora mismo</p>
+        <h1 class="hero-mode" id="hero-mode">Conectando con Sonia…</h1>
+        <p class="hero-activity">
+          <span class="activity-dot" id="activity-dot" aria-hidden="true"></span>
+          <span id="hero-activity">Esperando datos</span>
+        </p>
+        <a class="hero-health" id="hero-health" href="#salud" data-level="unknown">Comprobando…</a>
+        <p class="hero-warning" id="hero-muted" hidden>
+          Micrófono silenciado: Sonia no oye a nadie.
+        </p>
+        <div class="away-sign" id="away-sign" hidden>
+          <span class="away-sign-label">Letrero en pantalla:</span>
+          <q class="away-sign-text" id="away-sign-text"></q>
+          <button type="button" class="btn btn-small" id="edit-sign-btn" data-cap="modes">Cambiar el letrero</button>
+        </div>
+      </div>
+
+      <div class="hero-modes">
+        <h2 class="visually-hidden">Cambiar el modo de Sonia</h2>
+        <div class="mode-buttons" role="group" aria-label="Modo de Sonia">
+          <button type="button" class="mode-btn" data-set-mode="conversation" data-cap="modes" aria-pressed="false">
+            <span class="mode-name">Conversando</span>
+            <span class="mode-desc">Escucha, mira y habla con la gente.</span>
+            <span class="mode-check" aria-hidden="true">Activo</span>
+          </button>
+          <button type="button" class="mode-btn" data-set-mode="greeter" data-cap="modes" aria-pressed="false">
+            <span class="mode-name">Solo saludos</span>
+            <span class="mode-desc">No escucha. Saluda y baila sola de vez en cuando.</span>
+            <span class="mode-check" aria-hidden="true">Activo</span>
+          </button>
+          <button type="button" class="mode-btn" data-set-mode="away" data-cap="modes" aria-pressed="false">
+            <span class="mode-name">Fuera</span>
+            <span class="mode-desc">Sale de la pantalla y deja un letrero.</span>
+            <span class="mode-check" aria-hidden="true">Activo</span>
+          </button>
+        </div>
+        <p class="cap-note" data-cap-note="modes" hidden>
+          Con el motor de voz actual Sonia siempre está conversando: los modos no se pueden cambiar.
+        </p>
+      </div>
+    </section>
+
+    <div class="col col-1">
+      <!-- ===== Acciones rápidas ===== -->
+      <section class="card card-actions" id="acciones" aria-labelledby="acciones-title">
+        <h2 id="acciones-title">Acciones rápidas</h2>
+        <div class="quick-grid">
+          <button type="button" class="btn btn-danger quick-wide" id="stop-btn" data-cap="stop">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg>
+            Callar a Sonia
+          </button>
+          <button type="button" class="btn" id="greet-btn" data-cap="greet" data-off-modes="away">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-6 4z"/></svg>
+            Saludar ahora
+          </button>
+          <button type="button" class="btn" id="dance-btn" data-cap="gestures" data-off-modes="away">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+            Bailar
+          </button>
+          <button type="button" class="btn" id="logo-btn" data-cap="images" data-off-modes="away" data-extra="logo">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></svg>
+            Mostrar el logo
+          </button>
+          <button type="button" class="btn" id="hide-btn" data-cap="images">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 9l8 6M16 9l-8 6"/></svg>
+            Quitar imagen
+          </button>
+          <button type="button" class="btn quick-wide" id="mute-btn" data-cap="mute" aria-pressed="false">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/><path class="icon-slash" d="M4 4l16 16"/></svg>
+            <span id="mute-label">Silenciar micrófono</span>
+          </button>
+        </div>
+        <p class="note" data-mode-note="away" hidden>Sonia está fuera: tráela de vuelta con «Conversando» o «Solo saludos» para que salude, baile o enseñe imágenes.</p>
+        <p class="cap-note" data-cap-note="greet" hidden>«Saludar ahora» no está disponible con el motor de voz actual.</p>
+        <p class="cap-note" data-cap-note="mute" hidden>Silenciar el micrófono no está disponible con el motor de voz actual.</p>
+      </section>
+
+      <!-- ===== Imágenes de la galería ===== -->
+      <section class="card" id="imagenes" aria-labelledby="imagenes-title">
+        <h2 id="imagenes-title">Mostrar una imagen</h2>
+        <p class="help">Toca una imagen para que salga en la pantalla de Sonia. Se quita sola al rato.</p>
+        <p class="now-showing" id="now-showing">No hay ninguna imagen en pantalla.</p>
+        <div class="thumbs" id="thumbs" aria-live="polite">
+          <p class="muted">Cargando imágenes…</p>
+        </div>
+        <label class="field">
+          <span class="field-label">Texto debajo de la imagen (opcional)</span>
+          <input type="text" id="caption-input" maxlength="120" autocomplete="off" data-cap="images" placeholder="Por ejemplo: Ven a conocernos">
+        </label>
+        <p class="cap-note" data-cap-note="images" hidden>Mostrar imágenes no está disponible con el motor de voz actual.</p>
+      </section>
+    </div>
+
+    <div class="col col-2">
+      <!-- ===== Que Sonia diga… ===== -->
+      <section class="card" id="decir" aria-labelledby="decir-title">
+        <h2 id="decir-title">Que Sonia diga…</h2>
+        <p class="help">Escribe un aviso o anuncio y Sonia lo dirá en voz alta tal cual.</p>
+        <form class="stack" id="say-form">
+          <label class="visually-hidden" for="say-input">Texto que dirá Sonia</label>
+          <textarea id="say-input" rows="3" maxlength="600" data-cap="say" placeholder="Por ejemplo: En diez minutos empieza la charla de Flutter en la sala principal."></textarea>
+          <button type="submit" class="btn btn-primary" id="say-btn" data-cap="say">Decirlo ahora</button>
+        </form>
+        <p class="cap-note" data-cap-note="say" hidden>No disponible con el motor de voz actual.</p>
+      </section>
+
+      <!-- ===== Avisos del día ===== -->
+      <section class="card" id="avisos" aria-labelledby="avisos-title">
+        <h2 id="avisos-title">Avisos de hoy para Sonia</h2>
+        <p class="help">Sonia tiene en cuenta lo que escribas aquí cuando la gente le pregunte. No lo dice en voz alta por sí sola.</p>
+        <form class="stack" id="notes-form">
+          <label class="visually-hidden" for="notes-input">Avisos de hoy</label>
+          <textarea id="notes-input" rows="5" maxlength="4000" data-cap="notes" placeholder="Por ejemplo: La charla de IA se movió a la sala B."></textarea>
+          <div class="row">
+            <button type="submit" class="btn btn-primary" id="notes-btn" data-cap="notes">Guardar avisos</button>
+            <span class="save-state" id="notes-state" data-state="saved">Guardado</span>
+          </div>
+        </form>
+        <p class="cap-note" data-cap-note="notes" hidden>No disponible con el motor de voz actual.</p>
+      </section>
+
+      <!-- ===== Sonido: volumen y ruido del pasillo ===== -->
+      <section class="card" id="sonido" aria-labelledby="sonido-title">
+        <h2 id="sonido-title">Sonido</h2>
+
+        <div class="control">
+          <div class="control-head">
+            <label for="volume-input" class="control-label">Volumen de la voz</label>
+            <output class="control-value" id="volume-value" for="volume-input">100 %</output>
+          </div>
+          <input type="range" id="volume-input" min="0" max="150" step="5" value="100" data-cap="volume">
+          <div class="scale scale--volume"><span>Mudo</span><span class="scale-normal">Normal</span><span>Máximo</span></div>
+          <p class="cap-note" data-cap-note="volume" hidden>No disponible con el motor de voz actual.</p>
+        </div>
+
+        <div class="control">
+          <div class="control-head">
+            <label for="gate-input" class="control-label">Ruido del pasillo</label>
+            <output class="control-value" id="gate-value" for="gate-input">Apagado</output>
+          </div>
+          <p class="help">Si Sonia contesta al ruido del pasillo o a gente que habla lejos, sube este control. Todo lo que quede por debajo de la raya, Sonia no lo oye. Habla cerca del micrófono para comprobar que tu voz pasa la raya.</p>
+          <div class="meter meter--big" id="gate-meter" aria-hidden="true">
+            <div class="meter-fill" id="gate-meter-fill"></div>
+            <div class="meter-mark" id="gate-meter-mark"></div>
+          </div>
+          <input type="range" id="gate-input" min="0" max="1000" step="10" value="0" data-cap="mic_gate" aria-describedby="gate-value">
+          <div class="scale"><span>Lo oye todo</span><span>Solo voces cercanas</span></div>
+          <p class="meter-caption" id="gate-meter-caption">Micrófono: sin datos</p>
+          <p class="cap-note" data-cap-note="mic_gate" hidden>No disponible con el motor de voz actual.</p>
+        </div>
+      </section>
+    </div>
+
+    <div class="col col-3">
+      <!-- ===== Salud ===== -->
+      <section class="card" id="salud" aria-labelledby="salud-title">
+        <h2 id="salud-title">¿Funciona todo?</h2>
+        <ul class="health-list" id="health-list">
+          <li class="muted">Esperando datos…</li>
+        </ul>
+        <div class="last-error" id="last-error" hidden>
+          <strong>Último error:</strong> <span id="last-error-text"></span>
+        </div>
+      </section>
+
+      <!-- ===== Conversación en vivo ===== -->
+      <section class="card" id="conversacion" aria-labelledby="conversacion-title">
+        <h2 id="conversacion-title">Conversación en vivo</h2>
+        <div class="chat" id="chat" tabindex="0" aria-label="Conversación en vivo">
+          <p class="chat-empty" id="chat-empty">Todavía no ha hablado nadie.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===== Avanzado (plegado) ===== -->
+    <details class="card advanced" id="avanzado">
+      <summary><span>Avanzado</span><span class="summary-hint">Voz, gestos, gasto y registro</span></summary>
+
+      <div class="adv-grid">
+        <section class="adv-block" aria-labelledby="adv-voice-title">
+          <h3 id="adv-voice-title">Voz de Sonia</h3>
+          <p class="help warn-text">Cambiar la voz empieza una conversación nueva: Sonia olvida lo que estaba hablando.</p>
+          <div class="row">
+            <label class="visually-hidden" for="voice-select">Voz</label>
+            <select id="voice-select" data-cap="voice"></select>
+            <button type="button" class="btn" id="voice-btn" data-cap="voice" data-extra="voice">Cambiar voz</button>
+          </div>
+          <p class="cap-note" data-cap-note="voice" hidden>No disponible con el motor de voz actual.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-barge-title">
+          <h3 id="adv-barge-title">Interrumpirla hablando</h3>
+          <label class="switch">
+            <input type="checkbox" role="switch" id="barge-input" data-cap="barge_in">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Dejar que la gente la interrumpa hablando</span>
+          </label>
+          <p class="help warn-text">Solo con auriculares o un micrófono con cancelación de eco. Si no, Sonia se oye a sí misma por los altavoces y se corta sola.</p>
+          <p class="cap-note" data-cap-note="barge_in" hidden>No disponible con el motor de voz actual.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-showcase-title">
+          <h3 id="adv-showcase-title">Animación de stand</h3>
+          <label class="switch">
+            <input type="checkbox" role="switch" id="showcase-input" data-cap="showcase">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Cuando no hay nadie, Sonia dice frases y baila sola</span>
+          </label>
+          <p class="cap-note" data-cap-note="showcase" hidden>No disponible con el motor de voz actual.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-gestures-title">
+          <h3 id="adv-gestures-title">Gestos</h3>
+          <p class="help">Solo se ven cuando Sonia no está hablando.</p>
+          <div class="button-row">
+            <button type="button" class="btn" data-gesture="greeting" data-cap="gestures" data-off-modes="away">Saludar con la mano</button>
+            <button type="button" class="btn" data-gesture="soft" data-cap="gestures" data-off-modes="away">Gesto suave</button>
+            <button type="button" class="btn" data-gesture="fourth_wall" data-cap="gestures" data-off-modes="away">Tocar la pantalla</button>
+            <button type="button" class="btn" data-gesture="dance" data-cap="gestures" data-off-modes="away">Bailar</button>
+          </div>
+          <p class="cap-note" data-cap-note="gestures" hidden>No disponible con el motor de voz actual.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-ask-title">
+          <h3 id="adv-ask-title">Preguntar como visitante</h3>
+          <p class="help">Sonia contesta en voz alta como si un visitante se lo hubiera dicho. Sirve para probarla.</p>
+          <form class="row" id="ask-form">
+            <label class="visually-hidden" for="ask-input">Pregunta</label>
+            <input type="text" id="ask-input" maxlength="400" autocomplete="off" data-cap="ask" placeholder="¿Qué hace Sonnet Code?">
+            <button type="submit" class="btn" id="ask-btn" data-cap="ask">Preguntar</button>
+          </form>
+          <p class="cap-note" data-cap-note="ask" hidden>No disponible con el motor de voz actual.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-restart-title">
+          <h3 id="adv-restart-title">Conversación nueva</h3>
+          <p class="help">Sonia olvida todo lo hablado y empieza de cero. Útil si se queda rara o repite cosas.</p>
+          <button type="button" class="btn" id="restart-btn" data-cap="restart">Empezar conversación nueva</button>
+          <p class="cap-note" data-cap-note="restart" hidden>No disponible con el motor de voz actual.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-cache-title">
+          <h3 id="adv-cache-title">Voces del modo saludos</h3>
+          <p class="help">Graba con la voz de Sonia las frases fijas que usa en «Solo saludos». Necesita internet.</p>
+          <progress id="cache-progress" max="1" value="0"></progress>
+          <p class="cache-text" id="cache-text">Sin datos</p>
+          <button type="button" class="btn" id="cache-btn" data-cap="voice_cache" data-extra="cache">Preparar voces</button>
+          <p class="cap-note" data-cap-note="voice_cache" hidden>No disponible con el motor de voz actual.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-session-title">
+          <h3 id="adv-session-title">Datos de la sesión</h3>
+          <dl class="facts" id="session-facts"></dl>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-usage-title">
+          <h3 id="adv-usage-title">Gasto de hoy</h3>
+          <dl class="facts" id="usage-facts"></dl>
+          <p class="help">Cifras aproximadas. Solo gasta en «Conversando».</p>
+        </section>
+
+        <section class="adv-block adv-wide" aria-labelledby="adv-log-title">
+          <h3 id="adv-log-title">Registro</h3>
+          <div class="log" id="log" tabindex="0" aria-label="Registro del orquestador"></div>
+        </section>
+      </div>
+    </details>
+  </main>
+
+  <!-- Respuestas a cada acción -->
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <!-- Confirmación genérica -->
+  <dialog class="dialog" id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+      <div class="dialog-actions">
+        <button type="submit" class="btn" value="cancel">Cancelar</button>
+        <button type="submit" class="btn btn-primary" value="ok" id="confirm-ok">Sí</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Mandar a Sonia fuera o cambiar el letrero -->
+  <dialog class="dialog" id="away-dialog" aria-labelledby="away-title">
+    <form method="dialog">
+      <h2 id="away-title">¿Mandar a Sonia fuera?</h2>
+      <p id="away-help">Sonia saldrá caminando de la pantalla y dejará este letrero. No conversará ni saludará hasta que la traigas de vuelta.</p>
+      <label class="field">
+        <span class="field-label">Texto del letrero</span>
+        <textarea id="away-text" rows="3" maxlength="200"></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button type="submit" class="btn" value="cancel">Cancelar</button>
+        <button type="submit" class="btn btn-warning" value="ok" id="away-ok">Sí, mandarla fuera</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

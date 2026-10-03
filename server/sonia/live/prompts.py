@@ -140,12 +140,20 @@ def describe_live_stack(settings: Settings, *, action_names: list[str] | None = 
     )
 
 
+def _notes_section(notes: str) -> str:
+    return (
+        "AVISOS DE HOY DEL EQUIPO DEL STAND (son más recientes que tu base de conocimiento; "
+        "si chocan, mandan estos):\n" + notes.strip()
+    )
+
+
 def build_live_instructions(
     settings: Settings,
     *,
     registry: ActionRegistry | None,
     gallery_ids: list[str],
     knowledge_dir: str | Path | None = None,
+    notes: str = "",
 ) -> str:
     """``instructions`` de la sesión: persona, reglas de este modo, conocimiento y stack."""
     names = _action_names(registry)
@@ -162,6 +170,8 @@ def build_live_instructions(
             "BASE DE CONOCIMIENTO (son tus únicos datos verificados; lo que no esté aquí, "
             "no lo afirmes):\n\n" + knowledge
         )
+    if notes.strip():
+        parts.append(_notes_section(notes))
     if gallery_ids:
         parts.append(
             "Imágenes que el backend puede mostrar en tu pantalla: " + ", ".join(gallery_ids)
@@ -171,7 +181,7 @@ def build_live_instructions(
 
 
 def build_backend_instructions(
-    *, gallery_ids: list[str], knowledge_dir: str | Path | None = None
+    *, gallery_ids: list[str], knowledge_dir: str | Path | None = None, notes: str = ""
 ) -> str:
     """Instrucciones del backend Responses: reglas, galería y conocimiento."""
     parts = [BACKEND_PROMPT]
@@ -179,6 +189,8 @@ def build_backend_instructions(
     knowledge = load_knowledge(knowledge_dir)
     if knowledge:
         parts.append("BASE DE CONOCIMIENTO:\n\n" + knowledge)
+    if notes.strip():
+        parts.append(_notes_section(notes))
     return "\n\n".join(parts)
 
 
@@ -188,6 +200,7 @@ def build_session_config(
     registry: ActionRegistry | None,
     gallery_ids: list[str],
     knowledge_dir: str | Path | None = None,
+    notes: str = "",
 ) -> dict[str, Any]:
     """El objeto ``session`` de ``session.start``.
 
@@ -198,7 +211,7 @@ def build_session_config(
     responses: dict[str, Any] = {
         "model": live.backend_model,
         "instructions": build_backend_instructions(
-            gallery_ids=gallery_ids, knowledge_dir=knowledge_dir
+            gallery_ids=gallery_ids, knowledge_dir=knowledge_dir, notes=notes
         ),
         "max_output_tokens": max(16, live.backend_max_output_tokens),
     }
@@ -216,7 +229,11 @@ def build_session_config(
     return {
         "model": live.model,
         "instructions": build_live_instructions(
-            settings, registry=registry, gallery_ids=gallery_ids, knowledge_dir=knowledge_dir
+            settings,
+            registry=registry,
+            gallery_ids=gallery_ids,
+            knowledge_dir=knowledge_dir,
+            notes=notes,
         ),
         "audio": {
             "format": {"type": "audio/pcm", "rate": int(live.sample_rate)},

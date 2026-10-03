@@ -130,6 +130,17 @@ namespace Sonia
         public const float PresentHoldTime = 0.45f;
 
         /// <summary>
+        /// Ciclo de caminar para salir y entrar en el modo "Fuera" (biblioteca de
+        /// Ready Player Me, feminine/fbx/locomotion). Trae root motion hacia
+        /// delante: 4,40 m en 3,13 s (1,40 m/s), seis pasos de 0,52 s. Se importa
+        /// en bucle y con la traslación XZ fuera de la pose (Center of Mass),
+        /// como el resto: PresenceController lee ese avance cada frame y mueve
+        /// a Sonia exactamente lo que dan los pies. F_Walk_003 es la alternativa
+        /// más enérgica (1,69 m/s).
+        /// </summary>
+        public const string WalkClip = "F_Walk_002";
+
+        /// <summary>
         /// Gestos de atención que Sonia lanza sola mientras está en idle, para
         /// que el stand no parezca una estatua. Todos se reproducen una sola vez.
         /// </summary>
@@ -165,15 +176,16 @@ namespace Sonia
         };
 
         /// <summary>
-        /// Solo los bucles base se importan en bucle. Todo lo demás se reproduce
-        /// una vez y termina: así el coreógrafo sabe cuándo encadenar el siguiente
-        /// clip en lugar de cortar un gesto a mitad.
+        /// Solo los bucles base (y el ciclo de caminar) se importan en bucle. Todo
+        /// lo demás se reproduce una vez y termina: así el coreógrafo sabe cuándo
+        /// encadenar el siguiente clip en lugar de cortar un gesto a mitad.
         /// </summary>
         public static bool IsLoopingClip(string clipName)
         {
             return clipName == IdleLoopClip
                 || clipName == ListeningLoopClip
-                || clipName == ThinkingLoopClip;
+                || clipName == ThinkingLoopClip
+                || clipName == WalkClip;
         }
     }
 }

@@ -14,6 +14,10 @@
 //              clip solo si el actual ya va avanzado
 //   greeting   saludo con la mano; se deja terminar salvo que toque hablar
 //
+// Mientras Sonia sale o entra caminando (modo "Fuera", PresenceController) el
+// coreógrafo queda suspendido: apunta el estado que le llega pero no lanza
+// ningún clip, ni gestos ni bailes, hasta que se le devuelve el cuerpo.
+//
 // Todo es opcional: sin MotionPlayer o sin set de clips no hace nada.
 
 using UnityEngine;
@@ -151,6 +155,7 @@ namespace Sonia
         private float _nodTimer;
         private float _wideUntil = -1f;
         private bool _started;
+        private bool _suspended;
 
         /// <summary>Estado que se le ha comunicado al coreógrafo.</summary>
         public AvatarState State
@@ -170,7 +175,11 @@ namespace Sonia
         /// </summary>
         public bool IsWideShot
         {
-            get { return _phase == Phase.Attention || _phase == Phase.Greeting || Time.time < _wideUntil; }
+            get
+            {
+                return !_suspended
+                       && (_phase == Phase.Attention || _phase == Phase.Greeting || Time.time < _wideUntil);
+            }
         }
 
         /// <summary>Set de clips en uso.</summary>
@@ -178,6 +187,18 @@ namespace Sonia
         {
             get { return motionSet; }
             set { motionSet = value; }
+        }
+
+        /// <summary>Reproductor de clips que usa el coreógrafo.</summary>
+        public MotionPlayer Player
+        {
+            get { return motionPlayer; }
+        }
+
+        /// <summary>Cierto mientras otro componente manda en el cuerpo (salida y entrada caminando).</summary>
+        public bool IsSuspended
+        {
+            get { return _suspended; }
         }
 
         private void Awake()
@@ -223,7 +244,9 @@ namespace Sonia
             _stateSeconds = 0f;
             _speechPaused = false;
 
-            if (!_started)
+            // Suspendido (fuera de pantalla o caminando): se apunta el estado y
+            // se aplica al devolverle el cuerpo (Resume).
+            if (!_started || _suspended)
             {
                 return;
             }
@@ -252,7 +275,7 @@ namespace Sonia
         /// </summary>
         public void NotifySpeechStart()
         {
-            if (!Ready || _state != AvatarState.Speaking)
+            if (!Ready || _suspended || _state != AvatarState.Speaking)
             {
                 return;
             }
@@ -295,7 +318,7 @@ namespace Sonia
             }
 
             _speechPaused = paused;
-            if (!Ready || _state != AvatarState.Speaking || _phase != Phase.Base)
+            if (!Ready || _suspended || _state != AvatarState.Speaking || _phase != Phase.Base)
             {
                 return;
             }
@@ -317,12 +340,7 @@ namespace Sonia
         /// </summary>
         public bool PlayGreeting()
         {
-            if (!Ready || motionSet.greeting == null)
-            {
-                return false;
-            }
-
-            if (_state != AvatarState.Idle && _state != AvatarState.Listening)
+            if (!CanGreet())
             {
                 return false;
             }
@@ -333,12 +351,133 @@ namespace Sonia
                 return false;
             }
 
+            StartGreeting("saludo tras " + Mathf.RoundToInt(idleSeconds) + " s en idle");
+            return true;
+        }
+
+        /// <summary>
+        /// Saluda con la mano ya, sin las condiciones del saludo automático
+        /// (rato sola, enfriamiento). Lo pide el orquestador con
+        /// <c>attention</c> y <c>category: "greeting"</c> (botón del panel, modo
+        /// saludos). Solo en idle o escuchando, sin una imagen puesta (el brazo
+        /// que saluda es el que señala) y sin repetir uno que ya esté en marcha.
+        /// </summary>
+        public bool PlayGreetingNow()
+        {
+            if (!CanGreet() || IsPresenting || _phase == Phase.Greeting)
+            {
+                return false;
+            }
+
+            StartGreeting("saludo pedido por el orquestador");
+            return true;
+        }
+
+        private bool CanGreet()
+        {
+            return Ready
+                   && !_suspended
+                   && motionSet.greeting != null
+                   && (_state == AvatarState.Idle || _state == AvatarState.Listening);
+        }
+
+        private void StartGreeting(string why)
+        {
             _secondsSinceGreeting = 0f;
             _phase = Phase.Greeting;
             _body = motionPlayer.Play(motionSet.greeting, MotionPlayer.BodyLayer, attentionFadeIn);
             _attentionTimer = Random.Range(attentionInterval.x, attentionInterval.y);
-            Log("saludo tras " + Mathf.RoundToInt(idleSeconds) + " s en idle");
-            return true;
+            _variationTimer = Random.Range(idleVariationInterval.x, idleVariationInterval.y);
+            Log(why);
+        }
+
+        /// <summary>
+        /// Otro componente toma el cuerpo (salida y entrada caminando): se cortan
+        /// la presentación de imagen y los asentimientos, y hasta
+        /// <see cref="Resume"/> no se lanza ningún clip (ni variaciones, ni
+        /// gestos de atención, ni bailes, ni gestos de habla). El estado que
+        /// llegue mientras tanto se apunta.
+        /// </summary>
+        public void Suspend()
+        {
+            if (_suspended)
+            {
+                return;
+            }
+
+            _suspended = true;
+            _phase = Phase.Base;
+            _wideUntil = -1f;
+            _speechPaused = false;
+            _present = null;
+            _presentHolding = false;
+            _presentReleasing = false;
+            _upper = null;
+            if (motionPlayer != null && motionPlayer.IsReady)
+            {
+                motionPlayer.FadeOut(MotionPlayer.UpperLayer, nodFade);
+                motionPlayer.FadeOut(MotionPlayer.RightArmLayer, nodFade);
+            }
+
+            Log("coreografía suspendida");
+        }
+
+        /// <summary>
+        /// Devuelve el cuerpo al coreógrafo. Si <paramref name="body"/> ya está
+        /// sonando el bucle base del estado actual (Sonia acaba de llegar en
+        /// reposo), se adopta tal cual para no reiniciarlo; si no, se entra en el
+        /// estado con un fundido de <paramref name="fade"/> segundos. El primer
+        /// gesto de atención espera lo de siempre, para que no se ponga a bailar
+        /// nada más volver.
+        /// </summary>
+        public void Resume(MotionPlayer.Handle body, float fade)
+        {
+            if (!_suspended)
+            {
+                return;
+            }
+
+            _suspended = false;
+            _stateSeconds = 0f;
+            _attentionTimer = firstAttentionDelay;
+            if (!Ready)
+            {
+                return;
+            }
+
+            AnimationClip loop = BaseLoopOf(_state);
+            if (body != null && body.IsCurrent && loop != null && body.Clip == loop)
+            {
+                _body = body;
+                _phase = Phase.Base;
+                _variationTimer = Random.Range(idleVariationInterval.x, idleVariationInterval.y);
+                _nodTimer = Random.Range(nodInterval.x, nodInterval.y);
+                Log("coreografía de vuelta, sigue el bucle " + loop.name);
+                return;
+            }
+
+            EnterState(_state, Mathf.Max(0.05f, fade), false);
+            Log("coreografía de vuelta en " + _state);
+        }
+
+        private AnimationClip BaseLoopOf(AvatarState state)
+        {
+            if (motionSet == null)
+            {
+                return null;
+            }
+
+            switch (state)
+            {
+                case AvatarState.Idle:
+                    return motionSet.idleLoop;
+                case AvatarState.Listening:
+                    return motionSet.listeningLoop;
+                case AvatarState.Thinking:
+                    return motionSet.thinkingLoop;
+                default:
+                    return null;
+            }
         }
 
         /// <summary>
@@ -349,7 +488,7 @@ namespace Sonia
         /// </summary>
         public bool BeginPresent()
         {
-            if (!Ready || motionSet.present == null)
+            if (!Ready || _suspended || motionSet.present == null)
             {
                 return false;
             }
@@ -468,7 +607,7 @@ namespace Sonia
         /// </summary>
         public void Preview(AnimationClip clip, bool upperBody = false)
         {
-            if (!Ready || clip == null)
+            if (!Ready || _suspended || clip == null)
             {
                 return;
             }
@@ -496,7 +635,7 @@ namespace Sonia
         /// <summary>Lanza un gesto de atención al azar (según los pesos). Solo en idle.</summary>
         public void PlayRandomAttention()
         {
-            if (_state != AvatarState.Idle)
+            if (_suspended || _state != AvatarState.Idle)
             {
                 return;
             }
@@ -511,7 +650,7 @@ namespace Sonia
         /// </summary>
         public void PlayAttention(AttentionCategory category, string clipName = null)
         {
-            if (!Ready || _state != AvatarState.Idle)
+            if (!Ready || _suspended || _state != AvatarState.Idle)
             {
                 return;
             }
@@ -566,7 +705,7 @@ namespace Sonia
         /// <summary>Lanza el gesto de atención con ese índice del set. Solo en idle.</summary>
         public void PlayAttention(int index)
         {
-            if (!Ready || _state != AvatarState.Idle || index < 0 || index >= motionSet.attention.Length)
+            if (!Ready || _suspended || _state != AvatarState.Idle || index < 0 || index >= motionSet.attention.Length)
             {
                 return;
             }
@@ -595,7 +734,7 @@ namespace Sonia
             _stateSeconds = Mathf.Min(MaxTrackedSeconds, _stateSeconds + dt);
             _secondsSinceGreeting = Mathf.Min(MaxTrackedSeconds, _secondsSinceGreeting + dt);
 
-            if (!Ready)
+            if (!Ready || _suspended)
             {
                 return;
             }

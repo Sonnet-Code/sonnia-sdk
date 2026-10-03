@@ -243,6 +243,31 @@ class ShowcaseSettings(BaseSettings):
     gesture_chance: float = 0.5
 
 
+class PanelSettings(BaseSettings):
+    """Panel de control web para el personal del stand (``docs/panel.md``)."""
+
+    model_config = SettingsConfigDict(env_prefix="PANEL_", extra="ignore", env_ignore_empty=True)
+
+    enabled: bool = True
+    #: Solo en local: desde internet se entra por el Cloudflare Tunnel.
+    host: str = "127.0.0.1"
+    port: int = 8780
+    #: Equipo de Cloudflare Zero Trust (``<equipo>.cloudflareaccess.com``) y
+    #: AUD de la aplicación de Access. Sin los dos, se rechaza todo acceso
+    #: que llegue por Cloudflare.
+    access_team_domain: str = ""
+    access_aud: str = ""
+    #: Dónde se guarda el estado del panel (modo, avisos, volumen...).
+    state_file: str = str(_REPO_ROOT / "cache" / "panel_state.json")
+    #: Caché de frases fijas grabadas con la voz de GPT-Live.
+    voice_cache_dir: str = str(_REPO_ROOT / "cache" / "voice")
+    #: Modo "Solo saludos": segundos entre saludos (mínimo y máximo).
+    greeter_interval_min_seconds: float = 25.0
+    greeter_interval_max_seconds: float = 55.0
+    #: Precio de GPT-Live por minuto de sesión, para estimar el gasto.
+    live_price_per_minute: float = 0.05
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(_REPO_ROOT / ".env", ".env"),
@@ -262,6 +287,7 @@ class Settings(BaseSettings):
     ws: WSSettings = Field(default_factory=WSSettings)
     mcp: MCPSettings = Field(default_factory=MCPSettings)
     showcase: ShowcaseSettings = Field(default_factory=ShowcaseSettings)
+    panel: PanelSettings = Field(default_factory=PanelSettings)
 
     assets_dir: str = str(_REPO_ROOT / "assets")
     log_level: str = "INFO"

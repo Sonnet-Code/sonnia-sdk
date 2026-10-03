@@ -45,8 +45,8 @@ namespace Sonia
 
         [Header("Salida")]
         [SerializeField]
-        [Range(0f, 2f)]
-        [Tooltip("Ganancia aplicada a las muestras antes de escribirlas en la salida.")]
+        [Range(0f, MaxVolume)]
+        [Tooltip("Volumen de la voz (1 = normal). Lo cambia el mensaje set_volume del orquestador. Solo afecta a lo que suena: el lip-sync analiza el audio antes de la ganancia, así que la boca se mueve igual a cualquier volumen.")]
         private float volume = 1f;
 
         [SerializeField]
@@ -93,6 +93,11 @@ namespace Sonia
         private AudioClip _silence;
         private volatile bool _hadUnderrun;
         private bool _droppedAudio;
+
+        // Ganancia que se aplicó en el último bloque. Solo la toca el hilo de
+        // audio: un cambio de volumen se reparte en rampa a lo largo de un
+        // bloque para que no chasquee.
+        private float _appliedGain = 1f;
 
         // Línea de retardo mono entre el análisis (lo que ven los oyentes de
         // OnAudioFrame) y la salida real. Solo la toca el hilo de audio salvo en
@@ -178,6 +183,30 @@ namespace Sonia
             get { return _outputSampleRate; }
         }
 
+        /// <summary>Volumen máximo que acepta <see cref="SetVolume"/> (el del protocolo).</summary>
+        public const float MaxVolume = 1.5f;
+
+        /// <summary>Volumen actual de la voz (0 a <see cref="MaxVolume"/>; 1 es el normal).</summary>
+        public float Volume
+        {
+            get { return volume; }
+        }
+
+        /// <summary>
+        /// Cambia el volumen de la voz (mensaje <c>set_volume</c>). Se recorta a
+        /// 0..<see cref="MaxVolume"/> y se aplica en rampa en el siguiente bloque
+        /// de audio. Hilo principal.
+        /// </summary>
+        public void SetVolume(float value)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+            {
+                return;
+            }
+
+            volume = Mathf.Clamp(value, 0f, MaxVolume);
+        }
+
         /// <summary>
         /// Lee de una sola vez la posición de reproducción y el nivel, para que el
         /// lip-sync tome el lock una vez por frame en lugar de tres.
@@ -208,6 +237,8 @@ namespace Sonia
         private void Awake()
         {
             _audioSource = GetComponent<AudioSource>();
+            volume = Mathf.Clamp(volume, 0f, MaxVolume);
+            _appliedGain = volume;
             RefreshOutputSampleRate();
             AllocateRing(initialBufferSeconds);
             ConfigureDelayLine();
@@ -612,7 +643,13 @@ namespace Sonia
 
             int written = 0;
             double sumSquares = 0.0;
-            float gain = volume;
+
+            // Rampa de ganancia de un bloque: de la que sonó en el bloque anterior
+            // a la pedida ahora. Con el volumen quieto es constante.
+            float gainStart = _appliedGain;
+            float gainTarget = volume;
+            float gainStep = (gainTarget - gainStart) / frames;
+            _appliedGain = gainTarget;
 
             lock (_lock)
             {
@@ -669,7 +706,8 @@ namespace Sonia
 
                         for (int i = 0; i < chunk; i++)
                         {
-                            float sample = _ring[_readPosition] * gain;
+                            // Sin ganancia: el análisis y el RMS ven la voz tal cual.
+                            float sample = _ring[_readPosition];
                             _readPosition++;
                             if (_readPosition >= _ring.Length)
                             {
@@ -736,7 +774,7 @@ namespace Sonia
                             _delayWrite = 0;
                         }
 
-                        float sample = _delayLine[read];
+                        float sample = ApplyGain(_delayLine[read], gainStart + (gainStep * (i + 1)));
                         read++;
                         if (read >= capacity)
                         {
@@ -754,7 +792,7 @@ namespace Sonia
                 {
                     for (int i = 0; i < frames; i++)
                     {
-                        float sample = _fresh[i];
+                        float sample = ApplyGain(_fresh[i], gainStart + (gainStep * (i + 1)));
                         int baseIndex = i * channels;
                         for (int c = 0; c < channels; c++)
                         {
@@ -788,6 +826,33 @@ namespace Sonia
                     // Un fallo del análisis no debe cortar el audio.
                 }
             }
+        }
+
+        /// <summary>
+        /// Aplica la ganancia. Con volumen por encima de 1 (hasta 1,5) pasa por un
+        /// limitador suave: los picos se redondean en lugar de recortarse en
+        /// seco, que es lo que distorsiona. Con 1 o menos la muestra sale tal
+        /// cual, como siempre. Hilo de audio.
+        /// </summary>
+        private static float ApplyGain(float sample, float gain)
+        {
+            float value = sample * gain;
+            if (gain <= 1f)
+            {
+                return value;
+            }
+
+            const float knee = 0.85f;
+            float magnitude = value < 0f ? -value : value;
+            if (magnitude <= knee)
+            {
+                return value;
+            }
+
+            float headroom = 1f - knee;
+            float over = (magnitude - knee) / headroom;
+            float limited = knee + (headroom * (over / (1f + over)));
+            return value < 0f ? -limited : limited;
         }
 
         /// <summary>Anota una frase como reproducida. Con el lock tomado.</summary>

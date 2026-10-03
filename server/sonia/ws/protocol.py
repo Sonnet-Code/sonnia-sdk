@@ -54,6 +54,8 @@ MSG_SHOW_IMAGE = "show_image"
 MSG_HIDE_IMAGE = "hide_image"
 MSG_ERROR = "error"
 MSG_REQUEST_FRAME = "request_frame"
+MSG_PRESENCE = "presence"
+MSG_SET_VOLUME = "set_volume"
 
 # Mensajes de Unity hacia el orquestador.
 MSG_CLIENT_HELLO = "client_hello"
@@ -204,6 +206,16 @@ def msg_hide_image() -> dict[str, Any]:
 def msg_error(message: str) -> dict[str, Any]:
     """Error legible para mostrar o registrar en el cliente."""
     return {"type": MSG_ERROR, "message": str(message)}
+
+
+def msg_presence(present: bool, message: str = "") -> dict[str, Any]:
+    """Sonia está en pantalla o se ha ido (y deja un letrero con ``message``)."""
+    return {"type": MSG_PRESENCE, "present": bool(present), "message": str(message)}
+
+
+def msg_set_volume(value: float) -> dict[str, Any]:
+    """Volumen de la voz de Sonia en Unity (0 a 1,5; 1 es el normal)."""
+    return {"type": MSG_SET_VOLUME, "value": round(max(0.0, min(1.5, float(value))), 3)}
 
 
 def msg_request_frame() -> dict[str, Any]:

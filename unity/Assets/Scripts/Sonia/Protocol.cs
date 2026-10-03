@@ -30,6 +30,8 @@ namespace Sonia
         public const string Error = "error";
         public const string RequestFrame = "request_frame";
         public const string Attention = "attention";
+        public const string Presence = "presence";
+        public const string SetVolume = "set_volume";
 
         // De Unity hacia el orquestador.
         public const string ClientHello = "client_hello";
@@ -128,15 +130,37 @@ namespace Sonia
         [JsonProperty("ambient")] public bool Ambient;
     }
 
-    /// <summary>El orquestador pide un gesto de atención (baile, cuarta pared, suave).</summary>
+    /// <summary>El orquestador pide un gesto de atención (baile, cuarta pared, suave, saludo).</summary>
     [Serializable]
     public class AttentionMessage
     {
-        /// <summary>"dance", "fourth_wall" o "soft".</summary>
+        /// <summary>"dance", "fourth_wall", "soft" o "greeting" (saludo con la mano).</summary>
         [JsonProperty("category")] public string Category = "soft";
 
         /// <summary>Nombre de clip concreto, opcional.</summary>
         [JsonProperty("clip")] public string Clip;
+    }
+
+    /// <summary>
+    /// Sonia está en pantalla o se ha ido (modo "Fuera" del panel). Es un mensaje
+    /// fijo: el orquestador lo repite tras <c>hello</c> a cada cliente nuevo.
+    /// </summary>
+    [Serializable]
+    public class PresenceMessage
+    {
+        /// <summary>Falso: sale caminando y deja el letrero. Cierto: vuelve a su sitio.</summary>
+        [JsonProperty("present")] public bool Present = true;
+
+        /// <summary>Texto del letrero mientras está fuera. Vacío: el de por defecto.</summary>
+        [JsonProperty("message")] public string Message;
+    }
+
+    /// <summary>Volumen de la voz de Sonia. También fijo: se repite tras <c>hello</c>.</summary>
+    [Serializable]
+    public class SetVolumeMessage
+    {
+        /// <summary>De 0 a 1,5; 1 es el volumen normal.</summary>
+        [JsonProperty("value")] public float Value = 1f;
     }
 
     /// <summary>Un visema con su instante de inicio relativo al <c>speech_start</c>.</summary>

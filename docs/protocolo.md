@@ -103,12 +103,28 @@ Mostrar una imagen en el panel de la escena. `data_base64` lleva la imagen compl
 ### `attention`
 
 Pide al avatar un gesto de atención: `dance` (baile), `fourth_wall` (señalar,
-saludar, tocar la pantalla) o `soft` (gesto suave). `clip` es opcional y nombra
-un clip concreto del set. Solo se atiende en `idle`. La animación de stand lo
+saludar, tocar la pantalla), `soft` (gesto suave) o `greeting` (saludo con la mano). `clip` es opcional y nombra
+un clip concreto del set. Se atiende en `idle`; `greeting` también mientras escucha. La animación de stand lo
 envía justo antes de una frase `ambient` para que Sonia cante mientras baila.
 
 ```json
 {"type": "attention", "category": "dance"}
+```
+
+### `presence`
+
+Sonia está en pantalla (`present: true`) o se ha ido (`false`): sale caminando y deja un letrero con `message`. Lo manda el panel de control al cambiar al modo "Fuera" o volver. Es un mensaje fijo: el orquestador lo repite justo después de `hello` a cada cliente nuevo, y entonces Unity lo aplica sin animación. Ver `docs/panel.md`.
+
+```json
+{"type": "presence", "present": false, "message": "Me fui a ver una charla, regreso en un momento"}
+```
+
+### `set_volume`
+
+Volumen de la voz de Sonia, de 0 a 1,5 (1 es el normal). También fijo: se repite tras `hello`.
+
+```json
+{"type": "set_volume", "value": 0.8}
 ```
 
 ### `error`

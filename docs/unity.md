@@ -718,6 +718,126 @@ los huesos en el mismo comando.
   spring bones y ajeno al rig humanoide. Cuenta para los bounds del avatar, que
   llegan hasta x ≈ 1,5.
 
+## 6c. Modo Fuera: salida y entrada caminando
+
+El panel del stand tiene un modo "Fuera" (`docs/panel.md`). El orquestador lo
+manda como `presence` y Unity lo resuelve con `PresenceController` y
+`AwaySignController`, que `SoniaBootstrap` añade por código al objeto `Sonia`
+si la escena no los trae (no hay que tocar la escena).
+
+**`present: false`.** Se corta la voz y la boca (como `stop_speaking`), se
+retira la imagen y el coreógrafo queda suspendido (apunta el estado pero no
+lanza variaciones, gestos, bailes ni gestos de habla). Sonia vuelve al reposo y
+mira hacia la salida (ojos con parpadeo y cabeza primero); a los 0,5 s gira
+hacia ese lado con una curva suave mientras el ciclo de caminar entra fundido,
+así los primeros pasos se dan girando y no pivota sobre los pies. Camina hasta
+que ningún hueso (más 0,3 m de margen) se ve en ningún encuadre de la cámara;
+entonces se apagan sus renderers y aparece el letrero con un fundido.
+
+**`present: true`.** El letrero se va, Sonia entra caminando desde el mismo
+lado mirando hacia dónde va, vuelve a mirar al visitante un poco antes de
+llegar, frena hasta su marca y se gira hacia la cámara; al terminar, el
+coreógrafo recupera el cuerpo (si estaba en reposo, sigue el mismo bucle sin
+reiniciarlo) y el primer gesto de atención espera lo de siempre.
+
+**Sin animación.** Un `presence: false` que llega en los 2 s siguientes al
+`hello` (el orquestador lo repite a cada cliente nuevo) se aplica de golpe:
+Sonia oculta, letrero puesto y cámara ya abierta
+(`SoniaBootstrap.presenceInstantWindowSeconds`). Otro `presence` con el mismo
+`present` solo cambia el texto. Si cambia de idea a medias (vuelve mientras
+sale o se va mientras entra), se da la vuelta desde donde está; el giro pasa
+siempre por mirar a cámara, nunca de espaldas.
+
+**Pies.** El ciclo es `F_Walk_002` de la biblioteca de Ready Player Me
+(`feminine/fbx/locomotion`, misma licencia que el resto de `RPM/`): trae root
+motion hacia delante, 4,40 m en 3,13 s (1,40 m/s), seis pasos de 0,52 s, en
+bucle limpio. Mientras camina se enciende `applyRootMotion`, se lee
+`Animator.deltaPosition` cada frame y Sonia se desplaza exactamente su
+proyección sobre el eje lateral de la cámara; lo que avanza hacia la cámara se
+descarta (sigue en su línea, y ese deslizamiento en profundidad no se ve de
+frente). Como la proyección depende del giro, la arrancada crece sola. Para
+frenar en su marca se sustituye el root motion por una curva de Hermite que
+parte de la velocidad medida y llega parada, en el mismo tiempo en que el
+caminar se funde al reposo: la velocidad baja lineal a la vez que los pasos se
+acortan. Sin clip de caminar (set sin regenerar) o con un clip sin root motion,
+se desplaza a una velocidad estimada: desliza, pero no se rompe.
+
+**Cámara.** En el plano medio no se ven las piernas y Sonia sale de cuadro en
+un paso, así que mientras sale, está fuera y vuelve, `CameraFramingController`
+abre al plano de cuerpo entero (`Wide Shot Position`, o `Presence Shot
+Position` si se rellena) con un travelling SmoothDamp que arranca y frena suave
+(`presenceSmoothTime` 0,75 s). Empieza a cerrar cuando Sonia empieza a frenar.
+Con el plano abierto actual caben 0,78 m a cada lado: el paseo es corto; para
+alargarlo, `Presence Shot Position` más atrás.
+
+**Letrero.** En el Canvas del HUD (sale en las capturas y F1 no lo esconde):
+tarjeta navy de 900 px con borde y halo en el azul de la marca, "SONIA"
+espaciado, el mensaje en blanco y negrita a 80 px (baja hasta 54 px con textos
+largos), tres puntos que laten y "Asistente virtual de Sonnet Code". El logo
+del HUD ya está arriba a la izquierda y no se repite. Entra subiendo con un
+fundido de 0,7 s y sale en 0,45 s.
+
+Todos los parámetros son campos serializados: en `PresenceController` el lado
+(`exitSide`, por defecto la derecha de la pantalla), la pausa antes de girar,
+la duración del giro, el fundido al caminar, el pie de arranque
+(`walkStartNormalizedTime`), la frenada, el margen de fuera de cuadro y la
+mirada; en `AwaySignController` textos, tamaños, colores y fundidos; en
+`CameraFramingController` el plano de salida.
+
+En la misma tanda: `set_volume` (`AudioStreamPlayer.SetVolume`, 0 a 1,5, en
+rampa de un bloque para que no chasquee y con limitador suave por encima de 1;
+el lip-sync analiza el audio antes de la ganancia, así que la boca se mueve
+igual a cualquier volumen) y `attention` con `category: "greeting"`
+(`AvatarChoreographer.PlayGreetingNow`: saludo con la mano ya, en idle o
+escuchando y sin imagen puesta).
+
+### Pendiente en el editor (nada de esto se ha probado aún)
+
+1. Abrir el proyecto: Unity importa `Assets/Animations/RPM/F_Walk_002.fbx` y
+   crea su `.meta` (subirlo con el FBX).
+2. **Sonia > Crear set de animaciones**: lo deja como Humanoid (Create From
+   This Model, como el resto de `RPM/`), en bucle, sin compresión, con rotación
+   y altura dentro de la pose y la traslación XZ fuera (Center of Mass), y
+   rellena `SoniaMotionSet.walk`. La consola debe decir "caminar F_Walk_002".
+   En el inspector del clip, Average Velocity con z ≈ 1,4 y los indicadores de
+   bucle en verde. Si el retargeting sobre Babe sale raro, probar Avatar
+   Definition "Copy From Other Avatar" con
+   `Assets/Avatar/Generated/Babe_Humanoid.asset`.
+3. Play con la Game view en 9:16. Sin orquestador: panel **Animaciones** >
+   **Salir/Volver**, o en un `RunCommand`
+   `Object.FindAnyObjectByType<Sonia.PresenceController>().TogglePresence()`
+   (`PhaseName` y `Offset` dicen dónde va). Con orquestador: modo "Fuera" del
+   panel.
+4. Verificación visual, con renders 1080x1920 (**Sonia > Captura vertical 9:16**
+   o render a `RenderTexture` desde un `RunCommand`, conduciendo los frames
+   con `EditorApplication.Step()`):
+   - Salida: al empezar (mira a un lado, cámara abriéndose), a mitad del giro
+     (pasos girando, sin pivotar sobre pies plantados), caminando de perfil,
+     con el hombro en el borde y con el escenario ya vacío y el letrero
+     entrando.
+   - Pies sin patinar: durante el apoyo, la posición en mundo de `LeftFoot` o
+     `RightFoot` entre frames seguidos debe quedarse quieta (deriva lateral de
+     1 o 2 cm como mucho). Si patina, mirar la consola: el aviso "El clip de
+     caminar no trae root motion" indica que la importación dejó la traslación
+     dentro de la pose.
+   - Entrada: letrero yéndose, Sonia entrando por el mismo lado, frenada con
+     pasos cada vez más cortos, mirada al visitante antes que el giro del
+     cuerpo, giro a cámara y vuelta al idle sin salto; cámara cerrando al plano
+     medio.
+   - Ojos: sacadas y parpadeos durante el paseo; nada de mirada fija ni
+     bizca al girar.
+   - Letrero: legible y sin cortes en la captura; probar un mensaje de unos 150
+     caracteres y otro con tildes y eñes.
+   - Reconexión: con el orquestador en "Fuera", parar y volver a dar a Play:
+     Sonia ya oculta, letrero puesto y cámara abierta, sin animación.
+   - Cambios de planes: "Volver" a mitad de la salida y "Fuera" a mitad de la
+     entrada.
+   - `set_volume` 0,3, 1 y 1,5 con Sonia hablando: la boca se mueve igual y no
+     hay chasquidos al cambiar. `attention` `greeting` en idle: saluda.
+5. Ajustar a ojo si hace falta: `walkStartNormalizedTime` (con qué pie da el
+   primer paso), `turnSecondsPer90`, `arriveSeconds`, `exitSide` y la posición
+   del plano de salida.
+
 ## 7. Mapeo de visemas
 
 El orquestador envía los identificadores del conjunto Oculus (ver
@@ -896,7 +1016,9 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `SoniaMotionSet.cs` | ScriptableObject con los clips ya resueltos, generado por el menú |
 | `MotionPlayer.cs` | Reproductor de clips con la Playables API: fundidos por código, capa de cuerpo y capa de torso con máscara |
 | `AvatarChoreographer.cs` | Decide qué clip suena en cada estado: idle con variaciones y atención, escuchar con asentimientos, pensar, hablar encadenando gestos, saludo |
-| `CameraFramingController.cs` | Abre el plano de la cámara durante los bailes y el saludo, y vuelve al plano medio |
+| `CameraFramingController.cs` | Abre el plano de la cámara durante los bailes y el saludo, y vuelve al plano medio; travelling a cuerpo entero en el modo Fuera |
+| `PresenceController.cs` | Modo Fuera (`presence`): sale caminando con el root motion del ciclo de caminar, se oculta, y vuelve frenando hasta su marca (sección 6c) |
+| `AwaySignController.cs` | Letrero del modo Fuera en el Canvas del HUD, construido por código, con fundidos |
 | `ImagePanelController.cs` | Decodifica el base64 de `show_image` y lo muestra con animación de escala |
 | `WebcamFrameSender.cs` | Captura de `WebCamTexture` y envío en JPEG cuando llega `request_frame` |
 | `SoniaDebugUI.cs` | HUD de conexión, subtítulos, entrada de texto y botón de interrumpir |

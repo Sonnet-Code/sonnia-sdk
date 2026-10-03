@@ -44,6 +44,7 @@ from sonia.live.audio import NoiseGate, pcm16_from_float, rms
 from sonia.live.client import LiveClient, WsConnect, describe_error
 from sonia.live.prompts import CAMERA_NOTE_PREFIX, build_session_config
 from sonia.live.vision import VisionNarrator
+from sonia.live.voicecache import VoiceCache
 from sonia.orchestrator import HubLike
 from sonia.showcase import Showcase
 from sonia.types import (
@@ -104,6 +105,25 @@ TEXT_INPUT_TEMPLATE = (
 
 #: Instrucción tras una interrupción desde Unity (por ejemplo, tocar la pantalla).
 INTERRUPT_TEXT = "El visitante te ha interrumpido: deja de hablar ahora y escucha lo que te diga."
+
+#: Cómo se pasa un aviso del panel para que lo diga en voz alta.
+ANNOUNCE_TEMPLATE = (
+    "Aviso del equipo del stand para los visitantes. Dilo ahora en voz alta, con tus "
+    "palabras pero sin cambiar los datos: «{text}»"
+)
+
+#: Cómo se pasan los avisos del día cuando cambian durante una sesión.
+NOTES_TEMPLATE = (
+    "Avisos de hoy del equipo del stand (son más recientes que tu base de conocimiento; "
+    "si chocan, mandan estos): {text}"
+)
+NOTES_CLEARED_TEXT = "El equipo del stand ha retirado los avisos de hoy: ya no aplican."
+
+#: Decaimiento por bloque del medidor de nivel del micrófono.
+MIC_LEVEL_DECAY = 0.85
+
+#: Nivel por debajo del cual un bloque se considera silencio absoluto.
+MIC_SILENCE_RMS = 0.0005
 
 #: Cómo se pide un número de la animación de stand.
 SHOWCASE_TEMPLATE = (
@@ -168,9 +188,11 @@ class LiveEngine:
         showcase: Showcase | None = None,
         connect: WsConnect | None = None,
         knowledge_dir: str | Path | None = None,
+        voice_cache: VoiceCache | None = None,
         tick_s: float = 0.05,
     ) -> None:
         self._settings = settings
+        self._voice_cache = voice_cache
         self._live = settings.live
         self._hub = hub
         self._registry = registry
@@ -184,6 +206,10 @@ class LiveEngine:
         self._gate = NoiseGate(self._live.gate_rms, self._live.gate_hold_ms)
 
         self._client: LiveClient | None = None
+        #: Con ``False`` no se abre sesión: GPT-Live apagada, sin gasto.
+        self._active = True
+        self._active_event = asyncio.Event()
+        self._active_event.set()
         self._state = AssistantState.IDLE
         self._utterance_counter = 0
         self._tasks: set[asyncio.Task[Any]] = set()
@@ -209,6 +235,12 @@ class LiveEngine:
         self._turn_level = 0.0
         self._expect_response_until = 0.0
 
+        # Micrófono (para el panel).
+        self._mic_manual_mute = False
+        self._mic_level = 0.0
+        self._last_mic_at = 0.0
+        self._last_sound_at = 0.0
+
         # Backend y sesión.
         self._delegations: dict[str, _Delegation] = {}
         self._last_delegation_id: str | None = None
@@ -220,24 +252,31 @@ class LiveEngine:
         self._context_full = False
         self._restarting = False
         self._last_activity = time.monotonic()
+        #: Avisos del día que el equipo escribe en el panel.
+        self._notes = ""
+        self._usage_closed_s = 0.0
+        self._usage_session_s = 0.0
+        self._context_ratio: float | None = None
+        self.last_error = ""
 
         # Cámara e imagen en pantalla.
         self._last_frame: Frame | None = None
         self._vision_task: asyncio.Task[None] | None = None
         self._last_vision_at = float("-inf")
+        self._camera_ok: bool | None = None
         self._image_hide_task: asyncio.Task[None] | None = None
 
         # Animación de stand.
+        # Se carga siempre (si hay material) para poder activarla desde el panel.
         show = settings.showcase
-        if showcase is None and show.enabled:
+        if showcase is None:
             showcase = Showcase.from_dir(
                 settings.showcase_dir,
                 dance_chance=show.dance_chance,
                 gesture_chance=show.gesture_chance,
             )
-        self._showcase = (
-            showcase if (showcase is not None and showcase.enabled and show.enabled) else None
-        )
+        self._showcase = showcase if showcase.enabled else None
+        self._showcase_enabled = show.enabled
         self._next_showcase_at = time.monotonic() + max(0.0, show.first_delay_seconds)
         self._ambient_expected_until = 0.0
 
@@ -266,6 +305,14 @@ class LiveEngine:
     def last_frame(self) -> Frame | None:
         return self._last_frame
 
+    @property
+    def active(self) -> bool:
+        return self._active
+
+    @property
+    def showcase(self) -> Showcase | None:
+        return self._showcase
+
     # -- entrada ------------------------------------------------------------
 
     async def push_mic(self, block: AudioArray) -> None:
@@ -275,15 +322,19 @@ class LiveEngine:
         ruido está cerrada, se manda silencio del mismo tamaño: GPT-Live
         necesita un flujo continuo. Sin sesión, el bloque se pierde.
         """
+        now = time.monotonic()
+        level = rms(block)
+        self._mic_level = max(level, self._mic_level * MIC_LEVEL_DECAY)
+        self._last_mic_at = now
+        if level > MIC_SILENCE_RMS:
+            self._last_sound_at = now
         client = self._client
         if client is None or self._restarting:
             return
-        now = time.monotonic()
         silent = bytes(len(block) * 2)
-        if self._mic_muted(now):
+        if self._mic_manual_mute or self._mic_muted(now):
             pcm = silent
         else:
-            level = rms(block)
             if self._user_turn_open:
                 self._turn_level = max(self._turn_level, level)
             pcm = pcm16_from_float(block) if self._gate.admit(level, now) else silent
@@ -360,6 +411,9 @@ class LiveEngine:
         delay = live.reconnect_min_seconds
         try:
             while True:
+                if not self._active:
+                    await self._active_event.wait()
+                    delay = live.reconnect_min_seconds
                 started = time.monotonic()
                 renewed = False
                 try:
@@ -368,6 +422,7 @@ class LiveEngine:
                     raise
                 except Exception as exc:
                     _log_stage_failure("Sesión de GPT-Live caída: %s", exc)
+                    self.last_error = str(exc)
                     await self._hub.broadcast_json(p.msg_error(f"GPT-Live: {exc}"))
                 if renewed or time.monotonic() - started > HEALTHY_SESSION_S:
                     delay = live.reconnect_min_seconds
@@ -392,6 +447,7 @@ class LiveEngine:
             registry=self._registry,
             gallery_ids=Gallery(self._settings.gallery_dir).ids(),
             knowledge_dir=self._knowledge_dir,
+            notes=self._notes,
         )
         if len(config["instructions"]) > INSTRUCTIONS_WARN_CHARS:
             logger.warning(
@@ -427,6 +483,9 @@ class LiveEngine:
 
     def _begin_session(self, client: LiveClient) -> None:
         self._client = client
+        self.last_error = ""
+        self._usage_session_s = 0.0
+        self._context_ratio = None
         self._session_conversation = False
         self._session_started_at = time.monotonic()
         self._context_full = False
@@ -438,6 +497,11 @@ class LiveEngine:
 
     async def _end_session(self) -> None:
         """Deja a Unity en un estado coherente cuando cae la sesión."""
+        if self._session_started_at:
+            lasted = time.monotonic() - self._session_started_at
+            self._usage_closed_s += max(self._usage_session_s, lasted)
+            self._session_started_at = 0.0
+            self._usage_session_s = 0.0
         if self._segment is not None:
             with contextlib.suppress(Exception):
                 await self._close_segment(time.monotonic())
@@ -476,7 +540,8 @@ class LiveEngine:
             case "session.usage.updated":
                 self._on_usage(event)
             case "error":
-                logger.warning("GPT-Live informó de un error: %s", describe_error(event))
+                self.last_error = describe_error(event)
+                logger.warning("GPT-Live informó de un error: %s", self.last_error)
                 self._on_command_error(event)
             case "session.closed":
                 logger.info("GPT-Live cerró la sesión (%s)", event.get("reason"))
@@ -812,6 +877,10 @@ class LiveEngine:
         ratio = window.get("usage_ratio") if isinstance(window, dict) else None
         usage = event.get("usage")
         seconds = usage.get("seconds") if isinstance(usage, dict) else None
+        if isinstance(seconds, int | float):
+            self._usage_session_s = float(seconds)
+        if isinstance(ratio, int | float):
+            self._context_ratio = float(ratio)
         if (
             isinstance(ratio, int | float)
             and ratio >= self._live.context_restart_ratio
@@ -823,7 +892,11 @@ class LiveEngine:
 
     # -- interrupción -------------------------------------------------------
 
-    async def _on_interrupt(self) -> None:
+    async def interrupt(self, *, tell_model: bool = True) -> None:
+        """Calla a Sonia ya (Unity tira lo que tenga en cola)."""
+        await self._on_interrupt(tell_model=tell_model)
+
+    async def _on_interrupt(self, *, tell_model: bool = True) -> None:
         """Interrupción desde Unity: se calla la voz en curso y se le pide que escuche."""
         self._touch()
         was_audible = self._audible
@@ -839,7 +912,7 @@ class LiveEngine:
         self._playback_end_at = time.monotonic()
         self._pending_assistant = []
         client = self._client
-        if was_audible and client is not None:
+        if tell_model and was_audible and client is not None:
             with contextlib.suppress(Exception):
                 await client.append_instructions(INTERRUPT_TEXT)
         self._audible = False
@@ -935,8 +1008,13 @@ class LiveEngine:
             aged = now - self._session_started_at > HEALTHY_SESSION_S
             if aged and expires is not None and expires - time.time() < EXPIRY_MARGIN_S:
                 reason = "la sesión está a punto de caducar"
-        if not reason:
-            return
+        if reason:
+            await self.restart_session(reason)
+
+    async def restart_session(self, reason: str = "pedido desde el panel") -> bool:
+        """Cierra la sesión actual para abrir otra limpia (olvida lo hablado)."""
+        if self._client is None or self._restarting:
+            return False
         logger.info("Se abre una sesión nueva de GPT-Live (%s)", reason)
         self._restarting = True
         self._last_frame = None
@@ -946,12 +1024,17 @@ class LiveEngine:
         if client is not None:
             # El bucle de la sesión ve el cierre y reconecta enseguida.
             self._spawn(client.close(), "live-renew")
+        return True
 
     # -- animación de stand -------------------------------------------------
 
     async def _maybe_showcase(self, now: float) -> None:
-        """Pide a GPT-Live un número del stand si Sonia lleva bastante sola."""
-        if self._showcase is None or now < self._next_showcase_at:
+        """Un número del stand si Sonia lleva bastante sola.
+
+        Si la frase está en la caché de voces se reproduce tal cual (sin
+        gastar ni meter nada en la conversación); si no, se le pide a GPT-Live.
+        """
+        if self._showcase is None or not self._showcase_enabled or now < self._next_showcase_at:
             return
         if now < self._ambient_expected_until:
             return
@@ -962,6 +1045,10 @@ class LiveEngine:
         self._next_showcase_at = now + self._showcase.rng.uniform(low, high)
         client = self._client
         if bit is None or client is None:
+            return
+        recorded = self._voice_cache.get(bit.text) if self._voice_cache is not None else None
+        if recorded is not None:
+            self._spawn(self.play_clip(recorded, bit.text, attention=bit.attention), "showcase")
             return
         if bit.attention:
             await self._hub.broadcast_json(p.msg_attention(bit.attention))
@@ -1004,8 +1091,10 @@ class LiveEngine:
             frame = await asyncio.wait_for(self._camera.capture(), timeout=CAPTURE_TIMEOUT_S)
         except Exception as exc:  # noqa: BLE001
             logger.warning("No se pudo capturar la cámara: %s", exc)
+            self._camera_ok = False
             return
         self._policy.note_captured()
+        self._camera_ok = frame is not None
         if frame is None:
             return
         self._last_frame = frame
@@ -1049,6 +1138,149 @@ class LiveEngine:
         logger.info("Imagen retirada sola tras %.0f s", seconds)
         self._image_hide_task = None
         await self._hub.hide_image()
+
+    # -- controles del panel ------------------------------------------------
+
+    async def set_active(self, active: bool) -> None:
+        """Enciende o apaga GPT-Live. Apagada no hay sesión, así que no gasta."""
+        if active == self._active:
+            return
+        self._active = active
+        if active:
+            logger.info("GPT-Live encendida: se abre sesión")
+            self._next_showcase_at = time.monotonic() + max(
+                0.0, self._settings.showcase.first_delay_seconds
+            )
+            self._active_event.set()
+            return
+        logger.info("GPT-Live apagada: se cierra la sesión y deja de gastar")
+        self._active_event.clear()
+        await self.interrupt(tell_model=False)
+        if self._vision_task is not None and not self._vision_task.done():
+            self._vision_task.cancel()
+        client = self._client
+        if client is not None:
+            self._restarting = True
+            self._spawn(client.close(), "live-off")
+
+    async def play_clip(self, pcm: bytes, text: str, *, attention: str | None = None) -> bool:
+        """Reproduce una frase grabada como voz ``ambient`` (sin cambiar de estado).
+
+        No pisa a GPT-Live: si Sonia ya está hablando, no hace nada y devuelve
+        ``False``. El micrófono se silencia mientras suena, igual que con su voz.
+        """
+        if self._audible or self._segment is not None:
+            return False
+        hub = self._hub
+        if attention:
+            await hub.broadcast_json(p.msg_attention(attention))
+            # Un baile arranca con un fundido; la voz entra un poco después.
+            await asyncio.sleep(0.6 if attention == "dance" else 0.25)
+            if self._audible or self._segment is not None:
+                return False
+        if not pcm:
+            return True
+        self._utterance_counter += 1
+        uid = self._utterance_counter
+        now = time.monotonic()
+        seconds = len(pcm) / 2 / self._rate
+        self._audible = True
+        self._last_closed_uid = uid
+        self._playback_end_at = max(self._playback_end_at, now) + seconds
+        self._last_closed_deadline = self._playback_end_at + PLAYBACK_GRACE_S
+        await hub.broadcast_json(p.msg_speech_start(uid, text, ambient=True))
+        await hub.broadcast_json(p.msg_transcript("assistant", text, True))
+        chunk = max(2, self._rate // 10 * 2)  # 100 ms
+        for start in range(0, len(pcm), chunk):
+            await hub.send_audio(
+                uid, AudioChunk(pcm=pcm[start : start + chunk], sample_rate=self._rate)
+            )
+        await hub.send_audio(uid, AudioChunk(pcm=b"", sample_rate=self._rate, is_last=True))
+        await hub.broadcast_json(p.msg_speech_end(uid))
+        logger.info("Sonia (grabada, %d, %.2f s): %s", uid, seconds, text)
+        return True
+
+    async def announce(self, text: str) -> bool:
+        """Pide a GPT-Live que diga un aviso en voz alta. Necesita sesión."""
+        client = self._client
+        text = text.strip()
+        if client is None or not text:
+            return False
+        await client.append_commentary(ANNOUNCE_TEMPLATE.format(text=text))
+        self._touch()
+        self._expect_response_until = time.monotonic() + RESPONSE_WAIT_S
+        logger.info("Aviso pedido desde el panel: %s", text)
+        return True
+
+    async def set_notes(self, text: str) -> None:
+        """Avisos del día: entran ya en la sesión y en las instrucciones de las siguientes."""
+        text = text.strip()
+        if text == self._notes:
+            return
+        self._notes = text
+        client = self._client
+        if client is not None:
+            content = NOTES_TEMPLATE.format(text=text) if text else NOTES_CLEARED_TEXT
+            with contextlib.suppress(Exception):
+                await client.append_instructions(content)
+        logger.info("Avisos del día actualizados (%d caracteres)", len(text))
+
+    @property
+    def notes(self) -> str:
+        return self._notes
+
+    def set_mic_muted(self, muted: bool) -> None:
+        self._mic_manual_mute = muted
+        logger.info("Micrófono %s desde el panel", "silenciado" if muted else "activado")
+
+    @property
+    def mic_muted(self) -> bool:
+        return self._mic_manual_mute
+
+    def set_gate(self, threshold: float) -> None:
+        self._live.gate_rms = max(0.0, float(threshold))
+        self._gate = NoiseGate(self._live.gate_rms, self._live.gate_hold_ms)
+
+    def set_showcase_enabled(self, enabled: bool) -> None:
+        self._showcase_enabled = enabled
+        if enabled:
+            self._next_showcase_at = time.monotonic() + max(
+                0.0, self._settings.showcase.first_delay_seconds
+            )
+
+    @property
+    def showcase_enabled(self) -> bool:
+        return self._showcase_enabled
+
+    def snapshot(self) -> dict[str, Any]:
+        """Lo que el panel necesita saber del motor, en tipos JSON."""
+        now = time.monotonic()
+        client = self._client
+        expires = client.expires_at if client is not None else None
+        uptime = now - self._session_started_at if self._session_started_at else 0.0
+        current = max(self._usage_session_s, uptime) if client is not None else 0.0
+        return {
+            "active": self._active,
+            "connected": client is not None,
+            "session_id": client.session_id if client is not None else "",
+            "uptime_s": round(uptime, 1),
+            "expires_in_s": round(expires - time.time(), 1) if expires is not None else None,
+            "context_ratio": self._context_ratio,
+            "state": str(self._state),
+            "speaking": self._audible,
+            "delegations": len(self._delegations),
+            "usage_s": round(self._usage_closed_s + current, 1),
+            "mic_level": round(self._mic_level, 4),
+            "mic_age_s": round(now - self._last_mic_at, 1) if self._last_mic_at else None,
+            "mic_sound_age_s": (
+                round(now - self._last_sound_at, 1) if self._last_sound_at else None
+            ),
+            "mic_muted": self._mic_manual_mute,
+            "mic_gate": self._live.gate_rms,
+            "camera_enabled": self._camera is not None and self._policy.enabled,
+            "camera_ok": self._camera_ok,
+            "last_error": self.last_error,
+        }
 
     # -- utilidades -----------------------------------------------------------
 

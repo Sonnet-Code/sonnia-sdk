@@ -50,6 +50,16 @@ namespace Sonia
         [Tooltip("HUD de depuración. Opcional.")]
         private SoniaDebugUI debugUI;
 
+        [SerializeField]
+        [Tooltip("Salida y entrada caminando (modo Fuera) con su letrero. Si la escena no lo trae, se añade por código en este objeto.")]
+        private PresenceController presence;
+
+        [Header("Modo Fuera")]
+        [SerializeField]
+        [Range(0f, 10f)]
+        [Tooltip("Un presence 'fuera' que llega en estos segundos tras el hello (el orquestador lo repite a cada cliente nuevo) se aplica sin animación: Sonia ya oculta y el letrero puesto.")]
+        private float presenceInstantWindowSeconds = 2f;
+
         [Header("Modo kiosco")]
         [SerializeField]
         [Tooltip("Seguir corriendo aunque la ventana pierda el foco. Imprescindible en el stand.")]
@@ -98,6 +108,8 @@ namespace Sonia
         private float _audioDrainedAt = -1f;
         // Imagen anunciada que espera a que la mano llegue arriba.
         private ShowImageMessage _pendingImage;
+        // Momento del último hello (para aplicar sin animación el presence que lo sigue).
+        private float _helloAt = -999f;
 
         private void Awake()
         {
@@ -124,6 +136,8 @@ namespace Sonia
                 client.OnShowImage += HandleShowImage;
                 client.OnHideImage += HandleHideImage;
                 client.OnAttention += HandleAttention;
+                client.OnPresence += HandlePresence;
+                client.OnSetVolume += HandleSetVolume;
                 client.OnError += HandleError;
                 client.OnRequestFrame += HandleRequestFrame;
             }
@@ -152,6 +166,8 @@ namespace Sonia
                 client.OnShowImage -= HandleShowImage;
                 client.OnHideImage -= HandleHideImage;
                 client.OnAttention -= HandleAttention;
+                client.OnPresence -= HandlePresence;
+                client.OnSetVolume -= HandleSetVolume;
                 client.OnError -= HandleError;
                 client.OnRequestFrame -= HandleRequestFrame;
             }
@@ -210,6 +226,23 @@ namespace Sonia
             {
                 debugUI = GetComponentInChildren<SoniaDebugUI>(true);
             }
+
+            if (presence == null)
+            {
+                presence = GetComponentInChildren<PresenceController>(true);
+            }
+
+            if (presence == null)
+            {
+                // Por código, para no tocar la escena: se monta solo con lo que
+                // encuentra (coreógrafo, mirada, cámara) y crea su letrero.
+                presence = gameObject.AddComponent<PresenceController>();
+            }
+
+            if (cameraFraming != null)
+            {
+                cameraFraming.Presence = presence;
+            }
         }
 
         private void ApplyKioskSettings()
@@ -265,7 +298,9 @@ namespace Sonia
 
             // Si se cae la conexión en mitad de un baile, la cámara se queda
             // abierta hasta que termine el clip. Mejor volver al plano medio ya.
-            if (cameraFraming != null)
+            // Fuera (o saliendo) no: Sonia sigue fuera hasta que el orquestador
+            // diga otra cosa al reconectar, y la cámara sigue en su plano.
+            if (cameraFraming != null && (presence == null || presence.IsPresent))
             {
                 cameraFraming.ResetToBase();
             }
@@ -296,6 +331,7 @@ namespace Sonia
                 return;
             }
 
+            _helloAt = Time.unscaledTime;
             if (audioPlayer != null)
             {
                 audioPlayer.SetSourceSampleRate(message.SampleRate);
@@ -460,6 +496,19 @@ namespace Sonia
 
             AttentionCategory category = AttentionCategory.Soft;
             string name = (message.Category ?? string.Empty).ToLowerInvariant();
+            if (name == "greeting" || name == "wave")
+            {
+                // Saludo con la mano ya (botón del panel, modo saludos), sin las
+                // condiciones del saludo automático. En idle o escuchando.
+                bool waved = choreographer.PlayGreetingNow();
+                if (logEvents)
+                {
+                    Debug.Log("[Sonia] saludo pedido por el orquestador" + (waved ? string.Empty : " (ahora no toca)"), this);
+                }
+
+                return;
+            }
+
             if (name == "dance")
             {
                 category = AttentionCategory.Dance;
@@ -534,6 +583,17 @@ namespace Sonia
 
         private void HandleStopSpeaking(StopSpeakingMessage message)
         {
+            StopSpeechNow();
+
+            if (logEvents)
+            {
+                Debug.Log("[Sonia] stop_speaking: " + (message != null ? message.Reason : "?"), this);
+            }
+        }
+
+        /// <summary>Descarta el audio en cola y cierra la boca (stop_speaking y salida a "Fuera").</summary>
+        private void StopSpeechNow()
+        {
             _pendingSpeakingState = false;
             _pendingSpeechStart = false;
             _audioDrainedAt = -1f;
@@ -546,10 +606,53 @@ namespace Sonia
             {
                 lipSync.StopAndClose();
             }
+        }
+
+        /// <summary>
+        /// Modo "Fuera" del panel. Al irse corta la voz y la boca (como
+        /// stop_speaking) y retira la imagen; la salida caminando, el letrero y
+        /// la vuelta los lleva PresenceController. El presence que el orquestador
+        /// repite justo tras el hello se aplica sin animación.
+        /// </summary>
+        private void HandlePresence(PresenceMessage message)
+        {
+            if (message == null || presence == null)
+            {
+                return;
+            }
+
+            bool leaving = !message.Present && presence.TargetPresent;
+            if (leaving)
+            {
+                StopSpeechNow();
+                HideImageNow();
+            }
+
+            bool instant = !message.Present && Time.unscaledTime - _helloAt <= presenceInstantWindowSeconds;
+            presence.SetPresent(message.Present, message.Message, instant);
 
             if (logEvents)
             {
-                Debug.Log("[Sonia] stop_speaking: " + (message != null ? message.Reason : "?"), this);
+                Debug.Log(
+                    "[Sonia] presence: " + (message.Present ? "en pantalla" : "fuera")
+                    + (instant ? " (sin animación)" : string.Empty)
+                    + (string.IsNullOrEmpty(message.Message) ? string.Empty : ", \"" + message.Message + "\""),
+                    this);
+            }
+        }
+
+        /// <summary>Volumen de la voz (0 a 1,5).</summary>
+        private void HandleSetVolume(SetVolumeMessage message)
+        {
+            if (message == null || audioPlayer == null)
+            {
+                return;
+            }
+
+            audioPlayer.SetVolume(message.Value);
+            if (logEvents)
+            {
+                Debug.Log("[Sonia] set_volume: " + audioPlayer.Volume.ToString("F2"), this);
             }
         }
 
@@ -596,7 +699,23 @@ namespace Sonia
                 return;
             }
 
+            HideImageNow();
+
+            if (logEvents)
+            {
+                Debug.Log("[Sonia] hide_image", this);
+            }
+        }
+
+        /// <summary>Retira la imagen (y la que esperaba a la mano) y suelta el gesto de señalar.</summary>
+        private void HideImageNow()
+        {
             _pendingImage = null;
+            if (imagePanel == null)
+            {
+                return;
+            }
+
             imagePanel.Hide();
             if (choreographer != null)
             {
@@ -606,11 +725,6 @@ namespace Sonia
             if (avatarState != null)
             {
                 avatarState.SetImagePanel(imagePanel.PanelTransform, false);
-            }
-
-            if (logEvents)
-            {
-                Debug.Log("[Sonia] hide_image", this);
             }
         }
 

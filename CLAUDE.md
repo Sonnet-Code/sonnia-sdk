@@ -29,6 +29,10 @@ Jean decidió que ya no importa que Sonia corra en local y pidió migrar a **GPT
 - **Pendiente de validar con clave:** si la voz llega a ritmo de reproducción (el motor avisa en el log si va por delante), que `text_input` (vía `session.instructions.append`) y los números del stand (vía `session.commentary.append`) funcionen como se espera, y la voz elegida (`LIVE_VOICE`, por defecto `marin`).
 - El principio 1 y el discurso de "100 % local" siguen escritos como antes: con este motor la descripción del stack que se genera al arrancar (`describe_live_stack`) dice la verdad y Sonia no presume de local. Reescribir el principio es decisión de Jean.
 
+## Panel de control (`docs/panel.md`)
+
+El orquestador sirve un panel web en `http://127.0.0.1:8780` (`server/sonia/panel`, extra `panel`) para personal no técnico. Modos: **Conversando** (GPT-Live), **Solo saludos** (sin sesión: saluda y baila con frases grabadas una vez con su voz en `cache/voice`, no gasta) y **Fuera** (cierra GPT-Live; Unity la saca de pantalla caminando y deja un letrero, mensaje `presence`). Más avisos del día, volumen (`set_volume`), filtro de ruido, imágenes, gestos y salud en frases llanas. Lo que se cambia se guarda en `cache/panel_state.json` y sobrevive a un reinicio. Desde internet: `https://sonia.sonnetcode.com` por el Cloudflare Tunnel `sonia-panel` (`scripts/panel_tunnel.sh`) con Cloudflare Access delante; el panel rechaza cualquier petición que llegue por Cloudflare sin JWT de Access válido (`PANEL_ACCESS_TEAM_DOMAIN`, `PANEL_ACCESS_AUD`). Lo pendiente está en `ROADMAP.md`.
+
 ## Estado provisional (septiembre de 2026)
 
 El equipo definitivo del stand será un mini PC **GMKtec EVO-X2 AI** (AMD Ryzen AI Max+ 395, Radeon 8060S integrada, 128 GB de memoria unificada LPDDR5X, 2 TB SSD, Wi-Fi 7, Windows 11 Pro). Implicaciones: el orquestador debe correr en Windows; el LLM local irá servido con llama.cpp (backend Vulkan o ROCm) aprovechando la memoria unificada; OmniVoice y faster-whisper deben validarse en esa GPU AMD (por confirmar: ROCm en Windows o CPU). Sonia debe presumir de correr 100 % en local en esa máquina, que estará a la vista en el stand.

@@ -17,11 +17,33 @@
 // La prioridad es esa: si Sonia baila mientras hay una imagen, manda el baile.
 // El plano abierto está apagado por defecto (en el stand la cámara no se mueve
 // por bailes ni reverencias); el de panel es un retroceso suave.
+//
+// Por encima de todos va el plano de salida (modo "Fuera"): mientras Sonia se
+// va caminando, está fuera y vuelve, la cámara se abre al plano de cuerpo
+// entero para que el paseo se vea (en el plano medio no se ven las piernas y
+// saldría de cuadro en un paso). Ese movimiento es un travelling con
+// SmoothDamp, que arranca y frena suave; el resto conserva su suavizado.
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Sonia
 {
+    /// <summary>Pose de cámara de un encuadre (posición, rotación y campo de visión vertical).</summary>
+    public struct ShotPose
+    {
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public float FieldOfView;
+
+        public ShotPose(Vector3 position, Quaternion rotation, float fieldOfView)
+        {
+            Position = position;
+            Rotation = rotation;
+            FieldOfView = fieldOfView;
+        }
+    }
+
     /// <summary>
     /// Aleja la cámara mientras Sonia hace una animación grande y la devuelve al
     /// plano medio al acabar. Sin cámara o sin coreógrafo no hace nada.
@@ -72,6 +94,28 @@ namespace Sonia
         [Tooltip("Campo de visión con imagen puesta. Cero o menos deja el mismo que el plano base.")]
         private float panelShotFieldOfView;
 
+        [Header("Salida y entrada caminando")]
+        [SerializeField]
+        [Tooltip("Presencia de Sonia (modo Fuera). Si está vacío se busca en este objeto o sus hijos.")]
+        private PresenceController presence;
+
+        [SerializeField]
+        [Tooltip("Abrir a cuerpo entero mientras Sonia sale caminando, está fuera y vuelve. Apagado: la cámara se queda en el plano medio y Sonia sale de cuadro en un par de pasos, sin que se vean las piernas.")]
+        private bool presenceShotEnabled = true;
+
+        [SerializeField]
+        [Tooltip("Posición de la cámara para la salida y la entrada. Cero: la del plano abierto (Wide Shot Position), que ya encuadra el cuerpo entero.")]
+        private Vector3 presenceShotPosition = Vector3.zero;
+
+        [SerializeField]
+        [Tooltip("Campo de visión para la salida y la entrada. Cero o menos: el del plano abierto o, si tampoco tiene, el del plano base.")]
+        private float presenceShotFieldOfView = 0f;
+
+        [SerializeField]
+        [Range(0.1f, 3f)]
+        [Tooltip("Tiempo de suavizado (SmoothDamp) del travelling al abrir y al cerrar el plano de salida. Unos 2,5 veces este valor hasta quedar quieta.")]
+        private float presenceSmoothTime = 0.75f;
+
         [Header("Movimiento")]
         [SerializeField]
         [Range(0.2f, 10f)]
@@ -83,7 +127,16 @@ namespace Sonia
         private float _baseFieldOfView;
         private bool _wide;
         private bool _panel;
+        private bool _presenceShot;
         private bool _ready;
+
+        // Travelling del plano de salida: dura hasta que la cámara llega quieta
+        // al encuadre que toque, aunque el plano de salida ya haya terminado.
+        private bool _dolly;
+        private Vector3 _dollyVelocity;
+        private float _fieldOfViewVelocity;
+        private bool _snapNextFrame;
+        private bool _presenceSearched;
 
         /// <summary>Cierto mientras la cámara está abriendo o ya abierta.</summary>
         public bool IsWideShot
@@ -95,6 +148,56 @@ namespace Sonia
         public bool IsPanelShot
         {
             get { return _panel; }
+        }
+
+        /// <summary>Cierto mientras manda el plano de salida y entrada caminando.</summary>
+        public bool IsPresenceShot
+        {
+            get { return _presenceShot; }
+        }
+
+        /// <summary>Cámara que mueve este componente.</summary>
+        public Camera TargetCamera
+        {
+            get { return targetCamera; }
+        }
+
+        /// <summary>Presencia de Sonia, para el plano de salida. La asigna SoniaBootstrap.</summary>
+        public PresenceController Presence
+        {
+            get { return presence; }
+            set { presence = value; }
+        }
+
+        /// <summary>
+        /// Añade las poses de todos los encuadres posibles (base, abierto, panel y
+        /// salida). Sirve para saber si un punto queda fuera de cuadro en
+        /// cualquiera de ellos, aunque la cámara esté a medio camino.
+        /// </summary>
+        public void CollectShotPoses(List<ShotPose> poses)
+        {
+            if (!_ready || poses == null)
+            {
+                return;
+            }
+
+            poses.Add(new ShotPose(_basePosition, _baseRotation, _baseFieldOfView));
+            poses.Add(new ShotPose(wideShotPosition, _baseRotation, WideFieldOfView()));
+            poses.Add(new ShotPose(PanelPosition(), _baseRotation, PanelFieldOfView()));
+            if (presenceShotEnabled)
+            {
+                poses.Add(new ShotPose(PresencePosition(), _baseRotation, PresenceFieldOfView()));
+            }
+        }
+
+        /// <summary>
+        /// En el siguiente frame la cámara salta al encuadre que toque, sin
+        /// travelling. Se usa cuando Sonia se aplica como "fuera" nada más
+        /// conectar: no tiene sentido ver la cámara abrirse sobre un escenario vacío.
+        /// </summary>
+        public void SnapNextFrame()
+        {
+            _snapNextFrame = true;
         }
 
         private void Awake()
@@ -140,6 +243,10 @@ namespace Sonia
         {
             _wide = false;
             _panel = false;
+            _presenceShot = false;
+            _dolly = false;
+            _dollyVelocity = Vector3.zero;
+            _fieldOfViewVelocity = 0f;
             if (!_ready)
             {
                 return;
@@ -157,36 +264,106 @@ namespace Sonia
                 return;
             }
 
-            _wide = NeedsWideShot();
-            _panel = panelShotEnabled && !_wide && imagePanel != null && imagePanel.IsVisible;
+            if (presence == null && !_presenceSearched)
+            {
+                // SoniaBootstrap lo añade por código en su Awake; puede no existir
+                // aún cuando corre el Awake de este componente.
+                _presenceSearched = true;
+                presence = GetComponentInChildren<PresenceController>(true);
+            }
+
+            _presenceShot = presenceShotEnabled && presence != null && presence.WantsWideShot;
+            _wide = !_presenceShot && NeedsWideShot();
+            _panel = panelShotEnabled && !_presenceShot && !_wide && imagePanel != null && imagePanel.IsVisible;
 
             Vector3 targetPosition = _basePosition;
             float targetFieldOfView = _baseFieldOfView;
 
-            if (_wide)
+            if (_presenceShot)
+            {
+                targetPosition = PresencePosition();
+                targetFieldOfView = PresenceFieldOfView();
+                _dolly = true;
+            }
+            else if (_wide)
             {
                 targetPosition = wideShotPosition;
-                if (wideShotFieldOfView > 0f)
-                {
-                    targetFieldOfView = wideShotFieldOfView;
-                }
+                targetFieldOfView = WideFieldOfView();
             }
             else if (_panel)
             {
-                targetPosition = panelShotOffset.sqrMagnitude > 0.0001f
-                    ? _basePosition + panelShotOffset
-                    : panelShotPosition;
-                if (panelShotFieldOfView > 0f)
-                {
-                    targetFieldOfView = panelShotFieldOfView;
-                }
+                targetPosition = PanelPosition();
+                targetFieldOfView = PanelFieldOfView();
             }
 
-            float step = 1f - Mathf.Exp(-Mathf.Max(0.2f, smoothing) * Time.deltaTime);
             Transform cameraTransform = targetCamera.transform;
+
+            if (_snapNextFrame)
+            {
+                _snapNextFrame = false;
+                _dolly = false;
+                _dollyVelocity = Vector3.zero;
+                _fieldOfViewVelocity = 0f;
+                cameraTransform.position = targetPosition;
+                cameraTransform.rotation = _baseRotation;
+                targetCamera.fieldOfView = targetFieldOfView;
+                return;
+            }
+
+            float dt = Time.deltaTime;
+            if (_dolly)
+            {
+                // Travelling: velocidad continua, arranque y frenada suaves.
+                float smoothTime = Mathf.Max(0.05f, presenceSmoothTime);
+                cameraTransform.position = Vector3.SmoothDamp(
+                    cameraTransform.position, targetPosition, ref _dollyVelocity, smoothTime, Mathf.Infinity, dt);
+                targetCamera.fieldOfView = Mathf.SmoothDamp(
+                    targetCamera.fieldOfView, targetFieldOfView, ref _fieldOfViewVelocity, smoothTime, Mathf.Infinity, dt);
+                cameraTransform.rotation = Quaternion.Slerp(
+                    cameraTransform.rotation, _baseRotation, 1f - Mathf.Exp(-4f * dt));
+
+                bool arrived = (cameraTransform.position - targetPosition).sqrMagnitude < 0.000004f
+                               && _dollyVelocity.sqrMagnitude < 0.0001f
+                               && Mathf.Abs(targetCamera.fieldOfView - targetFieldOfView) < 0.01f;
+                if (!_presenceShot && arrived)
+                {
+                    _dolly = false;
+                    _dollyVelocity = Vector3.zero;
+                    _fieldOfViewVelocity = 0f;
+                }
+
+                return;
+            }
+
+            float step = 1f - Mathf.Exp(-Mathf.Max(0.2f, smoothing) * dt);
             cameraTransform.position = Vector3.Lerp(cameraTransform.position, targetPosition, step);
             cameraTransform.rotation = Quaternion.Slerp(cameraTransform.rotation, _baseRotation, step);
             targetCamera.fieldOfView = Mathf.Lerp(targetCamera.fieldOfView, targetFieldOfView, step);
+        }
+
+        private float WideFieldOfView()
+        {
+            return wideShotFieldOfView > 0f ? wideShotFieldOfView : _baseFieldOfView;
+        }
+
+        private Vector3 PanelPosition()
+        {
+            return panelShotOffset.sqrMagnitude > 0.0001f ? _basePosition + panelShotOffset : panelShotPosition;
+        }
+
+        private float PanelFieldOfView()
+        {
+            return panelShotFieldOfView > 0f ? panelShotFieldOfView : _baseFieldOfView;
+        }
+
+        private Vector3 PresencePosition()
+        {
+            return presenceShotPosition.sqrMagnitude > 0.0001f ? presenceShotPosition : wideShotPosition;
+        }
+
+        private float PresenceFieldOfView()
+        {
+            return presenceShotFieldOfView > 0f ? presenceShotFieldOfView : WideFieldOfView();
         }
 
         /// <summary>

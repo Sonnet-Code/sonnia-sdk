@@ -54,6 +54,10 @@ namespace Sonia
         [Tooltip("Gesto de presentar una imagen (se congela señalando mientras la imagen está puesta).")]
         public AnimationClip present;
 
+        [Header("Caminar")]
+        [Tooltip("Ciclo de caminar en bucle, con root motion hacia delante. Lo usa la salida y la entrada del modo Fuera (PresenceController). Sin él, Sonia sale deslizándose.")]
+        public AnimationClip walk;
+
         [Header("Atención en el idle")]
         [Tooltip("Bailes, gestos de cuarta pared y gestos suaves que rompen el idle.")]
         public AttentionMotion[] attention = new AttentionMotion[0];

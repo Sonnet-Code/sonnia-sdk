@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 #: Un callback puede ser síncrono o asíncrono.
 MessageCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
+#: Oyente de los mensajes JSON que salen hacia Unity (el panel de control).
+OutgoingListener = Callable[[dict[str, Any]], None]
+
 #: Tamaño máximo de un mensaje entrante. El valor por defecto de ``websockets``
 #: (1 MiB) se queda corto para un ``camera_frame`` de Unity: un JPEG de una
 #: webcam 4K en base64 lo supera y el servidor cerraría la conexión con 1009.
@@ -54,6 +57,11 @@ class Hub:
         self._sample_rate = sample_rate
         self._clients: set[ServerConnection] = set()
         self._callbacks: dict[str, list[MessageCallback]] = {}
+        self._listeners: list[OutgoingListener] = []
+        #: Mensajes que se repiten a cada cliente nuevo justo después de
+        #: ``hello`` (presencia, volumen): el estado que Unity debe tener
+        #: aunque se conecte o se reconecte más tarde.
+        self._sticky: dict[str, dict[str, Any]] = {}
         self._server: Server | None = None
         #: Cierres en curso de clientes descartados (referencia fuerte).
         self._closing: set[asyncio.Task[None]] = set()
@@ -136,10 +144,27 @@ class Hub:
         """
         self._callbacks.setdefault(type, []).append(callback)
 
+    def add_listener(self, listener: OutgoingListener) -> None:
+        """Registra un oyente de todo lo que se manda a Unity (síncrono, no debe bloquear)."""
+        self._listeners.append(listener)
+
+    async def set_sticky(self, key: str, msg: dict[str, Any]) -> None:
+        """Fija un mensaje para los clientes que se conecten y lo difunde ya."""
+        self._sticky[key] = msg
+        await self.broadcast_json(msg)
+
+    def sticky(self, key: str) -> dict[str, Any] | None:
+        return self._sticky.get(key)
+
     # -- envío --------------------------------------------------------------
 
     async def broadcast_json(self, msg: dict[str, Any]) -> None:
         """Envía un mensaje JSON a todos los clientes. Nunca lanza."""
+        for listener in self._listeners:
+            try:
+                listener(msg)
+            except Exception:  # noqa: BLE001 - un oyente roto no tumba la demo
+                logger.exception("Error en un oyente del hub")
         await self._broadcast(p.dumps(msg))
 
     async def broadcast_bytes(self, data: bytes) -> None:
@@ -208,6 +233,8 @@ class Hub:
             # Unity puede reconectar en mitad de una frase: no reenviamos nada,
             # solo el saludo con el formato de audio.
             await connection.send(p.dumps(p.msg_hello(self._sample_rate)))
+            for msg in list(self._sticky.values()):
+                await connection.send(p.dumps(msg))
             async for raw in connection:
                 await self._dispatch(raw)
         except Exception as exc:  # noqa: BLE001 - cierres bruscos son normales

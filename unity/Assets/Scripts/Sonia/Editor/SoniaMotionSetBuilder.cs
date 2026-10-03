@@ -191,6 +191,7 @@ namespace Sonia.EditorTools
             set.talking = LoadClips(SoniaAnimations.TalkingClips, missing);
             set.greeting = LoadClip(SoniaAnimations.GreetingClip, missing);
             set.present = LoadClip(SoniaAnimations.PresentClip, missing);
+            set.walk = LoadClip(SoniaAnimations.WalkClip, missing);
 
             List<AttentionMotion> attention = new List<AttentionMotion>();
             for (int i = 0; i < SoniaAnimations.AttentionClips.Length; i++)
@@ -212,7 +213,7 @@ namespace Sonia.EditorTools
                 "[Sonia] Set de animaciones en " + SoniaAnimations.MotionSetPath + ": "
                 + set.idleVariations.Length + " variaciones de reposo, " + set.talking.Length
                 + " de habla, " + set.nods.Length + " asentimientos, " + set.attention.Length
-                + " de atención"
+                + " de atención, caminar " + (set.walk != null ? set.walk.name : "(falta)")
                 + (missing.Count > 0 ? ". Sin encontrar: " + string.Join(", ", missing.ToArray()) : ".") ,
                 set);
 

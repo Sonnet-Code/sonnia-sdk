@@ -93,7 +93,15 @@ namespace Sonia
 
         /// <summary>Retirar el panel de imágenes.</summary>
         public event Action<HideImageMessage> OnHideImage;
+
+        /// <summary>Gesto de atención pedido por el orquestador (baile, cuarta pared, suave, saludo).</summary>
         public event Action<AttentionMessage> OnAttention;
+
+        /// <summary>Sonia se va de la pantalla (modo "Fuera") o vuelve.</summary>
+        public event Action<PresenceMessage> OnPresence;
+
+        /// <summary>Volumen de la voz.</summary>
+        public event Action<SetVolumeMessage> OnSetVolume;
 
         /// <summary>Error informado por el orquestador.</summary>
         public event Action<ErrorMessage> OnError;
@@ -549,6 +557,10 @@ namespace Sonia
                     return Protocol.Deserialize<HideImageMessage>(payload);
                 case MessageTypes.Attention:
                     return Protocol.Deserialize<AttentionMessage>(payload);
+                case MessageTypes.Presence:
+                    return Protocol.Deserialize<PresenceMessage>(payload);
+                case MessageTypes.SetVolume:
+                    return Protocol.Deserialize<SetVolumeMessage>(payload);
                 case MessageTypes.Error:
                     return Protocol.Deserialize<ErrorMessage>(payload);
                 case MessageTypes.RequestFrame:
@@ -688,6 +700,20 @@ namespace Sonia
             if (attention != null)
             {
                 Raise(OnAttention, attention);
+                return;
+            }
+
+            PresenceMessage presence = message as PresenceMessage;
+            if (presence != null)
+            {
+                Raise(OnPresence, presence);
+                return;
+            }
+
+            SetVolumeMessage setVolume = message as SetVolumeMessage;
+            if (setVolume != null)
+            {
+                Raise(OnSetVolume, setVolume);
                 return;
             }
 

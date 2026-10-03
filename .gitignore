@@ -3,6 +3,7 @@ kimi.txt
 
 # Modelos y capturas
 models/
+cache/
 debug_frames/
 *.pt
 *.onnx

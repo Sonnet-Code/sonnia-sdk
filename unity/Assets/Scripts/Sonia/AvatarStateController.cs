@@ -145,10 +145,43 @@ namespace Sonia
         private float _noiseSeed;
         private float _nodLevel;
 
+        // Mirada dirigida desde fuera (salida y entrada caminando: mira hacia
+        // dónde va). Manda sobre el visitante, el panel y el punto de pensar.
+        private bool _lookOverride;
+        private Vector3 _lookOverridePosition;
+        private float _lookOverrideWeight = -1f;
+
         /// <summary>Estado actual del avatar.</summary>
         public AvatarState State
         {
             get { return _state; }
+        }
+
+        /// <summary>Cierto mientras otro componente decide hacia dónde mira.</summary>
+        public bool HasLookOverride
+        {
+            get { return _lookOverride; }
+        }
+
+        /// <summary>
+        /// Mira a un punto del mundo en lugar de al visitante. Cabeza y ojos
+        /// (EyeGazeController lee el mismo punto) van hacia él con su suavizado
+        /// de siempre, así que un cambio de punto se lee como un giro natural.
+        /// Se llama cada frame mientras dure; <paramref name="weight"/> negativo
+        /// deja el peso normal de la mirada.
+        /// </summary>
+        public void SetLookOverride(Vector3 worldPosition, float weight = -1f)
+        {
+            _lookOverride = true;
+            _lookOverridePosition = worldPosition;
+            _lookOverrideWeight = weight;
+        }
+
+        /// <summary>Vuelve a mirar a quien toque según el estado (visitante, panel, pensar).</summary>
+        public void ClearLookOverride()
+        {
+            _lookOverride = false;
+            _lookOverrideWeight = -1f;
         }
 
         private void Awake()
@@ -277,6 +310,10 @@ namespace Sonia
 
             bool wide = choreographer != null && choreographer.IsWideShot;
             float targetWeight = wide ? wideShotLookWeight : lookWeight;
+            if (_lookOverride && _lookOverrideWeight >= 0f)
+            {
+                targetWeight = Mathf.Clamp01(_lookOverrideWeight);
+            }
             _currentWeight = Mathf.Lerp(_currentWeight, targetWeight, 1f - Mathf.Exp(-3f * deltaTime));
 
             Quaternion desiredOffset = Quaternion.identity;
@@ -314,6 +351,12 @@ namespace Sonia
         /// <summary>Punto del mundo al que mira ahora mismo (visitante, panel o el punto de pensar).</summary>
         public bool TryGetLookPosition(out Vector3 position)
         {
+            if (_lookOverride)
+            {
+                position = _lookOverridePosition;
+                return true;
+            }
+
             // Un vistazo breve al panel cuando aparece la imagen; después la
             // mirada vuelve al visitante, que es lo natural en una conversación.
             bool glancing = imageGlanceSeconds <= 0f || Time.time - _imageShownAt < imageGlanceSeconds;

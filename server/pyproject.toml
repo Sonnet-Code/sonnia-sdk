@@ -28,8 +28,10 @@ omnivoice = ["omnivoice>=0.2", "soundfile>=0.12"]
 camera = ["opencv-python>=4.10"]
 # Servidor MCP local que expone las mismas acciones del modelo.
 mcp = ["mcp>=1.9", "uvicorn>=0.30"]
+# Panel de control web para el personal del stand (docs/panel.md).
+panel = ["starlette>=0.40", "uvicorn>=0.30", "pyjwt[crypto]>=2.8"]
 # Todo lo necesario para la demo completa.
-all = ["sonia[audio,stt,omnivoice,camera,mcp]"]
+all = ["sonia[audio,stt,omnivoice,camera,mcp,panel]"]
 
 [project.scripts]
 sonia = "sonia.cli:main"

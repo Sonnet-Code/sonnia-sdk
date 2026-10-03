@@ -124,6 +124,21 @@ namespace Sonia
                 }
             });
 
+            // Modo Fuera sin orquestador: sale caminando y deja el letrero, o vuelve.
+            SoniaUiKit.MakeButton(states.transform, "Salir/Volver", () =>
+            {
+                PresenceController presence = GetComponentInParent<PresenceController>();
+                if (presence == null)
+                {
+                    presence = FindAnyObjectByType<PresenceController>();
+                }
+
+                if (presence != null)
+                {
+                    presence.TogglePresence();
+                }
+            });
+
             // Lista con scroll
             GameObject scrollGo = new GameObject("Scroll", typeof(RectTransform));
             scrollGo.transform.SetParent(panel.transform, false);

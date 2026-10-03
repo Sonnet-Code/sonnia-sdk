@@ -144,6 +144,8 @@ Con Unity en Play y conectado a `ws://127.0.0.1:8765`, el texto del `ws_probe` (
 
 ## Hoja de ruta
 
+Lo que queda pendiente, con detalle y por orden de urgencia, está en [`ROADMAP.md`](ROADMAP.md).
+
 - [x] Orquestador: máquina de estados que conecta VAD, STT, LLM y TTS en streaming (`sonia/orchestrator.py`, `sonia run`, `sonia chat`, `sonia check`)
 - [x] Servidor WebSocket con protocolo de eventos hacia Unity
 - [x] Interrupción: Sonia se calla cuando el usuario empieza a hablar (barge-in por VAD e `interrupt` desde Unity)
@@ -155,6 +157,8 @@ Con Unity en Play y conectado a `ws://127.0.0.1:8765`, el texto del `ws_probe` (
 - [x] Voz provisional con la API Live de Gemini mientras no hay GPU (ADR 006)
 - [x] Motor voz a voz con GPT-Live de OpenAI, acciones por delegación en un backend Responses y ojos por notas de la cámara (ADR 007)
 - [ ] Prueba real de GPT-Live con clave: voz, `text_input`, acciones, números del stand y Unity
+- [x] Panel de control web para el personal del stand (`docs/panel.md`): modos Conversando, Solo saludos y Fuera, avisos, imágenes, volumen, salud en lenguaje llano
+- [ ] Panel publicado en `sonia.sonnetcode.com` con Cloudflare Access (túnel y DNS hechos; falta la aplicación de Access)
 - [x] Scripts de Unity: cliente WebSocket, audio en streaming, lip-sync, estados, panel de imágenes, webcam, HUD, escena base 9:16
 - [x] Modo kiosco para el stand (`scripts/kiosk.sh`) y guía de montaje (`docs/stand.md`)
 - [ ] Integración de OmniVoice con el modelo real (módulo listo; falta la GPU)

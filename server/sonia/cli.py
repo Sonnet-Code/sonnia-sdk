@@ -43,10 +43,13 @@ from sonia.live.audio import silence_blocks
 from sonia.live.engine import LiveEngine
 from sonia.live.oneshot import probe_session, speak_text
 from sonia.live.vision import VisionNarrator
+from sonia.live.voicecache import VoiceCache
 from sonia.llm.client import LLMClient
 from sonia.mcp.server import MCPServer
 from sonia.mcp.server import is_available as mcp_available
 from sonia.orchestrator import Orchestrator
+from sonia.panel.control import StandControl
+from sonia.panel.logs import LogBuffer
 from sonia.persona import DEFAULT_KNOWLEDGE_DIR
 from sonia.stt import build_stt
 from sonia.stt.mock import MockSTT
@@ -503,11 +506,72 @@ async def _live_mic_loop(settings: Settings, engine: LiveEngine) -> None:
         await _feed_silence(engine, settings, MIC_RETRY_DELAY_S)
 
 
+@dataclass(slots=True)
+class _Panel:
+    control: StandControl
+    server: Any
+    logs: LogBuffer
+
+
+async def _start_panel(
+    settings: Settings,
+    hub: Hub,
+    registry: ActionRegistry,
+    *,
+    engine: LiveEngine | None = None,
+    orchestrator: Orchestrator | None = None,
+    voice_cache: VoiceCache | None = None,
+) -> _Panel | None:
+    """Arranca el panel de control (``docs/panel.md``). Antes de ``engine.run()``.
+
+    El control se arranca aunque falte el servidor web: aplica el modo
+    guardado (por ejemplo, seguir "Fuera" tras un reinicio sin gastar).
+    """
+    if not settings.panel.enabled:
+        return None
+    from sonia.panel.server import PanelServer
+    from sonia.panel.server import is_available as panel_available
+
+    logs = LogBuffer()
+    logging.getLogger().addHandler(logs)
+    control = StandControl(
+        settings,
+        hub=hub,
+        registry=registry,
+        engine=engine,
+        orchestrator=orchestrator,
+        voice_cache=voice_cache,
+    )
+    await control.start()
+    server: Any = None
+    if panel_available():
+        server = PanelServer(settings.panel, control, hub, logs)
+        try:
+            await server.start()
+        except Exception as exc:
+            logger.warning("No se pudo arrancar el panel de control: %s", exc)
+            server = None
+    else:
+        logger.warning("Falta el extra 'panel' (uv sync --extra panel): panel de control apagado")
+    return _Panel(control, server, logs)
+
+
+async def _stop_panel(panel: _Panel | None) -> None:
+    if panel is None:
+        return
+    if panel.server is not None:
+        with contextlib.suppress(Exception):
+            await panel.server.stop()
+    await panel.control.stop()
+    logging.getLogger().removeHandler(panel.logs)
+
+
 async def cmd_run_live(settings: Settings, *, use_mic: bool = True) -> int:
     if _missing_live_key(settings):
         return 1
     components = build_live_components(settings)
     _log_live_summary(settings, components)
+    voice_cache = VoiceCache(settings.panel.voice_cache_dir, settings.live)
     engine = LiveEngine(
         settings,
         hub=components.hub,
@@ -515,6 +579,7 @@ async def cmd_run_live(settings: Settings, *, use_mic: bool = True) -> int:
         camera=components.camera,
         vision_policy=components.policy,
         narrator=components.narrator,
+        voice_cache=voice_cache,
     )
 
     mcp: MCPServer | None = None
@@ -525,6 +590,7 @@ async def cmd_run_live(settings: Settings, *, use_mic: bool = True) -> int:
             logger.warning("MCP_ENABLED=true pero el extra 'mcp' no está instalado")
 
     tasks: list[asyncio.Task[None]] = []
+    panel: _Panel | None = None
     try:
         async with components.hub:
             if mcp is not None:
@@ -533,6 +599,13 @@ async def cmd_run_live(settings: Settings, *, use_mic: bool = True) -> int:
                 except Exception:
                     logger.exception("No se pudo arrancar el servidor MCP; se sigue sin él")
                     mcp = None
+            panel = await _start_panel(
+                settings,
+                components.hub,
+                components.registry,
+                engine=engine,
+                voice_cache=voice_cache,
+            )
             tasks.append(asyncio.create_task(engine.run(), name="live-engine"))
             source = (
                 _live_mic_loop(settings, engine)
@@ -546,6 +619,7 @@ async def cmd_run_live(settings: Settings, *, use_mic: bool = True) -> int:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        await _stop_panel(panel)
         if mcp is not None:
             await mcp.stop()
         await components.close()
@@ -669,6 +743,7 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
             logger.warning("MCP_ENABLED=true pero el extra 'mcp' no está instalado")
 
     tasks: list[asyncio.Task[None]] = []
+    panel: _Panel | None = None
     try:
         async with components.hub:
             await asyncio.gather(
@@ -682,6 +757,9 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
                 except Exception:
                     logger.exception("No se pudo arrancar el servidor MCP; se sigue sin él")
                     mcp = None
+            panel = await _start_panel(
+                settings, components.hub, components.registry, orchestrator=orchestrator
+            )
 
             tasks.append(asyncio.create_task(orchestrator.run(), name="orchestrator"))
             if detector is not None:
@@ -696,6 +774,7 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        await _stop_panel(panel)
         if mcp is not None:
             await mcp.stop()
         await components.close()
