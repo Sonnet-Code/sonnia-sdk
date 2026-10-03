@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Comprobación completa antes de abrir el stand: valida lo que ya cubre
-# `sonia check` (audio, VAD, STT, cámara, LLM y sus capacidades, TTS y
-# galería) y además cosas que están fuera del proceso del orquestador: que
-# el endpoint del LLM responde de verdad, que la galería tiene contenido y que
-# el puerto del WebSocket está libre para que Sonia pueda arrancar.
+# `sonia check` (con GPT-Live: audio, cámara, una sesión de GPT-Live, modelo
+# de visión y galería; con el motor pipeline: además VAD, STT, LLM y TTS) y
+# además cosas que están fuera del proceso del orquestador: que el endpoint
+# del LLM responde de verdad, que la galería tiene contenido y que el puerto
+# del WebSocket está libre para que Sonia pueda arrancar.
 #
 # Uso: scripts/check_stand.sh
 #
@@ -25,7 +26,7 @@ ok()   { echo "  OK    - $1"; }
 fail() { echo "  FALLO - $1"; FAILURES=$((FAILURES + 1)); }
 warn() { echo "  AVISO - $1"; }
 
-echo "== 1/4: sonia check (audio, cámara, LLM, TTS, galería) =="
+echo "== 1/4: sonia check (audio, cámara, voz, modelo, galería) =="
 if ( cd "$SERVER_DIR" && uv run --no-sync sonia check ); then
   ok "uv run sonia check terminó sin errores"
 else
@@ -46,8 +47,15 @@ fi
 echo
 
 echo "== 3/4: endpoint del LLM (\$LLM_BASE_URL/models) =="
+# Con GPT-Live (VOICE_ENGINE=live, el valor por defecto) LLM_* solo describe
+# la cámara: si falla, Sonia habla igual pero sin ojos, así que es un aviso.
+if [[ "${VOICE_ENGINE:-live}" == "live" ]]; then
+  llm_fail() { warn "$1 (con GPT-Live solo afecta a la cámara)"; }
+else
+  llm_fail() { fail "$1"; }
+fi
 if [[ -z "${LLM_BASE_URL:-}" ]]; then
-  fail "LLM_BASE_URL no está definida"
+  llm_fail "LLM_BASE_URL no está definida"
 else
   # Se usa LLM_API_KEY para la petición pero su valor nunca se imprime.
   # curl ya escribe "000" con -w si no logra conectar, así que no hace falta
@@ -59,7 +67,7 @@ else
   if [[ "$HTTP_CODE" == "200" ]]; then
     ok "El endpoint respondió en ${LLM_BASE_URL%/}/models (200)"
   else
-    fail "El endpoint en ${LLM_BASE_URL%/}/models no respondió 200 (código: $HTTP_CODE). ¿Está el servidor del LLM levantado (scripts/run_llm_server.sh)?"
+    llm_fail "El endpoint en ${LLM_BASE_URL%/}/models no respondió 200 (código: $HTTP_CODE). ¿Está el servidor del LLM levantado (scripts/run_llm_server.sh)?"
   fi
 fi
 echo

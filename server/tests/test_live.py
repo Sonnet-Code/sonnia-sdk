@@ -87,7 +87,9 @@ class FakeConn:
             {"type": "session.input_transcript.delta", "delta": text, "start_ms": 0, "end_ms": 1}
         )
 
-    async def response_event(self, nested: dict[str, Any], delegation_id: str = "deleg_1") -> None:
+    async def response_event(
+        self, nested: dict[str, Any], delegation_id: str | None = "deleg_1"
+    ) -> None:
         await self.send(
             {
                 "type": "response.event",
@@ -120,9 +122,18 @@ class FakeConn:
 class FakeLiveServer:
     """Imita ``/v1/live/sessions``: arranque, comandos y cierre ordenado."""
 
-    def __init__(self, *, reject: bool = False, drop_after_start: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        reject: bool = False,
+        drop_after_start: bool = False,
+        close_after_start: str | None = None,
+    ) -> None:
         self.reject = reject
         self.drop_after_start = drop_after_start
+        #: Si se define, el servidor cierra la sesión de forma ordenada con
+        #: este motivo nada más arrancarla (``expired``, ``content``...).
+        self.close_after_start = close_after_start
         self.conns: list[FakeConn] = []
         self.attempts = 0
         self._new_conn = asyncio.Event()
@@ -158,6 +169,20 @@ class FakeLiveServer:
         self._new_conn.set()
         if self.drop_after_start:
             await ws.close(1011, "caída")
+            return
+        if self.close_after_start is not None:
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "session.closed",
+                        "event_id": "ec",
+                        "reason": self.close_after_start,
+                        "session": session,
+                        "usage": {"seconds": 0},
+                    }
+                )
+            )
+            await ws.close()
             return
         with contextlib.suppress(Exception):
             async for raw in ws:
@@ -420,6 +445,17 @@ def test_el_stack_de_live_dice_que_la_voz_va_en_la_nube(tmp_path: Path) -> None:
     assert "en la nube" in text
     assert "No digas que corres en local" in text
     assert "no puedes ver a nadie" in text
+
+
+def test_la_tasa_de_muestreo_se_lee_del_entorno(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Desde .env llega como texto: no puede tumbar la carga de la configuración.
+    monkeypatch.setenv("LIVE_SAMPLE_RATE", "16000")
+    assert LiveSettings().sample_rate == 16_000
+    monkeypatch.setenv("LIVE_SAMPLE_RATE", "24000")
+    assert Settings(_env_file=None).live.sample_rate == 24_000  # type: ignore[call-arg]
+    monkeypatch.setenv("LIVE_SAMPLE_RATE", "44100")
+    with pytest.raises(ValueError, match="16000 o 24000"):
+        LiveSettings()
 
 
 def test_la_clave_sale_de_openai_api_key_si_no_hay_live(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -856,3 +892,88 @@ def test_narrador_recorta_y_normaliza(monkeypatch: pytest.MonkeyPatch) -> None:
     llm = FakeVisionLLM("  Dos   personas\n con gorras. ")
     text = asyncio.run(VisionNarrator(llm).describe(Frame(data=b"x")))
     assert text == "Dos personas con gorras."
+
+
+# ---------------------------------------------------------------------------
+# Casos que encontró la revisión
+# ---------------------------------------------------------------------------
+
+
+def call_item(name: str = "hide_image", call_id: str = "call_1") -> dict[str, Any]:
+    return {
+        "type": "response.output_item.done",
+        "item": {"type": "function_call", "call_id": call_id, "name": name, "arguments": "{}"},
+    }
+
+
+async def test_un_evento_tardio_no_resucita_una_tarea_cerrada(tmp_path: Path) -> None:
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.response_event({"type": "response.created"})
+        await conn.response_event({"type": "response.output_text.delta", "delta": "Listo."})
+        await conn.response_event({"type": "response.completed"})
+        await wait_until(lambda: not rig.engine._delegations)
+        # Eventos posteriores de la misma tarea, con su id o sin él.
+        await conn.response_event({"type": "response.output_text.delta", "delta": "x"})
+        await conn.response_event({"type": "response.output_text.delta", "delta": "x"}, None)
+        await asyncio.sleep(0.1)
+        assert not rig.engine._delegations
+
+
+async def test_un_error_a_un_comando_del_backend_cierra_la_tarea(tmp_path: Path) -> None:
+    server = FakeLiveServer()
+
+    async def reject_items(conn: FakeConn, message: dict[str, Any]) -> None:
+        if message["type"] == "response.item.create":
+            await conn.send(
+                {
+                    "type": "error",
+                    "event_id": "err",
+                    "error": {
+                        "type": "invalid_request_error",
+                        "code": "invalid_item",
+                        "message": "no",
+                        "client_event_id": message["event_id"],
+                    },
+                }
+            )
+
+    server.on_message = reject_items
+    async with make_rig(tmp_path, server=server) as rig:
+        conn = await rig.conn()
+        await conn.response_event(call_item())
+        await conn.wait_type("response.item.create")
+        await wait_until(lambda: not rig.engine._delegations)
+        assert not rig.engine._command_owner
+
+
+async def test_una_accion_sin_id_de_delegacion_tambien_continua(tmp_path: Path) -> None:
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.response_event(call_item(), None)
+        await conn.response_event({"type": "response.completed"}, None)
+        await conn.wait_type("response.create")
+
+
+async def test_tras_un_interrupt_no_se_espera_el_audio_que_unity_ya_tiro(tmp_path: Path) -> None:
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.audio(pcm(RATE * 10))  # 10 s de voz de golpe
+        await rig.rec.wait_type("speech_start")
+        await rig.unity({"type": "interrupt"})
+        await rig.rec.wait_type("stop_speaking")
+        await asyncio.sleep(0.25)
+        await conn.audio(pcm(2_400))  # 0,1 s
+        await rig.rec.wait_type("speech_end")
+        # Sin playback_done de Unity, la espera es la de 0,1 s más el margen, no 10 s.
+        await wait_until(lambda: not rig.engine._audible, limit=2.5)
+
+
+async def test_un_cierre_ordenado_del_servidor_no_reconecta_sin_freno(tmp_path: Path) -> None:
+    server = FakeLiveServer(close_after_start="expired")
+    async with make_rig(
+        tmp_path, server=server, reconnect_min_seconds=0.3, reconnect_max_seconds=0.3
+    ):
+        await server.wait_conn(1)
+        await asyncio.sleep(0.8)
+        assert server.attempts <= 4

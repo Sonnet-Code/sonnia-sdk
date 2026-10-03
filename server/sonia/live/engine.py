@@ -212,6 +212,9 @@ class LiveEngine:
         # Backend y sesión.
         self._delegations: dict[str, _Delegation] = {}
         self._last_delegation_id: str | None = None
+        #: ``event_id`` de los comandos enviados al backend → delegación, para
+        #: cerrar la tarea si la API responde a uno de ellos con ``error``.
+        self._command_owner: dict[str, str] = {}
         self._session_conversation = False
         self._session_started_at = 0.0
         self._context_full = False
@@ -358,18 +361,21 @@ class LiveEngine:
         try:
             while True:
                 started = time.monotonic()
-                clean = False
+                renewed = False
                 try:
-                    clean = await self._run_session()
+                    renewed = await self._run_session()
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
                     _log_stage_failure("Sesión de GPT-Live caída: %s", exc)
                     await self._hub.broadcast_json(p.msg_error(f"GPT-Live: {exc}"))
-                if clean or time.monotonic() - started > HEALTHY_SESSION_S:
+                if renewed or time.monotonic() - started > HEALTHY_SESSION_S:
                     delay = live.reconnect_min_seconds
-                if clean:
+                if renewed:
                     continue
+                # Cualquier otro final (caducidad, filtro de contenido, red, un
+                # servidor que cierra nada más abrir) espera antes de reconectar:
+                # abrir sesiones sin freno durante horas cuesta dinero.
                 logger.info("Se reintenta conectar con GPT-Live en %.0f s", delay)
                 await asyncio.sleep(delay)
                 delay = min(max(delay * 2, live.reconnect_min_seconds), live.reconnect_max_seconds)
@@ -379,7 +385,7 @@ class LiveEngine:
             await self._shutdown()
 
     async def _run_session(self) -> bool:
-        """Una sesión de principio a fin. Devuelve si terminó con un cierre limpio."""
+        """Una sesión de principio a fin. Devuelve si terminó porque el motor la renovó."""
         client = LiveClient(self._live, connect=self._connect)
         config = build_session_config(
             self._settings,
@@ -409,11 +415,10 @@ class LiveEngine:
                     raise
                 except Exception:
                     logger.exception("Error procesando el evento %s de GPT-Live", event.get("type"))
-            reason = client.close_reason or "conexión cerrada"
-            logger.info("La sesión de GPT-Live terminó (%s)", reason)
-            # Un ``session.closed`` deja el motivo sin la palabra "cierre";
-            # un corte del transporte la lleva ("cierre 1006: ...").
-            return not reason.startswith("cierre") and reason != "conexión cerrada"
+            logger.info(
+                "La sesión de GPT-Live terminó (%s)", client.close_reason or "conexión cerrada"
+            )
+            return self._restarting
         finally:
             self._client = None
             # Si el motor se está apagando no se espera la respuesta del cierre.
@@ -429,6 +434,7 @@ class LiveEngine:
         self._lead_warned = False
         self._delegations.clear()
         self._last_delegation_id = None
+        self._command_owner.clear()
 
     async def _end_session(self) -> None:
         """Deja a Unity en un estado coherente cuando cae la sesión."""
@@ -437,6 +443,7 @@ class LiveEngine:
                 await self._close_segment(time.monotonic())
         self._pending_assistant = []
         self._discard_audio = False
+        self._playback_end_at = min(self._playback_end_at, time.monotonic())
         self._delegations.clear()
         self._user_turn_open = False
         self._user_parts = []
@@ -470,6 +477,7 @@ class LiveEngine:
                 self._on_usage(event)
             case "error":
                 logger.warning("GPT-Live informó de un error: %s", describe_error(event))
+                self._on_command_error(event)
             case "session.closed":
                 logger.info("GPT-Live cerró la sesión (%s)", event.get("reason"))
             case _:
@@ -615,15 +623,25 @@ class LiveEngine:
         nested = event.get("event")
         if not isinstance(nested, dict):
             return
-        delegation_id = event.get("delegation_id") or self._last_delegation_id
-        delegation: _Delegation | None = None
-        if isinstance(delegation_id, str):
-            delegation = self._delegations.get(delegation_id)
-            if delegation is None:
-                # El ``session.delegation.created`` pudo perderse en una reconexión.
-                delegation = _Delegation(delegation_id, time.monotonic())
-                self._delegations[delegation_id] = delegation
         kind = nested.get("type")
+        item = nested.get("item")
+        is_call = (
+            kind == "response.output_item.done"
+            and isinstance(item, dict)
+            and item.get("type") == "function_call"
+        )
+        delegation_id = event.get("delegation_id") or self._last_delegation_id
+        delegation = (
+            self._delegations.get(delegation_id) if isinstance(delegation_id, str) else None
+        )
+        if delegation is None and (kind == "response.created" or is_call):
+            # Trabajo nuevo sin ``session.delegation.created`` (perdido o sin id
+            # correlacionable): se le da una delegación para poder continuarlo.
+            # Cualquier otro evento tardío de una tarea ya cerrada se ignora.
+            new_id = delegation_id if isinstance(delegation_id, str) else "sin-id"
+            delegation = _Delegation(new_id, time.monotonic())
+            self._delegations[new_id] = delegation
+            self._last_delegation_id = new_id
 
         if kind == "response.created" and delegation is not None:
             delegation.response_done = False
@@ -632,10 +650,8 @@ class LiveEngine:
             delta = nested.get("delta")
             if isinstance(delta, str):
                 delegation.text.append(delta)
-        elif kind == "response.output_item.done":
-            item = nested.get("item")
-            if isinstance(item, dict) and item.get("type") == "function_call":
-                self._start_call(delegation, item)
+        elif is_call and isinstance(item, dict):
+            self._start_call(delegation, item)
         elif kind in _TERMINAL_RESPONSE_EVENTS:
             if kind != "response.completed":
                 logger.warning(
@@ -682,11 +698,12 @@ class LiveEngine:
             if client is None or client is not self._client:
                 # La sesión que pidió la acción ya no existe: el resultado no va a otra.
                 return
-            await client.create_item(
+            sent = await client.create_item(
                 {"type": "function_call_output", "call_id": call_id, "output": result.text}
             )
+            self._own_command(sent, delegation)
             if result.image is not None:
-                await client.create_item(
+                sent = await client.create_item(
                     {
                         "type": "message",
                         "role": "user",
@@ -700,6 +717,7 @@ class LiveEngine:
                         ],
                     }
                 )
+                self._own_command(sent, delegation)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -750,10 +768,35 @@ class LiveEngine:
         delegation.response_done = False
         client = self._client
         if client is not None:
-            await client.create_response()
+            self._own_command(await client.create_response(), delegation)
+
+    def _own_command(self, event_id: str, delegation: _Delegation | None) -> None:
+        if delegation is not None:
+            self._command_owner[event_id] = delegation.id
+
+    def _on_command_error(self, event: dict[str, Any]) -> None:
+        """Si el error responde a un comando de una tarea delegada, se da por perdida.
+
+        Sin esto la tarea esperaría un evento final que nunca llega y el
+        avatar se quedaría en ``thinking`` hasta ``DELEGATION_TIMEOUT_S``.
+        """
+        error = event.get("error")
+        client_event_id = error.get("client_event_id") if isinstance(error, dict) else None
+        client_event_id = client_event_id or event.get("client_event_id")
+        if not isinstance(client_event_id, str):
+            return
+        owner = self._command_owner.pop(client_event_id, None)
+        delegation = self._delegations.get(owner) if owner is not None else None
+        if delegation is not None:
+            logger.warning("El backend rechazó un comando de la tarea %s; se cierra", owner)
+            self._finish_delegation(delegation)
 
     def _finish_delegation(self, delegation: _Delegation) -> None:
         self._delegations.pop(delegation.id, None)
+        if self._last_delegation_id == delegation.id:
+            self._last_delegation_id = None
+        for event_id in [k for k, v in self._command_owner.items() if v == delegation.id]:
+            del self._command_owner[event_id]
         text = " ".join("".join(delegation.text).split())
         logger.info(
             "Backend (%s, %.1f s): %s",
@@ -793,6 +836,7 @@ class LiveEngine:
         # Unity vació su cola: no hay nada pendiente de reproducir.
         self._playback_done_id = max(self._playback_done_id, self._utterance_counter)
         self._last_closed_deadline = 0.0
+        self._playback_end_at = time.monotonic()
         self._pending_assistant = []
         client = self._client
         if was_audible and client is not None:
@@ -921,13 +965,18 @@ class LiveEngine:
             return
         if bit.attention:
             await self._hub.broadcast_json(p.msg_attention(bit.attention))
+        self._ambient_expected_until = now + AMBIENT_WAIT_S
+        # En segundo plano: el ciclo de 50 ms no puede quedarse esperando a la red.
+        self._spawn(self._request_showcase(client, bit.text), "showcase")
+
+    async def _request_showcase(self, client: LiveClient, text: str) -> None:
         try:
-            await client.append_commentary(SHOWCASE_TEMPLATE.format(text=bit.text))
+            await client.append_commentary(SHOWCASE_TEMPLATE.format(text=text))
         except Exception as exc:  # noqa: BLE001
             logger.debug("No se pudo pedir el número del stand: %s", exc)
+            self._ambient_expected_until = 0.0
             return
-        self._ambient_expected_until = now + AMBIENT_WAIT_S
-        logger.info("Número del stand pedido: %s", bit.text)
+        logger.info("Número del stand pedido: %s", text)
 
     # -- cámara -------------------------------------------------------------
 

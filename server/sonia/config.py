@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -183,8 +183,10 @@ class LiveSettings(BaseSettings):
     model: str = "gpt-live-1"
     #: Voz integrada (marin, cedar, coral, sage, shimmer...). Fija durante la sesión.
     voice: str = "marin"
-    #: Tasa del PCM en los dos sentidos. La API acepta 16000 o 24000.
-    sample_rate: Literal[16000, 24000] = 24_000
+    #: Tasa del PCM en los dos sentidos. La API acepta 16000 o 24000. Es un
+    #: ``int`` validado y no un ``Literal``: desde ``.env`` llega como texto y
+    #: pydantic no convierte texto a un ``Literal`` de enteros.
+    sample_rate: int = 24_000
     #: Modelo de la API Responses que ejecuta las tareas delegadas y las acciones.
     backend_model: str = "gpt-6-luna"
     #: ``reasoning.effort`` del backend (vacío = el del modelo).
@@ -215,6 +217,13 @@ class LiveSettings(BaseSettings):
     #: Esperas entre reconexiones (crecen del mínimo al máximo).
     reconnect_min_seconds: float = 1.0
     reconnect_max_seconds: float = 15.0
+
+    @field_validator("sample_rate")
+    @classmethod
+    def _check_sample_rate(cls, value: int) -> int:
+        if value not in (16_000, 24_000):
+            raise ValueError("LIVE_SAMPLE_RATE debe ser 16000 o 24000")
+        return value
 
 
 class ShowcaseSettings(BaseSettings):

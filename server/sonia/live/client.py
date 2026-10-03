@@ -46,8 +46,9 @@ logger = logging.getLogger(__name__)
 WsConnect = Callable[[str, dict[str, str]], Awaitable[Any]]
 
 #: Recorte de seguridad para los appends (500 tokens son unos 2 000
-#: caracteres en español; se deja margen).
-APPEND_MAX_CHARS = 1_600
+#: caracteres de español corriente; números, URLs o emojis cuestan más
+#: tokens, así que se deja mucho margen).
+APPEND_MAX_CHARS = 1_200
 
 #: Tope de un mensaje entrante. Los eventos de GPT-Live son pequeños, pero un
 #: ``session.started`` devuelve las instrucciones completas.
