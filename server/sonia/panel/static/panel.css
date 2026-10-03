@@ -146,9 +146,25 @@ h3 {
 }
 
 #topbar-text,
-.topbar-state {
+.topbar-state,
+.topbar-name {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#topbar-text {
+  flex: none;
+}
+
+.topbar-name {
+  min-width: 0;
+  max-width: 14ch;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.topbar-name::after {
+  content: ":";
 }
 
 /* En móvil la píldora solo dice el modo; lo que hace Sonia ya está en la tarjeta grande. */
@@ -216,6 +232,7 @@ h3 {
   display: contents;
 }
 
+.instances { order: -1; }
 .hero { order: 0; }
 #acciones { order: 1; }
 #imagenes { order: 2; }
@@ -478,6 +495,27 @@ summary:focus-visible,
 .hero-health[data-level="ok"] { color: var(--ok); }
 .hero-health[data-level="bad"] { color: var(--bad); }
 .hero-health[data-level="unknown"] { color: var(--na); }
+
+/* La Sonia elegida no está conectada al panel: se ve en gris y se explica por qué */
+.hero-disconnected {
+  margin: 6px 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--na);
+  color: #fff;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.hero[data-disconnected="true"] {
+  --mode-color: var(--na);
+  --mode-bg: var(--na-bg);
+}
+
+.hero[data-disconnected="true"] .hero-activity,
+.hero[data-disconnected="true"] .hero-health {
+  opacity: 0.6;
+}
 
 .hero-warning {
   margin: 12px 0 0;
@@ -1161,6 +1199,13 @@ progress {
   font-weight: 600;
 }
 
+.cache-error {
+  margin: 0 0 10px;
+  color: var(--bad);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .facts {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -1292,7 +1337,189 @@ progress {
   }
 }
 
+/* ---------- Varias Sonias ---------- */
+
+.instances h2 {
+  margin-top: 0;
+}
+
+.dup-alert {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  font-size: 17px;
+}
+
+.dup-alert--warn {
+  background: var(--warn-bg);
+  border: 2px solid var(--warn-strong);
+  color: #4d2800;
+}
+
+.dup-alert--bad {
+  background: var(--bad-bg);
+  border: 2px solid var(--bad);
+  color: #5c120d;
+}
+
+.dup-title {
+  font-size: 19px;
+}
+
+.dup-alert .btn {
+  margin-top: 6px;
+  justify-self: start;
+}
+
+.instance-list {
+  display: grid;
+  gap: 10px;
+}
+
+.instance {
+  --c: var(--na);
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 6px 12px;
+  align-items: center;
+  align-content: center;
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 2px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.instance:hover {
+  border-color: var(--blue);
+}
+
+.instance[aria-pressed="true"] {
+  border: 3px solid var(--blue-strong);
+  background: #e1ecfd;
+  cursor: default;
+}
+
+.instance-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1c9c55;
+}
+
+.instance[data-connected="false"] .instance-dot {
+  background: transparent;
+  border: 3px solid var(--na);
+}
+
+.instance-name {
+  font-size: 18px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.instance-title {
+  display: grid;
+  min-width: 0;
+}
+
+.instance-host {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.instance-mode {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--c);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.instance[data-mode="conversation"] { --c: var(--mode-conversation); }
+.instance[data-mode="greeter"] { --c: var(--mode-greeter); }
+.instance[data-mode="away"] { --c: var(--mode-away); }
+
+.instance-detail {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.instance-health[data-level="ok"] { color: var(--ok); }
+.instance-health[data-level="bad"] { color: var(--bad); }
+.instance-health[data-level="off"] { color: var(--na); }
+
+.instance-check {
+  color: var(--blue-strong);
+  font-weight: 800;
+}
+
+.instance[aria-pressed="false"] .instance-check {
+  display: none;
+}
+
+/* Desconectada: todo en gris */
+.instance[data-connected="false"] {
+  --c: var(--na);
+  background: var(--na-bg);
+  color: var(--ink-2);
+}
+
+.instance[data-connected="false"][aria-pressed="true"] {
+  background: #dfe3ea;
+}
+
+/* Miniatura sin imagen (en Cloudflare puede faltar el archivo) */
+.thumb-missing {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  background: var(--na-bg);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.line-time {
+  margin-left: 6px;
+  font-weight: 600;
+  letter-spacing: 0;
+  opacity: 0.75;
+}
+
 /* ---------- Pantallas anchas ---------- */
+
+/* Con varias Sonias, en el móvil el logo se queda en la «S» para que quepa el nombre */
+@media (max-width: 519px) {
+  body.has-several .brand-logo {
+    width: 13px;
+    object-fit: cover;
+    object-position: left center;
+  }
+
+  body.has-several .topbar-name {
+    max-width: none;
+  }
+}
 
 @media (min-width: 520px) {
   .topbar-title,
@@ -1313,8 +1540,13 @@ progress {
   }
 
   .hero,
+  .instances,
   .advanced {
     grid-column: 1 / -1;
+  }
+
+  .instance-list {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   }
 
   .col {

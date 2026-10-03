@@ -18,7 +18,6 @@ import asyncio
 import contextlib
 import logging
 import time
-from collections import deque
 from collections.abc import Awaitable, Callable
 from importlib.util import find_spec
 from pathlib import Path
@@ -27,15 +26,16 @@ from urllib.parse import urlparse
 
 from sonia.config import PanelSettings
 from sonia.panel.control import StandControl
+from sonia.panel.events import PanelEvents
+from sonia.panel.identity import InstanceIdentity, summarize
 from sonia.panel.logs import LogBuffer
-from sonia.ws import protocol as p
 
 if TYPE_CHECKING:  # pragma: no cover - solo para tipado
     from starlette.applications import Starlette
 
     from sonia.ws.hub import Hub
 
-__all__ = ["AccessVerifier", "PanelEvents", "PanelServer", "build_app", "is_available"]
+__all__ = ["AccessVerifier", "PanelServer", "build_app", "is_available"]
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +47,6 @@ STATUS_INTERVAL_S = 0.5
 #: Cabecera obligatoria en las acciones (protección contra peticiones de otras webs).
 ACTION_HEADER = "x-sonia-panel"
 
-#: Mensajes hacia Unity que no interesan en el panel.
-_SKIP_MESSAGES = frozenset({p.MSG_VISEMES, p.MSG_ENVELOPE, p.MSG_REQUEST_FRAME, p.MSG_HELLO})
-
-#: Mensajes que se guardan para pintar la página al abrirla.
-_HISTORY_MESSAGES = frozenset(
-    {p.MSG_TRANSCRIPT, p.MSG_SHOW_IMAGE, p.MSG_HIDE_IMAGE, p.MSG_PRESENCE, p.MSG_ERROR}
-)
 
 #: Política de contenido: todo del propio panel, nada de terceros.
 _CSP = (
@@ -121,49 +114,6 @@ class AccessVerifier:
             issuer=f"https://{self._team}",
         )
         return claims
-
-
-class PanelEvents:
-    """Reparte a los WebSocket del panel lo que va a Unity y el registro."""
-
-    def __init__(self, hub: Hub, logs: LogBuffer | None) -> None:
-        self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
-        self._history: deque[dict[str, Any]] = deque(maxlen=80)
-        self._logs = logs
-        hub.add_listener(self._on_message)
-        if logs is not None:
-            logs.add_listener(self._publish)
-
-    def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
-        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=500)
-        self._subscribers.add(queue)
-        return queue
-
-    def unsubscribe(self, queue: asyncio.Queue[dict[str, Any]]) -> None:
-        self._subscribers.discard(queue)
-
-    def history(self) -> dict[str, Any]:
-        return {
-            "type": "history",
-            "messages": list(self._history),
-            "logs": self._logs.lines() if self._logs is not None else [],
-        }
-
-    def _on_message(self, msg: dict[str, Any]) -> None:
-        kind = msg.get("type")
-        if kind in _SKIP_MESSAGES:
-            return
-        # Copia para el panel: sin la imagen en base64 y con la hora.
-        msg = {k: v for k, v in msg.items() if k != "data_base64"}
-        msg["time"] = time.strftime("%H:%M:%S")
-        if kind in _HISTORY_MESSAGES and (kind != p.MSG_TRANSCRIPT or msg.get("final")):
-            self._history.append(msg)
-        self._publish({"type": "message", "message": msg})
-
-    def _publish(self, item: dict[str, Any]) -> None:
-        for queue in list(self._subscribers):
-            with contextlib.suppress(asyncio.QueueFull):
-                queue.put_nowait(item)
 
 
 def _headers(scope: dict[str, Any]) -> dict[str, str]:
@@ -254,6 +204,7 @@ def build_app(
     events: PanelEvents,
     *,
     verifier: Verifier,
+    identity: InstanceIdentity | None = None,
     static_dir: Path = STATIC_DIR,
 ) -> Starlette:
     """La aplicación Starlette del panel."""
@@ -270,8 +221,28 @@ def build_app(
             return HTMLResponse("<h1>Panel de Sonia</h1><p>Falta la página del panel.</p>")
         return FileResponse(page, headers={"Cache-Control": "no-store"})
 
+    me = identity or InstanceIdentity(id="local", name="Sonia", host="local")
+
+    def instances() -> dict[str, Any]:
+        # En local solo existe esta Sonia; el parámetro ``instance`` se ignora.
+        summary = summarize(me, control.status())
+        return {
+            "type": "instances",
+            "instances": [summary],
+            "conflicts": {"connected": [], "conversing": []},
+        }
+
+    def full_status() -> dict[str, Any]:
+        snapshot = control.status()
+        return {**snapshot, "instance": summarize(me, snapshot)}
+
     async def status(request: Request) -> Response:
-        return JSONResponse(control.status(), headers={"Cache-Control": "no-store"})
+        return JSONResponse(full_status(), headers={"Cache-Control": "no-store"})
+
+    async def instances_route(request: Request) -> Response:
+        body = instances()
+        body.pop("type")
+        return JSONResponse(body, headers={"Cache-Control": "no-store"})
 
     async def gallery(request: Request) -> Response:
         ids = control.gallery().ids()
@@ -312,8 +283,9 @@ def build_app(
 
         receiver = asyncio.create_task(drain(), name="sonia-panel-ws-drain")
         try:
+            await ws.send_json(instances())
             await ws.send_json(events.history())
-            await ws.send_json({"type": "status", "status": control.status()})
+            await ws.send_json({"type": "status", "status": full_status()})
             last_status = time.monotonic()
             while not receiver.done():
                 timeout = max(0.05, STATUS_INTERVAL_S - (time.monotonic() - last_status))
@@ -323,7 +295,7 @@ def build_app(
                 except TimeoutError:
                     pass
                 if time.monotonic() - last_status >= STATUS_INTERVAL_S:
-                    await ws.send_json({"type": "status", "status": control.status()})
+                    await ws.send_json({"type": "status", "status": full_status()})
                     last_status = time.monotonic()
         except (WebSocketDisconnect, RuntimeError, OSError):
             pass
@@ -339,6 +311,7 @@ def build_app(
         routes=[
             Route("/", index),
             Route("/api/status", status),
+            Route("/api/instances", instances_route),
             Route("/api/gallery", gallery),
             Route("/api/gallery/{image_id}", gallery_image),
             Route("/api/action", action, methods=["POST"]),
@@ -359,11 +332,14 @@ class PanelServer:
         logs: LogBuffer | None = None,
         *,
         verifier: Verifier | None = None,
+        events: PanelEvents | None = None,
+        identity: InstanceIdentity | None = None,
     ) -> None:
         self._settings = settings
         self._control = control
         self._logs = logs
-        self.events = PanelEvents(hub, logs)
+        self._identity = identity
+        self.events = events or PanelEvents(hub, logs)
         access = AccessVerifier(settings.access_team_domain, settings.access_aud)
         self._verifier: Verifier = verifier or access
         self._access_configured = verifier is not None or access.configured
@@ -387,7 +363,9 @@ class PanelServer:
 
         if self._logs is not None:
             self._logs.bind(asyncio.get_running_loop())
-        app = build_app(self._control, self.events, verifier=self._verifier)
+        app = build_app(
+            self._control, self.events, verifier=self._verifier, identity=self._identity
+        )
         config = uvicorn.Config(
             app,
             host=self._settings.host,

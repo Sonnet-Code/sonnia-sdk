@@ -1,0 +1,10 @@
+# Copia este archivo a .dev.vars para `npm run dev` (wrangler dev en local).
+# Nunca pongas aquí los valores de producción: esos van con `wrangler secret put`.
+
+# Token que comparten el Worker y cada Sonia (PANEL_CLOUD_TOKEN en el .env del orquestador).
+AGENT_TOKEN=
+# Contraseña del panel para el personal del stand.
+PANEL_PASSWORD=
+# Cloudflare Access (opcional). Si se dejan vacíos, solo vale la contraseña.
+ACCESS_TEAM_DOMAIN=
+ACCESS_AUD=

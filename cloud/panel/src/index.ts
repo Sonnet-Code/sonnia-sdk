@@ -1,0 +1,249 @@
+/**
+ * Worker `sonia-panel`: panel de control de Sonia en Cloudflare.
+ *
+ * - `/agent`: WebSocket de cada Sonia, solo con `AGENT_TOKEN`.
+ * - `/login`, `/logout`: entrada con la contraseña del panel.
+ * - Todo lo demás (página, estáticos, API y WebSocket del navegador) exige un
+ *   JWT de Cloudflare Access o la sesión de la contraseña.
+ *
+ * El estado vive en el Durable Object `ControlRoom` (una sola instancia).
+ */
+
+import { authenticate, constantTimeEqual } from "./auth";
+import type { Env } from "./env";
+import { json, rawJson, redirect, sameOrigin, text, withSecurityHeaders } from "./http";
+import { bouncePage, handleLoginGet, handleLoginPost, handleLogout } from "./login";
+
+export { ControlRoom } from "./control-room";
+
+/** Estáticos que se ven sin sesión (los usa la página de entrada). */
+const PUBLIC_PATHS = new Set(["/static/sonnet-code-logo.svg", "/static/favicon.svg", "/favicon.ico"]);
+/** Tamaño máximo del cuerpo de `POST /api/action`. */
+const MAX_ACTION_BYTES = 64 * 1024;
+/** Ids de Sonia válidos (el agente los manda en `[a-z0-9-]`; se admite algo más). */
+const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
+
+export default {
+  async fetch(request, env): Promise<Response> {
+    try {
+      return withSecurityHeaders(await route(request, env));
+    } catch (error) {
+      console.error("Error en el panel:", error instanceof Error ? error.stack ?? error.message : String(error));
+      return withSecurityHeaders(json({ ok: false, message: "Error interno del panel. Inténtalo de nuevo." }, 500));
+    }
+  },
+} satisfies ExportedHandler<Env>;
+
+function controlRoom(env: Env): DurableObjectStub<import("./control-room").ControlRoom> {
+  return env.CONTROL_ROOM.get(env.CONTROL_ROOM.idFromName("control"));
+}
+
+async function route(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const path = url.pathname;
+  const method = request.method;
+
+  if (path === "/agent") return handleAgent(request, env);
+  if (path === "/login") {
+    if (method === "POST") return handleLoginPost(request, env);
+    if (method === "GET" || method === "HEAD") return handleLoginGet(request, env);
+    return text("Método no permitido.", 405);
+  }
+  if (path === "/logout") return handleLogout(request, env);
+  if (PUBLIC_PATHS.has(path) && (method === "GET" || method === "HEAD")) {
+    return serveAsset(request, env, path === "/favicon.ico" ? "/static/favicon.svg" : path);
+  }
+
+  if (!(await authenticate(request, env))) return unauthorized(request, url);
+
+  if (path.startsWith("/api/")) return handleApi(request, env, url);
+  if (method !== "GET" && method !== "HEAD") return text("Método no permitido.", 405);
+  return serveAsset(request, env, path);
+}
+
+/** Sin sesión: la API responde 401 y las páginas mandan a `/login`. */
+function unauthorized(request: Request, url: URL): Response {
+  if (url.pathname.startsWith("/api/")) {
+    return json({ ok: false, message: "Inicia sesión de nuevo." }, 401);
+  }
+  const next = url.pathname + url.search;
+  const login = next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`;
+  // Desde otra web la cookie SameSite=Strict no viaja: se reintenta desde aquí.
+  if (request.method === "GET" && request.headers.get("sec-fetch-site") === "cross-site") {
+    return bouncePage(login);
+  }
+  return redirect(login, 302);
+}
+
+// ------------------------------------------------------------ Sonias (agentes)
+
+/** Decodifica texto codificado como URL; si está mal codificado, lo deja tal cual. */
+function decodeHeader(value: string | null): string {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+async function handleAgent(request: Request, env: Env): Promise<Response> {
+  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+    return text("Se esperaba un WebSocket.", 426);
+  }
+  const header = request.headers.get("authorization") ?? "";
+  const token = /^Bearer\s+(.+)$/i.exec(header)?.[1]?.trim() ?? "";
+  const expected = env.AGENT_TOKEN ?? "";
+  if (!expected) {
+    console.warn("Conexión de una Sonia rechazada: falta el secreto AGENT_TOKEN.");
+    return text("Token no válido.", 401);
+  }
+  if (!token || !(await constantTimeEqual(token, expected))) return text("Token no válido.", 401);
+
+  const id = decodeHeader(request.headers.get("x-sonia-instance")).trim();
+  if (!INSTANCE_ID.test(id)) return text("Falta X-Sonia-Instance o no es válido.", 400);
+  // Sin caracteres de control; el nombre bueno llega después en el `hello`.
+  const name = decodeHeader(request.headers.get("x-sonia-name"))
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, 80);
+
+  const target = new URL("https://control/agent");
+  target.searchParams.set("id", id);
+  target.searchParams.set("name", name || id);
+  return controlRoom(env).fetch(target.toString(), { headers: { upgrade: "websocket" } });
+}
+
+// ------------------------------------------------------------ API del navegador
+
+function instanceParam(url: URL): string | null {
+  const value = url.searchParams.get("instance")?.trim();
+  return value && INSTANCE_ID.test(value) ? value : null;
+}
+
+async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
+  const path = url.pathname;
+  const method = request.method;
+  const isRead = method === "GET" || method === "HEAD";
+
+  if (path === "/api/events") {
+    if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+      return json({ ok: false, message: "Se esperaba un WebSocket." }, 426);
+    }
+    if (!sameOrigin(request)) return json({ ok: false, message: "Origen no permitido." }, 403);
+    const target = new URL("https://control/events");
+    const instance = instanceParam(url);
+    if (instance) target.searchParams.set("instance", instance);
+    return controlRoom(env).fetch(target.toString(), { headers: { upgrade: "websocket" } });
+  }
+
+  if (path === "/api/action") {
+    if (method !== "POST") return json({ ok: false, message: "Método no permitido." }, 405);
+    return handleAction(request, env, url);
+  }
+
+  if (!isRead) return json({ ok: false, message: "Método no permitido." }, 405);
+
+  if (path === "/api/instances") {
+    return json(await controlRoom(env).getInstances());
+  }
+  if (path === "/api/status") {
+    const result = await controlRoom(env).getStatus(instanceParam(url));
+    return rawJson(result.body, result.status);
+  }
+  if (path === "/api/gallery") {
+    return handleGallery(request, env, url);
+  }
+  if (path.startsWith("/api/gallery/")) {
+    return handleGalleryImage(request, env, decodeHeader(path.slice("/api/gallery/".length)));
+  }
+  return json({ ok: false, message: "No existe." }, 404);
+}
+
+async function handleAction(request: Request, env: Env, url: URL): Promise<Response> {
+  if (request.headers.get("x-sonia-panel") !== "1") {
+    return json({ ok: false, message: "Petición no permitida." }, 403);
+  }
+  if (Number(request.headers.get("content-length") ?? "0") > MAX_ACTION_BYTES) {
+    return json({ ok: false, message: "Petición demasiado grande." }, 413);
+  }
+  let body: unknown = null;
+  try {
+    const raw = await request.text();
+    if (raw.length <= MAX_ACTION_BYTES) body = JSON.parse(raw);
+  } catch {
+    body = null;
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return json({ ok: false, message: "Petición mal formada." }, 400);
+  }
+  const { action, instance, ...params } = body as Record<string, unknown>;
+  if (typeof action !== "string" || !action) {
+    return json({ ok: false, message: "Petición mal formada." }, 400);
+  }
+  let target = instanceParam(url);
+  if (typeof instance === "string" && instance) {
+    if (!INSTANCE_ID.test(instance)) return json({ ok: false, message: "No conozco esa Sonia." }, 404);
+    target = instance;
+  }
+  const result = await controlRoom(env).runAction(target, action, params);
+  return rawJson(result.body, result.status);
+}
+
+// ------------------------------------------------------------ galería
+
+/** `id → archivo` de `public/gallery.json` (cambia solo al desplegar). */
+let galleryMapCache: Record<string, string> | null = null;
+
+async function galleryMap(request: Request, env: Env): Promise<Record<string, string>> {
+  if (galleryMapCache) return galleryMapCache;
+  const response = await env.ASSETS.fetch(new URL("/gallery.json", request.url));
+  if (!response.ok) return {};
+  const data: unknown = await response.json();
+  const map: Record<string, string> = {};
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    for (const [id, file] of Object.entries(data)) {
+      if (typeof file === "string") map[id] = file;
+    }
+  }
+  galleryMapCache = map;
+  return map;
+}
+
+async function handleGallery(request: Request, env: Env, url: URL): Promise<Response> {
+  const map = await galleryMap(request, env);
+  // Los ids que mandó esa Sonia; si todavía no se saben, los de la galería desplegada.
+  const ids = (await controlRoom(env).getGalleryIds(instanceParam(url))) ?? Object.keys(map).sort();
+  const images = ids.map((id) => ({
+    id,
+    // Un id sin archivo en Cloudflare sale sin miniatura.
+    url: map[id] ? `/gallery/${encodeURIComponent(map[id])}` : null,
+  }));
+  return json({ images });
+}
+
+async function handleGalleryImage(request: Request, env: Env, id: string): Promise<Response> {
+  const file = (await galleryMap(request, env))[id];
+  if (!file) return json({ ok: false, message: "No existe esa imagen." }, 404);
+  return serveAsset(request, env, `/gallery/${encodeURIComponent(file)}`);
+}
+
+// ------------------------------------------------------------ estáticos
+
+/**
+ * Sirve un archivo de `public/`. La página pide sus recursos en `/static/...`
+ * (igual que en el panel local) y en `public/` están en la raíz.
+ */
+async function serveAsset(request: Request, env: Env, path: string): Promise<Response> {
+  let assetPath = path;
+  if (assetPath.startsWith("/static/")) assetPath = assetPath.slice("/static".length);
+  if (assetPath === "/gallery.json") return json({ ok: false, message: "No existe." }, 404);
+  const assetUrl = new URL(assetPath, request.url);
+  const response = await env.ASSETS.fetch(new Request(assetUrl, { method: request.method, headers: request.headers }));
+  if (assetPath === "/" || assetPath === "/index.html") {
+    const page = new Response(response.body, response);
+    page.headers.set("cache-control", "no-store");
+    return page;
+  }
+  return response;
+}

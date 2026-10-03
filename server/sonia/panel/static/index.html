@@ -19,13 +19,14 @@
       <span class="topbar-title">Panel de Sonia</span>
       <span class="topbar-status" id="topbar-status" data-mode="">
         <span class="mode-dot" aria-hidden="true"></span>
+        <span class="topbar-name" id="topbar-name" hidden></span>
         <span id="topbar-text">Conectando…</span><span class="topbar-state" id="topbar-state"></span>
       </span>
     </div>
 
     <!-- Aviso grande cuando el panel no puede hablar con el orquestador -->
     <div class="conn-banner conn-banner--offline" id="offline-banner" role="alert" hidden>
-      <strong class="conn-title">Sin conexión con Sonia</strong>
+      <strong class="conn-title">Sin conexión con el panel</strong>
       <span class="conn-detail" id="offline-detail">Reintentando…</span>
     </div>
     <!-- Aviso pequeño cuando falla la conexión en vivo pero el sondeo sigue funcionando -->
@@ -41,10 +42,27 @@
   </header>
 
   <main class="layout" id="layout">
+    <!-- ===== Varias Sonias: cuál se controla y avisos de duplicados (oculta si solo hay una) ===== -->
+    <section class="card instances" id="instances" aria-labelledby="instances-title" hidden>
+      <div class="dup-alert dup-alert--bad" id="dup-conversing" role="alert" hidden>
+        <strong class="dup-title" id="dup-conversing-title"></strong>
+        <span id="dup-conversing-text"></span>
+        <button type="button" class="btn btn-danger" id="keep-one-btn">Dejar solo esta conversando</button>
+      </div>
+      <div class="dup-alert dup-alert--warn" id="dup-connected" role="status" hidden>
+        <strong class="dup-title" id="dup-connected-title"></strong>
+        <span id="dup-connected-text"></span>
+      </div>
+      <h2 id="instances-title">¿Qué Sonia estás controlando?</h2>
+      <p class="help">Toca una para controlarla. Todo lo que hagas abajo se aplica solo a la marcada.</p>
+      <div class="instance-list" id="instance-list" role="group" aria-labelledby="instances-title"></div>
+    </section>
+
     <!-- ===== Estado de un vistazo y cambio de modo ===== -->
     <section class="card hero" id="hero" data-mode="" aria-labelledby="hero-mode">
       <div class="hero-status">
-        <p class="kicker">Ahora mismo</p>
+        <p class="kicker" id="hero-kicker">Ahora mismo</p>
+        <p class="hero-disconnected" id="hero-disconnected" role="status" hidden></p>
         <h1 class="hero-mode" id="hero-mode">Conectando con Sonia…</h1>
         <p class="hero-activity">
           <span class="activity-dot" id="activity-dot" aria-hidden="true"></span>
@@ -290,6 +308,7 @@
           <p class="help">Graba con la voz de Sonia las frases fijas que usa en «Solo saludos». Necesita internet.</p>
           <progress id="cache-progress" max="1" value="0"></progress>
           <p class="cache-text" id="cache-text">Sin datos</p>
+          <p class="cache-error" id="cache-error" hidden></p>
           <button type="button" class="btn" id="cache-btn" data-cap="voice_cache" data-extra="cache">Preparar voces</button>
           <p class="cap-note" data-cap-note="voice_cache" hidden>No disponible con el motor de voz actual.</p>
         </section>

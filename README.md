@@ -158,7 +158,8 @@ Lo que queda pendiente, con detalle y por orden de urgencia, está en [`ROADMAP.
 - [x] Motor voz a voz con GPT-Live de OpenAI, acciones por delegación en un backend Responses y ojos por notas de la cámara (ADR 007)
 - [ ] Prueba real de GPT-Live con clave: voz, `text_input`, acciones, números del stand y Unity
 - [x] Panel de control web para el personal del stand (`docs/panel.md`): modos Conversando, Solo saludos y Fuera, avisos, imágenes, volumen, salud en lenguaje llano
-- [ ] Panel publicado en `sonia.sonnetcode.com` con Cloudflare Access (túnel y DNS hechos; falta la aplicación de Access)
+- [x] Panel alojado en Cloudflare (`sonia.sonnetcode.com`, `cloud/panel/`) que ve todas las Sonias conectadas y avisa de duplicados
+- [ ] Cloudflare Access delante del panel (de momento, contraseña)
 - [x] Scripts de Unity: cliente WebSocket, audio en streaming, lip-sync, estados, panel de imágenes, webcam, HUD, escena base 9:16
 - [x] Modo kiosco para el stand (`scripts/kiosk.sh`) y guía de montaje (`docs/stand.md`)
 - [ ] Integración de OmniVoice con el modelo real (módulo listo; falta la GPU)

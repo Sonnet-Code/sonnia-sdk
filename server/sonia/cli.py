@@ -511,6 +511,7 @@ class _Panel:
     control: StandControl
     server: Any
     logs: LogBuffer
+    cloud: asyncio.Task[None] | None = None
 
 
 async def _start_panel(
@@ -529,11 +530,17 @@ async def _start_panel(
     """
     if not settings.panel.enabled:
         return None
+    from sonia.panel.cloud import CloudLink
+    from sonia.panel.events import PanelEvents
+    from sonia.panel.identity import load_identity
     from sonia.panel.server import PanelServer
     from sonia.panel.server import is_available as panel_available
 
     logs = LogBuffer()
+    logs.bind(asyncio.get_running_loop())
     logging.getLogger().addHandler(logs)
+    identity = load_identity(settings.panel)
+    events = PanelEvents(hub, logs)
     control = StandControl(
         settings,
         hub=hub,
@@ -545,20 +552,29 @@ async def _start_panel(
     await control.start()
     server: Any = None
     if panel_available():
-        server = PanelServer(settings.panel, control, hub, logs)
+        server = PanelServer(settings.panel, control, hub, logs, events=events, identity=identity)
         try:
             await server.start()
         except Exception as exc:
-            logger.warning("No se pudo arrancar el panel de control: %s", exc)
+            logger.warning("No se pudo arrancar el panel de control local: %s", exc)
             server = None
     else:
-        logger.warning("Falta el extra 'panel' (uv sync --extra panel): panel de control apagado")
-    return _Panel(control, server, logs)
+        logger.warning("Falta el extra 'panel' (uv sync --extra panel): panel local apagado")
+    cloud: asyncio.Task[None] | None = None
+    link = CloudLink(settings.panel, control, events, identity)
+    if link.enabled:
+        cloud = asyncio.create_task(link.run(), name="sonia-cloud-panel")
+    else:
+        logger.info("Sin PANEL_CLOUD_TOKEN: esta Sonia no se conecta al panel de Cloudflare")
+    return _Panel(control, server, logs, cloud)
 
 
 async def _stop_panel(panel: _Panel | None) -> None:
     if panel is None:
         return
+    if panel.cloud is not None:
+        panel.cloud.cancel()
+        await asyncio.gather(panel.cloud, return_exceptions=True)
     if panel.server is not None:
         with contextlib.suppress(Exception):
             await panel.server.stop()

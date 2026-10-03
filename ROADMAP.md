@@ -19,10 +19,13 @@ El motor GPT-Live (`VOICE_ENGINE=live`, ADR 007) está escrito y probado contra 
 
 ## 2. Panel de control (`docs/panel.md`)
 
-- [ ] **Cloudflare Access** para `sonia.sonnetcode.com` (aplicación self-hosted, regla "correos que terminan en @sonnetcode.com"). Pasos exactos en `docs/panel.md`, "Publicación en internet". Después, `PANEL_ACCESS_TEAM_DOMAIN` y `PANEL_ACCESS_AUD` en el `.env`. Hasta entonces el panel solo funciona en local y desde internet responde "Acceso no autorizado". Ningún token disponible tiene permiso de Access: o se crea la aplicación desde el dashboard, o se amplía el token de `haymesa` con "Access: Apps and Policies → Edit".
-- [ ] Arrancar `scripts/panel_tunnel.sh` en el equipo del stand (copiar `~/.cloudflared/sonia-panel.token`) y entrar desde un móvil con un correo `@sonnetcode.com`.
-- [ ] "Preparar voces" una vez con la clave puesta y la voz elegida (graba saludos, frases y cantos en `cache/voice`; se repite solo si cambia la voz).
-- [ ] Ensayo con alguien del stand que no sea técnico: cambiar de modo, mandar un aviso, mostrar el logo, subir el volumen y ver si entiende los avisos de salud.
+El panel vive en Cloudflare (`https://sonia.sonnetcode.com`, Worker `sonia-panel`, código en `cloud/panel/`) y cada Sonia se conecta a él hacia fuera. El panel local (`http://127.0.0.1:8780`) queda de respaldo sin internet.
+
+- [ ] Poner `PANEL_CLOUD_TOKEN` (y un `PANEL_INSTANCE_NAME` reconocible) en el `.env` del equipo del stand. El valor está en `~/.config/sonia/panel-secrets.env` del Mac de Jean, junto con la contraseña del panel.
+- [ ] Repartir la contraseña del panel al personal del stand (o cambiarla con `npx wrangler secret put PANEL_PASSWORD` en `cloud/panel/`).
+- [ ] Opcional: Cloudflare Access (login con el correo `@sonnetcode.com`) en vez de, o además de, la contraseña. Pasos en `docs/panel.md` ("Acceso"); hace falta una política Bypass para `/agent` y los secretos `ACCESS_TEAM_DOMAIN` y `ACCESS_AUD`. Ningún token disponible tiene permiso de Access: se hace desde el dashboard.
+- [ ] "Preparar voces" una vez con la clave puesta y la voz elegida (graba saludos, frases y cantos en `cache/voice` de ese equipo; se repite solo si cambia la voz).
+- [ ] Ensayo con alguien del stand que no sea técnico: entrar desde el móvil, cambiar de modo, mandar un aviso, mostrar el logo, subir el volumen y ver si entiende los avisos de salud y de Sonias duplicadas.
 
 ## 3. Unity: modo "Fuera", volumen y saludo
 
@@ -44,12 +47,16 @@ El código está escrito y compila contra las DLL de Unity 6000.6.0f1 (0 errores
 
 ## 5. Equipo del stand
 
-- [ ] Si es el mini PC con Windows: comprobar que el micrófono abre a 24 kHz (si no, `LIVE_SAMPLE_RATE=16000`), instalar `cloudflared` como servicio y `scripts/kiosk.sh` (o su equivalente en Windows).
+Sonia no tiene por qué correr en el Mac de desarrollo. Guía de instalación para cualquier equipo en `docs/stand.md`, "Instalar Sonia en el equipo del stand".
+
+- [ ] Decidir el equipo (mini PC GMKtec con Windows, otro portátil o el Mac) e instalarlo siguiendo esa guía: claves en su `.env`, token del túnel desde el dashboard y `cloudflared` como servicio.
+- [ ] Apagar el conector del túnel en cualquier otro equipo (si hay dos, Cloudflare reparte las visitas).
+- [ ] Si es Windows: comprobar que el micrófono abre a 24 kHz (si no, `LIVE_SAMPLE_RATE=16000`), compilar la build de Unity para Windows y buscar un equivalente de `scripts/kiosk.sh` (es bash).
 - [ ] Internet estable todo el día: con GPT-Live, sin red Sonia no conversa. Plan B: pasar a "Solo saludos" desde el panel (sigue funcionando con las frases grabadas) o `VOICE_ENGINE=pipeline`.
 - [ ] Prueba completa con micrófono, cámara y Unity en el equipo del stand.
 
 ## 6. Arrastrado de antes
 
-- [ ] `tests/test_tts_system.py::test_say_de_macos_sintetiza_en_espanol` falla en este Mac: `say` elige ahora la voz "Eddy". No afecta a GPT-Live.
+- [ ] `tests/test_tts_system.py::test_say_de_macos_sintetiza_en_espanol` falla en el Mac de desarrollo: `say` elige ahora la voz "Eddy". No afecta a GPT-Live.
 - [ ] Imágenes de la galería: faltan servicios de Sonnet Code y un diagrama de cómo funciona Sonia.
 - [ ] Motor `pipeline` en local (OmniVoice y LLM en el mini PC): solo si se vuelve al plan "100 % local".

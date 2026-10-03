@@ -266,6 +266,12 @@ class PanelSettings(BaseSettings):
     greeter_interval_max_seconds: float = 55.0
     #: Precio de GPT-Live por minuto de sesión, para estimar el gasto.
     live_price_per_minute: float = 0.05
+    #: Panel en Cloudflare: cada Sonia se conecta hacia fuera a este Worker.
+    #: Sin ``cloud_token`` no se conecta (solo queda el panel local).
+    cloud_url: str = "wss://sonia.sonnetcode.com/agent"
+    cloud_token: str = ""
+    #: Nombre con el que esta Sonia sale en el panel (vacío = nombre del equipo).
+    instance_name: str = ""
 
 
 class Settings(BaseSettings):

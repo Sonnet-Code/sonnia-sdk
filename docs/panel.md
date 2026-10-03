@@ -1,6 +1,8 @@
 # Panel de control de Sonia
 
-Panel web para que el personal del stand (no necesariamente técnico) controle a Sonia en vivo. Lo sirve el propio orquestador en `http://127.0.0.1:8780/` y se publica en internet en `https://sonia.sonnetcode.com` con un Cloudflare Tunnel protegido por Cloudflare Access (solo correos `@sonnetcode.com`). Ver "Publicación en internet" al final.
+Panel web para que el personal del stand (no necesariamente técnico) controle a Sonia en vivo. Vive en **Cloudflare** (`https://sonia.sonnetcode.com`, Worker `sonia-panel` con un Durable Object, código en `cloud/panel/`) y cada Sonia, esté en el equipo que esté, se conecta a él hacia fuera por WebSocket: no hace falta abrir puertos ni túneles en el equipo del stand. Así el panel ve **todas** las Sonias conectadas y avisa si hay más de una (lo normal es una sola; dos conversando a la vez es pagar doble y que se pisen).
+
+El orquestador sigue sirviendo el mismo panel en `http://127.0.0.1:8780/` como respaldo local: funciona sin internet (por ejemplo, para pasar a "Solo saludos" si cae la red) y solo ve a la Sonia de ese equipo.
 
 ## Modos de Sonia
 
@@ -127,34 +129,73 @@ El servidor manda objetos JSON:
 
 Al conectar llega primero un `{"type": "history", "messages": [...], "logs": [...]}` con lo último (conversación y registro) para pintar la página sin esperar.
 
-## Seguridad
+## Seguridad del panel local
 
-- El panel escucha solo en `127.0.0.1` (`PANEL_HOST`, `PANEL_PORT=8780`).
+- El panel local escucha solo en `127.0.0.1` (`PANEL_HOST`, `PANEL_PORT=8780`).
 - Las peticiones que llegan por Cloudflare (traen `Cf-Connecting-Ip`) necesitan un JWT de Cloudflare Access válido en `Cf-Access-Jwt-Assertion`: firma con las claves de `https://<PANEL_ACCESS_TEAM_DOMAIN>/cdn-cgi/access/certs`, `aud` igual a `PANEL_ACCESS_AUD` y sin caducar. Sin esas dos variables, todo acceso remoto se rechaza.
 - Las acciones exigen la cabecera `X-Sonia-Panel: 1` y el WebSocket comprueba que `Origin` sea el propio panel.
 - El panel muestra lo que dicen los visitantes (transcripción). No muestra la cámara.
 
-## Publicación en internet
+## Panel en Cloudflare (`cloud/panel/`)
 
-Estado a 3 de octubre de 2026:
-
-- **Hecho.** Cloudflare Tunnel `sonia-panel`, gestionado desde el dashboard (cuenta SONNET CODE), con el ingress `sonia.sonnetcode.com` → `http://localhost:8780` y el resto en 404. Registro DNS `sonia` (CNAME al túnel, con proxy). El token del conector está en `~/.cloudflared/sonia-panel.token` (fuera del repo, permisos 600) en el Mac de Jean.
-- **Pendiente.** La aplicación de Cloudflare Access. Hasta que exista, `https://sonia.sonnetcode.com` responde "Acceso no autorizado" (el panel rechaza todo lo que llega por Cloudflare sin un JWT de Access válido) y el panel solo se usa en local.
-
-Para terminar Access (dashboard de Cloudflare → Zero Trust, equipo `sonnetcode`):
-
-1. Access → Applications → Add an application → **Self-hosted**.
-2. Nombre "Panel de Sonia", dominio `sonia.sonnetcode.com`, duración de sesión 24 h.
-3. Política "Staff de Sonnet Code": acción **Allow**, regla **Include → Emails ending in → `@sonnetcode.com`**. Métodos de login: One-time PIN (código por correo) y, si se quiere, Google (ya configurado para el CMS de la web).
-4. Guardar y copiar el **Application Audience (AUD) Tag**.
-5. En el `.env` del equipo del stand: `PANEL_ACCESS_TEAM_DOMAIN=sonnetcode.cloudflareaccess.com` y `PANEL_ACCESS_AUD=<el AUD>`, y reiniciar `sonia run`.
-
-Alternativa: dar a Claude un token de API con "Access: Apps and Policies → Edit" (por ejemplo, ampliando el de `haymesa`) y lo hace por API. Los tokens existentes (sesión de wrangler y `haymesa`) no tienen ese permiso; el DNS se creó con el certificado de origen de `cloudflared` de `piku-steamdeck`.
-
-### Arrancar el túnel
-
-```bash
-scripts/panel_tunnel.sh      # en el equipo donde corre `sonia run`; se reinicia solo si se cae
+```
+navegador ──HTTPS/WS──► Worker sonia-panel ──► Durable Object "control" ◄──WS (saliente)── Sonia (equipo A)
+ (operador)              (login, estáticos)      (estado de cada Sonia,  ◄──WS (saliente)── Sonia (equipo B, duplicado)
+                                                  reparte acciones)
 ```
 
-Para el equipo del stand: instala `cloudflared` y copia `~/.cloudflared/sonia-panel.token`. Solo debe haber un equipo con el conector corriendo a la vez (si hay dos, Cloudflare reparte las visitas entre ellos).
+### Conexión de cada Sonia (agente)
+
+- El orquestador abre `wss://sonia.sonnetcode.com/agent` (`PANEL_CLOUD_URL`) con las cabeceras `Authorization: Bearer <PANEL_CLOUD_TOKEN>`, `X-Sonia-Instance: <id>` y `X-Sonia-Name: <nombre>`. El Worker compara el token con su secreto `AGENT_TOKEN` (comparación de tiempo constante) y pasa la conexión al Durable Object. Sin `PANEL_CLOUD_TOKEN` el orquestador no se conecta.
+- `id`: `<nombre del equipo>-<6 hex>`, guardado en `cache/instance_id` (dos equipos nunca comparten id aunque se copie la carpeta: incluye el nombre del equipo). `nombre`: `PANEL_INSTANCE_NAME` o el nombre del equipo.
+- Reconecta sola con espera creciente (1 a 30 s).
+
+Mensajes **agente → Durable Object**:
+
+| `type` | Campos | Cuándo |
+|---|---|---|
+| `hello` | `instance` (`id`, `name`, `host`, `engine`, `version`), `status`, `history` (`messages`, `logs`), `gallery` (lista de ids) | Al conectar y como respuesta a `sync`. |
+| `status` | `status` (la instantánea de `GET /api/status`) | Cada 0,5 s si alguien mira esa Sonia (`viewers` > 0); si no, cada 15 s. |
+| `message` | `message` (lo mismo que el panel local manda en `{"type": "message"}`, con `time`) | Al momento. |
+| `log` | `level`, `time`, `text` | Al momento. |
+| `result` | `request_id`, `ok`, `message` | Respuesta a cada `action`. |
+
+Mensajes **Durable Object → agente**:
+
+| `type` | Campos | Qué hace el agente |
+|---|---|---|
+| `action` | `request_id`, `action`, `params` | `StandControl.act(action, params)` y responde con `result`. |
+| `viewers` | `count` | Ajusta la frecuencia de `status`. |
+| `sync` | | Vuelve a mandar `hello` (el Durable Object pudo hibernar y perder el historial en memoria). |
+
+### API del navegador en Cloudflare
+
+Es la misma API del panel local con un parámetro `instance` (el `id` de la Sonia). Si falta, se usa la primera conectada.
+
+- `GET /api/instances` → `{"instances": [...], "conflicts": {"connected": ["id1", "id2"], "conversing": ["id1", "id2"]}}`. Cada instancia: `id`, `name`, `host`, `connected`, `last_seen` (ms desde 1970), `mode`, `state`, `engine`, `healthy` (bool), `issues` (frases de lo que falla), `cost_usd`. Incluye las desconectadas vistas en las últimas 2 horas.
+- `GET /api/status?instance=<id>` → la instantánea de esa Sonia más `"instance": {...}`. 404 si no se conoce.
+- `GET /api/gallery?instance=<id>` → `{"images": [{"id", "url"}]}`: ids que mandó esa Sonia; las imágenes se sirven desde los estáticos del Worker (`/gallery/<archivo>`, copiadas de `assets/gallery` al desplegar). Un id sin archivo en Cloudflare sale sin miniatura.
+- `POST /api/action` con `{"instance": "<id>", "action": ..., ...}` y la cabecera `X-Sonia-Panel: 1` → `{"ok", "message"}`. 503 si esa Sonia no está conectada, 504 si no contesta en 15 s.
+- `WS /api/events?instance=<id>` → igual que el local (`history`, `status`, `message`, `log` de esa Sonia) más `{"type": "instances", ...}` (misma forma que `GET /api/instances`) al conectar y cada vez que cambia la lista o el modo de alguna. El navegador puede mandar `{"type": "select", "instance": "<id>"}` para cambiar de Sonia sin reconectar.
+
+El panel local implementa lo mismo con una sola instancia (`/api/instances` devuelve la de ese equipo y el parámetro `instance` se ignora).
+
+### Duplicados
+
+- Con dos o más Sonias conectadas, el panel muestra arriba una barra para elegir cuál se controla (con su modo y si está bien) y un aviso: "Hay 2 Sonias conectadas; normalmente solo debe haber una".
+- Si dos o más están en "Conversando", el aviso es rojo ("se paga doble y pueden responder a la vez") con un botón para dejar solo la elegida y mandar las demás a "Fuera".
+- Una Sonia desconectada sale en gris con "desconectada hace X min" y sus controles deshabilitados.
+
+### Acceso
+
+- `/agent`: solo con `AGENT_TOKEN`.
+- Todo lo demás (página, estáticos, API, WebSocket): un JWT de Cloudflare Access válido (`Cf-Access-Jwt-Assertion` o la cookie `CF_Authorization`, firmado con las claves de `https://<ACCESS_TEAM_DOMAIN>/cdn-cgi/access/certs`, `aud` = `ACCESS_AUD`) si esas variables están puestas, **o** la sesión de la contraseña del panel (`PANEL_PASSWORD`): `GET /login` muestra un formulario, `POST /login` comprueba la contraseña y deja una cookie `sonia_session` (HttpOnly, Secure, SameSite=Strict, 12 h, firmada con HMAC). Sin sesión: las páginas redirigen a `/login` y la API responde 401. Si no hay ni Access ni contraseña configurados, nadie entra.
+- Cuando se cree la aplicación de Access para `sonia.sonnetcode.com`, la ruta `/agent` necesita una política **Bypass** (o un service token) para que las Sonias sigan conectando.
+- Las mismas cabeceras de seguridad que el panel local (CSP sin scripts en línea, `frame-ancestors 'none'`...).
+
+### Secretos y despliegue
+
+- Secretos del Worker (`wrangler secret put` en `cloud/panel/`): `AGENT_TOKEN`, `PANEL_PASSWORD` y, cuando exista Access, `ACCESS_TEAM_DOMAIN` y `ACCESS_AUD`.
+- En el `.env` de cada equipo con Sonia: `PANEL_CLOUD_TOKEN` (el mismo valor que `AGENT_TOKEN`) y, si se quiere, `PANEL_INSTANCE_NAME`.
+- Despliegue: `cd cloud/panel && npm install && npm run deploy` (copia los estáticos del panel y la galería a `public/` y ejecuta `wrangler deploy`). El dominio `sonia.sonnetcode.com` es un Custom Domain del Worker.
+- Plan free de Workers: el Durable Object usa SQLite y la API de hibernación; con el estado cada 15 s cuando nadie mira, el consumo queda muy por debajo de los límites gratuitos.

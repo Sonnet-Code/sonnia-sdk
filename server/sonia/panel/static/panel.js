@@ -1,36 +1,46 @@
 /*
  * Panel de control de Sonia: lógica de la página.
  *
- * Sin dependencias ni paso de compilación. Habla con el orquestador por el
- * contrato de docs/panel.md:
- *   GET  /api/status   instantánea completa del estado
- *   GET  /api/gallery  imágenes que Sonia puede mostrar
- *   POST /api/action   acciones (siempre con la cabecera X-Sonia-Panel: 1)
- *   WS   /api/events   estado cada medio segundo, mensajes para Unity y registro
+ * Sin dependencias ni paso de compilación. La misma página la sirve el
+ * orquestador en local (una sola Sonia) y el Worker de Cloudflare (todas las
+ * Sonias conectadas). Contrato completo en docs/panel.md:
+ *   GET  /api/instances  Sonias conocidas y conflictos (duplicados)
+ *   GET  /api/status     instantánea completa de la Sonia elegida (?instance=)
+ *   GET  /api/gallery    imágenes que esa Sonia puede mostrar (?instance=)
+ *   POST /api/action     acciones (cabecera X-Sonia-Panel: 1 e "instance" en el cuerpo)
+ *   WS   /api/events     estado, mensajes para Unity, registro y lista de Sonias;
+ *                        {"type": "select"} cambia de Sonia sin reconectar
  *
  * Si el WebSocket se cae, se reintenta con espera creciente y mientras tanto
- * se sondea /api/status para que la página no se quede congelada.
+ * se sondea /api/status para que la página no se quede congelada. Un 401 de
+ * la API significa que caducó la sesión del panel en Cloudflare: a /login.
  */
 "use strict";
 
 (() => {
   // ------------------------------------------------------------ constantes
 
+  const API_INSTANCES = "/api/instances";
   const API_STATUS = "/api/status";
   const API_GALLERY = "/api/gallery";
   const API_ACTION = "/api/action";
   const API_EVENTS = "/api/events";
+  const LOGIN_URL = "/login";
+  const STORAGE_KEY = "sonia-panel.instance";
 
   const DEFAULT_AWAY_MESSAGE = "Me fui a ver una charla, regreso en un momento";
   const MIC_GATE_MAX = 0.2;
   const GATE_SLIDER_MAX = 1000;
 
-  const STATUS_STALE_MS = 5000; // sin estado por el WebSocket en este tiempo: reconectar
+  const STATUS_STALE_MS = 8000; // sin nada por el WebSocket en este tiempo: reconectar
   const WS_CONNECT_TIMEOUT_MS = 10000;
   const POLL_INTERVAL_MS = 3000; // sondeo de /api/status mientras no hay WebSocket
   const RETRY_MIN_MS = 1000;
   const RETRY_MAX_MS = 15000;
   const STARTUP_GRACE_MS = 4000; // no alarmar mientras la página arranca
+  const INSTANCES_REFRESH_MS = 10000; // lista de Sonias cuando no llega por el WebSocket
+  const INSTANCES_TIMEOUT_MS = 4000; // al arrancar no se espera más a la lista
+  const SELECT_HISTORY_TIMEOUT_MS = 3000; // tras cambiar de Sonia, espera su historial
   const ACTION_TIMEOUT_MS = 15000;
   const CONTROL_LOCK_MS = 2500; // tras tocar un control, el estado del servidor no lo pisa
   const PARTIAL_LINE_STALE_MS = 20000;
@@ -134,6 +144,38 @@
     return typeof value === "number" && Number.isFinite(value);
   }
 
+  /** "A", "A y B", "A, B y C". */
+  function joinNames(names) {
+    if (names.length <= 1) return names.join("");
+    return `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+  }
+
+  /** "12:03:04" -> "12:03". */
+  function shortTime(time) {
+    return typeof time === "string" ? time.slice(0, 5) : "";
+  }
+
+  // La Sonia elegida se recuerda en este navegador. El almacenamiento puede no
+  // existir (modo privado, bloqueado): entonces simplemente no se recuerda.
+  function loadStoredInstance() {
+    try {
+      return localStorage.getItem(STORAGE_KEY) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function storeInstance(id) {
+    try {
+      localStorage.setItem(STORAGE_KEY, id);
+    } catch {
+      // Sin almacenamiento: no pasa nada.
+    }
+  }
+
+  // El panel local solo se abre desde el propio equipo del stand.
+  const isLocalPanel = ["127.0.0.1", "localhost", "[::1]"].includes(location.hostname);
+
   // Los controles de ruido y el medidor usan escala de raíz cuadrada: los
   // niveles de voz son pequeños (0,01-0,1) y en escala lineal no se verían.
   function levelToFraction(level) {
@@ -163,8 +205,17 @@
     status: null,
     caps: new Set(),
     capsKnown: false,
-    lastStatusAt: 0,
+    lastContactAt: 0, // última respuesta del panel (WebSocket o HTTP)
+    lastWsMessageAt: 0,
     startedAt: Date.now(),
+    instances: [], // Sonias que conoce el panel (en local, solo una)
+    conflicts: { connected: [], conversing: [] },
+    instancesFetchedAt: 0,
+    instanceId: null, // la Sonia que se controla
+    preferredId: loadStoredInstance(), // la que eligió este navegador la última vez
+    awaitingHistoryUntil: 0, // tras "select", lo que llegue antes del historial es de la anterior
+    redirecting: false,
+    started: false,
     ws: null,
     wsLive: false,
     wsCreatedAt: 0,
@@ -188,7 +239,9 @@
 
   function collectElements() {
     const ids = [
-      "topbar-status", "topbar-text", "topbar-state", "offline-banner", "offline-detail", "slow-banner", "auth-banner",
+      "topbar-status", "topbar-name", "topbar-text", "topbar-state", "instances", "instance-list",
+      "dup-conversing", "dup-conversing-title", "dup-conversing-text", "keep-one-btn", "dup-connected",
+      "dup-connected-title", "dup-connected-text", "hero-kicker", "hero-disconnected", "cache-error", "offline-banner", "offline-detail", "slow-banner", "auth-banner",
       "reload-btn", "hero", "hero-mode", "hero-activity", "activity-dot", "hero-health", "hero-muted",
       "away-sign", "away-sign-text", "edit-sign-btn", "stop-btn", "greet-btn", "dance-btn", "logo-btn",
       "hide-btn", "mute-btn", "mute-label", "now-showing", "thumbs", "caption-input", "say-form",
@@ -239,12 +292,15 @@
     }
   }
 
-  /** Cloudflare Access redirige a su página de acceso cuando caduca la sesión. */
+  /**
+   * Cloudflare Access (si está delante) redirige a su propia página de acceso
+   * cuando caduca la sesión: la petición llega como redirección opaca o HTML.
+   */
   function looksLikeLogin(response, data) {
     if (response.type === "opaqueredirect") return true;
     if (data) return false;
-    const type = response.headers.get("content-type") || "";
-    return response.status === 401 || response.status === 403 || type.includes("text/html");
+    const html = (response.headers.get("content-type") || "").includes("text/html");
+    return response.status === 403 || (response.status === 200 && html);
   }
 
   function setAuthExpired() {
@@ -253,39 +309,79 @@
     updateConnectionUi();
   }
 
+  /** Un 401 de la API: caducó la sesión del panel en Cloudflare. En local nunca pasa. */
+  function goToLogin() {
+    setAuthExpired();
+    if (app.redirecting) return;
+    app.redirecting = true;
+    location.assign(LOGIN_URL);
+  }
+
+  /** Añade ?instance=<id> de la Sonia elegida (el panel local lo ignora). */
+  function withInstance(url, id = app.instanceId) {
+    if (!id) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}instance=${encodeURIComponent(id)}`;
+  }
+
   /**
-   * Manda una acción al orquestador y enseña su respuesta al operador.
-   * Devuelve {ok, message}. Con quiet solo avisa si falla.
+   * fetch con las opciones de siempre. Devuelve {response, data} (data es el
+   * JSON o null). Se encarga del 401 y de la página de acceso de Cloudflare.
    */
-  async function sendAction(action, params = {}, { button = null, quiet = false } = {}) {
+  async function apiFetch(url, options = {}) {
+    const response = await fetch(url, {
+      cache: "no-store",
+      credentials: "same-origin",
+      redirect: "manual",
+      ...options,
+    });
+    if (response.status === 401) goToLogin();
+    const data = await readJson(response);
+    if (response.status !== 401 && looksLikeLogin(response, data)) setAuthExpired();
+    return { response, data };
+  }
+
+  /** Mensaje para el operador cuando la respuesta no trae uno propio. */
+  function defaultActionError(status) {
+    if (status === 503) return "Esa Sonia no está conectada al panel ahora mismo.";
+    if (status === 504) return "Sonia no contestó a tiempo. Mira si lo hizo antes de repetirlo.";
+    if (status === 401) return "Tu sesión del panel caducó. Vuelve a entrar.";
+    return `El panel respondió con un error (código ${status}). Inténtalo de nuevo.`;
+  }
+
+  /**
+   * Manda una acción a una Sonia (por defecto, la elegida) y enseña su
+   * respuesta al operador. Devuelve {ok, message}. Con quiet solo avisa si
+   * falla; con silent no avisa nunca (quien llama junta los resultados).
+   */
+  async function sendAction(action, params = {}, { button = null, quiet = false, silent = false, instance } = {}) {
+    const target = instance === undefined ? app.instanceId : instance;
+    const notify = (message, kind) => {
+      if (!silent && (kind === "error" || !quiet)) showToast(message, kind);
+    };
     setBusy(button, true);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ACTION_TIMEOUT_MS);
     try {
-      const response = await fetch(API_ACTION, {
+      const body = { action, ...params };
+      if (target) body.instance = target;
+      const { response, data } = await apiFetch(API_ACTION, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Sonia-Panel": "1" },
-        body: JSON.stringify({ action, ...params }),
-        cache: "no-store",
-        credentials: "same-origin",
-        redirect: "manual",
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
-      const data = await readJson(response);
       if (!data) {
-        if (looksLikeLogin(response, data)) {
-          setAuthExpired();
-          showToast("Tu acceso al panel caducó. Recarga la página para volver a entrar.", "error");
-          return { ok: false };
-        }
-        const message = `El panel respondió con un error (código ${response.status}). Inténtalo de nuevo.`;
-        showToast(message, "error");
+        const message = app.authExpired
+          ? "Tu acceso al panel caducó. Recarga la página para volver a entrar."
+          : defaultActionError(response.status);
+        notify(message, "error");
         return { ok: false, message };
       }
+      markContact();
       const ok = response.ok && data.ok !== false;
       const serverMessage = typeof data.message === "string" ? data.message.trim() : "";
-      const message = serverMessage || (ok ? "Listo." : "Sonia no pudo hacerlo.");
-      if (!ok || !quiet) showToast(message, ok ? "ok" : "error");
+      const message = serverMessage || (ok ? "Listo." : defaultActionError(response.status));
+      notify(message, ok ? "ok" : "error");
       // Sin WebSocket, refresca ya para que se vea el cambio sin esperar al sondeo.
       if (ok && !app.wsLive) pollStatus();
       return { ok, message };
@@ -294,7 +390,7 @@
         error && error.name === "AbortError"
           ? "Sonia tardó demasiado en responder. Mira si lo hizo antes de repetirlo."
           : "No se pudo enviar: no hay conexión con el panel. Inténtalo de nuevo en unos segundos.";
-      showToast(message, "error");
+      notify(message, "error");
       return { ok: false, message };
     } finally {
       clearTimeout(timer);
@@ -312,16 +408,20 @@
 
   // ------------------------------------------------------------ conexión
 
+  function markContact() {
+    app.lastContactAt = Date.now();
+  }
+
   function eventsUrl() {
     const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-    return `${scheme}//${location.host}${API_EVENTS}`;
+    return withInstance(`${scheme}//${location.host}${API_EVENTS}`);
   }
 
   function connectWs() {
     clearTimeout(app.retryTimer);
     app.retryTimer = 0;
     app.nextRetryAt = 0;
-    if (app.ws) return;
+    if (app.ws || app.redirecting) return;
     let ws;
     try {
       ws = new WebSocket(eventsUrl());
@@ -330,9 +430,13 @@
       return;
     }
     app.ws = ws;
+    ws.instanceId = app.instanceId; // la Sonia con la que se abrió
     app.wsCreatedAt = Date.now();
     ws.addEventListener("open", () => {
-      if (app.ws === ws) app.wsOpenedAt = Date.now();
+      if (app.ws !== ws) return;
+      app.wsOpenedAt = Date.now();
+      // Si se cambió de Sonia mientras conectaba, se pide la buena.
+      if (app.instanceId && ws.instanceId !== app.instanceId) sendSelect(ws);
     });
     ws.addEventListener("message", (event) => {
       if (app.ws === ws) onWsMessage(event);
@@ -344,12 +448,24 @@
     updateConnectionUi();
   }
 
+  /** Pide por el WebSocket abierto la Sonia elegida y descarta lo que llegue antes de su historial. */
+  function sendSelect(ws) {
+    try {
+      ws.send(JSON.stringify({ type: "select", instance: app.instanceId }));
+      ws.instanceId = app.instanceId;
+      app.awaitingHistoryUntil = Date.now() + SELECT_HISTORY_TIMEOUT_MS;
+    } catch {
+      dropWs();
+    }
+  }
+
   /** Abandona el WebSocket actual y pasa a sondeo con reintento. */
   function dropWs() {
     const ws = app.ws;
     app.ws = null;
     app.wsLive = false;
     app.wsOpenedAt = 0;
+    app.awaitingHistoryUntil = 0;
     if (ws && ws.readyState <= WebSocket.OPEN) {
       try {
         ws.close();
@@ -357,6 +473,7 @@
         // Ya estaba cerrándose.
       }
     }
+    if (app.redirecting) return;
     startPolling();
     scheduleReconnect();
     updateConnectionUi();
@@ -383,6 +500,12 @@
     pollStatus();
   }
 
+  /** ¿Este estado es de la Sonia elegida? (en Cloudflare trae "instance"; en local, no). */
+  function statusIsForSelected(status) {
+    const id = status && status.instance && status.instance.id;
+    return !id || !app.instanceId || id === app.instanceId;
+  }
+
   function onWsMessage(event) {
     let data;
     try {
@@ -391,27 +514,36 @@
       return;
     }
     if (!data || typeof data !== "object") return;
+    app.lastWsMessageAt = Date.now();
+    markContact();
+    if (!app.wsLive) {
+      app.wsLive = true;
+      app.retryDelay = RETRY_MIN_MS;
+      stopPolling();
+    }
+    // Tras cambiar de Sonia, lo que llegue antes de su historial es de la anterior.
+    const switching = app.awaitingHistoryUntil > Date.now();
     switch (data.type) {
-      case "status":
-        if (!app.wsLive) {
-          app.wsLive = true;
-          app.retryDelay = RETRY_MIN_MS;
-          stopPolling();
-        }
-        applyStatus(data.status);
-        break;
-      case "message":
-        handleOrchestratorMessage(data.message, true);
-        break;
-      case "log":
-        appendLog(data);
+      case "instances":
+        applyInstances(data);
         break;
       case "history":
+        app.awaitingHistoryUntil = 0;
         applyHistory(data);
+        break;
+      case "status":
+        if (!switching && statusIsForSelected(data.status)) applyStatus(data.status);
+        break;
+      case "message":
+        if (!switching) handleOrchestratorMessage(data.message, true);
+        break;
+      case "log":
+        if (!switching) appendLog(data);
         break;
       default:
         break;
     }
+    updateConnectionUi();
   }
 
   function startPolling() {
@@ -425,25 +557,56 @@
     app.pollTimer = 0;
   }
 
+  /**
+   * Pide la lista de Sonias. Devuelve "ok", "unsupported" (servidor sin varias
+   * Sonias: se sigue como antes) o "error" (sin conexión).
+   */
+  async function fetchInstances({ timeout = ACTION_TIMEOUT_MS } = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const { response, data } = await apiFetch(API_INSTANCES, { signal: controller.signal });
+      if (response.ok && data) {
+        markContact();
+        app.instancesFetchedAt = Date.now();
+        applyInstances(data);
+        return "ok";
+      }
+      if (response.status === 404) {
+        markContact();
+        app.instancesFetchedAt = Date.now();
+        return "unsupported";
+      }
+      return "error";
+    } catch {
+      return "error";
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Sondeo mientras no hay WebSocket: lista de Sonias (cada poco) y estado de la elegida. */
   async function pollStatus() {
-    if (app.polling) return;
+    if (app.polling || app.redirecting) return;
     app.polling = true;
     try {
-      const response = await fetch(API_STATUS, {
-        cache: "no-store",
-        credentials: "same-origin",
-        redirect: "manual",
-      });
-      const data = await readJson(response);
+      if (Date.now() - app.instancesFetchedAt > INSTANCES_REFRESH_MS) await fetchInstances();
+      const requested = app.instanceId;
+      const { response, data } = await apiFetch(withInstance(API_STATUS, requested));
       if (response.ok && data) {
         const wasOffline = connectionLevel() === "offline";
         app.pollOk = true;
-        applyStatus(data);
+        markContact();
+        if (requested === app.instanceId && statusIsForSelected(data)) applyStatus(data);
         // El servidor ha vuelto: no esperes al siguiente reintento del WebSocket.
         if (wasOffline && !app.ws) connectWs();
+      } else if (response.status === 404) {
+        // Esa Sonia ya no existe para el panel: al pedir la lista se elige otra.
+        app.pollOk = true;
+        markContact();
+        app.instancesFetchedAt = 0;
       } else {
         app.pollOk = false;
-        if (looksLikeLogin(response, data)) setAuthExpired();
       }
     } catch {
       app.pollOk = false;
@@ -453,27 +616,37 @@
     }
   }
 
-  /** Vigila cada segundo que el WebSocket siga vivo y refresca los avisos de conexión. */
+  /** Vigila cada segundo que el WebSocket siga vivo y refresca avisos y tiempos. */
   function watchdog() {
     const now = Date.now();
     const ws = app.ws;
     if (ws) {
       const stuckConnecting = ws.readyState === WebSocket.CONNECTING && now - app.wsCreatedAt > WS_CONNECT_TIMEOUT_MS;
       const silentAfterOpen = !app.wsLive && app.wsOpenedAt && now - app.wsOpenedAt > STATUS_STALE_MS;
-      const staleLive = app.wsLive && now - app.lastStatusAt > STATUS_STALE_MS;
+      // Si la Sonia elegida está desconectada no llega su estado: el silencio no prueba nada.
+      const staleLive = app.wsLive && selectedConnected() && now - app.lastWsMessageAt > STATUS_STALE_MS;
       if (stuckConnecting || silentAfterOpen || staleLive) dropWs();
     }
+    // Con la Sonia elegida desconectada el WebSocket puede estar callado: la
+    // lista se pide de vez en cuando para saber si vuelve y si el panel responde.
+    if (app.wsLive && !selectedConnected() && now - app.instancesFetchedAt > INSTANCES_REFRESH_MS) {
+      app.instancesFetchedAt = now;
+      fetchInstances().then((result) => {
+        if (result === "error" && app.wsLive) dropWs();
+      });
+    }
     // Si la galería falló al arrancar, se reintenta cuando vuelve la conexión.
-    if (app.galleryState === "error" && app.lastStatusAt && now - app.galleryAttemptAt > 10000) loadGallery();
+    if (app.galleryState === "error" && app.lastContactAt && now - app.galleryAttemptAt > 10000) loadGallery();
+    renderInstances();
     updateConnectionUi();
   }
 
   function connectionLevel() {
     if (app.authExpired) return "auth";
     if (app.wsLive) return "live";
-    const age = Date.now() - app.lastStatusAt;
-    if (app.lastStatusAt && app.pollOk && age < POLL_INTERVAL_MS * 3) return "slow";
-    if (!app.lastStatusAt && Date.now() - app.startedAt < STARTUP_GRACE_MS) return "connecting";
+    const age = Date.now() - app.lastContactAt;
+    if (app.lastContactAt && app.pollOk && age < POLL_INTERVAL_MS * 3) return "slow";
+    if (!app.lastContactAt && Date.now() - app.startedAt < STARTUP_GRACE_MS) return "connecting";
     return "offline";
   }
 
@@ -490,12 +663,17 @@
         const seconds = Math.max(1, Math.ceil((app.nextRetryAt - Date.now()) / 1000));
         parts.push(`Reintento en ${seconds} s.`);
       }
-      if (app.lastStatusAt) parts.push(`Último dato hace ${formatAgo(Date.now() - app.lastStatusAt)}.`);
-      parts.push("Comprueba que el equipo del stand está encendido y con internet.");
+      if (app.lastContactAt) parts.push(`Último dato hace ${formatAgo(Date.now() - app.lastContactAt)}.`);
+      parts.push(
+        isLocalPanel
+          ? "Comprueba que Sonia sigue abierta en este equipo."
+          : "Comprueba la conexión a internet de este móvil o portátil.",
+      );
       setText(ui.offlineDetail, parts.join(" "));
     }
     renderTopbar();
     renderHealthSummary();
+    renderDisconnected();
   }
 
   // ------------------------------------------------------------ estado
@@ -505,7 +683,6 @@
     app.status = status;
     app.caps = new Set(Array.isArray(status.capabilities) ? status.capabilities : []);
     app.capsKnown = true;
-    app.lastStatusAt = Date.now();
     renderAll();
   }
 
@@ -548,6 +725,8 @@
    */
   function refreshControls() {
     const mode = app.status ? currentMode() : null;
+    // Sin estado de la Sonia elegida, o con ella desconectada, las acciones no llegarían.
+    const reachable = Boolean(app.status) && selectedConnected();
     for (const node of document.querySelectorAll("[data-cap]")) {
       const capOk = !app.capsKnown || hasCap(node.dataset.cap);
       const offModes = node.dataset.offModes ? node.dataset.offModes.split(" ") : [];
@@ -555,7 +734,7 @@
       const rule = node.dataset.extra && EXTRA_RULES[node.dataset.extra];
       const extraOk = !rule || rule();
       const busy = node.classList.contains("is-busy");
-      const disabled = !capOk || !modeOk || !extraOk || busy;
+      const disabled = !reachable || !capOk || !modeOk || !extraOk || busy;
       if (node.disabled !== disabled) node.disabled = disabled;
     }
     for (const note of document.querySelectorAll("[data-cap-note]")) {
@@ -564,6 +743,312 @@
     for (const note of document.querySelectorAll("[data-mode-note]")) {
       setHidden(note, mode !== note.dataset.modeNote);
     }
+  }
+
+  // ------------------------------------------------------------ varias Sonias
+
+  function findInstance(id) {
+    return app.instances.find((instance) => instance.id === id) || null;
+  }
+
+  function selectedInstance() {
+    return findInstance(app.instanceId);
+  }
+
+  /** ¿La Sonia elegida está conectada al panel? Si no se sabe, se da por buena. */
+  function selectedConnected() {
+    const instance = selectedInstance();
+    return !instance || instance.connected !== false;
+  }
+
+  function hasSeveralInstances() {
+    return app.instances.length >= 2;
+  }
+
+  function instanceName(instance) {
+    if (!instance) return "Sonia";
+    return String(instance.name || instance.host || instance.id);
+  }
+
+  function nameOf(id) {
+    return instanceName(findInstance(id) || { id });
+  }
+
+  /** "hace 12 min" desde last_seen (milisegundos desde 1970). */
+  function lastSeenText(instance) {
+    if (!isNumber(instance.last_seen)) return "";
+    return `hace ${formatDuration(Math.max(0, (Date.now() - instance.last_seen) / 1000))}`;
+  }
+
+  function idList(value) {
+    return Array.isArray(value) ? value.filter((id) => typeof id === "string") : [];
+  }
+
+  /** Llega la lista de Sonias (al conectar, al cambiar algo o por sondeo). */
+  function applyInstances(data) {
+    const list = (Array.isArray(data.instances) ? data.instances : []).filter(
+      (instance) => instance && typeof instance.id === "string" && instance.id,
+    );
+    const conflicts = data.conflicts && typeof data.conflicts === "object" ? data.conflicts : null;
+    app.instances = list;
+    if (conflicts) {
+      app.conflicts = { connected: idList(conflicts.connected), conversing: idList(conflicts.conversing) };
+    } else {
+      // Sin "conflicts" se calculan aquí con la misma regla.
+      const connected = list.filter((instance) => instance.connected !== false);
+      app.conflicts = {
+        connected: connected.map((instance) => instance.id),
+        conversing: connected.filter((instance) => instance.mode === "conversation").map((instance) => instance.id),
+      };
+    }
+
+    // Si la elegida ya no existe (o no había), la que eligió este navegador o la primera conectada.
+    if (!findInstance(app.instanceId)) {
+      const next = findInstance(app.preferredId) || list.find((instance) => instance.connected !== false) || list[0];
+      if (next) switchInstance(next.id, { remember: false });
+    }
+    renderInstances();
+    renderTopbar();
+    renderHeroKicker();
+    renderDisconnected();
+    if (app.status) renderHero(app.status);
+    refreshControls();
+  }
+
+  /**
+   * Cambia la Sonia que se controla: limpia lo de la anterior y pide la nueva
+   * (por el WebSocket si está abierto; si no, por sondeo).
+   */
+  function switchInstance(id, { remember = true } = {}) {
+    if (!id || id === app.instanceId) return;
+    const first = app.instanceId === null;
+    app.instanceId = id;
+    if (remember) {
+      app.preferredId = id;
+      storeInstance(id);
+    }
+    clearInstanceView();
+    const ws = app.ws;
+    if (ws && ws.readyState === WebSocket.OPEN && (!first || ws.instanceId !== id)) sendSelect(ws);
+    // Durante el arranque, init() pide el estado y la galería con la Sonia ya elegida.
+    if (app.started) {
+      if (!app.wsLive) pollStatus();
+      loadGallery();
+    }
+    renderInstances();
+  }
+
+  /** Borra estado, conversación y registro de la Sonia anterior. */
+  function clearInstanceView() {
+    app.status = null;
+    app.caps = new Set();
+    app.capsKnown = false;
+    app.notesBase = null;
+    app.lastPresence = null;
+    resetChat();
+    ui.log.replaceChildren();
+    ui.notesInput.value = "";
+    ui.voiceSelect.dirty = false;
+    voicesKey = "";
+    sessionKey = "";
+    usageKey = "";
+    healthKeys = "";
+    healthRows.clear();
+    ui.healthList.replaceChildren(el("li", { class: "muted", text: "Esperando datos…" }));
+    setHidden(ui.lastError, true);
+    if (ui.hero.dataset.mode !== "") ui.hero.dataset.mode = "";
+    setText(ui.heroMode, `Conectando con ${instanceName(selectedInstance())}…`);
+    setText(ui.heroActivity, "Esperando datos");
+    ui.activityDot.dataset.state = "";
+    setHidden(ui.heroMuted, true);
+    setHidden(ui.awaySign, true);
+    for (const button of ui.modeButtons) button.setAttribute("aria-pressed", "false");
+    setText(ui.nowShowing, "No hay ninguna imagen en pantalla.");
+    ui.nowShowing.classList.remove("is-showing");
+    renderHeroKicker();
+    renderNotesState();
+    refreshControls();
+    updateConnectionUi();
+  }
+
+  // Botones de cada Sonia, por id, para actualizarlos sin rehacerlos (un
+  // botón rehecho bajo el dedo puede perder la pulsación).
+  const instanceButtons = new Map();
+
+  function makeInstanceButton(id) {
+    const parts = {
+      button: el("button", { type: "button", class: "instance", "data-instance-id": id }),
+      dot: el("span", { class: "instance-dot", "aria-hidden": "true" }),
+      name: el("span", { class: "instance-name" }),
+      host: el("span", { class: "instance-host" }),
+      mode: el("span", { class: "instance-mode" }),
+      health: el("span", { class: "instance-health" }),
+      check: el("span", { class: "instance-check", text: "La estás controlando" }),
+    };
+    parts.button.append(
+      parts.dot,
+      el("span", { class: "instance-title" }, parts.name, parts.host),
+      el("span", { class: "instance-detail" }, parts.mode, parts.health, parts.check),
+    );
+    parts.button.addEventListener("click", () => onInstanceClick(id));
+    return parts;
+  }
+
+  function renderInstances() {
+    const several = hasSeveralInstances();
+    setHidden(ui.instances, !several);
+    document.body.classList.toggle("has-several", several);
+    if (!several) return;
+
+    const ids = app.instances.map((instance) => instance.id);
+    for (const [id, parts] of instanceButtons) {
+      if (!ids.includes(id)) {
+        parts.button.remove();
+        instanceButtons.delete(id);
+      }
+    }
+    app.instances.forEach((instance, index) => {
+      let parts = instanceButtons.get(instance.id);
+      if (!parts) {
+        parts = makeInstanceButton(instance.id);
+        instanceButtons.set(instance.id, parts);
+      }
+      // Mantiene el orden de la lista.
+      if (ui.instanceList.children[index] !== parts.button) {
+        ui.instanceList.insertBefore(parts.button, ui.instanceList.children[index] || null);
+      }
+      paintInstanceButton(parts, instance);
+    });
+    renderConflicts();
+  }
+
+  function paintInstanceButton(parts, instance) {
+    const connected = instance.connected !== false;
+    const selected = instance.id === app.instanceId;
+    const mode = MODES[instance.mode] ? instance.mode : "";
+    const set = (node, attr, value) => {
+      if (node.getAttribute(attr) !== value) node.setAttribute(attr, value);
+    };
+    set(parts.button, "aria-pressed", String(selected));
+    set(parts.button, "data-connected", String(connected));
+    set(parts.button, "data-mode", mode);
+    setText(parts.name, instanceName(instance));
+    const host = instance.host && instance.host !== instance.name ? `Equipo: ${instance.host}` : "";
+    setText(parts.host, host);
+    setText(parts.mode, mode ? MODES[mode].short : "Sin modo");
+
+    let health = "";
+    let level = "";
+    if (!connected) {
+      health = `Desconectada ${lastSeenText(instance)}`.trim();
+      level = "off";
+    } else if (instance.healthy === true) {
+      health = "Todo bien";
+      level = "ok";
+    } else if (instance.healthy === false) {
+      const issues = Array.isArray(instance.issues) ? instance.issues.filter((i) => typeof i === "string") : [];
+      health = issues.length ? `Revisar: ${issues.join(", ")}` : "Hay algo que revisar";
+      level = "bad";
+    }
+    setText(parts.health, health);
+    set(parts.health, "data-level", level);
+    const label = [instanceName(instance), mode ? MODES[mode].short : "", health, selected ? "la estás controlando" : ""]
+      .filter(Boolean)
+      .join(", ");
+    set(parts.button, "aria-label", label);
+  }
+
+  /** Avisos de duplicados: varias conectadas (ámbar) o varias conversando (rojo). */
+  function renderConflicts() {
+    const connected = app.conflicts.connected;
+    const conversing = app.conflicts.conversing;
+    const doubleTalk = conversing.length >= 2;
+
+    setHidden(ui.dupConversing, !doubleTalk);
+    if (doubleTalk) {
+      setText(ui.dupConversingTitle, `Hay ${conversing.length} Sonias conversando a la vez`);
+      const selected = selectedInstance();
+      const keepable = selected && conversing.includes(selected.id);
+      let text = `${joinNames(conversing.map(nameOf))}: se paga doble y pueden responder a la vez.`;
+      if (!keepable) text += " Elige abajo cuál debe seguir conversando y vuelve a este aviso.";
+      setText(ui.dupConversingText, text);
+      setHidden(ui.keepOneBtn, !keepable);
+      if (keepable) setText(ui.keepOneBtn, `Dejar solo «${instanceName(selected)}» conversando`);
+    }
+
+    // Si ya está el aviso rojo, el ámbar sobra.
+    const several = connected.length >= 2 && !doubleTalk;
+    setHidden(ui.dupConnected, !several);
+    if (several) {
+      setText(ui.dupConnectedTitle, `Hay ${connected.length} Sonias conectadas`);
+      setText(
+        ui.dupConnectedText,
+        `${joinNames(connected.map(nameOf))}. Normalmente solo debe haber una: cierra Sonia en el equipo que sobre.`,
+      );
+    }
+  }
+
+  function onInstanceClick(id) {
+    if (id === app.instanceId) return;
+    switchInstance(id);
+    showToast(`Ahora controlas «${nameOf(id)}».`, "info");
+  }
+
+  /** Manda a "Fuera" a las demás Sonias que están conversando (una acción por Sonia). */
+  async function onKeepOne() {
+    const keep = selectedInstance();
+    if (!keep) return;
+    const others = app.conflicts.conversing.filter((id) => id !== keep.id);
+    if (others.length === 0) return;
+    const names = joinNames(others.map((id) => `«${nameOf(id)}»`));
+    const plural = others.length > 1;
+    const ok = await confirmAction({
+      title: `¿Dejar solo «${instanceName(keep)}» conversando?`,
+      text:
+        `${names} ${plural ? "pasarán" : "pasará"} a «Fuera»: ${plural ? "saldrán" : "saldrá"} de su pantalla ` +
+        `y ${plural ? "dejarán" : "dejará"} el letrero. «${instanceName(keep)}» sigue conversando.`,
+      confirmLabel: "Sí, dejar solo esta",
+    });
+    if (!ok) return;
+    setBusy(ui.keepOneBtn, true);
+    const results = await Promise.all(
+      others.map((id) => sendAction("set_mode", { mode: "away" }, { instance: id, silent: true })),
+    );
+    setBusy(ui.keepOneBtn, false);
+    const failed = others.filter((_, index) => !results[index].ok);
+    const done = others.filter((_, index) => results[index].ok);
+    if (done.length) {
+      const doneNames = joinNames(done.map((id) => `«${nameOf(id)}»`));
+      showToast(`${doneNames} ${done.length > 1 ? "pasan" : "pasa"} a «Fuera».`, "ok");
+    }
+    for (const id of failed) {
+      showToast(`«${nameOf(id)}»: ${results[others.indexOf(id)].message}`, "error");
+    }
+    // La lista nueva llega sola por el WebSocket; sin él, se pide.
+    if (!app.wsLive) fetchInstances();
+  }
+
+  /** La Sonia elegida está desconectada: aviso en gris y controles deshabilitados. */
+  function renderDisconnected() {
+    const instance = selectedInstance();
+    const disconnected = Boolean(instance) && instance.connected === false;
+    const value = String(disconnected);
+    if (ui.hero.dataset.disconnected !== value) ui.hero.dataset.disconnected = value;
+    setHidden(ui.heroDisconnected, !disconnected);
+    if (disconnected) {
+      const name = hasSeveralInstances() ? `«${instanceName(instance)}»` : "Esta Sonia";
+      const since = lastSeenText(instance);
+      setText(
+        ui.heroDisconnected,
+        `${name} está desconectada${since ? ` desde ${since}` : ""}. Los controles no funcionan hasta que ` +
+          "vuelva: comprueba que su equipo está encendido y con internet.",
+      );
+    }
+  }
+
+  function renderHeroKicker() {
+    const several = hasSeveralInstances();
+    setText(ui.heroKicker, several ? `Ahora mismo · ${instanceName(selectedInstance())}` : "Ahora mismo");
   }
 
   // ------------------------------------------------------------ cabecera y modo
@@ -586,11 +1071,16 @@
   function renderTopbar() {
     const level = connectionLevel();
     const status = app.status;
+    const several = hasSeveralInstances();
     let text = "Conectando…";
     let detail = "";
     let mode = "";
+    setText(ui.topbarName, several ? instanceName(selectedInstance()) : "");
+    setHidden(ui.topbarName, !several);
     if (level === "offline" || level === "auth") {
       text = "Sin conexión";
+    } else if (!selectedConnected()) {
+      text = "Desconectada";
     } else if (status) {
       mode = currentMode();
       text = MODES[mode].short;
@@ -603,9 +1093,11 @@
 
   function renderHero(status) {
     const mode = currentMode();
+    const connected = selectedConnected();
     if (ui.hero.dataset.mode !== mode) ui.hero.dataset.mode = mode;
-    setText(ui.heroMode, MODES[mode].sentence);
-    setText(ui.heroActivity, activityText(status));
+    // Desconectada, el estado que se ve es el último conocido: se dice así.
+    setText(ui.heroMode, connected ? MODES[mode].sentence : "Sonia desconectada");
+    setText(ui.heroActivity, connected ? activityText(status) : `Lo último que se supo: ${MODES[mode].short.toLowerCase()}`);
     const state = activityState(status);
     if (ui.activityDot.dataset.state !== state) ui.activityDot.dataset.state = state;
 
@@ -634,6 +1126,8 @@
     let text = "Comprobando…";
     if (level === "offline" || level === "auth") {
       text = "Sin datos: no hay conexión";
+    } else if (!selectedConnected()) {
+      text = "Sin datos: Sonia desconectada";
     } else if (app.status) {
       const problems = healthEntries(app.status).filter(([, item]) => item.ok === false);
       if (problems.length === 0) {
@@ -759,32 +1253,36 @@
   }
 
   async function loadGallery() {
+    const requested = app.instanceId;
     app.galleryState = "loading";
     app.galleryAttemptAt = Date.now();
+    renderGallery();
+    let gallery = [];
+    let state = "error";
     try {
-      const response = await fetch(API_GALLERY, {
-        cache: "no-store",
-        credentials: "same-origin",
-        redirect: "manual",
-      });
-      const data = await readJson(response);
-      if (!response.ok || !data) {
-        if (looksLikeLogin(response, data)) setAuthExpired();
-        throw new Error(`galería ${response.status}`);
+      const { response, data } = await apiFetch(withInstance(API_GALLERY, requested));
+      if (response.ok && data) {
+        const images = Array.isArray(data.images) ? data.images : [];
+        // La url viene del servidor: /api/gallery/<id> en local, /gallery/<archivo> en
+        // Cloudflare. Sin url (imagen que no está en Cloudflare) sale sin miniatura.
+        gallery = images
+          .filter((image) => image && typeof image.id === "string" && image.id)
+          .map((image) => ({ id: image.id, url: typeof image.url === "string" && image.url ? image.url : "" }));
+        state = "ready";
       }
-      const images = Array.isArray(data.images) ? data.images : [];
-      app.gallery = images
-        .filter((image) => image && typeof image.id === "string" && image.id)
-        .map((image) => ({
-          id: image.id,
-          url: typeof image.url === "string" ? image.url : `${API_GALLERY}/${encodeURIComponent(image.id)}`,
-        }));
-      app.galleryState = "ready";
     } catch {
-      app.galleryState = "error";
+      state = "error";
     }
+    // Si mientras tanto se cambió de Sonia, esta respuesta ya no vale.
+    if (requested !== app.instanceId) return;
+    app.gallery = gallery;
+    app.galleryState = state;
     renderGallery();
     refreshControls();
+  }
+
+  function missingThumb() {
+    return el("span", { class: "thumb-missing", text: "Sin vista previa" });
   }
 
   function renderGallery() {
@@ -819,7 +1317,7 @@
             "data-off-modes": "away",
             "aria-label": `Mostrar «${prettyImageName(image.id)}»`,
           },
-          el("img", { src: image.url, alt: "", loading: "lazy", decoding: "async" }),
+          image.url ? thumbImage(image.url) : missingThumb(),
           el("span", { class: "thumb-name", text: prettyImageName(image.id) }),
         );
         button.addEventListener("click", () => onShowImage(image.id, button));
@@ -827,6 +1325,12 @@
       }),
     );
     if (app.status) renderImageState(app.status);
+  }
+
+  function thumbImage(url) {
+    const img = el("img", { src: url, alt: "", loading: "lazy", decoding: "async" });
+    img.addEventListener("error", () => img.replaceWith(missingThumb()), { once: true });
+    return img;
   }
 
   function currentImage(status) {
@@ -1100,6 +1604,9 @@
     } else {
       setText(ui.cacheText, "Sin datos");
     }
+    const cacheError = cache && typeof cache.error === "string" ? cache.error.trim() : "";
+    setText(ui.cacheError, cacheError ? `Último fallo al grabar: ${cacheError}` : "");
+    setHidden(ui.cacheError, !cacheError);
 
     // Sesión
     const session = status.session && typeof status.session === "object" ? status.session : null;
@@ -1223,11 +1730,13 @@
     return line.ambient ? "Sonia (sola)" : "Sonia";
   }
 
-  function addSpeechLine({ role, text, final, ambient = false }) {
+  function addSpeechLine({ role, text, final, ambient = false, time = "" }) {
     const line = { role, text, final, ambient, updatedAt: Date.now() };
     line.textNode = el("span", { class: "line-text" });
     line.node = el("div", { class: `line line--${role}${ambient ? " line--ambient" : ""}` });
-    line.node.append(el("span", { class: "line-who", text: speakerName(line) }), line.textNode);
+    const who = el("span", { class: "line-who" }, el("span", { class: "line-name", text: speakerName(line) }));
+    if (shortTime(time)) who.append(el("span", { class: "line-time", text: shortTime(time) }));
+    line.node.append(who, line.textNode);
     paintSpeechLine(line);
     appendChatNode(line);
     return line;
@@ -1240,8 +1749,9 @@
     if (stick) chatScrollToBottom();
   }
 
-  function addSystemLine(text, kind = "") {
-    const line = { role: "system", node: el("div", { class: `line line--system${kind ? ` line--${kind}` : ""}`, text }) };
+  function addSystemLine(text, kind = "", time = "") {
+    const label = shortTime(time) ? `${shortTime(time)} · ${text}` : text;
+    const line = { role: "system", node: el("div", { class: `line line--system${kind ? ` line--${kind}` : ""}`, text: label }) };
     appendChatNode(line);
   }
 
@@ -1276,7 +1786,7 @@
       }
       paintSpeechLine(line);
     } else if (text) {
-      line = addSpeechLine({ role, text, final });
+      line = addSpeechLine({ role, text, final, time: message.time });
       if (!final) chat.open[role] = line;
     }
   }
@@ -1295,11 +1805,11 @@
     ) {
       last.ambient = true;
       last.node.classList.add("line--ambient");
-      setText(last.node.querySelector(".line-who"), speakerName(last));
+      setText(last.node.querySelector(".line-name"), speakerName(last));
       paintSpeechLine(last);
       return;
     }
-    chat.ambient = addSpeechLine({ role: "assistant", text, final: false, ambient: true });
+    chat.ambient = addSpeechLine({ role: "assistant", text, final: false, ambient: true, time: message.time });
     chat.ambientUid = message.utterance_id;
   }
 
@@ -1341,24 +1851,28 @@
         break;
       case "stop_speaking":
         closeSoniaLines();
-        addSystemLine("Sonia se calló");
+        addSystemLine("Sonia se calló", "", message.time);
         break;
       case "show_image": {
         const id = message.image_id || (message.source === "camera" ? "camera" : "");
-        addSystemLine(id === "camera" ? "En pantalla: una foto de la cámara" : `En pantalla: «${prettyImageName(id || "imagen")}»`);
+        addSystemLine(
+          id === "camera" ? "En pantalla: una foto de la cámara" : `En pantalla: «${prettyImageName(id || "imagen")}»`,
+          "",
+          message.time,
+        );
         break;
       }
       case "hide_image":
-        addSystemLine("Imagen retirada de la pantalla");
+        addSystemLine("Imagen retirada de la pantalla", "", message.time);
         break;
       case "presence":
         if (app.lastPresence !== null && app.lastPresence !== message.present) {
-          addSystemLine(message.present ? "Sonia volvió a la pantalla" : "Sonia salió de la pantalla");
+          addSystemLine(message.present ? "Sonia volvió a la pantalla" : "Sonia salió de la pantalla", "", message.time);
         }
         app.lastPresence = Boolean(message.present);
         break;
       case "error":
-        addSystemLine(`Error: ${message.message || "sin detalles"}`, "error");
+        addSystemLine(`Error: ${message.message || "sin detalles"}`, "error", message.time);
         break;
       case "state":
         // Cambia la actividad al momento, sin esperar al siguiente estado completo.
@@ -1417,6 +1931,7 @@
 
   function bindEvents() {
     ui.reloadBtn.addEventListener("click", () => location.reload());
+    ui.keepOneBtn.addEventListener("click", onKeepOne);
 
     for (const button of ui.modeButtons) button.addEventListener("click", () => onModeClick(button));
     ui.editSignBtn.addEventListener("click", onEditSign);
@@ -1487,15 +2002,20 @@
     });
   }
 
-  function init() {
+  async function init() {
     collectElements();
     bindEvents();
     renderVolumeLabel();
     renderGateControl();
+    refreshControls();
+    setInterval(watchdog, 1000);
+    // Primero la lista de Sonias, para abrir el WebSocket ya con la elegida
+    // (sin esperar más de unos segundos: si falla, se sigue igual).
+    await fetchInstances({ timeout: INSTANCES_TIMEOUT_MS });
+    app.started = true;
     connectWs();
     startPolling();
     loadGallery();
-    setInterval(watchdog, 1000);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

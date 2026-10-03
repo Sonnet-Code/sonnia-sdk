@@ -146,11 +146,21 @@ en este mecanismo.
 
 ## El equipo del stand
 
-Mini PC GMKtec EVO-X2 AI: AMD Ryzen AI Max+ 395, gráfica integrada Radeon 8060S, 128 GB de memoria unificada, 2 TB SSD, Wi-Fi 7, Windows 11 Pro. Va a la vista en el stand, porque Sonia invita a los visitantes a verlo cuando cuenta que corre en local.
+Sonia no tiene por qué correr en el Mac donde se desarrolla. El equipo del stand está por decidir: el mini PC GMKtec EVO-X2 AI (Windows 11 Pro), otro portátil o el propio Mac. Todo lo de esta guía vale para macOS, Windows y Linux.
 
 - Colocarlo sobre la mesa, con el logo visible y sin tapar la ventilación.
-- Un cartel pequeño al lado: "Aquí vive Sonia. Todo corre en local, sin nube."
-- Conectar por cable lo que se pueda (pantalla, cámara, micrófono, altavoz) y dejar el Wi-Fi solo como respaldo: la demo no necesita internet.
+- Conectar por cable lo que se pueda (pantalla, cámara, micrófono, altavoz y **red**). Con GPT-Live (`VOICE_ENGINE=live`, el modo por defecto) Sonia necesita internet para conversar: sin red, el plan B es pasarla a "Solo saludos" desde el panel local de ese equipo (`http://127.0.0.1:8780`), que funciona con frases ya grabadas.
+- El cartel "Aquí vive Sonia. Todo corre en local, sin nube." solo vale con el motor local (`VOICE_ENGINE=pipeline`); con GPT-Live no es cierto. Está entre las decisiones pendientes de `ROADMAP.md`.
+
+### Instalar Sonia en el equipo del stand
+
+1. Python 3.12 con `uv` y la build de Unity para ese sistema (`docs/unity.md`; la de macOS está en `unity/Build/macOS/Sonia.app`, la de Windows hay que compilarla).
+2. Clonar el repo (privado, org Sonnet-Code) y, desde `server/`: `uv sync --extra audio --extra camera --extra mcp --extra panel`.
+3. `.env` a partir de `.env.example`, con las claves pasadas a mano (nunca por git): `LIVE_API_KEY`, el modelo de visión en `LLM_*`, `AUDIO_INPUT_DEVICE`, `AUDIO_BARGE_IN=false`, `PANEL_CLOUD_TOKEN` (para que salga en el panel de `sonia.sonnetcode.com`) y un nombre reconocible en `PANEL_INSTANCE_NAME` (por ejemplo "Mini PC del stand").
+4. Nada más de red: Sonia se conecta sola hacia fuera al panel de Cloudflare; no hay que abrir puertos ni instalar túneles. Si otro equipo (el Mac de desarrollo, por ejemplo) también tiene `PANEL_CLOUD_TOKEN` y está corriendo, el panel mostrará dos Sonias y avisará: hay que dejar solo una.
+5. `uv run sonia check` y `uv run sonia say "Hola, soy Sonia"` por el altavoz del stand.
+6. `uv run sonia run`. A los 20 segundos graba solas las frases del modo saludos en `cache/voice` de ese equipo (o con "Preparar voces" en el panel). Cada equipo tiene su caché y su estado del panel (`cache/`).
+7. Abrir la app de Unity y comprobar en `https://sonia.sonnetcode.com` (desde un móvil, con la contraseña del panel) que sale esta Sonia y solo esta. Sin internet queda el panel local en `http://127.0.0.1:8780` de ese equipo.
 
 ## Pantalla vertical (9:16)
 

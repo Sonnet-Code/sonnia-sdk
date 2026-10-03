@@ -357,6 +357,8 @@ async def test_el_websocket_manda_historial_estado_y_mensajes(tmp_path: Path) ->
             async with connect(f"ws://{host}/api/events", origin="https://otra-web.example"):  # type: ignore[arg-type]
                 pass
         async with connect(f"ws://{host}/api/events", origin=f"http://{host}") as ws:  # type: ignore[arg-type]
+            listing = json.loads(await ws.recv())
+            assert listing["type"] == "instances" and len(listing["instances"]) == 1
             first = json.loads(await ws.recv())
             assert first["type"] == "history" and isinstance(first["logs"], list)
             second = json.loads(await ws.recv())
