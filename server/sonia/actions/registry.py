@@ -1,7 +1,7 @@
 """Registro único de acciones del modelo.
 
-La misma definición (`ActionSpec`) alimenta el tool calling de la API compatible
-con OpenAI y el servidor MCP local. Aquí vive también la validación básica de
+La misma definición (`ActionSpec`) alimenta las herramientas del backend al que
+delega GPT-Live (API Responses). Aquí vive también la validación básica de
 argumentos contra el JSON Schema de cada acción: nunca lanzamos hacia el
 orquestador, un error se devuelve como texto para que el modelo lo lea.
 """
@@ -127,20 +127,6 @@ class ActionRegistry:
     def __iter__(self) -> Iterator[ActionSpec]:
         return iter(self._specs.values())
 
-    def to_openai_tools(self) -> list[dict[str, Any]]:
-        """Traduce el registro al formato ``tools`` de la API de OpenAI."""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": spec.name,
-                    "description": spec.description,
-                    "parameters": spec.parameters,
-                },
-            }
-            for spec in self._specs.values()
-        ]
-
     def to_responses_tools(self) -> list[dict[str, Any]]:
         """Traduce el registro al formato ``tools`` de la API Responses.
 
@@ -153,17 +139,6 @@ class ActionRegistry:
                 "name": spec.name,
                 "description": spec.description,
                 "parameters": spec.parameters,
-            }
-            for spec in self._specs.values()
-        ]
-
-    def to_mcp_tools(self) -> list[dict[str, Any]]:
-        """Traduce el registro al formato de tools de MCP."""
-        return [
-            {
-                "name": spec.name,
-                "description": spec.description,
-                "inputSchema": spec.parameters,
             }
             for spec in self._specs.values()
         ]

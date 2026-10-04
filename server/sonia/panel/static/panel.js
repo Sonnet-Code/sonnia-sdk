@@ -248,7 +248,7 @@
       "say-input", "say-btn", "notes-form", "notes-input", "notes-btn", "notes-state", "volume-input",
       "volume-value", "gate-input", "gate-value", "gate-meter-fill", "gate-meter-mark",
       "gate-meter-caption", "health-list", "last-error", "last-error-text", "chat", "chat-empty",
-      "voice-select", "voice-btn", "barge-input", "showcase-input", "ask-form", "ask-input", "ask-btn",
+      "voice-select", "voice-btn", "showcase-input", "anim-groups", "ask-form", "ask-input", "ask-btn",
       "restart-btn", "cache-progress", "cache-text", "cache-btn", "session-facts", "usage-facts", "log",
       "toasts", "confirm-dialog", "confirm-title", "confirm-text", "confirm-ok", "away-dialog",
       "away-title", "away-help", "away-text", "away-ok",
@@ -852,6 +852,8 @@
     voicesKey = "";
     sessionKey = "";
     usageKey = "";
+    animKey = "";
+    ui.animGroups.replaceChildren();
     healthKeys = "";
     healthRows.clear();
     ui.healthList.replaceChildren(el("li", { class: "muted", text: "Esperando datos…" }));
@@ -1567,6 +1569,111 @@
   let voicesKey = "";
   let sessionKey = "";
   let usageKey = "";
+  let animKey = "";
+
+  /** Grupos del bloque de animaciones (los que manda Unity), en este orden. */
+  const ANIMATION_GROUPS = [
+    ["greeting", "Saludo"],
+    ["dance", "Bailes"],
+    ["fourth_wall", "Hacia el público"],
+    ["soft", "Gestos suaves"],
+    ["talking", "Gestos al hablar"],
+    ["idle_variation", "En reposo"],
+    ["thinking", "Pensando"],
+    ["nod", "Escuchando"],
+    ["present", "Señalar una imagen"],
+  ];
+
+  /** Nombres legibles de los clips conocidos; el resto se deriva del nombre del clip. */
+  const ANIMATION_NAMES = {
+    Greeting: "Saludar con la mano",
+    F_Dances_006: "Baile 6",
+    Dance_HipHop: "Hip hop",
+    Dance_Jazz: "Jazz",
+    Dance_RunningMan: "Running man",
+    Dance_Gangnam: "Gangnam style",
+    Touch_Screen: "Tocar la pantalla",
+    Point_ThisGuy: "Señalar",
+    Blow_Kiss: "Lanzar un beso",
+    Salute: "Saludo militar",
+    Thumbs_Up: "Pulgar arriba",
+    Shrug: "Encogerse de hombros",
+    LookAround: "Mirar alrededor",
+    Idle_Leaning: "Apoyarse",
+    Excited: "Emocionada",
+    Cheering: "Celebrar",
+    Bow: "Reverencia",
+    Thankful: "Agradecer",
+    Dismissive: "Restar importancia",
+    IdleLooking2: "Mirar a los lados",
+    ListeningNod: "Asentir",
+    HeadGesture: "Gesto con la cabeza",
+    ThoughtfulHeadShake: "Negar pensativa",
+  };
+
+  /** "F_Talking_Variations_005" -> "Hablando 5 (F)". */
+  function prettyClipName(clip) {
+    if (ANIMATION_NAMES[clip]) return ANIMATION_NAMES[clip];
+    const numbered = /^([FM])_(Talking|Standing_Idle)_Variations_0*(\d+)$/.exec(clip);
+    if (numbered) {
+      const what = numbered[2] === "Talking" ? "Hablando" : "Reposo";
+      return numbered[1] === "M" ? `${what} ${numbered[3]} (M)` : `${what} ${numbered[3]}`;
+    }
+    return capitalize(clip.replace(/^Dance_/, "").replace(/_+/g, " ").trim());
+  }
+
+  /** Botones de cada animación que tiene la app de Unity, por grupos. */
+  function renderAnimations(status) {
+    const list = Array.isArray(status.animations)
+      ? status.animations.filter((a) => a && typeof a.clip === "string" && typeof a.group === "string")
+      : [];
+    const supported = app.caps.has("animations");
+    const key = `${supported}|${JSON.stringify(list)}`;
+    if (key === animKey) return;
+    animKey = key;
+    if (!supported) {
+      ui.animGroups.replaceChildren();
+      return;
+    }
+    if (list.length === 0) {
+      ui.animGroups.replaceChildren(
+        el("p", { class: "muted", text: "La pantalla de Sonia no ha mandado su lista de animaciones. Ábrela (o actualízala) y aparecerán aquí." }),
+      );
+      return;
+    }
+    const known = ANIMATION_GROUPS.map(([group]) => group);
+    const extra = [...new Set(list.map((a) => a.group).filter((group) => !known.includes(group)))];
+    const groups = [...ANIMATION_GROUPS, ...extra.map((group) => [group, capitalize(group.replace(/_+/g, " "))])];
+    ui.animGroups.replaceChildren(
+      ...groups
+        .map(([group, label]) => {
+          const clips = list.filter((a) => a.group === group);
+          if (clips.length === 0) return null;
+          return el(
+            "div",
+            { class: "anim-group" },
+            el("h4", { text: label }),
+            el(
+              "div",
+              { class: "anim-row" },
+              ...clips.map(({ clip }) => {
+                const button = el("button", {
+                  type: "button",
+                  class: "btn btn-small",
+                  "data-cap": "animations",
+                  "data-off-modes": "away",
+                  title: clip,
+                  text: prettyClipName(clip),
+                });
+                button.addEventListener("click", () => sendAction("animation", { clip }, { button }));
+                return button;
+              }),
+            ),
+          );
+        })
+        .filter(Boolean),
+    );
+  }
 
   function renderAdvanced(status) {
     // Voz
@@ -1588,8 +1695,9 @@
     }
 
     // Interruptores
-    if (!isLocked(ui.bargeInput)) ui.bargeInput.checked = Boolean(status.barge_in);
     if (!isLocked(ui.showcaseInput)) ui.showcaseInput.checked = Boolean(status.showcase && status.showcase.enabled);
+
+    renderAnimations(status);
 
     // Caché de voces
     const cache = status.voice_cache;
@@ -1651,27 +1759,6 @@
     if (!ok) return;
     const result = await sendAction("set_voice", { voice }, { button: ui.voiceBtn });
     if (result.ok) ui.voiceSelect.dirty = false;
-  }
-
-  async function onBargeChange() {
-    const input = ui.bargeInput;
-    const enabled = input.checked;
-    lockControl(input);
-    if (enabled) {
-      const ok = await confirmAction({
-        title: "¿Dejar que la interrumpan hablando?",
-        text: "Actívalo solo si se usan auriculares o un micrófono con cancelación de eco. Si no, Sonia se oye a sí misma por los altavoces y se corta sola.",
-        confirmLabel: "Sí, activarlo",
-      });
-      if (!ok) {
-        input.checked = false;
-        return;
-      }
-    }
-    lockControl(input);
-    const result = await sendAction("set_barge_in", { enabled }, { button: input });
-    if (!result.ok) input.checked = !enabled;
-    lockControl(input);
   }
 
   async function onShowcaseChange() {
@@ -1984,7 +2071,6 @@
       refreshControls();
     });
     ui.voiceBtn.addEventListener("click", onVoiceChange);
-    ui.bargeInput.addEventListener("change", onBargeChange);
     ui.showcaseInput.addEventListener("change", onShowcaseChange);
     for (const button of ui.gestureButtons) {
       button.addEventListener("click", () => sendAction("gesture", { category: button.dataset.gesture }, { button }));

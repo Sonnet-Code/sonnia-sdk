@@ -1,7 +1,9 @@
 """Cliente de streaming para cualquier endpoint compatible con OpenAI.
 
-No se usa ningún SDK: solo ``httpx`` y un parser de SSE. El cliente es agnóstico
-al modelo; todo lo específico del servidor viene de :class:`LLMSettings`.
+Con GPT-Live solo se usa para describir la cámara (``sonia/live/vision.py``):
+texto e imagen de entrada, texto de salida, sin acciones. No se usa ningún
+SDK: solo ``httpx`` y un parser de SSE. Todo lo específico del servidor viene
+de :class:`LLMSettings`.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from typing import Any
 import httpx
 
 from sonia.config import LLMSettings
-from sonia.types import LLMEvent, Message, TextDelta, ToolCall, ToolCallsEvent, TurnDone
+from sonia.types import LLMEvent, Message, TextDelta, TurnDone
 
 __all__ = ["LLMClient", "LLMError"]
 
@@ -50,22 +52,11 @@ class LLMError(RuntimeError):
 
 
 @dataclass(slots=True)
-class _ToolCallBuffer:
-    """Acumulador de una tool call que llega troceada en varios deltas."""
-
-    index: int
-    id: str = ""
-    name: str = ""
-    arguments: str = ""
-
-
-@dataclass(slots=True)
 class _StreamState:
     """Estado acumulado mientras se consume un stream."""
 
     content: list[str] = field(default_factory=list)
     reasoning: list[str] = field(default_factory=list)
-    tool_calls: dict[int, _ToolCallBuffer] = field(default_factory=dict)
     finish_reason: str | None = None
 
 
@@ -111,7 +102,6 @@ class LLMClient:
     def _build_body(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None,
         *,
         stream: bool,
         max_tokens: int | None = None,
@@ -125,9 +115,6 @@ class LLMClient:
         }
         if settings.temperature is not None:
             body["temperature"] = settings.temperature
-        if tools:
-            body["tools"] = tools
-            body["tool_choice"] = "auto"
         if settings.reasoning_effort.strip():
             body["reasoning_effort"] = settings.reasoning_effort
         # Nota: no se envía ``stream_options.include_usage``. Varios servidores
@@ -136,24 +123,19 @@ class LLMClient:
 
     # -- streaming ---------------------------------------------------------
 
-    async def stream(
-        self,
-        messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
-    ) -> AsyncIterator[LLMEvent]:
+    async def stream(self, messages: list[Message]) -> AsyncIterator[LLMEvent]:
         """Emite eventos del modelo según van llegando.
 
-        Emite un :class:`TextDelta` por cada fragmento de texto hablable y, al
-        cerrar el turno, un :class:`ToolCallsEvent` (si el modelo pidió
-        acciones) o un :class:`TurnDone`. El ``reasoning_content`` se acumula
-        pero nunca se emite como texto: no se habla, solo se reenvía.
+        Emite un :class:`TextDelta` por cada fragmento de texto y, al cerrar,
+        un :class:`TurnDone`. El ``reasoning_content`` se acumula pero nunca se
+        emite como texto.
 
         Un fallo de red antes de recibir nada se reintenta una vez; si ya se
         había emitido texto no se reintenta (duplicaría lo dicho). Un timeout
         no se reintenta nunca: duplicaría la espera delante del visitante. Al
         cancelar la tarea, ``async with`` cierra la respuesta y la conexión.
         """
-        body = self._build_body(messages, tools, stream=True)
+        body = self._build_body(messages, stream=True)
         attempt = 0
         while True:
             emitted = False
@@ -235,29 +217,15 @@ class LLMClient:
             state.content.append(content)
             events.append(TextDelta(content))
 
-        for raw_call in delta.get("tool_calls") or []:
-            if isinstance(raw_call, dict):
-                _merge_tool_call(raw_call, state.tool_calls)
-
         finish_reason = choice.get("finish_reason")
         if isinstance(finish_reason, str) and finish_reason:
             state.finish_reason = finish_reason
         return events
 
-    def _finish(self, state: _StreamState) -> LLMEvent:
+    def _finish(self, state: _StreamState) -> TurnDone:
         """Construye el evento final del turno."""
         content = "".join(state.content)
         reasoning = "".join(state.reasoning) or None
-        if state.tool_calls:
-            calls = [
-                ToolCall(
-                    id=buf.id or f"call_{buf.index}",
-                    name=buf.name,
-                    arguments=_parse_arguments(buf),
-                )
-                for buf in sorted(state.tool_calls.values(), key=lambda b: b.index)
-            ]
-            return ToolCallsEvent(calls=calls, reasoning_content=reasoning, content=content)
         return TurnDone(
             content=content,
             reasoning_content=reasoning,
@@ -274,7 +242,6 @@ class LLMClient:
         """
         body = self._build_body(
             [{"role": "user", "content": "ping"}],
-            None,
             stream=False,
             max_tokens=5,
         )
@@ -307,22 +274,15 @@ class LLMClient:
                     text = message["content"].strip()
             return f"{model}: {text}" if text else model
 
-    async def probe(
-        self,
-        *,
-        image: Message | None = None,
-        tools: list[dict[str, Any]] | None = None,
-    ) -> None:
-        """Petición mínima que ejercita una capacidad concreta del endpoint.
+    async def probe(self, message: Message) -> None:
+        """Petición mínima con un mensaje concreto (por ejemplo, con imagen).
 
-        ``ping`` solo comprueba que el servidor conteste a texto plano, pero en
-        cada turno real se le mandan imágenes y ``tools``. Un servidor sin
-        ``mmproj`` o sin tool calling responde 400 a eso y Sonia se disculpa
-        turno tras turno; esto lo detecta antes de abrir el stand. Lanza
-        :class:`LLMError` si el servidor rechaza la petición.
+        ``ping`` solo comprueba que el servidor conteste a texto plano, pero la
+        cámara le manda imágenes. Un modelo sin visión responde 400 a eso y la
+        descripción fallaría en cada turno; esto lo detecta antes de abrir el
+        stand. Lanza :class:`LLMError` si el servidor rechaza la petición.
         """
-        message = image if image is not None else {"role": "user", "content": "ping"}
-        body = self._build_body([message], tools, stream=False, max_tokens=5)
+        body = self._build_body([message], stream=False, max_tokens=5)
         try:
             response = await self._client.post(self._url, json=body)
         except httpx.TransportError as exc:
@@ -376,42 +336,3 @@ def _load_chunk(data: str) -> dict[str, Any] | None:
         logger.warning("Chunk del modelo con JSON inválido, se ignora: %r", data[:200])
         return None
     return parsed if isinstance(parsed, dict) else None
-
-
-def _merge_tool_call(raw: dict[str, Any], buffers: dict[int, _ToolCallBuffer]) -> None:
-    """Acumula un fragmento de tool call en su buffer por ``index``."""
-    index = raw.get("index")
-    if not isinstance(index, int):
-        index = 0
-    buffer = buffers.get(index)
-    if buffer is None:
-        buffer = _ToolCallBuffer(index=index)
-        buffers[index] = buffer
-    call_id = raw.get("id")
-    if isinstance(call_id, str) and call_id:
-        buffer.id = call_id
-    function = raw.get("function") or {}
-    if not isinstance(function, dict):
-        return
-    name = function.get("name")
-    if isinstance(name, str) and name:
-        buffer.name = name
-    arguments = function.get("arguments")
-    if isinstance(arguments, str) and arguments:
-        buffer.arguments += arguments
-
-
-def _parse_arguments(buffer: _ToolCallBuffer) -> dict[str, Any]:
-    """Parsea los argumentos acumulados; ``{}`` si el JSON vino roto."""
-    raw = buffer.arguments.strip()
-    if not raw:
-        return {}
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.error("Argumentos inválidos para la acción %r (%s): %r", buffer.name, exc, raw[:200])
-        return {}
-    if not isinstance(parsed, dict):
-        logger.error("Argumentos de %r no son un objeto: %r", buffer.name, raw[:200])
-        return {}
-    return parsed

@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from sonia.config import WSSettings
-from sonia.types import AudioChunk, VisemeFrame
+from sonia.types import AudioChunk
 from sonia.ws import protocol as p
 from sonia.ws.hub import Hub
 
@@ -104,27 +104,6 @@ def test_msg_speech_start() -> None:
         "type": "speech_start",
         "utterance_id": 7,
         "text": "Hola, ¿cómo estás?",
-    }
-
-
-def test_msg_visemes_rounds_times() -> None:
-    frames = [VisemeFrame(0.0, "oh"), VisemeFrame(0.123456, "aa", 0.5)]
-    assert p.msg_visemes(7, frames) == {
-        "type": "visemes",
-        "utterance_id": 7,
-        "frames": [
-            {"t": 0.0, "v": "oh", "w": 1.0},
-            {"t": 0.123, "v": "aa", "w": 0.5},
-        ],
-    }
-
-
-def test_msg_envelope() -> None:
-    assert p.msg_envelope(7, 20, [0.0, 0.3141592, 0.62]) == {
-        "type": "envelope",
-        "utterance_id": 7,
-        "interval_ms": 20,
-        "values": [0.0, 0.314, 0.62],
     }
 
 

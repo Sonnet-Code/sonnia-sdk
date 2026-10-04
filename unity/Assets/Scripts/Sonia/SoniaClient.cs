@@ -8,6 +8,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.WebSockets;
 using System.Text;
@@ -96,6 +97,9 @@ namespace Sonia
 
         /// <summary>Gesto de atención pedido por el orquestador (baile, cuarta pared, suave, saludo).</summary>
         public event Action<AttentionMessage> OnAttention;
+
+        /// <summary>El panel pide una animación concreta del catálogo.</summary>
+        public event Action<PlayAnimationMessage> OnPlayAnimation;
 
         /// <summary>Sonia se va de la pantalla (modo "Fuera") o vuelve.</summary>
         public event Action<PresenceMessage> OnPresence;
@@ -288,6 +292,12 @@ namespace Sonia
             }
 
             SendJson(Protocol.CameraFrameMessage(jpeg));
+        }
+
+        /// <summary>Manda el catálogo de animaciones que el panel puede lanzar una a una.</summary>
+        public void SendAnimations(IList<KeyValuePair<string, string>> clips)
+        {
+            SendJson(Protocol.AnimationsMessage(clips));
         }
 
         private void SendJson(string json)
@@ -557,6 +567,8 @@ namespace Sonia
                     return Protocol.Deserialize<HideImageMessage>(payload);
                 case MessageTypes.Attention:
                     return Protocol.Deserialize<AttentionMessage>(payload);
+                case MessageTypes.PlayAnimation:
+                    return Protocol.Deserialize<PlayAnimationMessage>(payload);
                 case MessageTypes.Presence:
                     return Protocol.Deserialize<PresenceMessage>(payload);
                 case MessageTypes.SetVolume:
@@ -700,6 +712,13 @@ namespace Sonia
             if (attention != null)
             {
                 Raise(OnAttention, attention);
+                return;
+            }
+
+            PlayAnimationMessage playAnimation = message as PlayAnimationMessage;
+            if (playAnimation != null)
+            {
+                Raise(OnPlayAnimation, playAnimation);
                 return;
             }
 

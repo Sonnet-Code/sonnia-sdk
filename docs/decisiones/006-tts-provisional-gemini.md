@@ -1,5 +1,7 @@
 # 006. TTS provisional en la nube con Gemini
 
+**Sustituida por [007](007-voz-a-voz-gpt-live.md) el 4 de octubre de 2026.**
+
 ## Contexto
 
 La voz de Sonia la pone OmniVoice corriendo en local, pero OmniVoice necesita GPU y la máquina del stand todavía no existe: el hardware llega más adelante. Sin voz no hay nada que enseñar, y el resto del pipeline (VAD, STT, LLM, visemas, avatar, protocolo con Unity) no se puede probar de punta a punta ni ajustar en latencia mientras el último eslabón esté vacío. La alternativa de trabajar solo con `MockTTS` sirve para los tests, pero no permite evaluar cómo suena Sonia, ni afinar el troceado de frases, ni comprobar el lip-sync con audio real.

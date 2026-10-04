@@ -1,8 +1,7 @@
 """Pruebas de la línea de comandos.
 
-`sonia check` se prueba con el cliente del modelo sustituido por uno falso:
-nunca se hace una petición real. El TTS es el backend ``mock`` y la cámara y
-el micrófono se simulan.
+`sonia check` se prueba con GPT-Live y el modelo de visión sustituidos por
+falsos: nunca se hace una petición real. La cámara y el micrófono se simulan.
 """
 
 from __future__ import annotations
@@ -13,6 +12,7 @@ import wave
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 
 from sonia import cli
@@ -20,13 +20,11 @@ from sonia.config import (
     AudioSettings,
     LiveSettings,
     LLMSettings,
-    MCPSettings,
     Settings,
-    STTSettings,
-    TTSSettings,
     VisionSettings,
     WSSettings,
 )
+from sonia.live.oneshot import ProbeResult
 from sonia.llm.client import LLMError
 from sonia.types import AudioChunk
 from sonia.ws import protocol as p
@@ -37,7 +35,7 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
     gallery = tmp_path / "gallery"
     gallery.mkdir(exist_ok=True)
     values: dict[str, Any] = {
-        "voice_engine": "pipeline",
+        "live": LiveSettings(api_key="clave"),
         "llm": LLMSettings(
             base_url="http://llm.test/v1",
             model="modelo-de-prueba",
@@ -45,12 +43,9 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
             reasoning_effort="",
             request_timeout=2.0,
         ),
-        "stt": STTSettings(backend="mock"),
-        "tts": TTSSettings(backend="mock", sample_rate=24_000),
         "audio": AudioSettings(),
         "vision": VisionSettings(source="none"),
         "ws": WSSettings(host="127.0.0.1", port=0),
-        "mcp": MCPSettings(enabled=False),
         "assets_dir": str(tmp_path),
         "log_level": "WARNING",
     }
@@ -88,13 +83,8 @@ class FakeLLMClient:
             raise self.reply
         return self.reply
 
-    async def probe(
-        self,
-        *,
-        image: dict[str, Any] | None = None,
-        tools: list[dict[str, Any]] | None = None,
-    ) -> None:
-        FakeLLMClient.probes.append({"image": image, "tools": tools})
+    async def probe(self, message: dict[str, Any]) -> None:
+        FakeLLMClient.probes.append(message)
         if FakeLLMClient.probe_error is not None:
             raise FakeLLMClient.probe_error
 
@@ -109,22 +99,17 @@ def fake_llm(monkeypatch: pytest.MonkeyPatch) -> type[FakeLLMClient]:
     return FakeLLMClient
 
 
-class _FakeVad:
-    """Silero falso: `sonia check` no debe cargar torch en los tests."""
+@pytest.fixture
+def fake_live(monkeypatch: pytest.MonkeyPatch) -> list[LiveSettings]:
+    """Sustituye la sesión de prueba de GPT-Live: nunca se abre una de verdad."""
+    probes: list[LiveSettings] = []
 
-    def warmup(self) -> None:
-        return None
+    async def fake_probe(settings: LiveSettings) -> ProbeResult:
+        probes.append(settings)
+        return ProbeResult("sess_1", 0.42, "marin", 3600.0)
 
-    def probability(self, block: Any) -> float:
-        return 0.0
-
-
-@pytest.fixture(autouse=True)
-def fake_vad(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Evita cargar Silero de verdad en cada `run_checks`."""
-    import sonia.audio.vad as vad_module
-
-    monkeypatch.setattr(vad_module, "VoiceActivityDetector", _FakeVad)
+    monkeypatch.setattr(cli, "probe_session", fake_probe)
+    return probes
 
 
 @pytest.fixture
@@ -153,7 +138,6 @@ def fake_audio(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
         (["say", "Hola"], {"command": "say", "text": "Hola", "out": None}),
         (["say", "Hola", "--out", "x.wav"], {"command": "say", "out": Path("x.wav")}),
         (["check"], {"command": "check"}),
-        (["mcp"], {"command": "mcp"}),
         (["--log-level", "DEBUG", "check"], {"command": "check", "log_level": "DEBUG"}),
     ],
 )
@@ -176,74 +160,85 @@ def test_parser_exige_subcomando() -> None:
 async def test_check_todo_ok(
     tmp_path: Path,
     fake_llm: type[FakeLLMClient],
+    fake_live: list[LiveSettings],
     fake_audio: list[dict[str, Any]],
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     add_gallery_image(tmp_path, "logo.png")
-    settings = make_settings(tmp_path, audio=AudioSettings(input_device="yeti"))
+    settings = make_settings(
+        tmp_path,
+        audio=AudioSettings(input_device="yeti"),
+        vision=VisionSettings(source="unity"),
+    )
 
     results = await cli.run_checks(settings)
     assert [(r.name, r.ok) for r in results] == [
         ("Micrófono", True),
-        ("VAD", True),
-        ("STT", True),
         ("Cámara", True),
-        ("LLM", True),
-        ("Capacidad", True),
-        ("TTS", True),
+        ("GPT-Live", True),
+        ("Visión", True),
         ("Galería", True),
     ]
     detail = {r.name: r.detail for r in results}
     assert "Yeti" in detail["Micrófono"]
-    assert "Silero" in detail["VAD"]
-    assert "backend mock" in detail["STT"]
-    assert "VISION_SOURCE=none" in detail["Cámara"]
-    assert "pong" in detail["LLM"]
-    assert detail["Capacidad"] == "visión: OK; acciones: OK"
-    assert "backend mock" in detail["TTS"] and "24000 Hz" in detail["TTS"]
+    assert "Unity" in detail["Cámara"]
+    assert "420 ms" in detail["GPT-Live"] and "60 min" in detail["GPT-Live"]
+    assert "gpt-6-luna" in detail["GPT-Live"]
+    assert "pong" in detail["Visión"] and "acepta imágenes" in detail["Visión"]
     assert "logo" in detail["Galería"]
-    assert fake_llm.pings == 1  # una única petición mínima de conectividad
-
-    # Las capacidades se prueban tal como se usan en cada turno: imagen y tools.
-    assert len(fake_llm.probes) == 2
-    assert fake_llm.probes[0]["image"]["content"][1]["type"] == "image_url"
-    assert fake_llm.probes[0]["tools"] is None
-    assert fake_llm.probes[1]["image"] is None
-    assert [t["function"]["name"] for t in fake_llm.probes[1]["tools"]] == [
-        "show_image",
-        "hide_image",
-    ]
+    assert len(fake_live) == 1
+    # El modelo de visión: un ping y una petición mínima con imagen.
+    assert fake_llm.pings == 1
+    assert len(fake_llm.probes) == 1
+    assert fake_llm.probes[0]["content"][1]["type"] == "image_url"
 
     assert cli.print_results(results) is True
     out = capsys.readouterr().out
-    assert out.count("OK   ") == 8
+    assert out.count("OK   ") == 5
     assert "Todo listo." in out
 
 
-async def test_check_llm_caido_es_fallo_critico(
+async def test_check_sin_clave_de_gpt_live_es_fallo_critico(
     tmp_path: Path,
     fake_llm: type[FakeLLMClient],
     fake_audio: list[dict[str, Any]],
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    fake_llm.reply = LLMError("El servidor del modelo devolvió 503", status_code=503)
-    settings = make_settings(tmp_path)
-
-    results = await cli.run_checks(settings)
-    llm = next(r for r in results if r.name == "LLM")
-    assert llm.ok is False and llm.critical is True
-    assert "503" in llm.detail
+    results = await cli.run_checks(make_settings(tmp_path, live=LiveSettings(api_key="")))
+    live = next(r for r in results if r.name == "GPT-Live")
+    assert not live.ok and live.critical
+    assert "LIVE_API_KEY" in live.detail
+    assert next(r for r in results if r.name == "Visión").ok  # sin cámara: desactivada
     gallery = next(r for r in results if r.name == "Galería")
     assert gallery.ok is False and gallery.critical is False  # vacía: aviso, no fallo
 
     assert cli.print_results(results) is False
     out = capsys.readouterr().out
-    assert "FALLO  LLM" in out
+    assert "FALLO  GPT-Live" in out
     assert "AVISO  Galería" in out
 
 
+async def test_check_gpt_live_caido_es_fallo_critico(
+    tmp_path: Path,
+    fake_llm: type[FakeLLMClient],
+    fake_audio: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def failing_probe(settings: LiveSettings) -> ProbeResult:
+        raise ConnectionError("sin conexión")
+
+    monkeypatch.setattr(cli, "probe_session", failing_probe)
+    results = await cli.run_checks(make_settings(tmp_path))
+    live = next(r for r in results if r.name == "GPT-Live")
+    assert not live.ok and live.critical
+    assert "sin conexión" in live.detail
+
+
 async def test_check_sin_microfono_es_fallo(
-    tmp_path: Path, fake_llm: type[FakeLLMClient], monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    fake_llm: type[FakeLLMClient],
+    fake_live: list[LiveSettings],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(cli, "list_input_devices", list)
     results = await cli.run_checks(make_settings(tmp_path))
@@ -251,17 +246,47 @@ async def test_check_sin_microfono_es_fallo(
     assert mic.name == "Micrófono" and not mic.ok and mic.critical
 
 
+async def test_check_vision_caida_es_solo_un_aviso(
+    tmp_path: Path,
+    fake_llm: type[FakeLLMClient],
+    fake_live: list[LiveSettings],
+    fake_audio: list[dict[str, Any]],
+) -> None:
+    """Sonia conversa igual sin ojos: un fallo del modelo de visión no para el stand."""
+    fake_llm.reply = LLMError("El servidor del modelo devolvió 503", status_code=503)
+    results = await cli.run_checks(make_settings(tmp_path, vision=VisionSettings(source="unity")))
+    vision = next(r for r in results if r.name == "Visión")
+    assert vision.ok is False and vision.critical is False
+    assert "503" in vision.detail
+    assert cli.print_results(results) is True
+
+
+async def test_check_avisa_si_el_modelo_no_acepta_imagenes(
+    tmp_path: Path,
+    fake_llm: type[FakeLLMClient],
+    fake_live: list[LiveSettings],
+    fake_audio: list[dict[str, Any]],
+) -> None:
+    fake_llm.probe_error = LLMError("El servidor del modelo devolvió 400: no vision")
+    results = await cli.run_checks(make_settings(tmp_path, vision=VisionSettings(source="unity")))
+    vision = next(r for r in results if r.name == "Visión")
+    assert vision.ok is False and vision.critical is False
+    assert "LLM_SUPPORTS_VISION=false" in vision.detail
+
+
 def test_main_check_devuelve_codigo_de_salida(
     tmp_path: Path,
     fake_llm: type[FakeLLMClient],
+    fake_live: list[LiveSettings],
     fake_audio: list[dict[str, Any]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     add_gallery_image(tmp_path, "logo.png")
-    monkeypatch.setattr(cli, "load_settings", lambda: make_settings(tmp_path))
+    settings = make_settings(tmp_path)
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
     assert cli.main(["check"]) == 0
 
-    fake_llm.reply = ConnectionError("sin conexión")
+    settings.live.api_key = ""
     assert cli.main(["check"]) == 1
 
 
@@ -273,17 +298,33 @@ def test_main_check_devuelve_codigo_de_salida(
 def test_say_guarda_un_wav(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    said: list[str] = []
+
+    async def fake_speak(settings: LiveSettings, text: str) -> bytes:
+        said.append(text)
+        return np.full(int(0.5 * settings.sample_rate), 1000, dtype="<i2").tobytes()
+
+    monkeypatch.setattr(cli, "speak_text", fake_speak)
     monkeypatch.setattr(cli, "load_settings", lambda: make_settings(tmp_path))
     out = tmp_path / "hola.wav"
     assert cli.main(["say", "Hola, Sonia.", "--out", str(out)]) == 0
 
+    assert said == ["Hola, Sonia."]
     with wave.open(str(out), "rb") as wav:
         assert wav.getnchannels() == 1
         assert wav.getsampwidth() == 2
         assert wav.getframerate() == 24_000
-        # MockTTS: 60 ms por carácter -> 12 caracteres = 0.72 s.
-        assert wav.getnframes() == int(0.72 * 24_000)
+        assert wav.getnframes() == 12_000
     assert "Guardado en" in capsys.readouterr().out
+
+
+def test_say_sin_clave_sale_con_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings = make_settings(tmp_path, live=LiveSettings(api_key=""))
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    assert cli.main(["say", "Hola"]) == 1
+    assert "LIVE_API_KEY" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
@@ -349,111 +390,40 @@ async def test_console_tap_no_confirma_si_unity_esta_conectado() -> None:
     await hub.stop()
 
 
-async def test_check_avisa_si_el_modelo_no_acepta_imagenes(
-    tmp_path: Path,
-    fake_llm: type[FakeLLMClient],
-    fake_audio: list[dict[str, Any]],
-) -> None:
-    """Un endpoint sin mmproj pasaba el check y luego fallaba todos los turnos."""
-    fake_llm.probe_error = LLMError("El servidor del modelo devolvió 400: no vision")
-
-    results = await cli.run_checks(make_settings(tmp_path))
-    features = next(r for r in results if r.name == "Capacidad")
-    assert features.ok is False
-    assert features.critical is False  # aviso: puede ser el parámetro, no el modelo
-    assert "LLM_SUPPORTS_VISION=false" in features.detail
-    assert "LLM_TOOL_MODE=prompt" in features.detail
-
-
 async def test_build_components_sin_camara(tmp_path: Path) -> None:
     settings = make_settings(tmp_path, vision=VisionSettings(source="opencv"))
     components = cli.build_components(settings, with_camera=False)
     try:
         assert components.policy.enabled is False
+        assert components.narrator is None and components.llm is None
         assert components.registry.names() == ["show_image", "hide_image"]
         assert components.hub.sample_rate == 24_000
         ctx = components.action_context()
         assert ctx.gallery_dir == str(tmp_path / "gallery")
-        assert json.dumps(components.registry.to_openai_tools())  # serializable
+        assert json.dumps(components.registry.to_responses_tools())  # serializable
     finally:
         await components.close()
 
 
-# ---------------------------------------------------------------------------
-# Motor GPT-Live
-# ---------------------------------------------------------------------------
-
-
-async def test_check_con_gpt_live_no_mira_vad_stt_ni_tts(
-    tmp_path: Path,
-    fake_llm: type[FakeLLMClient],
-    fake_audio: list[dict[str, Any]],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from sonia.live.oneshot import ProbeResult
-
-    probes: list[LiveSettings] = []
-
-    async def fake_probe(settings: LiveSettings) -> ProbeResult:
-        probes.append(settings)
-        return ProbeResult("sess_1", 0.42, "marin", 3600.0)
-
-    monkeypatch.setattr(cli, "probe_session", fake_probe)
-    add_gallery_image(tmp_path, "logo.png")
+async def test_build_components_con_camara_de_unity(tmp_path: Path) -> None:
     settings = make_settings(
         tmp_path,
-        voice_engine="live",
-        live=LiveSettings(api_key="clave"),
-        vision=VisionSettings(source="unity"),
-    )
-
-    results = await cli.run_checks(settings)
-    assert [(r.name, r.ok) for r in results] == [
-        ("Micrófono", True),
-        ("Cámara", True),
-        ("GPT-Live", True),
-        ("Visión", True),
-        ("Galería", True),
-    ]
-    detail = {r.name: r.detail for r in results}
-    assert "420 ms" in detail["GPT-Live"] and "60 min" in detail["GPT-Live"]
-    assert "gpt-6-luna" in detail["GPT-Live"]
-    assert len(probes) == 1
-    # El modelo de visión solo se prueba con imagen: con GPT-Live no hace acciones.
-    assert len(fake_llm.probes) == 1 and fake_llm.probes[0]["tools"] is None
-
-
-async def test_check_con_gpt_live_sin_clave_es_fallo(
-    tmp_path: Path, fake_llm: type[FakeLLMClient], fake_audio: list[dict[str, Any]]
-) -> None:
-    settings = make_settings(tmp_path, voice_engine="live", live=LiveSettings(api_key=""))
-    results = await cli.run_checks(settings)
-    live = next(r for r in results if r.name == "GPT-Live")
-    assert not live.ok and live.critical
-    assert "LIVE_API_KEY" in live.detail
-    assert next(r for r in results if r.name == "Visión").ok  # sin cámara: desactivada
-
-
-def test_run_con_gpt_live_sin_clave_sale_con_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    settings = make_settings(tmp_path, voice_engine="live", live=LiveSettings(api_key=""))
-    monkeypatch.setattr(cli, "load_settings", lambda: settings)
-    assert cli.main(["run", "--no-mic"]) == 1
-    assert "LIVE_API_KEY" in capsys.readouterr().err
-
-
-async def test_build_live_components(tmp_path: Path) -> None:
-    settings = make_settings(
-        tmp_path,
-        voice_engine="live",
         live=LiveSettings(api_key="clave", sample_rate=16_000),
         vision=VisionSettings(source="unity"),
     )
-    components = cli.build_live_components(settings)
+    components = cli.build_components(settings)
     try:
         assert components.hub.sample_rate == 16_000
         assert components.registry.names() == ["look", "show_image", "hide_image"]
         assert components.narrator is not None
     finally:
         await components.close()
+
+
+def test_run_sin_clave_sale_con_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings = make_settings(tmp_path, live=LiveSettings(api_key=""))
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    assert cli.main(["run", "--no-mic"]) == 1
+    assert "LIVE_API_KEY" in capsys.readouterr().err

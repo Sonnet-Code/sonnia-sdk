@@ -84,17 +84,17 @@
         <div class="mode-buttons" role="group" aria-label="Modo de Sonia">
           <button type="button" class="mode-btn" data-set-mode="conversation" data-cap="modes" aria-pressed="false">
             <span class="mode-name">Conversando</span>
-            <span class="mode-desc">Escucha, mira y habla con la gente.</span>
+            <span class="mode-desc">Escucha, mira y habla con la gente. Conectada a OpenAI: gasta.</span>
             <span class="mode-check" aria-hidden="true">Activo</span>
           </button>
           <button type="button" class="mode-btn" data-set-mode="greeter" data-cap="modes" aria-pressed="false">
             <span class="mode-name">Solo saludos</span>
-            <span class="mode-desc">No escucha. Saluda y baila sola de vez en cuando.</span>
+            <span class="mode-desc">Desconectada de OpenAI, no gasta. Saluda y baila sola con frases grabadas.</span>
             <span class="mode-check" aria-hidden="true">Activo</span>
           </button>
           <button type="button" class="mode-btn" data-set-mode="away" data-cap="modes" aria-pressed="false">
             <span class="mode-name">Fuera</span>
-            <span class="mode-desc">Sale de la pantalla y deja un letrero.</span>
+            <span class="mode-desc">Desconectada de OpenAI, no gasta. Sale de la pantalla y deja un letrero.</span>
             <span class="mode-check" aria-hidden="true">Activo</span>
           </button>
         </div>
@@ -238,7 +238,7 @@
 
     <!-- ===== Avanzado (plegado) ===== -->
     <details class="card advanced" id="avanzado">
-      <summary><span>Avanzado</span><span class="summary-hint">Voz, gestos, gasto y registro</span></summary>
+      <summary><span>Avanzado</span><span class="summary-hint">Voz, gestos, animaciones, gasto y registro</span></summary>
 
       <div class="adv-grid">
         <section class="adv-block" aria-labelledby="adv-voice-title">
@@ -250,17 +250,6 @@
             <button type="button" class="btn" id="voice-btn" data-cap="voice" data-extra="voice">Cambiar voz</button>
           </div>
           <p class="cap-note" data-cap-note="voice" hidden>No disponible con el motor de voz actual.</p>
-        </section>
-
-        <section class="adv-block" aria-labelledby="adv-barge-title">
-          <h3 id="adv-barge-title">Interrumpirla hablando</h3>
-          <label class="switch">
-            <input type="checkbox" role="switch" id="barge-input" data-cap="barge_in">
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Dejar que la gente la interrumpa hablando</span>
-          </label>
-          <p class="help warn-text">Solo con auriculares o un micrófono con cancelación de eco. Si no, Sonia se oye a sí misma por los altavoces y se corta sola.</p>
-          <p class="cap-note" data-cap-note="barge_in" hidden>No disponible con el motor de voz actual.</p>
         </section>
 
         <section class="adv-block" aria-labelledby="adv-showcase-title">
@@ -283,6 +272,13 @@
             <button type="button" class="btn" data-gesture="dance" data-cap="gestures" data-off-modes="away">Bailar</button>
           </div>
           <p class="cap-note" data-cap-note="gestures" hidden>No disponible con el motor de voz actual.</p>
+        </section>
+
+        <section class="adv-block adv-wide" aria-labelledby="adv-anim-title">
+          <h3 id="adv-anim-title">Animaciones</h3>
+          <p class="help">Cada botón hace una animación concreta. Si Sonia está hablando, corta sus gestos un momento y luego sigue.</p>
+          <div class="anim-groups" id="anim-groups"></div>
+          <p class="cap-note" data-cap-note="animations" hidden>Esta Sonia no tiene aún las animaciones: hay que actualizar el orquestador.</p>
         </section>
 
         <section class="adv-block" aria-labelledby="adv-ask-title">

@@ -1,4 +1,4 @@
-"""Motor de voz a voz con GPT-Live de OpenAI (``VOICE_ENGINE=live``, ADR 007)."""
+"""Motor de voz a voz con GPT-Live de OpenAI (ADR 007)."""
 
 from __future__ import annotations
 

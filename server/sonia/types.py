@@ -1,13 +1,13 @@
 """Tipos e interfaces compartidos por todos los módulos del orquestador.
 
-Este archivo es el contrato entre etapas. Cada etapa (VAD, STT, LLM, TTS,
-visión, acciones, WebSocket) implementa o consume estos tipos y no depende de
-los detalles internos de las demás.
+Este archivo es el contrato entre módulos (motor GPT-Live, visión, acciones,
+WebSocket): cada uno implementa o consume estos tipos y no depende de los
+detalles internos de los demás.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal, Protocol, runtime_checkable
@@ -19,34 +19,19 @@ import numpy.typing as npt
 # Audio
 # ---------------------------------------------------------------------------
 
-#: Tasa de muestreo del micrófono y de todo lo que entra al VAD y al STT.
-INPUT_SAMPLE_RATE = 16_000
+#: Tasa de muestreo por defecto del micrófono (la de las sesiones de GPT-Live).
+INPUT_SAMPLE_RATE = 24_000
 
 #: Audio mono en float32 en el rango [-1, 1].
 AudioArray = npt.NDArray[np.float32]
 
 
 @dataclass(slots=True)
-class Utterance:
-    """Un turno completo del usuario, tal como sale del detector de voz."""
-
-    audio: AudioArray
-    sample_rate: int = INPUT_SAMPLE_RATE
-    started_at: float = 0.0  # time.monotonic() cuando empezó a hablar
-    ended_at: float = 0.0  # time.monotonic() cuando terminó
-    level: float = 0.0  # RMS medio de los bloques con voz (0..1)
-
-    @property
-    def duration(self) -> float:
-        return len(self.audio) / self.sample_rate
-
-
-@dataclass(slots=True)
 class AudioChunk:
-    """Fragmento de audio sintetizado, listo para enviarse al avatar.
+    """Fragmento de la voz de Sonia, listo para enviarse al avatar.
 
-    ``pcm`` es PCM s16le mono. ``sample_rate`` lo decide el motor de TTS
-    (OmniVoice produce 24 kHz) y se anuncia a Unity en el mensaje ``hello``.
+    ``pcm`` es PCM s16le mono a la tasa de la sesión de GPT-Live, la que se
+    anuncia a Unity en el mensaje ``hello``.
     """
 
     pcm: bytes
@@ -95,32 +80,13 @@ class Frame:
 # Modelo de lenguaje
 # ---------------------------------------------------------------------------
 
-#: Un mensaje en formato OpenAI (``role`` + ``content`` o ``tool_calls``).
+#: Un mensaje en formato OpenAI (``role`` + ``content``).
 Message = dict[str, Any]
-
-
-@dataclass(slots=True)
-class ToolCall:
-    id: str
-    name: str
-    arguments: dict[str, Any]
 
 
 @dataclass(slots=True)
 class TextDelta:
     text: str
-
-
-@dataclass(slots=True)
-class ToolCallsEvent:
-    """El modelo terminó su turno pidiendo ejecutar acciones."""
-
-    calls: list[ToolCall]
-    #: Contenido de razonamiento (Kimi y otros lo devuelven y esperan que se
-    #: reenvíe en el mensaje del asistente al continuar tras las tool calls).
-    reasoning_content: str | None = None
-    #: Texto que el modelo emitió antes de las tool calls, si lo hubo.
-    content: str = ""
 
 
 @dataclass(slots=True)
@@ -132,46 +98,12 @@ class TurnDone:
     finish_reason: str | None = None
 
 
-LLMEvent = TextDelta | ToolCallsEvent | TurnDone
-
-
-# ---------------------------------------------------------------------------
-# Visemas (lip-sync)
-# ---------------------------------------------------------------------------
-
-#: Conjunto de visemas Oculus/Ready Player Me. Unity los mapea a blendshapes.
-VisemeId = Literal[
-    "sil", "PP", "FF", "TH", "DD", "kk", "CH", "SS", "nn", "RR", "aa", "E", "ih", "oh", "ou"
-]
-
-
-@dataclass(slots=True)
-class VisemeFrame:
-    t: float  # segundos desde el inicio de la frase
-    viseme: VisemeId
-    weight: float = 1.0
+LLMEvent = TextDelta | TurnDone
 
 
 # ---------------------------------------------------------------------------
 # Interfaces de las etapas
 # ---------------------------------------------------------------------------
-
-
-@runtime_checkable
-class SpeechToText(Protocol):
-    async def transcribe(self, utterance: Utterance) -> str:
-        """Devuelve el texto transcrito (cadena vacía si no hay habla)."""
-        ...
-
-
-@runtime_checkable
-class TextToSpeech(Protocol):
-    @property
-    def sample_rate(self) -> int: ...
-
-    def synthesize(self, text: str) -> AsyncIterator[AudioChunk]:
-        """Sintetiza ``text`` y produce chunks PCM en streaming."""
-        ...
 
 
 @runtime_checkable

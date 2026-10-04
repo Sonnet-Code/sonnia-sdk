@@ -24,7 +24,7 @@ if TYPE_CHECKING:  # pragma: no cover - solo para tipado
 __all__ = ["PanelEvents"]
 
 #: Mensajes hacia Unity que no interesan en el panel.
-_SKIP_MESSAGES = frozenset({p.MSG_VISEMES, p.MSG_ENVELOPE, p.MSG_REQUEST_FRAME, p.MSG_HELLO})
+_SKIP_MESSAGES = frozenset({p.MSG_REQUEST_FRAME, p.MSG_HELLO})
 
 #: Mensajes que se guardan para pintar la página al abrirla.
 _HISTORY_MESSAGES = frozenset(

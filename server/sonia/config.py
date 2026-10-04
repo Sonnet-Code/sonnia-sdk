@@ -1,4 +1,4 @@
-"""Configuración del orquestador. Todo viene de variables de entorno o de `.env`.
+"""Configuración de Sonia. Todo viene de variables de entorno o de `.env`.
 
 Ningún módulo debe leer `os.environ` directamente: recibe un `Settings` (o la
 parte que necesita) por parámetro. Así los tests pueden construir la
@@ -17,72 +17,31 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class LLMSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="LLM_", extra="ignore", env_ignore_empty=True)
+    """Modelo con visión que describe la cámara (GPT-Live no acepta imágenes).
 
-    base_url: str = "http://localhost:8000/v1"
-    model: str = "kimi-k3"
-    api_key: str = "local"
-    #: Si el modelo acepta imágenes. Si es False, la capa de visión se apaga.
+    Cualquier endpoint compatible con OpenAI (Chat Completions). Por defecto la
+    API de OpenAI; si falta ``LLM_API_KEY`` se usa ``OPENAI_API_KEY``.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="LLM_", extra="ignore", env_ignore_empty=True, populate_by_name=True
+    )
+
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-6-luna"
+    api_key: str = Field(default="", validation_alias=AliasChoices("LLM_API_KEY", "OPENAI_API_KEY"))
+    #: Si es False, Sonia no mira la cámara (sin notas de la cámara ni ``look``).
     supports_vision: bool = True
-    #: native = tool calling de la API; prompt = acciones descritas en el
-    #: system prompt y parseadas del texto; none = sin acciones.
-    tool_mode: Literal["native", "prompt", "none"] = "native"
-    #: Se envía como ``reasoning_effort`` si no está vacío (Kimi K3: low/high/max).
+    #: Se envía como ``reasoning_effort`` si no está vacío.
     reasoning_effort: str = "low"
-    #: Se envía solo si no es None. Algunos modelos (Kimi K3) solo admiten 1 y
-    #: rechazan cualquier otro valor; los servidores locales tienen su propio
-    #: valor por defecto.
+    #: Se envía solo si no es None (algunos modelos solo admiten su valor por defecto).
     temperature: float | None = None
     max_tokens: int = 400
-    #: Nombre del campo con el que se envía ``max_tokens``. La API de OpenAI
-    #: rechaza ``max_tokens`` en sus modelos de razonamiento y pide
-    #: ``max_completion_tokens``; los servidores locales usan ``max_tokens``.
-    max_tokens_param: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
-    #: Máximo de rondas de tool calls por turno del usuario.
-    max_tool_rounds: int = 3
-    #: Turnos de conversación que se conservan en el historial.
-    history_turns: int = 12
+    #: Nombre del campo con el que se envía ``max_tokens``: la API de OpenAI pide
+    #: ``max_completion_tokens`` en sus modelos de razonamiento; otros servidores,
+    #: ``max_tokens``.
+    max_tokens_param: Literal["max_tokens", "max_completion_tokens"] = "max_completion_tokens"
     request_timeout: float = 60.0
-
-
-class STTSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="STT_", extra="ignore", env_ignore_empty=True)
-
-    backend: Literal["faster_whisper", "mock"] = "faster_whisper"
-    model: str = "small"
-    device: str = "auto"
-    compute_type: str = "auto"
-    language: str = "es"
-    beam_size: int = 1
-
-
-class TTSSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="TTS_", extra="ignore", env_ignore_empty=True)
-
-    #: omnivoice = en proceso; http = servidor compatible con /v1/audio/speech;
-    #: gemini = API Live de Gemini (provisional, sin GPU; ver ADR 006);
-    #: system = voz del sistema operativo (say en macOS, SAPI en Windows,
-    #: espeak-ng en Linux): bajo consumo, sin red, para ensayos;
-    #: mock = silencio con la duración del texto, solo para tests.
-    backend: Literal["omnivoice", "http", "gemini", "system", "mock"] = "omnivoice"
-    base_url: str = "http://127.0.0.1:8880/v1"
-    api_key: str = "local"
-    http_model: str = "omnivoice"
-    #: Descripción de la voz (voice design de OmniVoice).
-    voice_instruct: str = "female, young adult, warm, natural, latin american spanish accent"
-    #: Ruta a un audio de referencia para clonar la voz. Si se define, tiene
-    #: prioridad sobre ``voice_instruct``.
-    ref_audio: str = ""
-    ref_text: str = ""
-    language: str = "es"
-    device: str = "auto"
-    speed: float = 1.0
-    num_step: int = 16
-    sample_rate: int = 24_000
-    #: Backend system: nombre de la voz ("" = mejor voz en español disponible).
-    system_voice: str = ""
-    #: Backend system: palabras por minuto (0 = la del sistema).
-    system_rate: int = 0
 
 
 class AudioSettings(BaseSettings):
@@ -90,42 +49,8 @@ class AudioSettings(BaseSettings):
 
     #: Índice o nombre del dispositivo de entrada de sounddevice ("" = por defecto).
     input_device: str = ""
-    #: Tamaño del bloque que entra al VAD, en milisegundos (Silero usa 32 ms).
+    #: Tamaño de los bloques del micrófono que se mandan a GPT-Live, en milisegundos.
     block_ms: int = 32
-    vad_threshold: float = 0.5
-    #: Umbral más exigente mientras Sonia habla, para reducir falsos positivos
-    #: por eco del altavoz.
-    vad_threshold_while_speaking: float = 0.8
-    #: Silencio necesario para dar por terminado el turno del usuario.
-    end_silence_ms: int = 600
-    #: Habla mínima para considerar que hay un turno (descarta ruidos).
-    min_speech_ms: int = 250
-    #: Habla mínima para interrumpir a Sonia mientras habla.
-    barge_in_min_speech_ms: int = 400
-    #: Factor por el que la voz del visitante debe superar el eco de Sonia en el
-    #: micrófono (nivel RMS medio) para contar como interrupción. 2,5 son unos
-    #: 8 dB. Un micrófono de condensador con altavoces cerca capta la voz de
-    #: Sonia como si fuera una persona; esto la distingue por nivel.
-    barge_in_over_echo: float = 2.5
-    #: Nivel RMS mínimo absoluto (0..1) para interrumpir; 0 lo desactiva. Se
-    #: calibra en el stand si el factor sobre el eco no basta.
-    barge_in_min_rms: float = 0.0
-    #: Nivel RMS medio (0..1) que debe alcanzar la voz de un turno para que
-    #: cuente; por debajo se descarta como conversación de fondo. 0 lo
-    #: desactiva. Cada turno deja su nivel en el log ("nivel 0.031") para
-    #: calibrarlo en el sitio: la gente a un metro del micro suele quedar
-    #: bastante por encima de las voces del pasillo.
-    min_turn_rms: float = 0.0
-    #: Eco con voz que hay que haber oído desde que suena Sonia antes de
-    #: admitir interrupciones: evita disparos al arrancar, cuando aún no hay
-    #: referencia de nivel.
-    barge_in_warmup_ms: int = 500
-    #: Constante de tiempo de la media móvil del nivel de eco.
-    echo_level_tau_ms: int = 1500
-    max_utterance_s: float = 20.0
-    #: Audio previo al inicio del habla que se conserva (evita cortar la primera sílaba).
-    pre_roll_ms: int = 300
-    barge_in: bool = True
 
 
 class VisionSettings(BaseSettings):
@@ -150,20 +75,10 @@ class WSSettings(BaseSettings):
 
     host: str = "127.0.0.1"
     port: int = 8765
-    #: Tamaño de los chunks de audio hacia Unity, en milisegundos.
-    chunk_ms: int = 100
-
-
-class MCPSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="MCP_", extra="ignore", env_ignore_empty=True)
-
-    enabled: bool = False
-    host: str = "127.0.0.1"
-    port: int = 8766
 
 
 class LiveSettings(BaseSettings):
-    """Motor de voz a voz con GPT-Live (``VOICE_ENGINE=live``, ver ADR 007).
+    """Motor de voz a voz con GPT-Live (ver ADR 007).
 
     GPT-Live oye el micrófono y habla con su propia voz por un único WebSocket:
     sustituye al detector de voz, al reconocedor, al modelo de texto y al TTS.
@@ -200,9 +115,6 @@ class LiveSettings(BaseSettings):
     segment_gap_ms: int = 800
     #: Silencio en lo que transcribe del visitante que da su turno por cerrado.
     user_turn_gap_ms: int = 1_200
-    #: Con ``AUDIO_BARGE_IN=false`` el micrófono sigue mudo este tiempo después
-    #: de que Sonia termine, para que no se oiga la cola de su propia voz.
-    echo_tail_ms: int = 400
     #: Puerta de ruido: nivel RMS (0..1) por debajo del cual se envía silencio
     #: en lugar del micrófono. 0 la desactiva. Sirve para que GPT-Live no oiga
     #: las conversaciones de fondo del pasillo; se calibra en el stand.
@@ -282,16 +194,11 @@ class Settings(BaseSettings):
         env_ignore_empty=True,
     )
 
-    #: live = GPT-Live voz a voz (ADR 007); pipeline = VAD + STT + LLM + TTS.
-    voice_engine: Literal["live", "pipeline"] = "live"
     live: LiveSettings = Field(default_factory=LiveSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
-    stt: STTSettings = Field(default_factory=STTSettings)
-    tts: TTSSettings = Field(default_factory=TTSSettings)
     audio: AudioSettings = Field(default_factory=AudioSettings)
     vision: VisionSettings = Field(default_factory=VisionSettings)
     ws: WSSettings = Field(default_factory=WSSettings)
-    mcp: MCPSettings = Field(default_factory=MCPSettings)
     showcase: ShowcaseSettings = Field(default_factory=ShowcaseSettings)
     panel: PanelSettings = Field(default_factory=PanelSettings)
 

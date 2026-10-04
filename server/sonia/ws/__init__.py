@@ -11,7 +11,6 @@ from sonia.ws.protocol import (
     decode_audio_frame,
     dumps,
     encode_audio_frame,
-    msg_envelope,
     msg_error,
     msg_hello,
     msg_hide_image,
@@ -22,7 +21,6 @@ from sonia.ws.protocol import (
     msg_state,
     msg_stop_speaking,
     msg_transcript,
-    msg_visemes,
     parse_client_message,
 )
 
@@ -35,7 +33,6 @@ __all__ = [
     "decode_audio_frame",
     "dumps",
     "encode_audio_frame",
-    "msg_envelope",
     "msg_error",
     "msg_hello",
     "msg_hide_image",
@@ -46,6 +43,5 @@ __all__ = [
     "msg_state",
     "msg_stop_speaking",
     "msg_transcript",
-    "msg_visemes",
     "parse_client_message",
 ]

@@ -6,9 +6,9 @@ una frase corta (saludo, curiosidad, promoción de Sonnet Code) acompañada a
 veces de un gesto de cuarta pared, o un baile con una frase "cantada" encima.
 
 Las frases viven en ``assets/showcase/frases.md`` y los cantos en
-``assets/showcase/cantos.md`` (una por línea; ``#`` comenta). No se usa el
-modelo de lenguaje: los tokens de la cuenta provisional son escasos y para
-esto no hacen falta.
+``assets/showcase/cantos.md`` (una por línea; ``#`` comenta). Son textos
+fijos: si la frase está en la caché de voces (``cache/voice``) suena tal cual
+sin gastar; si no, el motor se la pide a GPT-Live para que la diga con su voz.
 
 El avatar recibe las frases como cualquier otra (``speech_start`` con
 ``ambient: true``) pero **sin cambiar de estado**: el coreógrafo sigue en idle

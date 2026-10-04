@@ -1131,6 +1131,30 @@ input[type="range"]:disabled {
   font-size: 16px;
 }
 
+/* Animaciones: un grupo por familia, botones que se reparten el ancho */
+.anim-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.anim-group h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.anim-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.anim-row .btn {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Interruptor */
 .switch {
   display: flex;

@@ -3,7 +3,7 @@
 
 Se conecta al orquestador como si fuera un segundo Unity, envía un ``text_input``
 y registra con marcas de tiempo los mensajes que llegan (estados, frases,
-visemas, imágenes) hasta que Sonia vuelve a ``idle``. Sirve para sincronizar
+transcripciones, imágenes) hasta que Sonia vuelve a ``idle``. Sirve para sincronizar
 capturas de pantalla con lo que está pasando y para depurar el protocolo.
 
 Uso (desde server/):
@@ -71,16 +71,6 @@ async def main() -> None:
                 print(stamp(), f"speech_start {data.get('utterance_id')}: {data.get('text')}")
             elif kind == "speech_end":
                 print(stamp(), f"speech_end {data.get('utterance_id')}")
-            elif kind == "visemes":
-                print(
-                    stamp(),
-                    f"visemes {data.get('utterance_id')}: {len(data.get('frames', []))} frames",
-                )
-            elif kind == "envelope":
-                print(
-                    stamp(),
-                    f"envelope {data.get('utterance_id')}: {len(data.get('values', []))} valores",
-                )
             elif kind == "transcript":
                 print(stamp(), f"transcript {data.get('role')}: {data.get('text')}")
             elif kind == "show_image":

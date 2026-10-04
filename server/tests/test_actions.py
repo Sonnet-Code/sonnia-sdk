@@ -152,29 +152,15 @@ def test_registry_register_get_names() -> None:
     assert len(registry) == 1
 
 
-def test_to_openai_tools_forma_exacta() -> None:
+def test_to_responses_tools_forma_exacta() -> None:
     registry = ActionRegistry()
     registry.register(PING)
-    assert registry.to_openai_tools() == [
+    assert registry.to_responses_tools() == [
         {
             "type": "function",
-            "function": {
-                "name": "ping",
-                "description": "Acción de prueba.",
-                "parameters": PING.parameters,
-            },
-        }
-    ]
-
-
-def test_to_mcp_tools_forma_exacta() -> None:
-    registry = ActionRegistry()
-    registry.register(PING)
-    assert registry.to_mcp_tools() == [
-        {
             "name": "ping",
             "description": "Acción de prueba.",
-            "inputSchema": PING.parameters,
+            "parameters": PING.parameters,
         }
     ]
 

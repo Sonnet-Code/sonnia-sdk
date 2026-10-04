@@ -3,14 +3,12 @@
 GPT-Live separa dos prompts (ver la guía de prompting de la API Live):
 
 - Las ``instructions`` de la sesión son para la voz: quién es Sonia, cómo
-  habla, cuándo calla y cuándo delega. Se reutiliza la persona de
-  :mod:`sonia.persona` tal cual y se añade un bloque con lo que cambia en este
-  modo, que tiene prioridad sobre lo anterior.
+  habla, cuándo calla y cuándo delega. Es la persona de :mod:`sonia.persona`
+  más las reglas de la voz en tiempo real, el conocimiento y el stack.
 - Las del backend (``delegation.responses.instructions``) son para el modelo
   que ejecuta las acciones: herramientas, ids de la galería y reglas.
 
-Así la persona sigue viviendo en un solo sitio y se edita igual para los dos
-motores.
+Así la persona vive en un solo sitio.
 """
 
 from __future__ import annotations
@@ -21,7 +19,7 @@ from typing import Any
 
 from sonia.actions.registry import ActionRegistry
 from sonia.config import Settings
-from sonia.persona import SYSTEM_PROMPT, _host_of, _is_local_host, load_knowledge
+from sonia.persona import SYSTEM_PROMPT, host_of, is_local_host, load_knowledge
 
 __all__ = [
     "CAMERA_NOTE_PREFIX",
@@ -36,15 +34,14 @@ __all__ = [
 CAMERA_NOTE_PREFIX = "[Cámara]"
 
 LIVE_RULES = """\
-CÓMO FUNCIONAS AHORA (voz a voz en tiempo real; si algo de lo anterior choca con esto, manda esto):
+CÓMO FUNCIONAS (voz a voz en tiempo real):
 - Oyes directamente al visitante y hablas con tu propia voz. Habla siempre en español, con registro caribeño natural, salvo que te pidan otro idioma.
 - Pronuncia "Sonnet Code" como en inglés (sónet cóud) y "DevFest" como "dev fest".
 - Estás en un evento lleno de gente. Responde solo cuando alguien te hable a ti; ignora conversaciones de fondo, toses, aplausos y música. Si oyes algo suelto que no va contigo, quédate callada.
-- {backchannel}
+- Usa asentimientos breves ("ajá", "claro") con moderación y sin pisar al visitante. Si te interrumpe, para enseguida y escucha.
 - Si un nombre, una fecha o un dato importante no se entendió bien, pregunta justo esa parte.
 - A veces te llegan notas internas que empiezan por "[Cámara]" con lo que ve tu cámara en ese momento. Úsalas con naturalidad, por ejemplo para el cumplido al saludar, pero no las leas en voz alta ni digas que te llegan notas. No ves imágenes directamente: solo esas notas. Si no tienes una nota reciente, no inventes lo que ves.
 - Si te indican que un visitante te ha escrito algo en la pantalla, respóndele en voz alta igual que si te lo hubiera dicho.
-- Lo que digan tus instrucciones sobre correr en local o sobre reconocedores de voz no aplica en este modo: para hablar de cómo funcionas, fíate solo de "TU STACK AHORA MISMO".
 
 Política de delegación:
 Tu backend tiene estas capacidades:
@@ -56,18 +53,6 @@ No delegues cuando:
 - Saludas, charlas o respondes algo que ya está en tu base de conocimiento.
 - Solo hace falta una aclaración breve.
 Mientras el backend trabaja, di algo breve y natural ("mira, te lo enseño", "déjame ver") y no inventes el resultado."""
-
-_BACKCHANNEL_ON = (
-    'Usa asentimientos breves ("ajá", "claro") con moderación y sin pisar al visitante. '
-    "Si te interrumpe, para y escucha."
-)
-
-#: Sin barge-in el micrófono se silencia mientras Sonia suena: un "ajá" a
-#: mitad de la frase del visitante le haría perder lo que dice después.
-_BACKCHANNEL_OFF = (
-    "No hagas asentimientos ni ruidos mientras el visitante habla: espera a que termine y "
-    "entonces contesta. Mientras tú hablas no puedes oírle, así que sé breve."
-)
 
 _CAPABILITIES = {
     "show_image": (
@@ -115,8 +100,8 @@ def describe_live_stack(settings: Settings, *, action_names: list[str] | None = 
         )
     else:
         origin = "Unity" if vision.source == "unity" else "una cámara USB"
-        host = _host_of(settings.llm.base_url)
-        where = "en local" if _is_local_host(host) else f"en {host}"
+        host = host_of(settings.llm.base_url)
+        where = "en local" if is_local_host(host) else f"en {host}"
         lines.append(
             f"Ojos: {origin}; cuando alguien empieza a hablarte, el modelo {settings.llm.model} "
             f"({where}) describe la foto y te llega como nota [Cámara]. Las fotos no se guardan."
@@ -159,7 +144,6 @@ def build_live_instructions(
     names = _action_names(registry)
     capabilities = "\n".join(_CAPABILITIES[n] for n in names if n in _CAPABILITIES)
     rules = LIVE_RULES.format(
-        backchannel=_BACKCHANNEL_ON if settings.audio.barge_in else _BACKCHANNEL_OFF,
         capabilities=capabilities or "- Ninguna en este momento: no delegues.",
         look_when=_LOOK_WHEN if "look" in names else "",
     )

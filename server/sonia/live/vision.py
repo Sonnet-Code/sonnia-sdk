@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from typing import Any, Protocol
+from typing import Protocol
 
 from sonia.llm.messages import user_with_image
 from sonia.types import Frame, LLMEvent, Message, TextDelta, TurnDone
@@ -33,9 +33,7 @@ MAX_DESCRIPTION_CHARS = 500
 
 
 class _StreamingLLM(Protocol):
-    def stream(
-        self, messages: list[Message], tools: list[dict[str, Any]] | None = None
-    ) -> AsyncIterator[LLMEvent]: ...
+    def stream(self, messages: list[Message]) -> AsyncIterator[LLMEvent]: ...
 
 
 class VisionNarrator:
@@ -54,7 +52,7 @@ class VisionNarrator:
         parts: list[str] = []
         final = ""
         async with asyncio.timeout(self._timeout_s):
-            async for event in self._llm.stream(messages, None):
+            async for event in self._llm.stream(messages):
                 if isinstance(event, TextDelta):
                     parts.append(event.text)
                 elif isinstance(event, TurnDone):

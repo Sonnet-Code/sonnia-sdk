@@ -640,16 +640,15 @@ los huesos en el mismo comando.
   `viseme_aa/I/U/E/O` escalados por el volumen con una curva suave (abre un
   poco con voz floja, nunca del todo); si no hay analizador
   (`preferRealtimePhonemes` apagado o sin perfil), los visemas con timestamp
-  del orquestador, que hoy son una estimación por texto repartida uniformemente
-  en la duración del audio; y si tampoco, envolvente o RMS. Suavizado con
-  ataque 28/s y caída 11/s, peso máximo 65 %. Antes los visemas del orquestador
-  tenían prioridad y, como llegan al terminar la síntesis (en las frases
-  segunda y siguientes de una respuesta, antes de que empiecen a sonar), la
-  boca cambiaba a la estimación por texto y se desincronizaba, sobre todo en
-  la cola: seguía moviéndose unos 400 ms después de la voz.
+  del mensaje `visemes`, que el orquestador ya no envía (con GPT-Live no hay
+  tiempos por fonema); y si tampoco, envolvente o RMS del audio. Suavizado con
+  ataque 28/s y caída 11/s, peso máximo 65 %. Con el motor en cascada anterior
+  los visemas del orquestador (una estimación por texto) tuvieron prioridad y,
+  como llegaban al terminar la síntesis, la boca se desincronizaba, sobre todo
+  en la cola: seguía moviéndose unos 400 ms después de la voz.
 - **Sincronía boca-voz** (`AudioStreamPlayer.lipSyncLeadMs`, 60 ms): el
   análisis de fonemas ve el audio fresco y la salida real sale por una línea
-  de retardo de 60 ms. Medido con la voz de Gemini: la boca iba 75 ms por
+  de retardo de 60 ms. Medido con la voz del motor anterior: la boca iba 75 ms por
   detrás del bloque generado (ventana de 64 ms de uLipSync, un frame de espera
   del job y el suavizado), unos 40-50 ms tarde respecto al altavoz, que es
   justo el rango en que el oído nota que el audio va por delante. Con el
@@ -657,12 +656,14 @@ los huesos en el mismo comando.
   desapercibido. Importante: el componente uLipSync vive en el objeto hijo
   `Fonemas`, sin AudioSource; en el raíz Unity le pasaría además por su propio
   `OnAudioFilterRead` la salida ya retardada y analizaría una mezcla.
-- **Arranque de "hablando"** (`SoniaBootstrap.waitAudioBeforeSpeaking`): el
-  orquestador manda `speech_start` y el estado `speaking` al empezar a
-  sintetizar, y la voz tarda entre 0,3 y 1,5 s en llegar. Sonia se queda en
-  "pensando" y aplica el estado y la gesticulación con el primer chunk de audio
-  de esa frase (tope de 2,5 s por si el TTS falla). Las frases ambientales del
-  stand no cambian de estado y no pasan por aquí.
+- **Arranque de "hablando"** (`SoniaBootstrap.waitAudioBeforeSpeaking`): Sonia
+  se queda en "pensando" y aplica el estado `speaking` y la gesticulación con
+  el primer chunk de audio de esa frase (tope de 2,5 s por si el audio no
+  llega). Con GPT-Live el orquestador ya manda `speech_start` y `speaking` con
+  el primer audio con voz, así que la espera es casi nula; con el motor en
+  cascada anterior la voz tardaba entre 0,3 y 1,5 s en llegar tras
+  `speech_start`. Las frases ambientales del stand no cambian de estado y no
+  pasan por aquí.
 - **Escala de blendshapes**: los GLB de glTFast definen los blendshapes de 0 a 1
   y los FBX/VRM de 0 a 100. `LipSyncController.BlendShapeScale` lee el peso del
   frame y se escribe siempre en la escala de la malla; sin esto la cara de Babe
@@ -840,9 +841,11 @@ escuchando y sin imagen puesta).
 
 ## 7. Mapeo de visemas
 
-El orquestador envía los identificadores del conjunto Oculus (ver
-`docs/protocolo.md` y `server/sonia/visemes.py`). El mapa por defecto de
-`LipSyncController` es editable en el inspector. La columna Oculus sirve para
+El protocolo usa los identificadores del conjunto Oculus (ver
+`docs/protocolo.md`). El orquestador ya no envía `visemes`, pero el mapa sigue
+en uso: los fonemas de uLipSync se traducen a `aa`, `E`, `ih`, `oh`, `ou` y
+`nn` y pasan por él. El mapa por defecto de `LipSyncController` es editable en
+el inspector. La columna Oculus sirve para
 avatares GLB que usen esa convención de nombres (por ejemplo Ready Player Me,
 ya descontinuado, o algunos exportados desde MetaPerson Creator); la columna
 VRoid/VRM es la que aplica a los avatares de la sección 4.
@@ -921,8 +924,9 @@ En **Edit > Project Settings > Audio**:
    uv run sonia chat
    ```
 
-   `sonia chat` no necesita micrófono ni cámara: se escribe en la consola y el
-   pipeline hace el resto. Para la demo completa, `uv run sonia run`.
+   `sonia chat` no necesita micrófono ni cámara: se escribe en la consola y
+   GPT-Live contesta con su voz (abre una sesión y gasta). Para la demo
+   completa, `uv run sonia run`.
 2. Poner la Game view en **9:16 Portrait** (ver la sección 3). Sin eso el
    encuadre se ve mal y los subtítulos quedan fuera de sitio.
 3. Darle a **Play** en Unity. El HUD de arriba a la izquierda debe pasar de

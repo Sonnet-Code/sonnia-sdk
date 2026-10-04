@@ -43,6 +43,12 @@ Volumen de la voz de Sonia, de 0 a 1,5 (1 = normal). También es fijo: se repite
 
 Además de `dance`, `fourth_wall` y `soft`, `greeting` hace el saludo con la mano (`motionSet.greeting`).
 
+### `animations` (Unity → orquestador) y `play_animation` (orquestador → Unity)
+
+Unity manda al recibir `hello` la lista de clips que se pueden lanzar uno a uno (`AnimationCatalog.cs`: todo lo de una sola vez del set, sin los bucles base ni el caminar). El orquestador la publica en `animations` del estado y el bloque «Animaciones» de Avanzado pinta un botón por clip, agrupados (saludo, bailes, hacia el público, gestos suaves, al hablar, en reposo, pensando, escuchando). Cada botón manda la acción `animation` y el orquestador la pasa a Unity como `play_animation`. Forma de los mensajes en `docs/protocolo.md`.
+
+Mientras suena una frase grabada (saludos, avisos y números del stand de la caché de voces), el micrófono manda silencio a GPT-Live hasta que termina más `CLIP_ECHO_TAIL_S`: la frase no la dijo él y, si la oyera por los altavoces, la contestaría.
+
 ## API HTTP del panel
 
 Todo bajo el mismo origen que la página. Respuestas JSON en UTF-8.
@@ -66,22 +72,23 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   "session": {"id": "sess_123", "uptime_s": 312.0, "expires_in_s": 3100.0, "context_ratio": 0.21},
   "usage": {"live_seconds": 1840.0, "cost_usd": 1.53},
   "image": null,
+  "animations": [{"clip": "Greeting", "group": "greeting"}, {"clip": "Dance_HipHop", "group": "dance"}],
   "showcase": {"enabled": true},
   "voice": "marin",
   "voices": ["marin", "cedar", "coral", "sage", "shimmer"],
-  "barge_in": false,
   "volume": 1.0,
   "mic_gate": 0.0,
   "notes": "La charla de IA se movió a la sala B.",
   "voice_cache": {"ready": 18, "total": 25, "busy": false},
   "last_error": null,
-  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "greet", "showcase", "volume", "mic_gate", "barge_in", "voice", "notes", "voice_cache"]
+  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache"]
 }
 ```
 
 - `health.*.ok` es `true`, `false` o `null` (no aplica, por ejemplo la cámara desactivada o GPT-Live en modo saludos). `label` es una frase corta para el operador y `hint`, si no está bien, qué hacer.
-- `capabilities` dice qué controles funcionan con el motor actual: con `VOICE_ENGINE=pipeline` solo hay `ask`, `stop`, `images`, `gestures` y `volume`.
+- `capabilities` dice qué controles funcionan; la página desactiva los que no estén en la lista y muestra una nota junto a ellos.
 - `image` es `null` o `{"id": "logo-sonnet", "caption": "..."}`; `last_error` es `null` o un texto.
+- `animations` es la lista que mandó Unity al conectar (vacía si la app de Unity es anterior a este mensaje o aún no se ha conectado).
 - `health.mic.level` es el nivel RMS del micrófono (0 a 1, con decaimiento rápido), la misma escala que `mic_gate`. Llega con el estado cada medio segundo.
 - `usage` es el gasto del día (desde medianoche, sumando los reinicios del orquestador): segundos de sesión de GPT-Live y su coste aproximado con `PANEL_LIVE_PRICE_PER_MINUTE`.
 - `voice_cache` trae también `error` (texto del último fallo al grabar, o vacío).
@@ -110,11 +117,11 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `show_image` | `image_id`, `caption` opcional | Muestra una imagen de la galería. |
 | `hide_image` | | Retira la imagen. |
 | `gesture` | `category`: `greeting`, `dance`, `fourth_wall`, `soft` | Gesto en el avatar. |
+| `animation` | `clip`: un nombre de `animations` | Reproduce ese clip una vez, en cualquier estado (no estando "Fuera"). |
 | `greet` | | Saludo con frase grabada ahora mismo (modos `conversation` y `greeter`). |
 | `showcase` | `enabled`: bool | Animación de stand (frases y bailes solos) sí o no. |
 | `set_volume` | `value`: 0 a 1,5 | Volumen de la voz. |
 | `set_mic_gate` | `value`: 0 a 0,2 | Puerta de ruido: por debajo de este nivel el micrófono manda silencio. |
-| `set_barge_in` | `enabled`: bool | Dejar que la interrumpan hablando (solo con auriculares o cancelación de eco). |
 | `set_voice` | `voice` | Cambia la voz; reinicia la conversación. |
 | `set_notes` | `text` | Avisos del día que Sonia debe conocer; se le pasan al momento. |
 | `prepare_voices` | | Graba las frases que falten en la caché de voces. |

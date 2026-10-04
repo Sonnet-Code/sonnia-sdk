@@ -6,7 +6,7 @@ Hay dos sitios razonables desde donde capturar la imagen de la cámara: el propi
 
 ## Decisión
 
-`VISION_SOURCE` selecciona la fuente: `opencv` (por defecto), `unity` o `none`. Con `opencv`, `server/sonia/vision/camera.py` abre la cámara directamente con `cv2.VideoCapture` sin pasar por Unity. Con `unity`, Unity captura con su propia cámara y envía frames por WebSocket (`camera_frame`) cuando el orquestador los pide con `request_frame`. Ambas implementan la misma interfaz (`CameraSource`), así que el resto del pipeline no distingue cuál está activa.
+`VISION_SOURCE` selecciona la fuente: `opencv` (por defecto), `unity` o `none`. Con `opencv`, `server/sonia/vision/camera.py` abre la cámara directamente con `cv2.VideoCapture` sin pasar por Unity. Con `unity`, Unity captura con su propia cámara y envía frames por WebSocket (`camera_frame`) cuando el orquestador los pide con `request_frame`. Ambas implementan la misma interfaz (`CameraSource`), así que el resto del orquestador no distingue cuál está activa.
 
 ## Consecuencias
 

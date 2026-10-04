@@ -1,15 +1,15 @@
 """Motor de voz GPT-Live: une el micrófono, la sesión de GPT-Live, las acciones y Unity.
 
-Sustituye al orquestador clásico (VAD → STT → LLM → TTS) cuando
-``VOICE_ENGINE=live``. GPT-Live es full duplex: oye el micrófono de forma
-continua, decide él solo cuándo le hablan y cuándo contestar, y devuelve su
+GPT-Live es full duplex: oye el micrófono de forma continua, decide él solo
+cuándo le hablan y cuándo contestar, se calla si le interrumpen y devuelve su
 voz en streaming. Este motor se limita a:
 
-- Mandarle el micrófono (silencio mientras suena Sonia si ``AUDIO_BARGE_IN``
-  está desactivado, y silencio por debajo de la puerta de ruido).
-- Traducir su voz al protocolo de Unity sin cambiarlo: cada tramo de voz
-  separado por un silencio es una frase (``speech_start`` + frames binarios +
-  ``speech_end``), y la transcripción viaja como ``transcript`` parcial.
+- Mandarle el micrófono tal cual, siempre (silencio solo si el panel lo
+  silencia o por debajo de la puerta de ruido ``LIVE_GATE_RMS``).
+- Traducir su voz al protocolo de Unity: GPT-Live manda audio sin parar,
+  también callado, así que cada tramo con voz separado por un silencio es una
+  frase (``speech_start`` + frames binarios + ``speech_end``), y la
+  transcripción viaja como ``transcript`` parcial.
 - Deducir el estado del avatar (``listening``, ``thinking``, ``speaking``,
   ``idle``) de lo que llega: GPT-Live no emite eventos de turno.
 - Ejecutar las acciones que pide el backend Responses al que delega
@@ -19,8 +19,7 @@ voz en streaming. Este motor se limita a:
 - Mantener la sesión viva: reconectar con espera creciente si se cae y
   empezar una sesión limpia tras un rato sin nadie (modo kiosco).
 
-Regla de oro, igual que en el orquestador: nada de lo que pase en una sesión
-tumba el motor. Un fallo se registra, se avisa a Unity y se reconecta.
+Regla de oro: nada de lo que pase en una sesión tumba el motor. Un fallo se registra, se avisa a Unity y se reconecta.
 """
 
 from __future__ import annotations
@@ -36,7 +35,7 @@ import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from sonia.actions.gallery import Gallery
 from sonia.actions.registry import ActionRegistry
@@ -46,7 +45,6 @@ from sonia.live.client import LiveClient, WsConnect, describe_error
 from sonia.live.prompts import CAMERA_NOTE_PREFIX, build_session_config
 from sonia.live.vision import VisionNarrator
 from sonia.live.voicecache import VoiceCache
-from sonia.orchestrator import HubLike
 from sonia.showcase import Showcase
 from sonia.types import (
     ActionContext,
@@ -54,11 +52,13 @@ from sonia.types import (
     AssistantState,
     AudioArray,
     AudioChunk,
+    AvatarLink,
     CameraSource,
     Frame,
 )
 from sonia.vision.policy import VisionPolicy
 from sonia.ws import protocol as p
+from sonia.ws.hub import MessageCallback
 
 __all__ = ["LiveEngine"]
 
@@ -131,11 +131,23 @@ MIC_LEVEL_DECAY = 0.85
 #: Nivel por debajo del cual un bloque se considera silencio absoluto.
 MIC_SILENCE_RMS = 0.0005
 
+#: Segundos que el micrófono sigue mandando silencio a GPT-Live después de una
+#: frase grabada (búfer de Unity y cola del altavoz en la sala).
+CLIP_ECHO_TAIL_S = 0.8
+
 #: Cómo se pide un número de la animación de stand.
 SHOWCASE_TEMPLATE = (
     "Ahora mismo nadie está hablando contigo. Para animar el stand, di en voz alta, una sola "
     "vez y tal cual, esta frase: «{text}»"
 )
+
+
+class HubLike(AvatarLink, Protocol):
+    """Lo que el motor usa del hub WebSocket (y las acciones del avatar)."""
+
+    def on(self, type: str, callback: MessageCallback) -> None: ...
+    async def broadcast_json(self, msg: dict[str, Any]) -> None: ...
+    async def send_audio(self, utterance_id: int, chunk: AudioChunk) -> None: ...
 
 
 def _log_stage_failure(msg: str, *args: Any) -> None:
@@ -234,7 +246,6 @@ class LiveEngine:
         self._playback_done_id = 0
         self._audible = False
         self._settle_after = 0.0
-        self._unmute_at = 0.0
         self._discard_audio = False
         self._lead_warned = False
 
@@ -247,6 +258,9 @@ class LiveEngine:
 
         # Micrófono (para el panel).
         self._mic_manual_mute = False
+        #: Hasta cuándo el micrófono manda silencio porque suena una frase grabada.
+        self._clip_mute_until = 0.0
+        self._clip_uid = 0
         self._mic_level = 0.0
         self._last_mic_at = 0.0
         self._last_sound_at = 0.0
@@ -328,8 +342,10 @@ class LiveEngine:
     async def push_mic(self, block: AudioArray) -> None:
         """Un bloque del micrófono (float32 mono a la tasa de la sesión).
 
-        Mientras suena Sonia y ``AUDIO_BARGE_IN`` es falso, o si la puerta de
-        ruido está cerrada, se manda silencio del mismo tamaño: GPT-Live
+        Va siempre a GPT-Live, también mientras habla Sonia: así se la puede
+        interrumpir hablando. Si el panel silenció el micrófono, si suena una
+        frase grabada (GPT-Live no la dijo y la contestaría) o si la puerta de
+        ruido está cerrada, se manda silencio del mismo tamaño, porque GPT-Live
         necesita un flujo continuo. Sin sesión, el bloque se pierde.
         """
         now = time.monotonic()
@@ -342,7 +358,7 @@ class LiveEngine:
         if client is None or self._restarting:
             return
         silent = bytes(len(block) * 2)
-        if self._mic_manual_mute or self._mic_muted(now):
+        if self._mic_manual_mute or now < self._clip_mute_until:
             pcm = silent
         else:
             if self._user_turn_open:
@@ -382,6 +398,9 @@ class LiveEngine:
     def notify_playback_done(self, utterance_id: int) -> None:
         """Unity (o el reproductor local) terminó de reproducir ``utterance_id``."""
         self._playback_done_id = max(self._playback_done_id, utterance_id)
+        if utterance_id == self._clip_uid:
+            # Unity sabe mejor que la estimación cuándo terminó la frase grabada.
+            self._clip_mute_until = time.monotonic() + CLIP_ECHO_TAIL_S
 
     async def wait_idle(self, limit_s: float | None = None) -> bool:
         """Espera a que Sonia no hable, no piense y nadie esté hablando."""
@@ -410,11 +429,10 @@ class LiveEngine:
         """Mantiene una sesión de GPT-Live abierta. Solo termina al cancelarlo."""
         live = self._live
         logger.info(
-            "Motor GPT-Live en marcha (modelo %s, voz %s, backend %s, barge-in %s, visión %s)",
+            "Motor GPT-Live en marcha (modelo %s, voz %s, backend %s, visión %s)",
             live.model,
             live.voice,
             live.backend_model,
-            "sí" if self._settings.audio.barge_in else "no",
             "sí" if self._narrator is not None and self._policy.enabled else "no",
         )
         await self._hub.broadcast_json(p.msg_state(self._state))
@@ -933,6 +951,7 @@ class LiveEngine:
         self._playback_done_id = max(self._playback_done_id, self._utterance_counter)
         self._last_closed_deadline = 0.0
         self._playback_end_at = time.monotonic()
+        self._clip_mute_until = min(self._clip_mute_until, self._playback_end_at + CLIP_ECHO_TAIL_S)
         self._pending_assistant = []
         client = self._client
         if tell_model and was_audible and client is not None:
@@ -966,7 +985,6 @@ class LiveEngine:
             self._playback_done_id < self._last_closed_uid and now < self._last_closed_deadline
         )
         if self._audible and not audible:
-            self._unmute_at = now + self._live.echo_tail_ms / 1000.0
             self._settle_after = now + SPEECH_HOLD_S
         self._audible = audible
 
@@ -1009,12 +1027,6 @@ class LiveEngine:
             and not self._user_turn_open
             and now >= self._expect_response_until
         )
-
-    def _mic_muted(self, now: float) -> bool:
-        """Sin barge-in, el micro no oye a Sonia (ni la cola de su voz)."""
-        if self._settings.audio.barge_in:
-            return False
-        return self._audible or self._segment is not None or now < self._unmute_at
 
     # -- renovación de la sesión --------------------------------------------
 
@@ -1190,7 +1202,9 @@ class LiveEngine:
         """Reproduce una frase grabada como voz ``ambient`` (sin cambiar de estado).
 
         No pisa a GPT-Live: si Sonia ya está hablando, no hace nada y devuelve
-        ``False``. El micrófono se silencia mientras suena, igual que con su voz.
+        ``False``. Mientras suena (y ``CLIP_ECHO_TAIL_S`` después) el micrófono
+        manda silencio a GPT-Live: la frase no la dijo él y, si la oyera por
+        los altavoces, la contestaría como si se la hubiera dicho un visitante.
         """
         if self._audible or self._segment is not None:
             return False
@@ -1211,6 +1225,8 @@ class LiveEngine:
         self._last_closed_uid = uid
         self._playback_end_at = max(self._playback_end_at, now) + seconds
         self._last_closed_deadline = self._playback_end_at + PLAYBACK_GRACE_S
+        self._clip_uid = uid
+        self._clip_mute_until = self._playback_end_at + CLIP_ECHO_TAIL_S
         await hub.broadcast_json(p.msg_speech_start(uid, text, ambient=True))
         await hub.broadcast_json(p.msg_transcript("assistant", text, True))
         chunk = max(2, self._rate // 10 * 2)  # 100 ms

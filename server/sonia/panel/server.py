@@ -1,10 +1,12 @@
 """Servidor web del panel de control (Starlette servido con uvicorn).
 
-Escucha solo en ``PANEL_HOST`` (127.0.0.1). Desde internet se llega por un
-Cloudflare Tunnel con Cloudflare Access delante: toda petición que trae
-cabeceras de Cloudflare tiene que traer también un JWT de Access válido para
-la aplicación configurada (``PANEL_ACCESS_TEAM_DOMAIN`` y ``PANEL_ACCESS_AUD``);
-si faltan, se rechaza. Las acciones exigen la cabecera ``X-Sonia-Panel`` y el
+Es el panel local de respaldo: escucha solo en ``PANEL_HOST`` (127.0.0.1). El
+de internet es el Worker de Cloudflare (``cloud/panel``), al que el orquestador
+se conecta hacia fuera (``sonia/panel/cloud.py``). Si alguna vez se publica este
+servidor detrás de Cloudflare, toda petición que traiga cabeceras de
+Cloudflare tiene que traer también un JWT de Access válido para la aplicación
+configurada (``PANEL_ACCESS_TEAM_DOMAIN`` y ``PANEL_ACCESS_AUD``); si no, se
+rechaza. Las acciones exigen la cabecera ``X-Sonia-Panel`` y el
 WebSocket comprueba el ``Origin``, para que ninguna otra web pueda manejar a
 Sonia con la sesión del operador.
 

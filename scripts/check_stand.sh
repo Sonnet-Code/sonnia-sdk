@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # Comprobación completa antes de abrir el stand: valida lo que ya cubre
-# `sonia check` (con GPT-Live: audio, cámara, una sesión de GPT-Live, modelo
-# de visión y galería; con el motor pipeline: además VAD, STT, LLM y TTS) y
-# además cosas que están fuera del proceso del orquestador: que el endpoint
-# del LLM responde de verdad, que la galería tiene contenido y que el puerto
-# del WebSocket está libre para que Sonia pueda arrancar.
+# `sonia check` (micrófono, cámara, una sesión de GPT-Live que se abre y se
+# cierra, modelo de visión y galería) y además cosas que están fuera del
+# proceso del orquestador: que el endpoint del modelo de visión responde, que
+# la galería tiene contenido y que el puerto del WebSocket está libre para que
+# Sonia pueda arrancar.
 #
 # Uso: scripts/check_stand.sh
 #
+# Gasta: `sonia check` abre una sesión de GPT-Live de unos segundos y manda
+# dos peticiones mínimas al modelo de visión (texto e imagen). No lo uses en
+# bucle ni en tests.
+#
 # Importante: este script lee .env pero NUNCA imprime el valor de variables
-# cuyo nombre contenga "KEY" (por ejemplo LLM_API_KEY). Solo se usan para
-# construir peticiones, nunca se muestran por pantalla ni se guardan en logs.
+# cuyo nombre contenga "KEY" o "TOKEN" (por ejemplo LLM_API_KEY). Solo se
+# usan para construir peticiones, nunca se muestran por pantalla ni se
+# guardan en logs.
 set -uo pipefail
 # Sin `-e`: queremos que se ejecuten todas las comprobaciones aunque una
 # falle, y dar un resumen al final en vez de cortar en la primera.
@@ -26,7 +31,7 @@ ok()   { echo "  OK    - $1"; }
 fail() { echo "  FALLO - $1"; FAILURES=$((FAILURES + 1)); }
 warn() { echo "  AVISO - $1"; }
 
-echo "== 1/4: sonia check (audio, cámara, voz, modelo, galería) =="
+echo "== 1/4: sonia check (micrófono, cámara, GPT-Live, modelo de visión, galería) =="
 if ( cd "$SERVER_DIR" && uv run --no-sync sonia check ); then
   ok "uv run sonia check terminó sin errores"
 else
@@ -46,28 +51,26 @@ else
 fi
 echo
 
-echo "== 3/4: endpoint del LLM (\$LLM_BASE_URL/models) =="
-# Con GPT-Live (VOICE_ENGINE=live, el valor por defecto) LLM_* solo describe
-# la cámara: si falla, Sonia habla igual pero sin ojos, así que es un aviso.
-if [[ "${VOICE_ENGINE:-live}" == "live" ]]; then
-  llm_fail() { warn "$1 (con GPT-Live solo afecta a la cámara)"; }
+echo "== 3/4: modelo de visión (\$LLM_BASE_URL/models) =="
+# LLM_* solo describe la cámara (GPT-Live no acepta imágenes): si falla, Sonia
+# conversa igual pero sin ojos, así que es un aviso y no un fallo.
+llm_fail() { warn "$1 (Sonia conversa igual, pero sin ver la cámara)"; }
+LLM_BASE_URL="${LLM_BASE_URL:-https://api.openai.com/v1}"  # el mismo valor por defecto que el orquestador
+if [[ "${LLM_SUPPORTS_VISION:-true}" == "false" || "${VISION_SOURCE:-opencv}" == "none" ]]; then
+  ok "Visión desactivada (LLM_SUPPORTS_VISION=false o VISION_SOURCE=none): no se comprueba"
 else
-  llm_fail() { fail "$1"; }
-fi
-if [[ -z "${LLM_BASE_URL:-}" ]]; then
-  llm_fail "LLM_BASE_URL no está definida"
-else
-  # Se usa LLM_API_KEY para la petición pero su valor nunca se imprime.
+  # Se usa LLM_API_KEY (o, si falta, OPENAI_API_KEY, igual que el
+  # orquestador) para la petición, pero su valor nunca se imprime.
   # curl ya escribe "000" con -w si no logra conectar, así que no hace falta
   # (ni conviene) un "|| echo" que lo duplicaría.
   HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
-    -H "Authorization: Bearer ${LLM_API_KEY:-}" \
+    -H "Authorization: Bearer ${LLM_API_KEY:-${OPENAI_API_KEY:-}}" \
     "${LLM_BASE_URL%/}/models" 2>/dev/null)"
   HTTP_CODE="${HTTP_CODE:-000}"
   if [[ "$HTTP_CODE" == "200" ]]; then
     ok "El endpoint respondió en ${LLM_BASE_URL%/}/models (200)"
   else
-    llm_fail "El endpoint en ${LLM_BASE_URL%/}/models no respondió 200 (código: $HTTP_CODE). ¿Está el servidor del LLM levantado (scripts/run_llm_server.sh)?"
+    llm_fail "El endpoint en ${LLM_BASE_URL%/}/models no respondió 200 (código: $HTTP_CODE). Revisa LLM_BASE_URL, la clave (LLM_API_KEY u OPENAI_API_KEY) y la conexión a internet"
   fi
 fi
 echo

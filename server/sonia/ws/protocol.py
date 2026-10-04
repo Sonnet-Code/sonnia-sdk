@@ -14,10 +14,7 @@ from __future__ import annotations
 
 import json
 import struct
-from collections.abc import Iterable, Sequence
 from typing import Any, Literal
-
-from sonia.types import VisemeFrame
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -46,8 +43,6 @@ MSG_STATE = "state"
 MSG_TRANSCRIPT = "transcript"
 MSG_SPEECH_START = "speech_start"
 MSG_ATTENTION = "attention"
-MSG_VISEMES = "visemes"
-MSG_ENVELOPE = "envelope"
 MSG_SPEECH_END = "speech_end"
 MSG_STOP_SPEAKING = "stop_speaking"
 MSG_SHOW_IMAGE = "show_image"
@@ -56,6 +51,7 @@ MSG_ERROR = "error"
 MSG_REQUEST_FRAME = "request_frame"
 MSG_PRESENCE = "presence"
 MSG_SET_VOLUME = "set_volume"
+MSG_PLAY_ANIMATION = "play_animation"
 
 # Mensajes de Unity hacia el orquestador.
 MSG_CLIENT_HELLO = "client_hello"
@@ -63,9 +59,11 @@ MSG_INTERRUPT = "interrupt"
 MSG_PLAYBACK_DONE = "playback_done"
 MSG_TEXT_INPUT = "text_input"
 MSG_CAMERA_FRAME = "camera_frame"
+MSG_ANIMATIONS = "animations"
 
-#: Decimales con los que se serializan los tiempos y los pesos.
-_TIME_DECIMALS = 3
+#: Tope de clips que se aceptan en ``animations`` (el set real tiene unos 40).
+MAX_ANIMATIONS = 200
+
 
 Role = Literal["user", "assistant"]
 ImageSource = Literal["gallery", "camera"]
@@ -146,26 +144,9 @@ def msg_attention(category: str, clip: str | None = None) -> dict[str, Any]:
     return msg
 
 
-def msg_visemes(utterance_id: int, frames: Iterable[VisemeFrame]) -> dict[str, Any]:
-    """Visemas de la frase, con el instante relativo a ``speech_start``."""
-    return {
-        "type": MSG_VISEMES,
-        "utterance_id": int(utterance_id),
-        "frames": [
-            {"t": round(float(f.t), _TIME_DECIMALS), "v": f.viseme, "w": float(f.weight)}
-            for f in frames
-        ],
-    }
-
-
-def msg_envelope(utterance_id: int, interval_ms: int, values: Sequence[float]) -> dict[str, Any]:
-    """Envolvente de amplitud (0 a 1) de la frase, un valor cada ``interval_ms``."""
-    return {
-        "type": MSG_ENVELOPE,
-        "utterance_id": int(utterance_id),
-        "interval_ms": int(interval_ms),
-        "values": [round(float(v), _TIME_DECIMALS) for v in values],
-    }
+def msg_play_animation(clip: str) -> dict[str, Any]:
+    """Reproduce un clip concreto del set de animaciones (botones del panel)."""
+    return {"type": MSG_PLAY_ANIMATION, "clip": str(clip)}
 
 
 def msg_speech_end(utterance_id: int) -> dict[str, Any]:
@@ -249,3 +230,27 @@ def parse_client_message(text: str | bytes) -> dict[str, Any] | None:
     if not isinstance(parsed.get("type"), str):
         return None
     return parsed
+
+
+def parse_animations(msg: dict[str, Any]) -> list[dict[str, str]]:
+    """Catálogo de un mensaje ``animations``: ``[{"clip", "group"}, ...]``.
+
+    Se queda con las entradas bien formadas, sin repetir clip y en el orden
+    en que llegan; lo demás se ignora en silencio.
+    """
+    items = msg.get("animations")
+    if not isinstance(items, list):
+        return []
+    catalog: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in items[:MAX_ANIMATIONS]:
+        if not isinstance(item, dict):
+            continue
+        clip, group = item.get("clip"), item.get("group")
+        if not isinstance(clip, str) or not isinstance(group, str):
+            continue
+        clip, group = clip.strip(), group.strip()
+        if 0 < len(clip) <= 80 and 0 < len(group) <= 40 and clip not in seen:
+            seen.add(clip)
+            catalog.append({"clip": clip, "group": group})
+    return catalog

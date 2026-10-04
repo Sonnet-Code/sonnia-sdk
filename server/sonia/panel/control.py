@@ -6,9 +6,6 @@ que el equipo cambia para que sobreviva a un reinicio y traduce el estado
 técnico a frases que entiende cualquiera del stand ("La pantalla de Sonia no
 está conectada: abre la app").
 
-Con el motor GPT-Live funciona todo. Con el motor anterior (``pipeline``)
-solo lo que no depende de GPT-Live: preguntar, callar, imágenes, gestos y
-volumen (``capabilities``).
 """
 
 from __future__ import annotations
@@ -33,7 +30,6 @@ from sonia.ws import protocol as p
 if TYPE_CHECKING:  # pragma: no cover - solo para tipado
     from sonia.live.engine import LiveEngine
     from sonia.live.voicecache import VoiceCache
-    from sonia.orchestrator import Orchestrator
     from sonia.ws.hub import Hub
 
 __all__ = ["DEFAULT_AWAY_MESSAGE", "MODES", "PanelState", "StandControl"]
@@ -51,7 +47,7 @@ VOICES = ["marin", "cedar", "coral", "sage", "shimmer", "ballad", "verse", "allo
 GESTURES = ("greeting", "dance", "fourth_wall", "soft")
 
 #: Todo lo que el panel puede hacer con cada motor.
-LIVE_CAPABILITIES = [
+CAPABILITIES = [
     "modes",
     "say",
     "ask",
@@ -60,16 +56,15 @@ LIVE_CAPABILITIES = [
     "restart",
     "images",
     "gestures",
+    "animations",
     "greet",
     "showcase",
     "volume",
     "mic_gate",
-    "barge_in",
     "voice",
     "notes",
     "voice_cache",
 ]
-PIPELINE_CAPABILITIES = ["ask", "stop", "images", "gestures", "volume"]
 
 #: Primer saludo al entrar en el modo saludos.
 GREETER_FIRST_DELAY_S = 4.0
@@ -98,7 +93,6 @@ class PanelState:
     mic_gate: float | None = None
     voice: str | None = None
     showcase: bool | None = None
-    barge_in: bool | None = None
     #: Gasto del día: segundos de sesión de GPT-Live acumulados en ``usage_date``
     #: (sobrevive a los reinicios del orquestador).
     usage_date: str = ""
@@ -125,7 +119,7 @@ class PanelState:
             value = raw.get(name)
             if isinstance(value, int | float) and not isinstance(value, bool):
                 setattr(state, name, float(value))
-        for name in ("showcase", "barge_in"):
+        for name in ("showcase",):
             if isinstance(raw.get(name), bool):
                 setattr(state, name, raw[name])
         return state
@@ -175,8 +169,7 @@ class StandControl:
         *,
         hub: Hub,
         registry: ActionRegistry | None,
-        engine: LiveEngine | None = None,
-        orchestrator: Orchestrator | None = None,
+        engine: LiveEngine,
         voice_cache: VoiceCache | None = None,
         material: _Material | None = None,
         rng: random.Random | None = None,
@@ -185,7 +178,6 @@ class StandControl:
         self._hub = hub
         self._registry = registry
         self._engine = engine
-        self._orchestrator = orchestrator
         self._voice_cache = voice_cache
         self._material = material or _Material.from_dir(settings.showcase_dir)
         self._rng = rng or random.Random()
@@ -196,38 +188,37 @@ class StandControl:
         self._next_greet_at = 0.0
         self._last_greeting: str | None = None
         self._image: dict[str, Any] | None = None
+        #: Clips que Unity dice tener (mensaje ``animations`` al conectar).
+        self._animations: list[dict[str, str]] = []
         #: Segundos de sesión de arranques anteriores del mismo día.
         self._usage_base = 0.0
         self._last_usage_save = time.monotonic()
         self._roll_usage_day(engine_seconds=0.0)
         hub.add_listener(self._watch_outgoing)
+        hub.on(p.MSG_ANIMATIONS, self._on_animations)
 
     # -- ciclo de vida --------------------------------------------------------
 
     @property
     def capabilities(self) -> list[str]:
-        return list(LIVE_CAPABILITIES if self._engine is not None else PIPELINE_CAPABILITIES)
+        return list(CAPABILITIES)
 
     async def start(self) -> None:
         """Aplica lo guardado y arranca el bucle de saludos. Antes de ``engine.run()``."""
         state = self.state
         engine = self._engine
-        if engine is not None:
-            if state.voice in VOICES:
-                self._settings.live.voice = state.voice
-            if state.barge_in is not None:
-                self._settings.audio.barge_in = state.barge_in
-            if state.mic_gate is not None:
-                engine.set_gate(state.mic_gate)
-            if state.showcase is not None:
-                engine.set_showcase_enabled(state.showcase)
-            if state.notes:
-                await engine.set_notes(state.notes)
+        if state.voice in VOICES:
+            self._settings.live.voice = state.voice
+        if state.mic_gate is not None:
+            engine.set_gate(state.mic_gate)
+        if state.showcase is not None:
+            engine.set_showcase_enabled(state.showcase)
+        if state.notes:
+            await engine.set_notes(state.notes)
         await self._hub.set_sticky("volume", p.msg_set_volume(state.volume))
-        if engine is not None:
-            await self._apply_mode(state.mode, announce=False)
-            if state.mode != "conversation":
-                logger.info("El panel dejó a Sonia en modo %s: no se abre GPT-Live", state.mode)
+        await self._apply_mode(state.mode, announce=False)
+        if state.mode != "conversation":
+            logger.info("El panel dejó a Sonia en modo %s: no se abre GPT-Live", state.mode)
         self._loop_task = asyncio.create_task(self._loop(), name="sonia-panel-loop")
         if self._voice_cache is not None and self._settings.live.api_key:
             self._spawn(self._prepare_voices(delay=VOICE_WARMUP_DELAY_S), "voice-warmup")
@@ -255,8 +246,6 @@ class StandControl:
 
     async def _apply_mode(self, mode: Mode, *, announce: bool) -> None:
         engine = self._engine
-        if engine is None:
-            return
         hub = self._hub
         if mode == "away":
             await engine.set_active(False)
@@ -323,7 +312,7 @@ class StandControl:
             await self._hub.broadcast_json(p.msg_attention("greeting"))
             return True, "Sonia saluda con la mano."
         pcm = self._voice_cache.get(bit.text) if self._voice_cache is not None else None
-        if pcm is None or self._engine is None:
+        if pcm is None:
             if bit.gesture:
                 await self._hub.broadcast_json(p.msg_attention(bit.gesture))
             return (
@@ -373,17 +362,11 @@ class StandControl:
         logger.info("Panel: %s %s -> %s", action, _summary(params), result[1])
         return result
 
-    def _need_live(self) -> LiveEngine:
-        if self._engine is None:
-            raise _BadRequest("Esto solo funciona con el motor GPT-Live.")
-        return self._engine
-
     def _need_present(self) -> None:
         if self.state.mode == "away":
             raise _BadRequest("Sonia está fuera. Tráela de vuelta primero.")
 
     async def _act_set_mode(self, params: dict[str, Any]) -> tuple[bool, str]:
-        self._need_live()
         mode = params.get("mode")
         if mode not in MODES:
             raise _BadRequest("Modo no válido.")
@@ -405,8 +388,6 @@ class StandControl:
     async def _act_say(self, params: dict[str, Any]) -> tuple[bool, str]:
         text = _text(params, "text", max_len=400, required=True)
         self._need_present()
-        if self._engine is None:
-            raise _BadRequest("Con este motor usa «Preguntar como visitante».")
         if self.state.mode == "conversation":
             if not await self._engine.announce(text):
                 raise _BadRequest("Sonia no está conectada ahora mismo; prueba en unos segundos.")
@@ -418,7 +399,7 @@ class StandControl:
         return True, "Grabando el aviso con su voz; lo dirá en unos segundos."
 
     async def _record_and_play(self, text: str) -> None:
-        assert self._voice_cache is not None and self._engine is not None
+        assert self._voice_cache is not None
         pcm = self._voice_cache.get(text)
         if pcm is None:
             try:
@@ -431,31 +412,23 @@ class StandControl:
 
     async def _act_ask(self, params: dict[str, Any]) -> tuple[bool, str]:
         text = _text(params, "text", max_len=400, required=True)
-        if self._engine is not None:
-            if self.state.mode != "conversation":
-                raise _BadRequest("Sonia no está conversando. Pásala a «Conversando» primero.")
-            await self._engine.submit_text(text)
-        elif self._orchestrator is not None:
-            await self._orchestrator.submit_text(text)
+        if self.state.mode != "conversation":
+            raise _BadRequest("Sonia no está conversando. Pásala a «Conversando» primero.")
+        await self._engine.submit_text(text)
         return True, "Enviado. Sonia responderá en voz alta."
 
     async def _act_stop(self, params: dict[str, Any]) -> tuple[bool, str]:
-        if self._engine is not None:
-            await self._engine.interrupt()
-        elif self._orchestrator is not None:
-            from sonia.orchestrator import Interrupt
-
-            self._orchestrator.submit_nowait(Interrupt())
+        await self._engine.interrupt()
         return True, "Sonia se calla."
 
     async def _act_mute(self, params: dict[str, Any]) -> tuple[bool, str]:
-        engine = self._need_live()
+        engine = self._engine
         muted = _flag(params, "muted")
         engine.set_mic_muted(muted)
         return True, "Micrófono silenciado: Sonia no oye." if muted else "Micrófono activado."
 
     async def _act_restart(self, params: dict[str, Any]) -> tuple[bool, str]:
-        engine = self._need_live()
+        engine = self._engine
         if self.state.mode != "conversation":
             raise _BadRequest("Sonia no está conversando; no hay conversación que reiniciar.")
         if not await engine.restart_session("pedido desde el panel"):
@@ -489,12 +462,25 @@ class StandControl:
         await self._hub.broadcast_json(p.msg_attention(str(category)))
         return True, "Hecho."
 
+    async def _act_animation(self, params: dict[str, Any]) -> tuple[bool, str]:
+        self._need_present()
+        clip = _text(params, "clip", max_len=80, required=True)
+        if self._hub.client_count == 0:
+            raise _BadRequest("La pantalla de Sonia no está conectada.")
+        if not self._animations:
+            raise _BadRequest(
+                "La app de Sonia no ha mandado su lista de animaciones: actualízala o ábrela otra vez."
+            )
+        if clip not in {a["clip"] for a in self._animations}:
+            raise _BadRequest("Esa animación no está en la app de Sonia.")
+        await self._hub.broadcast_json(p.msg_play_animation(clip))
+        return True, f"Sonia hace «{clip}»."
+
     async def _act_greet(self, params: dict[str, Any]) -> tuple[bool, str]:
-        self._need_live()
         return await self.greet("greeting")
 
     async def _act_showcase(self, params: dict[str, Any]) -> tuple[bool, str]:
-        engine = self._need_live()
+        engine = self._engine
         enabled = _flag(params, "enabled")
         engine.set_showcase_enabled(enabled)
         self.state.showcase = enabled
@@ -513,7 +499,7 @@ class StandControl:
         return True, f"Volumen al {value * 100:.0f} %."
 
     async def _act_set_mic_gate(self, params: dict[str, Any]) -> tuple[bool, str]:
-        engine = self._need_live()
+        engine = self._engine
         value = _number(params, "value", 0.0, 0.2)
         engine.set_gate(value)
         self.state.mic_gate = value
@@ -522,20 +508,8 @@ class StandControl:
             return True, "Filtro de ruido apagado: Sonia oye todo."
         return True, "Filtro de ruido ajustado."
 
-    async def _act_set_barge_in(self, params: dict[str, Any]) -> tuple[bool, str]:
-        self._need_live()
-        enabled = _flag(params, "enabled")
-        self._settings.audio.barge_in = enabled
-        self.state.barge_in = enabled
-        self._save()
-        return True, (
-            "Ahora se la puede interrumpir hablando (usa auriculares o cancelación de eco)."
-            if enabled
-            else "Ya no se la puede interrumpir hablando."
-        )
-
     async def _act_set_voice(self, params: dict[str, Any]) -> tuple[bool, str]:
-        engine = self._need_live()
+        engine = self._engine
         voice = params.get("voice")
         if voice not in VOICES:
             raise _BadRequest("Voz no válida.")
@@ -550,7 +524,7 @@ class StandControl:
         return True, f"Voz cambiada a {voice}. La conversación empieza de nuevo."
 
     async def _act_set_notes(self, params: dict[str, Any]) -> tuple[bool, str]:
-        engine = self._need_live()
+        engine = self._engine
         text = _text(params, "text", max_len=1_000)
         await engine.set_notes(text)
         self.state.notes = text
@@ -558,7 +532,6 @@ class StandControl:
         return True, "Avisos guardados. Sonia ya los conoce." if text else "Avisos borrados."
 
     async def _act_prepare_voices(self, params: dict[str, Any]) -> tuple[bool, str]:
-        self._need_live()
         if self._voice_cache is None:
             raise _BadRequest("No hay caché de voces.")
         if not self._settings.live.api_key:
@@ -580,17 +553,21 @@ class StandControl:
         elif kind == p.MSG_HIDE_IMAGE:
             self._image = None
 
+    def _on_animations(self, msg: dict[str, Any]) -> None:
+        self._animations = p.parse_animations(msg)
+        logger.info("Unity tiene %d animaciones para el panel", len(self._animations))
+
     def status(self) -> dict[str, Any]:
         """La instantánea de ``GET /api/status`` (forma en ``docs/panel.md``)."""
         settings = self._settings
         engine = self._engine
-        snap = engine.snapshot() if engine is not None else {}
+        snap = engine.snapshot()
         usage_s = self.usage_today()
         return {
-            "engine": "live" if engine is not None else "pipeline",
-            "mode": self.state.mode if engine is not None else "conversation",
+            "engine": "live",
+            "mode": self.state.mode,
             "away_message": self._away_message,
-            "state": snap.get("state") or str(getattr(self._orchestrator, "state", "idle")),
+            "state": snap.get("state") or "idle",
             "health": self._health(snap),
             "session": {
                 "id": snap.get("session_id") or None,
@@ -603,13 +580,13 @@ class StandControl:
                 "cost_usd": round(usage_s / 60.0 * settings.panel.live_price_per_minute, 2),
             },
             "image": self._image,
-            "showcase": {"enabled": engine.showcase_enabled if engine is not None else False},
+            "animations": self._animations,
+            "showcase": {"enabled": engine.showcase_enabled},
             "voice": settings.live.voice,
             "voices": VOICES,
-            "barge_in": settings.audio.barge_in,
             "volume": self.state.volume,
             "mic_gate": snap.get("mic_gate", 0.0),
-            "notes": engine.notes if engine is not None else "",
+            "notes": engine.notes,
             "voice_cache": self._voice_cache_status(),
             "last_error": snap.get("last_error") or None,
             "capabilities": self.capabilities,
@@ -617,7 +594,6 @@ class StandControl:
 
     def _health(self, snap: dict[str, Any]) -> dict[str, dict[str, Any]]:
         mode = self.state.mode
-        engine = self._engine
         screen = (
             _health(True, "Pantalla conectada")
             if self._hub.client_count > 0
@@ -627,14 +603,6 @@ class StandControl:
                 "Abre la app de Sonia en el ordenador del stand (o ciérrala y ábrela otra vez).",
             )
         )
-        if engine is None:
-            return {
-                "internet": _health(None, "Motor anterior (sin GPT-Live)"),
-                "screen": screen,
-                "mic": _health(None, "Sin datos del micrófono con este motor"),
-                "camera": _health(None, "Sin datos de la cámara con este motor"),
-            }
-
         if mode != "conversation":
             internet = _health(None, "No conversa ahora, así que no gasta")
         elif snap.get("connected"):
@@ -694,8 +662,6 @@ class StandControl:
     # -- gasto del día ----------------------------------------------------------
 
     def _engine_usage(self) -> float:
-        if self._engine is None:
-            return 0.0
         return float(self._engine.snapshot().get("usage_s") or 0.0)
 
     def _roll_usage_day(self, engine_seconds: float) -> None:

@@ -1,5 +1,7 @@
 # 003. Acciones por tool calling y por MCP
 
+**Sustituida por [007](007-voz-a-voz-gpt-live.md) el 4 de octubre de 2026.**
+
 ## Contexto
 
 Las acciones de Sonia (`look`, `show_image`, `hide_image`) necesitan funcionar sea cual sea el modelo o servidor configurado. Tool calling estándar de la API de OpenAI es la vía más extendida y la que mejor integra la respuesta en el propio turno, pero no todos los servidores locales lo soportan bien, y algún modelo puede no tener tool calling nativo entrenado.

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -16,18 +16,8 @@ import pytest
 
 from sonia.config import LLMSettings
 from sonia.llm.client import LLMClient, LLMError
-from sonia.llm.conversation import Conversation
-from sonia.llm.messages import (
-    assistant_text,
-    assistant_tool_calls,
-    has_image,
-    strip_images,
-    tool_result,
-    user_text,
-    user_with_image,
-)
-from sonia.llm.prompt_tools import PromptToolParser, render_tools_prompt
-from sonia.types import Frame, TextDelta, ToolCall, ToolCallsEvent, TurnDone
+from sonia.llm.messages import system, user_text, user_with_image
+from sonia.types import Frame, TextDelta, TurnDone
 
 # ---------------------------------------------------------------------------
 # Utilidades
@@ -43,6 +33,7 @@ def make_settings(**overrides: Any) -> LLMSettings:
         "reasoning_effort": "",
         "temperature": 0.5,
         "max_tokens": 128,
+        "max_tokens_param": "max_tokens",
         "request_timeout": 5.0,
     }
     base.update(overrides)
@@ -89,35 +80,8 @@ def streaming_transport(
     return httpx.MockTransport(handler)
 
 
-async def collect(client: LLMClient, **kwargs: Any) -> list[Any]:
-    return [event async for event in client.stream(kwargs.pop("messages", []), **kwargs)]
-
-
-TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "show_image",
-            "description": "Muestra una imagen en el panel.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "image_id": {"type": "string", "description": "id de la galería"},
-                    "caption": {"type": "string"},
-                },
-                "required": ["image_id"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "hide_image",
-            "description": "Retira el panel.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-]
+async def collect(client: LLMClient, messages: list[dict[str, Any]]) -> list[Any]:
+    return [event async for event in client.stream(messages)]
 
 
 def make_frame(data: bytes = b"jpeg-falso") -> Frame:
@@ -193,125 +157,6 @@ async def test_lineas_raras_y_chunk_de_usage_se_toleran() -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_tool_call_con_argumentos_fragmentados() -> None:
-    body = sse(
-        chunk(
-            {
-                "tool_calls": [
-                    {
-                        "index": 0,
-                        "id": "call_abc",
-                        "type": "function",
-                        "function": {"name": "show_image", "arguments": ""},
-                    }
-                ]
-            }
-        ),
-        chunk({"tool_calls": [{"index": 0, "function": {"arguments": '{"image_'}}]}),
-        chunk({"tool_calls": [{"index": 0, "function": {"arguments": 'id": "logo'}}]}),
-        chunk({"tool_calls": [{"index": 0, "function": {"arguments": '-sonnet"}'}}]}),
-        chunk({}, finish_reason="tool_calls"),
-        "[DONE]",
-    )
-    client = LLMClient(make_settings(), transport=streaming_transport(body))
-    events = await collect(client, messages=[user_text("enséñame el logo")], tools=TOOLS)
-    await client.aclose()
-
-    assert len(events) == 1
-    event = events[0]
-    assert isinstance(event, ToolCallsEvent)
-    assert len(event.calls) == 1
-    call = event.calls[0]
-    assert call.id == "call_abc"
-    assert call.name == "show_image"
-    assert call.arguments == {"image_id": "logo-sonnet"}
-
-
-async def test_dos_tool_calls_intercaladas_por_index() -> None:
-    body = sse(
-        chunk(
-            {
-                "tool_calls": [
-                    {"index": 0, "id": "a", "function": {"name": "show_image", "arguments": "{"}}
-                ]
-            }
-        ),
-        chunk(
-            {
-                "tool_calls": [
-                    {"index": 1, "id": "b", "function": {"name": "hide_image", "arguments": "{"}}
-                ]
-            }
-        ),
-        chunk({"tool_calls": [{"index": 0, "function": {"arguments": '"image_id": "x"'}}]}),
-        chunk({"tool_calls": [{"index": 1, "function": {"arguments": "}"}}]}),
-        chunk({"tool_calls": [{"index": 0, "function": {"arguments": "}"}}]}),
-        chunk({}, finish_reason="tool_calls"),
-        "[DONE]",
-    )
-    client = LLMClient(make_settings(), transport=streaming_transport(body))
-    events = await collect(client, messages=[user_text("hola")], tools=TOOLS)
-    await client.aclose()
-
-    event = events[0]
-    assert isinstance(event, ToolCallsEvent)
-    assert [(c.id, c.name, c.arguments) for c in event.calls] == [
-        ("a", "show_image", {"image_id": "x"}),
-        ("b", "hide_image", {}),
-    ]
-
-
-async def test_tool_calls_sin_finish_reason_al_cerrar_el_stream() -> None:
-    """Si el servidor corta sin ``finish_reason`` pero hay calls, se emiten igual."""
-    body = sse(
-        chunk({"content": "Voy a mirar. "}),
-        chunk({"reasoning_content": "hmm"}),
-        chunk(
-            {
-                "tool_calls": [
-                    {"index": 0, "id": "c1", "function": {"name": "look", "arguments": "{}"}}
-                ]
-            }
-        ),
-        "[DONE]",
-    )
-    client = LLMClient(make_settings(), transport=streaming_transport(body))
-    events = await collect(client, messages=[user_text("¿qué ves?")], tools=TOOLS)
-    await client.aclose()
-
-    assert isinstance(events[0], TextDelta)
-    event = events[-1]
-    assert isinstance(event, ToolCallsEvent)
-    assert event.content == "Voy a mirar. "
-    assert event.reasoning_content == "hmm"
-    assert event.calls[0].arguments == {}
-
-
-async def test_argumentos_json_invalido_dan_diccionario_vacio() -> None:
-    body = sse(
-        chunk(
-            {
-                "tool_calls": [
-                    {
-                        "index": 0,
-                        "id": "c1",
-                        "function": {"name": "show_image", "arguments": "{roto"},
-                    }
-                ]
-            }
-        ),
-        chunk({}, finish_reason="tool_calls"),
-        "[DONE]",
-    )
-    client = LLMClient(make_settings(), transport=streaming_transport(body))
-    events = await collect(client, messages=[user_text("hola")], tools=TOOLS)
-    await client.aclose()
-
-    event = events[0]
-    assert isinstance(event, ToolCallsEvent)
-    assert event.calls[0].arguments == {}
-
-
 # ---------------------------------------------------------------------------
 # LLMClient: cuerpo de la petición
 # ---------------------------------------------------------------------------
@@ -328,7 +173,7 @@ async def test_body_sin_temperature_cuando_es_none() -> None:
     assert "temperature" not in captured[0]
 
 
-async def test_body_sin_tools_ni_reasoning() -> None:
+async def test_body_sin_reasoning() -> None:
     captured: list[dict[str, Any]] = []
     body = sse(chunk({"content": "ok"}, finish_reason="stop"), "[DONE]")
     client = LLMClient(make_settings(), transport=streaming_transport(body, captured=captured))
@@ -341,7 +186,6 @@ async def test_body_sin_tools_ni_reasoning() -> None:
     assert sent["temperature"] == 0.5
     assert sent["max_tokens"] == 128
     assert "tools" not in sent
-    assert "tool_choice" not in sent
     assert "reasoning_effort" not in sent
     assert "stream_options" not in sent
 
@@ -357,33 +201,6 @@ async def test_max_completion_tokens_para_la_api_de_openai() -> None:
     await client.aclose()
     assert captured[0]["max_completion_tokens"] == 128
     assert "max_tokens" not in captured[0]
-
-
-async def test_body_con_tools_y_reasoning_effort() -> None:
-    captured: list[dict[str, Any]] = []
-    body = sse(chunk({"content": "ok"}, finish_reason="stop"), "[DONE]")
-    client = LLMClient(
-        make_settings(reasoning_effort="high"),
-        transport=streaming_transport(body, captured=captured),
-    )
-    await collect(client, messages=[user_text("hola")], tools=TOOLS)
-    await client.aclose()
-
-    sent = captured[0]
-    assert sent["tools"] == TOOLS
-    assert sent["tool_choice"] == "auto"
-    assert sent["reasoning_effort"] == "high"
-
-
-async def test_tools_vacias_no_se_envian() -> None:
-    captured: list[dict[str, Any]] = []
-    body = sse(chunk({"content": "ok"}, finish_reason="stop"), "[DONE]")
-    client = LLMClient(make_settings(), transport=streaming_transport(body, captured=captured))
-    await collect(client, messages=[user_text("hola")], tools=[])
-    await client.aclose()
-
-    assert "tools" not in captured[0]
-    assert "tool_choice" not in captured[0]
 
 
 async def test_url_y_cabecera_de_autorizacion() -> None:
@@ -539,7 +356,9 @@ async def test_ping_con_error_lanza_llm_error() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_user_with_image_y_strip_images() -> None:
+def test_mensajes_de_texto_y_con_imagen() -> None:
+    assert system("eres sonia") == {"role": "system", "content": "eres sonia"}
+    assert user_text("hola") == {"role": "user", "content": "hola"}
     message = user_with_image("¿qué ves?", make_frame())
     assert message["role"] == "user"
     parts = message["content"]
@@ -547,234 +366,12 @@ def test_user_with_image_y_strip_images() -> None:
     assert parts[1]["type"] == "image_url"
     assert parts[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
     assert parts[1]["image_url"]["detail"] == "low"
-    assert has_image(message)
-
-    plain = strip_images(message)
-    assert plain == {"role": "user", "content": "¿qué ves?"}
-    assert not has_image(plain)
-    # No muta el original.
-    assert has_image(message)
-
-
-def test_strip_images_deja_igual_el_texto_plano() -> None:
-    message = user_text("hola")
-    assert strip_images(message) == message
-
-
-def test_assistant_tool_calls_serializa_al_formato_openai() -> None:
-    event = ToolCallsEvent(
-        calls=[ToolCall(id="c1", name="show_image", arguments={"image_id": "logo"})],
-        reasoning_content="porque sí",
-        content="",
-    )
-    message = assistant_tool_calls(event)
-    assert message["role"] == "assistant"
-    assert message["content"] is None
-    assert message["reasoning_content"] == "porque sí"
-    call = message["tool_calls"][0]
-    assert call == {
-        "id": "c1",
-        "type": "function",
-        "function": {"name": "show_image", "arguments": '{"image_id": "logo"}'},
-    }
-
-
-def test_assistant_tool_calls_sin_reasoning_no_incluye_la_clave() -> None:
-    event = ToolCallsEvent(
-        calls=[ToolCall(id="c1", name="hide_image", arguments={})],
-        content="Ya te lo quito.",
-    )
-    message = assistant_tool_calls(event)
-    assert "reasoning_content" not in message
-    assert message["content"] == "Ya te lo quito."
-
-
-def test_tool_result_y_assistant_text() -> None:
-    assert tool_result("c1", "look", "Captura tomada.") == {
-        "role": "tool",
-        "tool_call_id": "c1",
-        "name": "look",
-        "content": "Captura tomada.",
-    }
-    assert assistant_text("hola") == {"role": "assistant", "content": "hola"}
+    assert user_with_image("", make_frame())["content"][0]["type"] == "image_url"
 
 
 # ---------------------------------------------------------------------------
-# Conversation
+# Cancelación
 # ---------------------------------------------------------------------------
-
-
-def test_conversation_pone_el_system_delante() -> None:
-    conversation = Conversation("eres sonia", history_turns=4)
-    conversation.add(user_text("hola"))
-    conversation.add(assistant_text("¿qué tal?"))
-
-    messages = conversation.messages()
-    assert messages[0] == {"role": "system", "content": "eres sonia"}
-    assert [m["role"] for m in messages] == ["system", "user", "assistant"]
-
-    conversation.set_system_prompt("eres otra")
-    assert conversation.messages()[0]["content"] == "eres otra"
-
-    conversation.reset()
-    assert [m["role"] for m in conversation.messages()] == ["system"]
-
-
-def test_conversation_trunca_por_turnos_de_usuario() -> None:
-    conversation = Conversation("s", history_turns=2)
-    for i in range(4):
-        conversation.add(user_text(f"pregunta {i}"))
-        conversation.add(assistant_text(f"respuesta {i}"))
-
-    contents = [m["content"] for m in conversation.messages()[1:]]
-    assert contents == ["pregunta 2", "respuesta 2", "pregunta 3", "respuesta 3"]
-
-
-def test_conversation_no_separa_tool_calls_de_sus_resultados() -> None:
-    conversation = Conversation("s", history_turns=1)
-    conversation.add(user_text("turno viejo"))
-    conversation.add(assistant_text("ya"))
-
-    conversation.add(user_text("enséñame el logo"))
-    event = ToolCallsEvent(
-        calls=[ToolCall(id="c1", name="show_image", arguments={"image_id": "l"})]
-    )
-    conversation.add(assistant_tool_calls(event))
-    conversation.add(tool_result("c1", "show_image", "hecho"))
-    # La imagen que devolvió la acción entra como mensaje de usuario, pero no
-    # abre un turno nuevo.
-    conversation.add(user_with_image("", make_frame()))
-    conversation.add(assistant_text("ahí lo tienes"))
-
-    roles = [m["role"] for m in conversation.messages()]
-    assert roles == ["system", "user", "assistant", "tool", "user", "assistant"]
-    assert conversation.messages()[1]["content"] == "enséñame el logo"
-
-
-def test_conversation_solo_conserva_la_imagen_del_turno_actual() -> None:
-    conversation = Conversation("s", history_turns=5)
-    conversation.add(user_with_image("mira esto", make_frame(b"vieja")))
-    conversation.add(assistant_text("qué bonito"))
-    conversation.add(user_with_image("¿y ahora?", make_frame(b"nueva")))
-
-    messages = conversation.messages()
-    assert not has_image(messages[1])
-    assert messages[1]["content"] == "mira esto"
-    assert has_image(messages[3])
-
-
-def test_conversation_quita_la_imagen_cuando_el_turno_siguiente_es_texto() -> None:
-    conversation = Conversation("s", history_turns=5)
-    conversation.add(user_with_image("mira esto", make_frame()))
-    conversation.add(assistant_text("qué bonito"))
-    conversation.add(user_text("¿y qué es Sonnet Code?"))
-
-    assert not any(has_image(m) for m in conversation.messages())
-
-
-# ---------------------------------------------------------------------------
-# prompt_tools
-# ---------------------------------------------------------------------------
-
-
-def test_render_tools_prompt_describe_acciones_y_formato() -> None:
-    prompt = render_tools_prompt(TOOLS)
-    assert "<action>" in prompt and "</action>" in prompt
-    assert "show_image" in prompt
-    assert "hide_image" in prompt
-    assert "image_id: string, obligatorio" in prompt
-    assert "caption: string, opcional" in prompt
-    assert render_tools_prompt([]) == ""
-
-
-def _feed_all(parser: PromptToolParser, deltas: Iterable[str]) -> tuple[str, list[Any]]:
-    text: list[str] = []
-    calls: list[Any] = []
-    for delta in deltas:
-        spoken, found = parser.feed(delta)
-        text.append(spoken)
-        calls.extend(found)
-    text.append(parser.flush())
-    return "".join(text), calls
-
-
-def test_parser_bloque_partido_en_varios_deltas() -> None:
-    parser = PromptToolParser()
-    deltas = [
-        "Ahora mismo te lo muestro. ",
-        "<acti",
-        'on>{"name": "show_ima',
-        'ge", "arguments": {"image_id": "logo-sonnet"}}</act',
-        "ion> Ya está.",
-    ]
-    text, calls = _feed_all(parser, deltas)
-
-    assert text == "Ahora mismo te lo muestro.  Ya está."
-    assert len(calls) == 1
-    assert calls[0].id == "prompt_0"
-    assert calls[0].name == "show_image"
-    assert calls[0].arguments == {"image_id": "logo-sonnet"}
-
-
-def test_parser_no_emite_media_etiqueta() -> None:
-    parser = PromptToolParser()
-    spoken, calls = parser.feed("hola <ac")
-    assert spoken == "hola "
-    assert calls == []
-    spoken, calls = parser.feed('tion>{"name": "hide_image", "arguments": {}}</action>')
-    assert spoken == ""
-    assert [c.name for c in calls] == ["hide_image"]
-
-
-def test_parser_menor_que_suelto_se_habla() -> None:
-    parser = PromptToolParser()
-    text, calls = _feed_all(parser, ["si a < b ", "entonces b > a"])
-    assert text == "si a < b entonces b > a"
-    assert calls == []
-
-
-def test_parser_menor_que_al_final_se_suelta_en_flush() -> None:
-    parser = PromptToolParser()
-    spoken, _ = parser.feed("fin <")
-    assert spoken == "fin "
-    assert parser.flush() == "<"
-
-
-def test_parser_dos_acciones_con_ids_correlativos() -> None:
-    parser = PromptToolParser()
-    text, calls = _feed_all(
-        parser,
-        [
-            'Mira. <action>{"name": "look", "arguments": {}}</action>',
-            ' y luego <action>{"name": "hide_image", "arguments": {}}</action> listo.',
-        ],
-    )
-    assert text == "Mira.  y luego  listo."
-    assert [c.id for c in calls] == ["prompt_0", "prompt_1"]
-    assert [c.name for c in calls] == ["look", "hide_image"]
-
-
-def test_parser_json_invalido_no_produce_accion() -> None:
-    parser = PromptToolParser()
-    text, calls = _feed_all(parser, ["texto <action>{roto}</action> más texto"])
-    assert text == "texto  más texto"
-    assert calls == []
-
-
-def test_parser_bloque_sin_cerrar_no_se_habla() -> None:
-    parser = PromptToolParser()
-    spoken, calls = parser.feed('hola <action>{"name": "look"')
-    assert spoken == "hola "
-    assert calls == []
-    assert parser.flush() == ""
-
-
-def test_parser_reset() -> None:
-    parser = PromptToolParser()
-    parser.feed('<action>{"name": "look", "arguments": {}}</action>')
-    parser.reset()
-    _, calls = parser.feed('<action>{"name": "look", "arguments": {}}</action>')
-    assert calls[0].id == "prompt_0"
 
 
 async def test_cancelar_el_turno_cierra_la_respuesta() -> None:

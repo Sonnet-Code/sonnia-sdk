@@ -1,5 +1,7 @@
 # 002. API compatible con OpenAI, agnóstica al modelo
 
+**Sustituida por [007](007-voz-a-voz-gpt-live.md) el 4 de octubre de 2026.**
+
 ## Contexto
 
 El modelo de lenguaje es el componente que más cambia: puede que el hardware disponible el día del evento no sea el mismo que el de las pruebas, o que aparezca un modelo mejor antes de octubre. Acoplar el orquestador a un modelo concreto obligaría a tocar código cada vez que cambia esa elección.

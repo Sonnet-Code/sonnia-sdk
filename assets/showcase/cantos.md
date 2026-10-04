@@ -1,5 +1,6 @@
-# Lo que Sonia "canta" mientras baila sola (una por línea). El TTS las lee,
-# así que valen frases rítmicas y pegadizas más que letras largas.
+# Lo que Sonia "canta" mientras baila sola (una por línea). Las lee GPT-Live
+# con su voz (se graban una vez en cache/voice), así que valen frases
+# rítmicas y pegadizas más que letras largas.
 
 ¡Lalalá, lalalá! Esto es DevFest Santo Domingo, ¡a moverse!
 ¡Uh, uh! Sonnet Code está en la casa, ¡ven a bailar conmigo!

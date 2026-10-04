@@ -27,6 +27,7 @@ from sonia.panel.control import DEFAULT_AWAY_MESSAGE, PanelState, StandControl, 
 from sonia.panel.logs import LogBuffer
 from sonia.panel.server import AccessVerifier, PanelServer
 from sonia.ws.hub import Hub
+from tests.helpers import Recorder
 from tests.test_live import (
     RATE,
     FakeConn,
@@ -36,7 +37,6 @@ from tests.test_live import (
     running,
     wait_until,
 )
-from tests.test_orchestrator import Recorder
 
 GREETING = "¡Hola, bienvenidos al DevFest!"
 SONG = "¡Lalalá, esto es DevFest!"
@@ -178,6 +178,31 @@ async def test_solo_saludos_reproduce_frases_grabadas_sin_gpt_live(tmp_path: Pat
         assert rig.server.attempts == 1
 
 
+async def test_gpt_live_no_oye_la_frase_grabada_mientras_suena(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GPT-Live no dijo la frase grabada: si la oyera por los altavoces, la contestaría."""
+    import numpy as np
+
+    monkeypatch.setattr("sonia.live.engine.CLIP_ECHO_TAIL_S", 0.05)
+    loud = np.full(768, 0.5, dtype=np.float32)
+    async with make_panel_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        write_clip(rig.cache, GREETING)
+        ok, _ = await rig.control.act("greet", {})
+        assert ok
+        await rig.rec.wait_type("speech_end")
+        await rig.engine.push_mic(loud)
+        await conn.wait_type("session.input_audio.append")
+        assert not any(conn.audio_in()[-1])
+        # Unity confirma que terminó de sonar: pasada la cola, GPT-Live vuelve a oír.
+        rig.engine.notify_playback_done(rig.rec.of_type("speech_start")[-1]["utterance_id"])
+        await asyncio.sleep(0.1)
+        await rig.engine.push_mic(loud)
+        await conn.wait_type("session.input_audio.append", count=2)
+        assert any(conn.audio_in()[-1])
+
+
 async def test_sin_frase_grabada_saluda_solo_con_el_gesto(tmp_path: Path) -> None:
     async with make_panel_rig(tmp_path) as rig:
         await rig.control.act("set_mode", {"mode": "greeter"})
@@ -257,10 +282,49 @@ async def test_acciones_mal_formadas_no_rompen_nada(tmp_path: Path) -> None:
         assert not ok and "fuera" in message
 
 
+async def test_animaciones_con_la_lista_que_manda_unity(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        ok, message = await rig.control.act("animation", {"clip": "Dance_HipHop"})
+        assert not ok and "lista" in message
+        await rig.client.send(
+            json.dumps(
+                {
+                    "type": "animations",
+                    "animations": [
+                        {"clip": "Dance_HipHop", "group": "dance"},
+                        {"clip": "Dance_HipHop", "group": "soft"},  # repetido: fuera
+                        {"clip": "Shrug"},  # sin grupo: fuera
+                        "basura",
+                        {"clip": "ListeningNod", "group": "nod"},
+                    ],
+                }
+            )
+        )
+        await wait_until(lambda: bool(rig.control.status()["animations"]))
+        assert rig.control.status()["animations"] == [
+            {"clip": "Dance_HipHop", "group": "dance"},
+            {"clip": "ListeningNod", "group": "nod"},
+        ]
+        assert "animations" in rig.control.status()["capabilities"]
+        ok, message = await rig.control.act("animation", {"clip": "Dance_HipHop"})
+        assert ok and "Dance_HipHop" in message
+        await rig.rec.wait_type("play_animation")
+        assert rig.rec.of_type("play_animation")[-1] == {
+            "type": "play_animation",
+            "clip": "Dance_HipHop",
+        }
+        ok, message = await rig.control.act("animation", {"clip": "Moonwalk"})
+        assert not ok and "no está" in message
+        await rig.control.act("set_mode", {"mode": "away"})
+        ok, message = await rig.control.act("animation", {"clip": "Dance_HipHop"})
+        assert not ok and "fuera" in message
+        assert len(rig.rec.of_type("play_animation")) == 1
+
+
 async def test_silenciar_el_micro_manda_silencio(tmp_path: Path) -> None:
     import numpy as np
 
-    async with make_panel_rig(tmp_path, barge_in=True) as rig:
+    async with make_panel_rig(tmp_path) as rig:
         conn = await rig.conn()
         await rig.control.act("mute", {"muted": True})
         await rig.engine.push_mic(np.full(768, 0.5, dtype=np.float32))

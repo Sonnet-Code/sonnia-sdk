@@ -1,5 +1,7 @@
 # 001. Todo corre en local
 
+**Sustituida por [007](007-voz-a-voz-gpt-live.md) el 4 de octubre de 2026.**
+
 ## Contexto
 
 Sonia se usa en un stand físico durante un evento de dos días, con conectividad a internet que no se puede garantizar (redes de eventos saturadas, salas grandes, mucha gente conectada a la vez). Además, la demo depende de audio y vídeo del visitante: cualquier llamada a un servicio en la nube añade latencia variable y un punto de fallo fuera de nuestro control justo cuando más falta hace que funcione.

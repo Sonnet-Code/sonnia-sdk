@@ -136,6 +136,7 @@ namespace Sonia
                 client.OnShowImage += HandleShowImage;
                 client.OnHideImage += HandleHideImage;
                 client.OnAttention += HandleAttention;
+                client.OnPlayAnimation += HandlePlayAnimation;
                 client.OnPresence += HandlePresence;
                 client.OnSetVolume += HandleSetVolume;
                 client.OnError += HandleError;
@@ -166,6 +167,7 @@ namespace Sonia
                 client.OnShowImage -= HandleShowImage;
                 client.OnHideImage -= HandleHideImage;
                 client.OnAttention -= HandleAttention;
+                client.OnPlayAnimation -= HandlePlayAnimation;
                 client.OnPresence -= HandlePresence;
                 client.OnSetVolume -= HandleSetVolume;
                 client.OnError -= HandleError;
@@ -343,6 +345,44 @@ namespace Sonia
                     "[Sonia] hello: versión " + message.Version + ", " + message.SampleRate + " Hz, "
                     + message.Channels + " canal(es), formato " + message.Format,
                     this);
+            }
+
+            SendAnimationCatalog();
+        }
+
+        /// <summary>Le dice al orquestador qué animaciones puede lanzar el panel una a una.</summary>
+        private void SendAnimationCatalog()
+        {
+            if (client == null || choreographer == null || choreographer.MotionSet == null)
+            {
+                return;
+            }
+
+            client.SendAnimations(AnimationCatalog.ToPairs(AnimationCatalog.Build(choreographer.MotionSet)));
+        }
+
+        /// <summary>
+        /// El panel pide una animación concreta: se reproduce una vez sobre el
+        /// cuerpo y el coreógrafo vuelve a lo que tocaba en el estado actual.
+        /// </summary>
+        private void HandlePlayAnimation(PlayAnimationMessage message)
+        {
+            if (choreographer == null || message == null)
+            {
+                return;
+            }
+
+            AnimationCatalog.Entry entry;
+            if (!AnimationCatalog.TryFind(choreographer.MotionSet, message.Clip, out entry))
+            {
+                Debug.LogWarning("[Sonia] el panel pidió una animación que no está en el set: " + message.Clip, this);
+                return;
+            }
+
+            choreographer.Preview(entry.Clip);
+            if (logEvents)
+            {
+                Debug.Log("[Sonia] animación pedida desde el panel: " + entry.Clip.name, this);
             }
         }
 

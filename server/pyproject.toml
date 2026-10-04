@@ -1,7 +1,7 @@
 [project]
 name = "sonia"
 version = "0.1.0"
-description = "Asistente de IA por voz en tiempo real con avatar 3D, 100 % local."
+description = "Asistente de IA por voz en tiempo real con avatar 3D (GPT-Live) para el stand de Sonnet Code."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 license = { text = "MIT" }
@@ -15,23 +15,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Captura de micrófono y detección de voz.
-audio = [
-    "sounddevice>=0.5",
-    "silero-vad>=5.1",
-]
-# Reconocimiento de voz local.
-stt = ["faster-whisper>=1.1"]
-# Síntesis de voz local en proceso (pesado: torch, transformers, gradio...).
-omnivoice = ["omnivoice>=0.2", "soundfile>=0.12"]
+# Captura de micrófono y altavoz local.
+audio = ["sounddevice>=0.5"]
 # Captura de cámara desde Python (alternativa: la cámara la captura Unity).
 camera = ["opencv-python>=4.10"]
-# Servidor MCP local que expone las mismas acciones del modelo.
-mcp = ["mcp>=1.9", "uvicorn>=0.30"]
 # Panel de control web para el personal del stand (docs/panel.md).
 panel = ["starlette>=0.40", "uvicorn>=0.30", "pyjwt[crypto]>=2.8"]
 # Todo lo necesario para la demo completa.
-all = ["sonia[audio,stt,omnivoice,camera,mcp,panel]"]
+all = ["sonia[audio,camera,panel]"]
 
 [project.scripts]
 sonia = "sonia.cli:main"
@@ -42,7 +33,6 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.6",
     "mypy>=1.11",
-    "soundfile>=0.12",
 ]
 
 [build-system]

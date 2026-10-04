@@ -28,11 +28,8 @@ from sonia.config import (
     AudioSettings,
     LiveSettings,
     LLMSettings,
-    MCPSettings,
     Settings,
     ShowcaseSettings,
-    STTSettings,
-    TTSSettings,
     VisionSettings,
     WSSettings,
 )
@@ -42,11 +39,11 @@ from sonia.live.engine import INTERRUPT_TEXT, LiveEngine
 from sonia.live.oneshot import probe_session, speak_text
 from sonia.live.prompts import build_session_config, describe_live_stack
 from sonia.live.vision import VisionNarrator
-from sonia.showcase import Showcase
+from sonia.showcase import ATTENTION_DANCE, Showcase
 from sonia.types import Frame, LLMEvent, Message, TextDelta, TurnDone
 from sonia.vision.policy import VisionPolicy
 from sonia.ws.hub import Hub
-from tests.test_orchestrator import FakeCamera, Recorder
+from tests.helpers import FakeCamera, Recorder
 
 RATE = 24_000
 
@@ -238,7 +235,6 @@ async def running(server: FakeLiveServer) -> AsyncIterator[Callable[[str, dict[s
 def make_settings(
     tmp_path: Path,
     *,
-    barge_in: bool = False,
     vision_source: str = "none",
     idle_reset: float = 120.0,
     showcase_settings: ShowcaseSettings | None = None,
@@ -251,7 +247,6 @@ def make_settings(
         "api_key": "clave-de-prueba",
         "segment_gap_ms": 150,
         "user_turn_gap_ms": 200,
-        "echo_tail_ms": 50,
         "reconnect_min_seconds": 0.05,
         "reconnect_max_seconds": 0.1,
         "connect_timeout": 2.0,
@@ -260,7 +255,6 @@ def make_settings(
     live_values.update(live)
     return Settings(
         _env_file=None,  # type: ignore[call-arg]
-        voice_engine="live",
         live=LiveSettings(**live_values),
         llm=LLMSettings(
             base_url="http://llm.test/v1",
@@ -269,12 +263,9 @@ def make_settings(
             supports_vision=True,
             reasoning_effort="",
         ),
-        stt=STTSettings(backend="mock"),
-        tts=TTSSettings(backend="mock"),
-        audio=AudioSettings(barge_in=barge_in),
+        audio=AudioSettings(),
         vision=VisionSettings(source=vision_source, on_turn_start=True),  # type: ignore[arg-type]
         ws=WSSettings(host="127.0.0.1", port=0),
-        mcp=MCPSettings(enabled=False),
         showcase=showcase_settings or ShowcaseSettings(enabled=False),
         assets_dir=str(tmp_path),
         log_level="DEBUG",
@@ -401,7 +392,7 @@ async def test_session_start_lleva_modelo_voz_formato_y_acciones(tmp_path: Path)
         assert all(t["type"] == "function" and "function" not in t for t in backend["tools"])
         instructions = session["instructions"]
         assert "Eres Sonia" in instructions
-        assert "CÓMO FUNCIONAS AHORA" in instructions
+        assert "CÓMO FUNCIONAS (voz a voz en tiempo real)" in instructions
         assert "El DevFest es el 9 y 10 de octubre." in instructions
         assert "TU STACK AHORA MISMO" in instructions
         assert len(instructions) < 16_384 * 3  # muy por debajo del límite de tokens
@@ -427,16 +418,12 @@ def test_session_config_respeta_los_opcionales(tmp_path: Path) -> None:
     assert "Mirar: tomar una foto nueva" in config["instructions"]
 
 
-def test_sin_barge_in_pide_que_no_haga_asentimientos(tmp_path: Path) -> None:
+def test_las_reglas_piden_parar_si_la_interrumpen(tmp_path: Path) -> None:
     registry = build_default_registry(include_look=False)
-    quiet = build_session_config(
-        make_settings(tmp_path, barge_in=False), registry=registry, gallery_ids=[]
-    )["instructions"]
-    chatty = build_session_config(
-        make_settings(tmp_path, barge_in=True), registry=registry, gallery_ids=[]
-    )["instructions"]
-    assert "No hagas asentimientos" in quiet
-    assert "Usa asentimientos breves" in chatty and "No hagas asentimientos" not in chatty
+    instructions = build_session_config(make_settings(tmp_path), registry=registry, gallery_ids=[])[
+        "instructions"
+    ]
+    assert "Si te interrumpe, para enseguida" in instructions
 
 
 def test_el_stack_de_live_dice_que_la_voz_va_en_la_nube(tmp_path: Path) -> None:
@@ -630,30 +617,9 @@ def test_la_puerta_de_ruido_se_abre_con_voz_y_aguanta_las_pausas() -> None:
     assert NoiseGate(threshold=0.0, hold_ms=500).admit(0.0) is True
 
 
-async def test_sin_barge_in_el_micro_se_silencia_mientras_habla_sonia(tmp_path: Path) -> None:
-    async with make_rig(tmp_path, barge_in=False) as rig:
-        conn = await rig.conn()
-        await rig.engine.push_mic(voice_block())
-        await conn.wait_type("session.input_audio.append")
-        assert any(conn.audio_in()[-1])
-
-        await conn.audio(pcm(1_200))
-        await rig.rec.wait_type("speech_start")
-        await rig.engine.push_mic(voice_block())
-        await conn.wait_type("session.input_audio.append", count=2)
-        assert not any(conn.audio_in()[-1])  # silencio del mismo tamaño
-        assert len(conn.audio_in()[-1]) == 768 * 2
-
-        await rig.rec.wait_type("speech_end")
-        await rig.unity({"type": "playback_done", "utterance_id": 1})
-        await wait_until(lambda: not rig.engine._mic_muted(time.monotonic()))
-        await rig.engine.push_mic(voice_block())
-        await conn.wait_type("session.input_audio.append", count=3)
-        assert any(conn.audio_in()[-1])
-
-
-async def test_con_barge_in_el_micro_sigue_abierto_mientras_habla(tmp_path: Path) -> None:
-    async with make_rig(tmp_path, barge_in=True) as rig:
+async def test_el_micro_sigue_abierto_mientras_habla_sonia(tmp_path: Path) -> None:
+    # GPT-Live es full duplex: el visitante puede interrumpirla en cualquier momento.
+    async with make_rig(tmp_path) as rig:
         conn = await rig.conn()
         await conn.audio(pcm(1_200))
         await rig.rec.wait_type("speech_start")
@@ -900,6 +866,27 @@ async def test_el_numero_del_stand_va_como_commentary_y_suena_como_ambient(tmp_p
         assert rig.rec.of_type("speech_start")[0]["ambient"] is True
         await rig.rec.wait_type("speech_end")
         assert "speaking" not in rig.rec.states()
+
+
+async def test_un_baile_del_stand_avisa_a_unity_antes_de_pedir_la_voz(tmp_path: Path) -> None:
+    showcase = Showcase(phrases=[], songs=["La la la"], dance_chance=1.0)
+    settings = ShowcaseSettings(
+        enabled=True, first_delay_seconds=0.0, interval_min_seconds=60, interval_max_seconds=60
+    )
+    async with make_rig(tmp_path, showcase=showcase, showcase_settings=settings) as rig:
+        conn = await rig.conn()
+        await conn.wait_type("session.commentary.append")
+        attention = rig.rec.of_type("attention")
+        assert attention and attention[0]["category"] == ATTENTION_DANCE
+
+
+async def test_sin_animacion_de_stand_no_pide_nada(tmp_path: Path) -> None:
+    showcase = Showcase(phrases=["Hola"], songs=[], gesture_chance=0)
+    settings = ShowcaseSettings(enabled=False, first_delay_seconds=0.0)
+    async with make_rig(tmp_path, showcase=showcase, showcase_settings=settings) as rig:
+        conn = await rig.conn()
+        await asyncio.sleep(0.3)
+        assert not conn.of_type("session.commentary.append")
 
 
 # ---------------------------------------------------------------------------

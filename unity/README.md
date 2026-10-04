@@ -1,8 +1,8 @@
 # Proyecto Unity de Sonia
 
-Avatar 3D de Sonia: reproduce el audio que envía el orquestador, sincroniza los
-labios con los visemas, dispara las animaciones de estado y muestra imágenes en
-la escena.
+Avatar 3D de Sonia: reproduce la voz de GPT-Live que le envía el orquestador,
+mueve los labios según los fonemas del audio (uLipSync), dispara las
+animaciones de estado y muestra imágenes en la escena.
 
 - Versión del editor: **6000.6.0f1** (Unity 6.6), plantilla URP.
 - Escena inicial: `Assets/Scenes/SampleScene.unity`.
@@ -12,8 +12,8 @@ la escena.
 - Pantalla del stand: monitor **vertical 9:16, 1080x1920**. La escena, la cámara
   y el HUD están montados para ese formato.
 
-La guía completa (montar la escena, conseguir el avatar, animaciones, mapeo de
-visemas, ajustes de audio, build para el stand y licencias) está en
+La guía completa (montar la escena, conseguir el avatar, animaciones,
+lip-sync, ajustes de audio, build para el stand y licencias) está en
 [`../docs/unity.md`](../docs/unity.md).
 
 Arranque rápido:

@@ -32,6 +32,7 @@ namespace Sonia
         public const string Attention = "attention";
         public const string Presence = "presence";
         public const string SetVolume = "set_volume";
+        public const string PlayAnimation = "play_animation";
 
         // De Unity hacia el orquestador.
         public const string ClientHello = "client_hello";
@@ -39,6 +40,7 @@ namespace Sonia
         public const string PlaybackDone = "playback_done";
         public const string TextInput = "text_input";
         public const string CameraFrame = "camera_frame";
+        public const string Animations = "animations";
     }
 
     /// <summary>Valores posibles del campo <c>state</c> del mensaje <c>state</c>.</summary>
@@ -138,6 +140,14 @@ namespace Sonia
         [JsonProperty("category")] public string Category = "soft";
 
         /// <summary>Nombre de clip concreto, opcional.</summary>
+        [JsonProperty("clip")] public string Clip;
+    }
+
+    /// <summary>El panel pide un clip concreto del catálogo que mandó Unity (<see cref="AnimationCatalog"/>).</summary>
+    [Serializable]
+    public class PlayAnimationMessage
+    {
+        /// <summary>Nombre del clip, tal cual va en el mensaje <c>animations</c>.</summary>
         [JsonProperty("clip")] public string Clip;
     }
 
@@ -444,6 +454,26 @@ namespace Sonia
                 ["type"] = MessageTypes.CameraFrame,
                 ["mime"] = "image/jpeg",
                 ["data_base64"] = jpeg == null ? string.Empty : Convert.ToBase64String(jpeg)
+            };
+            return message.ToString(Formatting.None);
+        }
+
+        /// <summary>Catálogo de animaciones que el panel puede lanzar: pares (clip, grupo).</summary>
+        public static string AnimationsMessage(IList<KeyValuePair<string, string>> clips)
+        {
+            JArray list = new JArray();
+            if (clips != null)
+            {
+                foreach (KeyValuePair<string, string> item in clips)
+                {
+                    list.Add(new JObject { ["clip"] = item.Key, ["group"] = item.Value });
+                }
+            }
+
+            JObject message = new JObject
+            {
+                ["type"] = MessageTypes.Animations,
+                ["animations"] = list
             };
             return message.ToString(Formatting.None);
         }
