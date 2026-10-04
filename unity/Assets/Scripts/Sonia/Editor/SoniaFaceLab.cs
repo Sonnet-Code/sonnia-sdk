@@ -69,6 +69,20 @@ namespace Sonia.EditorTools
             public float value;
         }
 
+        /// <summary>Lanza un guion JSON desde el editor abierto (sin salir al terminar).</summary>
+        public static void RunConfigFile(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                Debug.LogError("[FaceLab] no existe el guion " + path);
+                return;
+            }
+
+            Config config = JsonUtility.FromJson<Config>(File.ReadAllText(path));
+            config.exitWhenDone = false;
+            Run(config);
+        }
+
         /// <summary>Entrada por línea de comandos: -facelab-config guion.json.</summary>
         public static void RunFromCommandLine()
         {

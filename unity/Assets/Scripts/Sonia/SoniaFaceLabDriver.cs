@@ -38,7 +38,12 @@ namespace Sonia
         [Serializable]
         public class Step
         {
-            /// <summary>"state", "speak", "attention", "wait", "freeze" (apaga los controladores de la cara) o "shape" (pesos fijos: "nombre:peso,...").</summary>
+            /// <summary>
+            /// "state", "speak", "attention", "wait", "freeze" (apaga los controladores
+            /// de la cara), "shape" (pesos fijos: "nombre:peso,...") o "avatar" (espera
+            /// en tiempo real, sin grabar, a que el SDK de Genies entregue su avatar;
+            /// <see cref="seconds"/> es el tope).
+            /// </summary>
             public string kind = "wait";
 
             /// <summary>Estado (idle, listening, thinking, speaking) o categoría de atención.</summary>
@@ -105,6 +110,9 @@ namespace Sonia
         private AvatarStateController _state;
         private AvatarChoreographer _choreographer;
         private FaceRig _faceRig;
+        private AvatarBinder _binder;
+        private bool _waitingAvatar;
+        private float _avatarWaitStart;
         private SkinnedMeshRenderer _face;
         private readonly List<KeyValuePair<int, float>> _posed = new List<KeyValuePair<int, float>>();
         private Transform _head;
@@ -178,30 +186,11 @@ namespace Sonia
             _outputRate = _player != null && _player.OutputSampleRate > 0 ? _player.OutputSampleRate : 48000;
             _block = new float[Mathf.Max(64, dspBlock) * 2];
 
-            Animator animator = _choreographer != null ? _choreographer.MotionPlayerAnimator : null;
-            if (animator == null)
+            BindAvatar();
+            _binder = FindAnyObjectByType<AvatarBinder>();
+            if (_binder != null)
             {
-                animator = FindAnyObjectByType<Animator>();
-            }
-
-            if (animator != null && animator.isHuman)
-            {
-                _head = animator.GetBoneTransform(HumanBodyBones.Head);
-            }
-
-            if (_head != null)
-            {
-                foreach (Transform t in _head.GetComponentsInChildren<Transform>(true))
-                {
-                    if (t.name == "LeftEye")
-                    {
-                        _leftEye = t;
-                    }
-                    else if (t.name == "RightEye")
-                    {
-                        _rightEye = t;
-                    }
-                }
+                _binder.AvatarChanged += OnAvatarChanged;
             }
 
             if (_face != null)
@@ -248,6 +237,22 @@ namespace Sonia
 
             if (_done)
             {
+                return;
+            }
+
+            if (_waitingAvatar)
+            {
+                Step waitStep = steps[_stepIndex];
+                bool arrived = _binder != null && _binder.Current != null && _binder.Current.name.Contains("(Genies)");
+                if (arrived || Time.realtimeSinceStartup - _avatarWaitStart >= waitStep.seconds)
+                {
+                    Debug.Log("[FaceLab] " + (arrived ? "avatar del SDK listo" : "sin avatar del SDK: sigue el doble")
+                              + " tras " + (Time.realtimeSinceStartup - _avatarWaitStart).ToString("F1") + " s");
+                    _waitingAvatar = false;
+                    Time.captureDeltaTime = 1f / Mathf.Max(1, fps);
+                    NextStep();
+                }
+
                 return;
             }
 
@@ -303,7 +308,55 @@ namespace Sonia
                 case "shape":
                     SetShapes(step.value);
                     break;
+                case "avatar":
+                    // Tiempo real y sin grabar mientras el SDK descarga y monta el avatar.
+                    _waitingAvatar = true;
+                    _avatarWaitStart = Time.realtimeSinceStartup;
+                    Time.captureDeltaTime = 0f;
+                    break;
             }
+        }
+
+        /// <summary>Cara, cabeza y ojos del avatar actual (cambian cuando el SDK sustituye al doble).</summary>
+        private void BindAvatar()
+        {
+            _face = _faceRig != null ? _faceRig.PrimaryRenderer : null;
+            _head = null;
+            _leftEye = null;
+            _rightEye = null;
+            Animator animator = _choreographer != null ? _choreographer.MotionPlayerAnimator : null;
+            if (animator == null)
+            {
+                animator = FindAnyObjectByType<Animator>();
+            }
+
+            if (animator != null && animator.isHuman)
+            {
+                _head = animator.GetBoneTransform(HumanBodyBones.Head);
+            }
+
+            if (_head == null)
+            {
+                return;
+            }
+
+            foreach (Transform t in _head.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name == "LeftEye")
+                {
+                    _leftEye = t;
+                }
+                else if (t.name == "RightEye")
+                {
+                    _rightEye = t;
+                }
+            }
+        }
+
+        private void OnAvatarChanged(Transform avatar)
+        {
+            BindAvatar();
+            Debug.Log("[FaceLab] avatar nuevo: " + avatar.name + ", cara " + (_face != null ? _face.name : "ninguna"));
         }
 
         /// <summary>Apaga todo lo que escribe en la cara, para posar blendshapes a mano.</summary>
@@ -724,6 +777,11 @@ namespace Sonia
 
         private void OnDestroy()
         {
+            if (_binder != null)
+            {
+                _binder.AvatarChanged -= OnAvatarChanged;
+            }
+
             if (_log != null)
             {
                 _log.Dispose();

@@ -63,33 +63,44 @@ namespace Sonia
         }
 
         /// <summary>
-        /// Recetas de la cara de Genies. Lo que no está aquí se busca tal cual
-        /// entre las formas FACS de las mallas.
+        /// Recetas de la cara de Genies. Nada está ajustado a ojo:
+        ///  - Vocales A, E, I y O: las expresiones VRM que define Genies para sus
+        ///    avatares (Genies Avatar Starter Pack).
+        ///  - U y consonantes: las mezclas ARKit de los visemas Oculus de
+        ///    TalkingHead (github.com/met4citizen/TalkingHead,
+        ///    blender/build-visemes-from-arkit.py, MIT), pasadas a FACS con la tabla
+        ///    oficial de Meta (meta-quest/agentic-tools, ARKitOVRCustomFace.cs,
+        ///    Apache-2.0). Donde Meta lleva una forma central a un solo lado
+        ///    (mouthFunnel a LipFunnelerLT, mouthPucker a LipPuckerL...), aquí va a
+        ///    todos los lados, porque Genies tiene cada lado por separado.
+        ///  - Nombres ARKit sueltos: la misma tabla de Meta.
+        /// Lo que no está aquí se busca tal cual entre las formas de las mallas.
         /// </summary>
         private static readonly Dictionary<string, Part[]> GeniesRecipes =
             new Dictionary<string, Part[]>(StringComparer.OrdinalIgnoreCase)
             {
-                // Visemas. A, E, I y O parten de las expresiones VRM de Genies;
-                // la U no la trae y se hace con los labios en pico.
-                { "viseme_sil", new Part[0] },
+                // Vocales de Genies.
                 { "viseme_aa", new[] { P("JAW_DROP", 0.57f), P("LIP_FUNNELER_LB", 0.18f), P("LIP_FUNNELER_LT", 0.18f), P("LIP_FUNNELER_RB", 0.18f), P("LIP_FUNNELER_RT", 0.18f) } },
-                { "viseme_E", new[] { P("JAW_DROP", 0.3f), P("LIP_STRETCHER_L", 0.45f), P("LIP_STRETCHER_R", 0.45f) } },
-                { "viseme_I", new[] { P("JAW_DROP", 0.2f), P("LIP_STRETCHER_L", 0.8f), P("LIP_STRETCHER_R", 0.8f) } },
+                { "viseme_E", new[] { P("JAW_DROP", 0.2f) } },
+                { "viseme_I", new[] { P("JAW_DROP", 0.2f), P("LIP_STRETCHER_L", 1f), P("LIP_STRETCHER_R", 1f) } },
                 { "viseme_O", new[] { P("JAW_DROP", 0.65f), P("LIP_FUNNELER_LB", 0.4f), P("LIP_FUNNELER_LT", 0.4f), P("LIP_FUNNELER_RB", 0.4f), P("LIP_FUNNELER_RT", 0.4f) } },
-                { "viseme_U", new[] { P("JAW_DROP", 0.15f), P("LIP_PUCKER_L", 0.75f), P("LIP_PUCKER_R", 0.75f), P("LIP_FUNNELER_LB", 0.45f), P("LIP_FUNNELER_LT", 0.45f), P("LIP_FUNNELER_RB", 0.45f), P("LIP_FUNNELER_RT", 0.45f) } },
-                { "viseme_PP", new[] { P("LIP_PRESSOR_L", 0.8f), P("LIP_PRESSOR_R", 0.8f), P("LIPS_TOWARD", 0.3f) } },
-                { "viseme_FF", new[] { P("JAW_DROP", 0.05f), P("LIP_SUCK_LB", 0.5f), P("LIP_SUCK_RB", 0.5f), P("UPPER_LIP_RAISER_L", 0.2f), P("UPPER_LIP_RAISER_R", 0.2f) } },
-                { "viseme_TH", new[] { P("JAW_DROP", 0.15f), P("TONGUE_TIP_OUT", 0.5f) } },
-                { "viseme_DD", new[] { P("JAW_DROP", 0.2f), P("LIP_STRETCHER_L", 0.25f), P("LIP_STRETCHER_R", 0.25f) } },
-                { "viseme_kk", new[] { P("JAW_DROP", 0.3f), P("LIP_STRETCHER_L", 0.2f), P("LIP_STRETCHER_R", 0.2f) } },
-                { "viseme_CH", new[] { P("JAW_DROP", 0.15f), P("LIP_PUCKER_L", 0.2f), P("LIP_PUCKER_R", 0.2f), P("LIP_FUNNELER_LB", 0.5f), P("LIP_FUNNELER_LT", 0.5f), P("LIP_FUNNELER_RB", 0.5f), P("LIP_FUNNELER_RT", 0.5f) } },
-                { "viseme_SS", new[] { P("JAW_DROP", 0.05f), P("LIP_STRETCHER_L", 0.45f), P("LIP_STRETCHER_R", 0.45f), P("UPPER_LIP_RAISER_L", 0.15f), P("UPPER_LIP_RAISER_R", 0.15f) } },
-                { "viseme_nn", new[] { P("JAW_DROP", 0.15f), P("LIP_STRETCHER_L", 0.15f), P("LIP_STRETCHER_R", 0.15f) } },
-                { "viseme_RR", new[] { P("JAW_DROP", 0.2f), P("LIP_FUNNELER_LB", 0.35f), P("LIP_FUNNELER_LT", 0.35f), P("LIP_FUNNELER_RB", 0.35f), P("LIP_FUNNELER_RT", 0.35f) } },
+
+                // TalkingHead pasado a FACS con la tabla de Meta.
+                { "viseme_sil", new Part[0] },
+                { "viseme_U", new[] { P("LIP_FUNNELER_LB"), P("LIP_FUNNELER_LT"), P("LIP_FUNNELER_RB"), P("LIP_FUNNELER_RT") } },
+                { "viseme_PP", new[] { P("LIP_SUCK_LB", 0.8f), P("LIP_SUCK_RB", 0.8f), P("LIP_SUCK_LT", 0.8f), P("LIP_SUCK_RT", 0.8f), P("UPPER_LIP_RAISER_L", 0.3f), P("UPPER_LIP_RAISER_R", 0.3f) } },
+                { "viseme_FF", new[] { P("LIP_PUCKER_L"), P("LIP_PUCKER_R"), P("CHIN_RAISER_T"), P("LOWER_LIP_DEPRESSOR_L", 0.2f), P("LOWER_LIP_DEPRESSOR_R", 0.2f), P("DIMPLER_L"), P("DIMPLER_R"), P("LIP_SUCK_LB"), P("LIP_SUCK_RB") } },
+                { "viseme_DD", new[] { P("LIP_PRESSOR_L", 0.8f), P("LIP_PRESSOR_R", 0.8f), P("LIP_FUNNELER_LB", 0.5f), P("LIP_FUNNELER_LT", 0.5f), P("LIP_FUNNELER_RB", 0.5f), P("LIP_FUNNELER_RT", 0.5f), P("JAW_DROP", 0.2f) } },
+                { "viseme_SS", new[] { P("LIP_PRESSOR_L", 0.8f), P("LIP_PRESSOR_R", 0.8f), P("LOWER_LIP_DEPRESSOR_L", 0.5f), P("LOWER_LIP_DEPRESSOR_R", 0.5f), P("JAW_DROP", 0.1f) } },
+                { "viseme_TH", new[] { P("LIP_SUCK_LT", 0.6f), P("LIP_SUCK_RT", 0.6f), P("JAW_DROP", 0.2f), P("TONGUE_OUT", 0.4f) } },
+                { "viseme_CH", new[] { P("LIP_PUCKER_L", 0.5f), P("LIP_PUCKER_R", 0.5f), P("JAW_DROP", 0.2f) } },
+                { "viseme_RR", new[] { P("LIP_PUCKER_L", 0.5f), P("LIP_PUCKER_R", 0.5f), P("JAW_DROP", 0.2f) } },
+                { "viseme_kk", new[] { P("LOWER_LIP_DEPRESSOR_L", 0.4f), P("LOWER_LIP_DEPRESSOR_R", 0.4f), P("DIMPLER_L", 0.3f), P("DIMPLER_R", 0.3f), P("LIP_FUNNELER_LB", 0.3f), P("LIP_FUNNELER_LT", 0.3f), P("LIP_FUNNELER_RB", 0.3f), P("LIP_FUNNELER_RT", 0.3f), P("LIP_PUCKER_L", 0.3f), P("LIP_PUCKER_R", 0.3f), P("JAW_DROP", 0.15f) } },
+                { "viseme_nn", new[] { P("LOWER_LIP_DEPRESSOR_L", 0.4f), P("LOWER_LIP_DEPRESSOR_R", 0.4f), P("DIMPLER_L", 0.3f), P("DIMPLER_R", 0.3f), P("LIP_FUNNELER_LB", 0.3f), P("LIP_FUNNELER_LT", 0.3f), P("LIP_FUNNELER_RB", 0.3f), P("LIP_FUNNELER_RT", 0.3f), P("LIP_PUCKER_L", 0.3f), P("LIP_PUCKER_R", 0.3f), P("JAW_DROP", 0.15f), P("TONGUE_OUT", 0.2f) } },
+
+                // ARKit con la tabla de Meta.
                 { "jawOpen", new[] { P("JAW_DROP") } },
                 { "mouthOpen", new[] { P("JAW_DROP") } },
-
-                // ARKit (equivalencias ARKit / OpenXR de Meta).
                 { "eyeBlinkLeft", new[] { P("EYES_CLOSED_L") } },
                 { "eyeBlinkRight", new[] { P("EYES_CLOSED_R") } },
                 { "eyeSquintLeft", new[] { P("LID_TIGHTENER_L") } },
@@ -222,23 +233,6 @@ namespace Sonia
             }
         }
 
-        /// <summary>Peso actual (0..1) de cada forma de la malla principal, para registrar en el laboratorio.</summary>
-        public void ReadPrimaryWeights(List<KeyValuePair<string, float>> into)
-        {
-            into.Clear();
-            if (PrimaryRenderer == null || PrimaryRenderer.sharedMesh == null)
-            {
-                return;
-            }
-
-            Mesh mesh = PrimaryRenderer.sharedMesh;
-            float scale = LipSyncController.BlendShapeScale(mesh) * 100f;
-            for (int i = 0; i < mesh.blendShapeCount; i++)
-            {
-                into.Add(new KeyValuePair<string, float>(ShortName(mesh.GetBlendShapeName(i)), PrimaryRenderer.GetBlendShapeWeight(i) / scale));
-            }
-        }
-
         /// <summary>Vuelve a buscar las mallas y a resolver los canales.</summary>
         public void Rebuild()
         {
@@ -368,12 +362,6 @@ namespace Sonia
             Array.Resize(ref _written, _targets.Count);
             _written[_targets.Count - 1] = true;
             return _targets.Count - 1;
-        }
-
-        private static string ShortName(string name)
-        {
-            int dot = name.LastIndexOf('.');
-            return dot >= 0 && dot + 1 < name.Length ? name.Substring(dot + 1) : name;
         }
     }
 }
