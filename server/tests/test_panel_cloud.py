@@ -314,3 +314,30 @@ async def test_el_panel_local_lista_una_sola_instancia(tmp_path: Path) -> None:
     assert body["instances"][0]["connected"] is True
     assert body["conflicts"] == {"connected": [], "conversing": []}
     assert status["instance"]["id"] == identity.id and status["mode"] == "conversation"
+
+
+async def test_el_avatar_de_jean_viaja_con_los_ajustes_de_la_nube(tmp_path: Path) -> None:
+    from tests.test_panel import JEAN
+
+    room = FakeRoom()
+    async with linked(tmp_path, room) as (rig, _):
+        await room.wait_for(lambda: bool(room.of_type("hello")))
+        values = room.of_type("hello")[0]["settings"]["values"]
+        assert values["guest_avatar"] is None and values["avatar"] is None
+        # Una definición sin piezas de la nube no se aplica.
+        empty = json.dumps({"JsonVersion": "2-0-0", "equippedAssetIds": []})
+        await room.send(
+            {"type": "settings", "settings": {**values, "guest_avatar": empty}, "rev": 4, "ack": 0}
+        )
+        await wait_until(lambda: rig.control.status()["settings_sync"]["rev"] == 4)
+        assert rig.control.status()["guest_avatar"]["custom"] is False
+        # La buena llega a Unity como avatar del invitado, sin tocar el de Sonia.
+        await room.send(
+            {"type": "settings", "settings": {**values, "guest_avatar": JEAN}, "rev": 5, "ack": 0}
+        )
+        await wait_until(lambda: rig.control.status()["guest_avatar"]["custom"])
+        await rig.rec.wait_for(
+            lambda msgs: rig.rec.of_type("set_guest_avatar", msgs)[-1]["definition"] == JEAN
+        )
+        assert rig.control.status()["avatar"]["custom"] is False
+    assert PanelState.load(tmp_path / "cache" / "panel_state.json").guest_avatar == JEAN

@@ -116,6 +116,18 @@ namespace Sonia
         /// <summary>Aspecto de Sonia: definición del avatar de Genies (null: el de la app).</summary>
         public event Action<SetAvatarMessage> OnSetAvatar;
 
+        /// <summary>Aspecto del invitado del Modo Jean (null: el avatar de prueba de la app).</summary>
+        public event Action<SetGuestAvatarMessage> OnSetGuestAvatar;
+
+        /// <summary>Modo Jean: entra el invitado o se despide.</summary>
+        public event Action<GuestModeMessage> OnGuestMode;
+
+        /// <summary>Un gesto del avatar del invitado.</summary>
+        public event Action<GuestAnimationMessage> OnGuestAnimation;
+
+        /// <summary>Un trozo de la voz del invitado (frames "SNGU").</summary>
+        public event Action<AudioFrame> OnGuestAudioFrame;
+
         /// <summary>El panel pide pasar a la escena de editar personaje.</summary>
         public event Action<OpenAvatarEditorMessage> OnOpenAvatarEditor;
 
@@ -327,21 +339,27 @@ namespace Sonia
             SendJson(Protocol.AnimationPlayingMessage(clip));
         }
 
-        /// <summary>Avisa de que la escena de editar personaje se abrió o se cerró.</summary>
-        public void SendAvatarEditor(bool open)
+        /// <summary>Avisa de que la escena de editar personaje se abrió o se cerró, y de quién es el personaje.</summary>
+        public void SendAvatarEditor(bool open, AvatarRole role = AvatarRole.Sonia)
         {
-            SendJson(Protocol.AvatarEditorMessage(open));
+            SendJson(Protocol.AvatarEditorMessage(open, role));
         }
 
-        /// <summary>Manda la definición del personaje guardado en el editor.</summary>
-        public void SendAvatarSaved(string definition)
+        /// <summary>Fase del Modo Jean en pantalla: entering, live, leaving u off.</summary>
+        public void SendGuestState(string phase)
+        {
+            SendJson(Protocol.GuestStateMessage(phase));
+        }
+
+        /// <summary>Manda la definición del personaje guardado en el editor y de quién es.</summary>
+        public void SendAvatarSaved(string definition, AvatarRole role = AvatarRole.Sonia)
         {
             if (string.IsNullOrEmpty(definition))
             {
                 return;
             }
 
-            SendJson(Protocol.AvatarSavedMessage(definition));
+            SendJson(Protocol.AvatarSavedMessage(definition, role));
         }
 
         private void SendJson(string json)
@@ -560,6 +578,10 @@ namespace Sonia
                         {
                             _inbox.Enqueue(frame);
                         }
+                        else if (Protocol.TryDecodeGuestAudioFrame(payload, payload.Length, out frame))
+                        {
+                            _inbox.Enqueue(new GuestAudioFrame { Frame = frame });
+                        }
                     }
                     else
                     {
@@ -623,6 +645,12 @@ namespace Sonia
                     return Protocol.Deserialize<SetTuningMessage>(payload);
                 case MessageTypes.SetAvatar:
                     return Protocol.Deserialize<SetAvatarMessage>(payload);
+                case MessageTypes.SetGuestAvatar:
+                    return Protocol.Deserialize<SetGuestAvatarMessage>(payload);
+                case MessageTypes.GuestMode:
+                    return Protocol.Deserialize<GuestModeMessage>(payload);
+                case MessageTypes.GuestAnimation:
+                    return Protocol.Deserialize<GuestAnimationMessage>(payload);
                 case MessageTypes.OpenAvatarEditor:
                     return Protocol.Deserialize<OpenAvatarEditorMessage>(payload);
                 case MessageTypes.CloseAvatarEditor:
@@ -688,6 +716,13 @@ namespace Sonia
             if (message is AudioFrame)
             {
                 Raise(OnAudioFrame, (AudioFrame)message);
+                return;
+            }
+
+            GuestAudioFrame guestAudio = message as GuestAudioFrame;
+            if (guestAudio != null)
+            {
+                Raise(OnGuestAudioFrame, guestAudio.Frame);
                 return;
             }
 
@@ -812,6 +847,27 @@ namespace Sonia
             if (setAvatar != null)
             {
                 Raise(OnSetAvatar, setAvatar);
+                return;
+            }
+
+            SetGuestAvatarMessage setGuestAvatar = message as SetGuestAvatarMessage;
+            if (setGuestAvatar != null)
+            {
+                Raise(OnSetGuestAvatar, setGuestAvatar);
+                return;
+            }
+
+            GuestModeMessage guestMode = message as GuestModeMessage;
+            if (guestMode != null)
+            {
+                Raise(OnGuestMode, guestMode);
+                return;
+            }
+
+            GuestAnimationMessage guestAnimation = message as GuestAnimationMessage;
+            if (guestAnimation != null)
+            {
+                Raise(OnGuestAnimation, guestAnimation);
                 return;
             }
 

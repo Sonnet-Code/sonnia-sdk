@@ -137,6 +137,17 @@ def test_msg_error_and_request_frame() -> None:
     assert p.msg_request_frame() == {"type": "request_frame"}
 
 
+def test_msg_del_editor_de_personaje_con_target() -> None:
+    assert p.msg_open_avatar_editor() == {"type": "open_avatar_editor", "target": "sonia"}
+    assert p.msg_open_avatar_editor("guest")["target"] == "guest"
+    assert p.msg_set_guest_avatar(None) == {"type": "set_guest_avatar", "definition": None}
+    # Sin target (una Unity antigua) o con uno raro, el personaje es el de Sonia.
+    assert p.parse_avatar_target({"type": "avatar_saved"}) == "sonia"
+    assert p.parse_avatar_target({"type": "avatar_saved", "target": "perro"}) == "sonia"
+    assert p.parse_avatar_target({"type": "avatar_saved", "target": 1}) == "sonia"
+    assert p.parse_avatar_target({"type": "avatar_saved", "target": "guest"}) == "guest"
+
+
 def test_dumps_keeps_accents() -> None:
     text = p.dumps(p.msg_speech_start(1, "¿cómo estás?"))
     assert "¿cómo estás?" in text

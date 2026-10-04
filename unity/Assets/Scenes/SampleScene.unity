@@ -6645,6 +6645,7 @@ GameObject:
   - component: {fileID: 1767658874}
   - component: {fileID: 1767658873}
   - component: {fileID: 1767658872}
+  - component: {fileID: 1767658875}
   m_Layer: 0
   m_Name: Sonia
   m_TagString: Untagged
@@ -7155,6 +7156,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a7ca9ab1f760745819cc4de8dd09e501, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Sonia.Genies::Sonia.GeniesAvatarLoader
+  role: 0
   definition: {fileID: 4900000, guid: 0331428ee211a444a9d870326c93c9b7, type: 3}
   binder: {fileID: 1767658873}
   client: {fileID: 1767658859}
@@ -7190,6 +7192,22 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Sonia::Sonia.FaceRig
   avatarRoot: {fileID: 604003403}
+--- !u!114 &1767658875
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1767658851}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26a854490205b493e8cfce7444ad784f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.AvatarEditorLauncher
+  sceneName: SoniaAvatarEditor
+  client: {fileID: 1767658859}
+  idleCloseSeconds: 300
+  guestTestDefinition: {fileID: 4900000, guid: fa056c08700454d26b4c5493e2378615, type: 3}
 --- !u!1 &1890986732
 GameObject:
   m_ObjectHideFlags: 0

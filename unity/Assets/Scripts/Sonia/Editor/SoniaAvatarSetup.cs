@@ -45,6 +45,9 @@ namespace Sonia.EditorTools
         /// <summary>Definición (JSON del SDK de Genies) del avatar que se carga en Play.</summary>
         public const string GeniesDefinitionPath = "Assets/Sonia/Avatar/SoniaGeniesAvatar.json";
 
+        /// <summary>Avatar de prueba de Jean (invitado del Modo Jean) mientras no guarde el suyo en el editor.</summary>
+        public const string GuestDefinitionPath = "Assets/Sonia/Avatar/JeanGeniesAvatar.json";
+
         /// <summary>Escena del stand, la que lleva el objeto Sonia.</summary>
         public const string StandScenePath = "Assets/Scenes/SampleScene.unity";
 

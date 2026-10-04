@@ -362,13 +362,18 @@
       <div class="adv-grid">
         <section class="adv-block" aria-labelledby="dev-avatar-title">
           <h3 id="dev-avatar-title">Personaje</h3>
-          <p class="help">Pone la pantalla de Sonia en el editor de personaje de Genies. Se edita allí, con el ratón; al guardar, el aspecto nuevo queda en la nube y lo usan todas las Sonias. Mientras tanto Sonia no conversa.</p>
-          <p class="avatar-state" id="avatar-state">Personaje de la app.</p>
+          <p class="help">Pone la pantalla de Sonia en el editor de personaje de Genies, para Sonia o para el avatar de Jean del Modo Jean. Se edita allí, con el ratón; al guardar, el aspecto nuevo queda en la nube y lo usan todas las Sonias. Mientras tanto Sonia no conversa.</p>
+          <p class="avatar-state" id="avatar-state">Sonia: personaje de la app.</p>
+          <p class="avatar-state" id="guest-avatar-state" hidden>Jean: avatar de prueba de la app.</p>
           <div class="button-row">
             <button type="button" class="btn btn-primary" id="avatar-edit-btn" data-cap="avatar_editor" data-off-modes="away" data-extra="avatar_closed">Editar personaje</button>
+            <button type="button" class="btn btn-primary" id="guest-avatar-edit-btn" data-cap="guest_avatar_editor" data-off-modes="away" data-extra="avatar_closed">Editar personaje de Jean</button>
             <button type="button" class="btn" id="avatar-close-btn" data-cap="avatar_editor" data-extra="avatar_open">Cerrar sin guardar</button>
           </div>
-          <button type="button" class="btn btn-small tune-reset" id="avatar-reset-btn" data-cap="avatar_editor" data-extra="avatar_custom">Volver al personaje de la app</button>
+          <div class="button-row tune-reset">
+            <button type="button" class="btn btn-small" id="avatar-reset-btn" data-cap="avatar_editor" data-extra="avatar_custom">Volver al personaje de la app</button>
+            <button type="button" class="btn btn-small" id="guest-avatar-reset-btn" data-cap="guest_avatar_editor" data-extra="guest_avatar_custom">Volver al avatar de prueba de Jean</button>
+          </div>
           <p class="cap-note" data-cap-note="avatar_editor" hidden>Esta Sonia no tiene aún el editor de personaje: hay que actualizar el orquestador.</p>
         </section>
 

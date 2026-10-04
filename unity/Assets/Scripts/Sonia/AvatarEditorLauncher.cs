@@ -5,14 +5,22 @@
 // panel pide open_avatar_editor, su escena se carga encima de la de Sonia, que
 // sigue conectada al orquestador pero deja de pintarse: se apagan las demás
 // raíces de la escena (cámaras, luces, volumen, EventSystem, escenario) y, dentro
-// de la raíz de Sonia, sus renderers y lienzos. El editor arranca con el
-// personaje que Sonia lleva puesto (AvatarEditorSession.CurrentDefinition).
+// de la raíz de Sonia y de la del invitado del Modo Jean, sus renderers y lienzos
+// (esas dos siguen vivas: conexión, cargadores de avatar, pipeline).
+//
+// open_avatar_editor trae target: "sonia" (por defecto) o "guest", el avatar de
+// Jean del Modo Jean. El editor arranca con el personaje que lleva ahora ese
+// avatar (AvatarEditorSession.StartingDefinition): el que publica su cargador o,
+// para Jean sin cargador en escena, el último set_guest_avatar o su avatar de
+// prueba. Sin definición no se abre: el editor partiría del avatar base de
+// Genies y guardarlo sustituiría al personaje.
 //
 // Al pulsar Guardar en el editor, la definición sale hacia el orquestador
-// (avatar_saved), que la guarda en la nube y la reparte a todas las Sonias con
-// set_avatar; luego se vuelve a Sonia. Si al guardar no hay conexión, la
-// definición se repite al reconectar hasta que llega su set_avatar. El botón de
-// salir del editor o close_avatar_editor vuelven sin guardar.
+// (avatar_saved, con el mismo target), que la guarda en la nube y la reparte a
+// todas las Sonias con set_avatar o set_guest_avatar; luego se vuelve a Sonia.
+// Si al guardar no hay conexión, la definición se repite al reconectar hasta que
+// llega su set_avatar (o set_guest_avatar). El botón de salir del editor o
+// close_avatar_editor vuelven sin guardar.
 
 using System;
 using System.Collections;
@@ -32,6 +40,34 @@ namespace Sonia
         /// el cargador de avatares; el editor arranca con ella.
         /// </summary>
         public static string CurrentDefinition { get; set; }
+
+        /// <summary>Definición del avatar del invitado del Modo Jean (la pone su cargador).</summary>
+        public static string GuestDefinition { get; set; }
+
+        /// <summary>Definición que lleva ahora el avatar de ese rol.</summary>
+        public static string DefinitionFor(AvatarRole role)
+        {
+            return role == AvatarRole.Guest ? GuestDefinition : CurrentDefinition;
+        }
+
+        /// <summary>Guarda la definición que lleva ahora el avatar de ese rol.</summary>
+        public static void SetDefinitionFor(AvatarRole role, string definition)
+        {
+            if (role == AvatarRole.Guest)
+            {
+                GuestDefinition = definition;
+            }
+            else
+            {
+                CurrentDefinition = definition;
+            }
+        }
+
+        /// <summary>De quién es el personaje que se edita (lo fija el lanzador al abrir el editor).</summary>
+        public static AvatarRole Target { get; internal set; }
+
+        /// <summary>Definición con la que arranca el editor: la que lleva ahora el personaje que se edita.</summary>
+        public static string StartingDefinition { get; internal set; }
 
         /// <summary>Cierto mientras la escena del editor está en pantalla.</summary>
         public static bool IsOpen { get; internal set; }
@@ -79,6 +115,10 @@ namespace Sonia
         [Tooltip("Sin tocar ratón ni teclado durante estos segundos, el editor se cierra sin guardar y vuelve Sonia. 0: nunca.")]
         private float idleCloseSeconds = 300f;
 
+        [SerializeField]
+        [Tooltip("Avatar de prueba de Jean (Modo Jean): de él parte el editor si Jean aún no tiene uno guardado y no hay cargador suyo en la escena.")]
+        private TextAsset guestTestDefinition;
+
         [NonSerialized]
         private readonly List<GameObject> _hiddenRoots = new List<GameObject>();
 
@@ -94,9 +134,17 @@ namespace Sonia
         [NonSerialized]
         private Scene _editorScene;
 
-        // Definición guardada que el orquestador aún no ha confirmado con set_avatar.
+        // Definición guardada que el orquestador aún no ha confirmado con set_avatar
+        // (o set_guest_avatar, si era la de Jean) y de quién es.
         [NonSerialized]
         private string _pendingDefinition;
+
+        [NonSerialized]
+        private AvatarRole _pendingRole;
+
+        // Último set_guest_avatar con definición (Jean con un personaje guardado).
+        [NonSerialized]
+        private string _lastGuestDefinition;
 
         // Última vez que alguien tocó el ratón o el teclado con el editor abierto.
         [NonSerialized]
@@ -119,6 +167,7 @@ namespace Sonia
                 client.OnOpenAvatarEditor += HandleOpenMessage;
                 client.OnCloseAvatarEditor += HandleCloseMessage;
                 client.OnSetAvatar += HandleSetAvatar;
+                client.OnSetGuestAvatar += HandleSetGuestAvatar;
                 client.OnConnected += HandleConnected;
             }
         }
@@ -132,19 +181,58 @@ namespace Sonia
                 client.OnOpenAvatarEditor -= HandleOpenMessage;
                 client.OnCloseAvatarEditor -= HandleCloseMessage;
                 client.OnSetAvatar -= HandleSetAvatar;
+                client.OnSetGuestAvatar -= HandleSetGuestAvatar;
                 client.OnConnected -= HandleConnected;
             }
         }
 
-        /// <summary>Pasa la pantalla al editor de personaje.</summary>
+        /// <summary>Pasa la pantalla al editor del personaje de Sonia.</summary>
         public void Open()
+        {
+            Open(AvatarRole.Sonia);
+        }
+
+        /// <summary>Pasa la pantalla al editor de personaje de <paramref name="role"/> (Sonia o Jean).</summary>
+        public void Open(AvatarRole role)
         {
             if (_busy || AvatarEditorSession.IsOpen)
             {
                 return;
             }
 
+            string starting = StartingDefinitionFor(role);
+            if (string.IsNullOrEmpty(starting))
+            {
+                // Sin definición el editor partiría del avatar base de Genies.
+                Debug.LogWarning("[Sonia] No se abre el editor: no se sabe qué personaje lleva "
+                                 + (role == AvatarRole.Guest ? "Jean" : "Sonia") + ".", this);
+                return;
+            }
+
+            AvatarEditorSession.Target = role;
+            AvatarEditorSession.StartingDefinition = starting;
             StartCoroutine(OpenRoutine());
+        }
+
+        /// <summary>
+        /// La definición con la que arranca el editor: la que publicó el cargador
+        /// de ese avatar y, para Jean sin cargador en escena, el último
+        /// set_guest_avatar o su avatar de prueba.
+        /// </summary>
+        private string StartingDefinitionFor(AvatarRole role)
+        {
+            string current = AvatarEditorSession.DefinitionFor(role);
+            if (!string.IsNullOrEmpty(current) || role != AvatarRole.Guest)
+            {
+                return current;
+            }
+
+            if (!string.IsNullOrEmpty(_lastGuestDefinition))
+            {
+                return _lastGuestDefinition;
+            }
+
+            return guestTestDefinition != null ? guestTestDefinition.text : null;
         }
 
         /// <summary>Vuelve a Sonia (sin guardar si no se ha guardado).</summary>
@@ -189,10 +277,10 @@ namespace Sonia
             AvatarEditorSession.IsOpen = true;
             _lastInputTime = Time.realtimeSinceStartup;
             _busy = false;
-            Debug.Log("[Sonia] Editor de personaje abierto.", this);
+            Debug.Log("[Sonia] Editor de personaje abierto (" + Who(AvatarEditorSession.Target) + ").", this);
             if (client != null)
             {
-                client.SendAvatarEditor(true);
+                client.SendAvatarEditor(true, AvatarEditorSession.Target);
             }
         }
 
@@ -212,10 +300,10 @@ namespace Sonia
             ShowSonia();
             AvatarEditorSession.IsOpen = false;
             _busy = false;
-            Debug.Log("[Sonia] Editor de personaje cerrado.", this);
+            Debug.Log("[Sonia] Editor de personaje cerrado (" + Who(AvatarEditorSession.Target) + ").", this);
             if (client != null)
             {
-                client.SendAvatarEditor(false);
+                client.SendAvatarEditor(false, AvatarEditorSession.Target);
             }
         }
 
@@ -285,7 +373,8 @@ namespace Sonia
                 return;
             }
 
-            string current = AvatarEditorSession.CurrentDefinition;
+            AvatarRole role = AvatarEditorSession.Target;
+            string current = AvatarEditorSession.StartingDefinition;
             if (!string.IsNullOrEmpty(current)
                 && GeniesAvatarSnapshot.HashDefinition(current) == GeniesAvatarSnapshot.HashDefinition(definition))
             {
@@ -295,19 +384,39 @@ namespace Sonia
             }
 
             _pendingDefinition = definition;
+            _pendingRole = role;
             if (client != null)
             {
-                client.SendAvatarSaved(definition);
+                client.SendAvatarSaved(definition, role);
             }
 
-            Debug.Log("[Sonia] Personaje guardado en el editor (" + definition.Length + " caracteres).", this);
+            Debug.Log("[Sonia] Personaje " + Who(role) + " guardado en el editor (" + definition.Length + " caracteres).", this);
             Close();
         }
 
         private void HandleSetAvatar(SetAvatarMessage message)
         {
-            // El orquestador ya tiene la definición guardada: no hace falta repetirla.
-            if (message != null && !string.IsNullOrEmpty(_pendingDefinition) && message.Definition == _pendingDefinition)
+            if (message != null)
+            {
+                ConfirmPending(AvatarRole.Sonia, message.Definition);
+            }
+        }
+
+        private void HandleSetGuestAvatar(SetGuestAvatarMessage message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            _lastGuestDefinition = string.IsNullOrWhiteSpace(message.Definition) ? null : message.Definition;
+            ConfirmPending(AvatarRole.Guest, message.Definition);
+        }
+
+        /// <summary>El orquestador ya tiene la definición guardada: no hace falta repetirla.</summary>
+        private void ConfirmPending(AvatarRole role, string definition)
+        {
+            if (!string.IsNullOrEmpty(_pendingDefinition) && _pendingRole == role && definition == _pendingDefinition)
             {
                 _pendingDefinition = null;
             }
@@ -317,18 +426,23 @@ namespace Sonia
         {
             if (!string.IsNullOrEmpty(_pendingDefinition) && client != null)
             {
-                client.SendAvatarSaved(_pendingDefinition);
+                client.SendAvatarSaved(_pendingDefinition, _pendingRole);
             }
 
             if (AvatarEditorSession.IsOpen && client != null)
             {
-                client.SendAvatarEditor(true);
+                client.SendAvatarEditor(true, AvatarEditorSession.Target);
             }
         }
 
         private void HandleOpenMessage(OpenAvatarEditorMessage message)
         {
-            Open();
+            Open(message != null ? message.Role : AvatarRole.Sonia);
+        }
+
+        private static string Who(AvatarRole role)
+        {
+            return role == AvatarRole.Guest ? "de Jean" : "de Sonia";
         }
 
         private void HandleCloseMessage(CloseAvatarEditorMessage message)
@@ -343,17 +457,32 @@ namespace Sonia
             _hiddenCanvases.Clear();
 
             // Las demás raíces de la escena: cámaras, luces, volumen, EventSystem...
+            // Las de un avatar (la de Sonia y la del invitado del Modo Jean, con su
+            // AvatarBinder) siguen vivas: conexión, cargadores y pipeline, que
+            // tienen que oír el set_avatar o set_guest_avatar que llega al guardar.
             Transform root = transform.root;
             foreach (GameObject other in gameObject.scene.GetRootGameObjects())
             {
-                if (other.transform != root && other.activeSelf)
+                if (other.transform == root || IsAvatarRoot(other))
+                {
+                    HideRenderers(other.transform);
+                }
+                else if (other.activeSelf)
                 {
                     other.SetActive(false);
                     _hiddenRoots.Add(other);
                 }
             }
+        }
 
-            // La raíz de Sonia sigue viva (conexión, pipeline), pero sin pintar nada.
+        private static bool IsAvatarRoot(GameObject root)
+        {
+            return root.GetComponentInChildren<AvatarBinder>(true) != null;
+        }
+
+        /// <summary>Deja una raíz viva pero sin pintar nada (ni avatar ni lienzos).</summary>
+        private void HideRenderers(Transform root)
+        {
             foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>(true))
             {
                 if (renderer.enabled)

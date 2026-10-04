@@ -270,6 +270,7 @@
       "voice-select", "voice-btn", "showcase-input", "anim-groups", "debug-input", "subtitles-input",
       "hero-debug", "ask-form", "ask-input", "ask-btn", "tune-mouth", "tune-camera",
       "avatar-state", "avatar-edit-btn", "avatar-close-btn", "avatar-reset-btn",
+      "guest-avatar-state", "guest-avatar-edit-btn", "guest-avatar-reset-btn",
       "restart-btn", "cache-progress", "cache-text", "cache-btn", "session-facts", "usage-facts", "log",
       "toasts", "confirm-dialog", "confirm-title", "confirm-text", "confirm-ok", "away-dialog",
       "away-title", "away-help", "away-text", "away-ok",
@@ -744,14 +745,27 @@
     },
     logo: () => app.galleryState !== "ready" || Boolean(logoImageId()),
     voice: () => Boolean(ui.voiceSelect.value) && ui.voiceSelect.value !== (app.status && app.status.voice),
-    avatar_closed: () => !avatarInfo().editor_open,
+    // Con el Modo Jean en marcha el orquestador no abre el editor.
+    avatar_closed: () => !avatarInfo().editor_open && !guestActive(),
     avatar_open: () => Boolean(avatarInfo().editor_open),
     avatar_custom: () => Boolean(avatarInfo().custom) && !avatarInfo().editor_open,
+    guest_avatar_custom: () => Boolean(guestAvatarInfo().custom) && !avatarInfo().editor_open,
   };
 
   function avatarInfo() {
     const avatar = app.status && app.status.avatar;
     return avatar && typeof avatar === "object" ? avatar : {};
+  }
+
+  /** Avatar de Jean para el Modo Jean (`guest_avatar` del estado). */
+  function guestAvatarInfo() {
+    const avatar = app.status && app.status.guest_avatar;
+    return avatar && typeof avatar === "object" ? avatar : {};
+  }
+
+  function guestActive() {
+    const guest = app.status && app.status.guest;
+    return Boolean(guest && typeof guest === "object" && guest.phase && guest.phase !== "off");
   }
 
   /**
@@ -1911,11 +1925,23 @@
 
   function renderAvatar() {
     const avatar = avatarInfo();
-    let text = avatar.custom ? "Personaje propio, guardado en la nube." : "Personaje de la app.";
-    if (avatar.editor_open) text = "Editando el personaje en la pantalla de Sonia…";
-    setText(ui.avatarState, text);
-    const state = avatar.editor_open ? "editing" : "idle";
-    if (ui.avatarState.dataset.state !== state) ui.avatarState.dataset.state = state;
+    const editingGuest = Boolean(avatar.editor_open) && avatar.editor_target === "guest";
+    const editingSonia = Boolean(avatar.editor_open) && !editingGuest;
+    let text = avatar.custom ? "Sonia: personaje propio, guardado en la nube." : "Sonia: personaje de la app.";
+    if (editingSonia) text = "Editando el personaje de Sonia en su pantalla…";
+    setAvatarState(ui.avatarState, text, editingSonia);
+    let guestText = guestAvatarInfo().custom
+      ? "Jean: personaje propio, guardado en la nube."
+      : "Jean: avatar de prueba de la app.";
+    if (editingGuest) guestText = "Editando el personaje de Jean en la pantalla de Sonia…";
+    setAvatarState(ui.guestAvatarState, guestText, editingGuest);
+    setHidden(ui.guestAvatarState, !hasCap("guest_avatar_editor"));
+  }
+
+  function setAvatarState(node, text, editing) {
+    setText(node, text);
+    const state = editing ? "editing" : "idle";
+    if (node.dataset.state !== state) node.dataset.state = state;
   }
 
   async function onResetAvatar() {
@@ -1925,6 +1951,15 @@
       confirmLabel: "Sí, volver",
     });
     if (ok) await sendAction("reset_avatar", {}, { button: ui.avatarResetBtn });
+  }
+
+  async function onResetGuestAvatar() {
+    const ok = await confirmAction({
+      title: "¿Volver al avatar de prueba de Jean?",
+      text: "El avatar de Jean del Modo Jean dejará el aspecto guardado en el editor, en todas las Sonias.",
+      confirmLabel: "Sí, volver",
+    });
+    if (ok) await sendAction("reset_avatar", { target: "guest" }, { button: ui.guestAvatarResetBtn });
   }
 
   // ------------------------------------------------------------ ajustes en la nube
@@ -2317,6 +2352,10 @@
     ui.avatarEditBtn.addEventListener("click", () => sendAction("open_avatar_editor", {}, { button: ui.avatarEditBtn }));
     ui.avatarCloseBtn.addEventListener("click", () => sendAction("close_avatar_editor", {}, { button: ui.avatarCloseBtn }));
     ui.avatarResetBtn.addEventListener("click", onResetAvatar);
+    ui.guestAvatarEditBtn.addEventListener("click", () =>
+      sendAction("open_avatar_editor", { target: "guest" }, { button: ui.guestAvatarEditBtn }),
+    );
+    ui.guestAvatarResetBtn.addEventListener("click", onResetGuestAvatar);
     ui.askForm.addEventListener("submit", onAskSubmit);
     ui.restartBtn.addEventListener("click", onRestart);
     ui.cacheBtn.addEventListener("click", () => sendAction("prepare_voices", {}, { button: ui.cacheBtn }));

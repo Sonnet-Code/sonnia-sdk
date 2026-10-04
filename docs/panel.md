@@ -14,7 +14,7 @@ El orquestador sigue sirviendo el mismo panel en `http://127.0.0.1:8780/` como r
 
 ## Dónde se guardan los ajustes
 
-Los ajustes son de Sonia, no de un equipo: el texto del letrero, los avisos del día, el volumen, la sensibilidad del micrófono, la voz, la animación de stand, los subtítulos, las animaciones que no usa por su cuenta, los de «Developer» (boca y cámara) y el personaje guardado en el editor se guardan **en la nube** y valen para todas las Sonias (`SHARED_SETTINGS` en `server/sonia/panel/control.py`). Da igual desde dónde se cambien, el panel de Cloudflare o el local (`http://127.0.0.1:8780`): el orquestador los aplica al momento y los sube a la nube, que los reparte a las demás Sonias conectadas.
+Los ajustes son de Sonia, no de un equipo: el texto del letrero, los avisos del día, el volumen, la sensibilidad del micrófono, la voz, la animación de stand, los subtítulos, las animaciones que no usa por su cuenta, los de «Developer» (boca y cámara) y los personajes guardados en el editor (el de Sonia y el de Jean del Modo Jean) se guardan **en la nube** y valen para todas las Sonias (`SHARED_SETTINGS` en `server/sonia/panel/control.py`). Da igual desde dónde se cambien, el panel de Cloudflare o el local (`http://127.0.0.1:8780`): el orquestador los aplica al momento y los sube a la nube, que los reparte a las demás Sonias conectadas.
 
 Cada orquestador guarda además una copia en `cache/panel_state.json`, así que sin internet arranca con lo último que supo y lo que se cambie desde el panel local queda apuntado como pendiente (`pending_settings`) hasta que la nube lo confirma al volver la conexión. Si con la red caída se cambia algo aquí y otra Sonia cambia lo mismo, gana el último cambio que llega a la nube.
 
@@ -72,11 +72,14 @@ Cada deslizador se aplica en directo mientras se arrastra (como mucho cada 150 m
 
 **Personaje**: «Editar personaje» pasa la pantalla de Sonia a la escena de editar personaje de Genies (`open_avatar_editor`). Se edita allí, en el equipo del stand y con el ratón; el panel no edita el avatar. Mientras la escena está abierta Sonia no conversa (GPT-Live cerrado) y el panel lo dice. Al pulsar Guardar en el editor, Unity manda la definición (`avatar_saved`), el orquestador la guarda en la nube como ajuste compartido (`avatar`) y todas las Sonias la reciben en el mensaje fijo `set_avatar`. «Cerrar sin guardar» sale del editor y «Volver al personaje de la app» borra el aspecto guardado.
 
+«Editar personaje de Jean» abre el mismo editor para el avatar de Jean del Modo Jean (`open_avatar_editor` con `target` `guest`, también desde el modal del Modo Jean). Parte del aspecto actual de Jean (su avatar de prueba si no hay ninguno guardado) y, al guardar, el orquestador lo guarda en el ajuste compartido `guest_avatar` y lo reparte en el mensaje fijo `set_guest_avatar`, sin tocar a Sonia. «Volver al avatar de prueba de Jean» lo borra. Con el Modo Jean en marcha no se abre el editor, y con el editor abierto no se activa el Modo Jean.
+
 **Modo Jean**: «Abrir Modo Jean» abre un modal para que Jean (CTO de Sonnet Code) entre en el stand desde lejos como invitado sorpresa (diseño completo en `docs/modo-jean.md`). Desde el modal:
 - activa y termina el modo (`set_guest_mode`);
 - ve la cámara del stand y oye su micro;
 - habla por su micro, abierto o pulsando para hablar;
-- lanza los gestos de su avatar (`guest_animation`).
+- lanza los gestos de su avatar (`guest_animation`);
+- pasa la pantalla de Sonia al editor de su personaje, con el modo apagado.
 
 Lo monta `static/jean.js` (con `jean.css` y el AudioWorklet `jean-worklet.js`). La media va por la sala `/api/guest` del panel de Cloudflare, así que la cámara y el micro solo funcionan desde la nube. En el panel local se puede probar la entrada y los gestos. Mientras el modo está activo:
 - GPT-Live está cerrada;
@@ -122,13 +125,14 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
     "mouth": {"open": 1.0, "jaw": 1.0, "closure": 1.0, "speed": 1.0},
     "camera": {"height": 0.0, "distance": 0.0, "side": 0.0, "zoom": 1.0, "tilt": 0.0}
   },
-  "avatar": {"custom": true, "editor_open": false},
+  "avatar": {"custom": true, "editor_open": false, "editor_target": "sonia"},
+  "guest_avatar": {"custom": false},
   "guest": {"available": true, "phase": "off", "name": "Jean", "unity_phase": null, "intro_ready": true,
             "link": {"connected": false, "viewers": 0, "video": {"fps": 0.0, "kbps": 0, "rtt_ms": null, "step": 1, "width": 640, "quality": 65, "lost": 0},
                      "guest_level": 0.0, "guest_frames": 0, "dropped_audio": 0}},
   "settings_sync": {"cloud": "online", "synced": true, "pending": [], "rev": 42},
   "last_error": null,
-  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "animation_toggles", "subtitles", "debug", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache", "tuning", "cloud_settings", "avatar_editor", "guest_mode"]
+  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "animation_toggles", "subtitles", "debug", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache", "tuning", "cloud_settings", "avatar_editor", "guest_avatar_editor", "guest_mode"]
 }
 ```
 
@@ -140,7 +144,8 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
 - `usage` es el gasto del día (desde medianoche, sumando los reinicios del orquestador): segundos de sesión de GPT-Live y su coste aproximado con `PANEL_LIVE_PRICE_PER_MINUTE`.
 - `voice_cache` trae también `error` (texto del último fallo al grabar, o vacío).
 - `tuning` son los ajustes de «Developer» (forma de `set_tuning`).
-- `avatar`: `custom`, si hay un personaje guardado desde el editor (si no, el de la app); `editor_open`, si la pantalla está ahora en la escena de editar personaje.
+- `avatar`: `custom`, si hay un personaje guardado desde el editor (si no, el de la app); `editor_open`, si la pantalla está ahora en la escena de editar personaje, y `editor_target`, de quién es el que se edita (`sonia` o `guest`, el de Jean; con el editor cerrado, el último que se abrió).
+- `guest_avatar`: `custom`, si Jean tiene un personaje guardado desde el editor (si no, su avatar de prueba).
 - `guest` (Modo Jean):
   - `available`: si esta Sonia tiene nube; sin ella no hay Modo Jean, y tampoco aparece `guest_mode` en `capabilities`.
   - `phase`: `off`, `intro`, `entering`, `live` o `leaving`.
@@ -185,9 +190,9 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `set_notes` | `text` | Avisos del día que Sonia debe conocer; se le pasan al momento. |
 | `set_tuning` | `mouth` y/o `camera`: valores sueltos de `tuning` | Ajustes de «Developer»; se mezclan con los que hay y se recortan a sus límites. |
 | `reset_tuning` | `part`: `mouth`, `camera` o `all` | Vuelve esa parte de «Developer» a como viene de la escena. |
-| `open_avatar_editor` | | La pantalla de Sonia pasa a la escena de editar personaje (no estando "Fuera"). |
+| `open_avatar_editor` | `target` opcional: `sonia` (por defecto) o `guest` | La pantalla de Sonia pasa a la escena de editar personaje (no estando "Fuera" ni con el Modo Jean en marcha); con `guest`, el de Jean. |
 | `close_avatar_editor` | | Sale del editor de personaje sin guardar. |
-| `reset_avatar` | | Borra el personaje guardado: todas las Sonias vuelven al de la app. |
+| `reset_avatar` | `target` opcional | Borra el personaje guardado: todas las Sonias vuelven al de la app. Con `target` `guest`, Jean vuelve a su avatar de prueba. |
 | `set_guest_mode` | `active`: bool | Modo Jean: Sonia presenta a Jean y le deja el sitio, o él se despide y vuelve ella. Necesita la nube y la pantalla conectada. |
 | `guest_animation` | `clip` | Un gesto del avatar de Jean (con el invitado en el stand). |
 | `prepare_voices` | | Graba las frases que falten en la caché de voces. |

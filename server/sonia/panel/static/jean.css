@@ -158,6 +158,15 @@
   font-weight: 700;
 }
 
+.jean-avatar-state {
+  margin: 8px 0;
+  font-weight: 700;
+}
+
+.jean-avatar-state[data-state="editing"] {
+  color: var(--warn);
+}
+
 .jean-anims {
   display: flex;
   flex-wrap: wrap;

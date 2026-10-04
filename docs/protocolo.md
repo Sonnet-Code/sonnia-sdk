@@ -181,12 +181,22 @@ Aspecto de Sonia. Fijo: se repite tras `hello` y cada vez que cambia (se guarda 
 {"type": "set_avatar", "definition": "{\"JsonVersion\": \"2-0-0\", \"equippedAssetIds\": [...], ...}"}
 ```
 
-### `open_avatar_editor` y `close_avatar_editor`
+### `set_guest_avatar`
 
-Botones de «Developer» en el panel. `open_avatar_editor` pasa la pantalla de Sonia a la escena de editar personaje y `close_avatar_editor` sale de ella sin guardar. Unity contesta con `avatar_editor`.
+Aspecto del invitado del Modo Jean, igual que `set_avatar` pero para su avatar: fijo, se repite tras `hello` y cada vez que cambia (ajuste compartido `guest_avatar` en la nube). `null` es el avatar de prueba que trae la app (`Assets/Sonia/Avatar/JeanGeniesAvatar.json`). Unity guarda una copia local aparte de la de Sonia y la rehace cuando cambia.
 
 ```json
-{"type": "open_avatar_editor"}
+{"type": "set_guest_avatar", "definition": "{\"JsonVersion\": \"2-0-0\", \"equippedAssetIds\": [...], ...}"}
+```
+
+### `open_avatar_editor` y `close_avatar_editor`
+
+Botones de «Developer» en el panel (y del modal del Modo Jean). `open_avatar_editor` pasa la pantalla de Sonia a la escena de editar personaje y `close_avatar_editor` sale de ella sin guardar. Unity contesta con `avatar_editor`.
+
+`target` dice de quién es el personaje: `sonia` (por defecto, también si falta) o `guest`, el avatar de Jean del Modo Jean. El editor parte del aspecto actual de ese personaje y contesta con el mismo `target` en `avatar_editor` y `avatar_saved`.
+
+```json
+{"type": "open_avatar_editor", "target": "guest"}
 ```
 
 ### `guest_mode`
@@ -295,18 +305,18 @@ Qué clip de una sola vez suena ahora en el avatar (capa de cuerpo, luego torso 
 
 ### `avatar_editor`
 
-La escena de editar personaje se abrió (`open: true`) o se cerró (`open: false`, se guardara o no). Mientras está abierta el orquestador no abre GPT-Live; al cerrarse, Sonia vuelve a su modo.
+La escena de editar personaje se abrió (`open: true`) o se cerró (`open: false`, se guardara o no). Mientras está abierta el orquestador no abre GPT-Live; al cerrarse, Sonia vuelve a su modo. `target` repite el de `open_avatar_editor` (sin él, `sonia`).
 
 ```json
-{"type": "avatar_editor", "open": true}
+{"type": "avatar_editor", "open": true, "target": "sonia"}
 ```
 
 ### `avatar_saved`
 
-Se pulsó Guardar en el editor de personaje. `definition` es la definición del avatar de Genies en texto JSON (un objeto, hasta 64 KB). El orquestador la guarda en la nube como ajuste compartido y la reparte con `set_avatar`.
+Se pulsó Guardar en el editor de personaje. `definition` es la definición del avatar de Genies en texto JSON (un objeto, hasta 64 KB, con alguna pieza en `equippedAssetIds`). El orquestador la valida, la guarda en la nube como ajuste compartido y la reparte: con `target` `sonia` (o sin `target`) es el ajuste `avatar` y va en `set_avatar`; con `guest` es `guest_avatar` y va en `set_guest_avatar`, sin tocar a Sonia.
 
 ```json
-{"type": "avatar_saved", "definition": "{\"JsonVersion\": \"2-0-0\", ...}"}
+{"type": "avatar_saved", "definition": "{\"JsonVersion\": \"2-0-0\", ...}", "target": "guest"}
 ```
 
 ### `guest_state`

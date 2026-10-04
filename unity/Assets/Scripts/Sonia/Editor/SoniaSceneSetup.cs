@@ -241,6 +241,7 @@ namespace Sonia.EditorTools
             EnsureFacialExpressions(root, avatarState);
             EnsureComponent<SoniaTuningUI>(root);
             EnsureComponent<SoniaAnimationPreviewUI>(root);
+            EnsureAvatarEditorLauncher(root);
 
             SerializedObject framingObject = new SerializedObject(cameraFraming);
             SetReference(framingObject, "choreographer", choreographer);
@@ -323,6 +324,25 @@ namespace Sonia.EditorTools
                 SetReference(stateObject, "lipSync", root.GetComponent<LipSyncController>());
                 stateObject.ApplyModifiedPropertiesWithoutUndo();
             }
+        }
+
+        /// <summary>
+        /// Deja en el objeto raíz el lanzador del editor de personaje con el avatar
+        /// de prueba de Jean, del que parte el editor de su personaje (Modo Jean)
+        /// mientras no tenga uno guardado. Sin esto SoniaBootstrap lo añade por
+        /// código, pero sin ese avatar de prueba.
+        /// </summary>
+        public static AvatarEditorLauncher EnsureAvatarEditorLauncher(GameObject root)
+        {
+            AvatarEditorLauncher launcher = EnsureComponent<AvatarEditorLauncher>(root);
+            SerializedObject launcherObject = new SerializedObject(launcher);
+            SetReference(launcherObject, "client", root.GetComponent<SoniaClient>());
+            SetReference(
+                launcherObject,
+                "guestTestDefinition",
+                AssetDatabase.LoadAssetAtPath<TextAsset>(SoniaAvatarSetup.GuestDefinitionPath));
+            launcherObject.ApplyModifiedPropertiesWithoutUndo();
+            return launcher;
         }
 
         /// <summary>Deja en el objeto raíz el controlador de cejas, párpados y sonrisa, escribiendo en la cara (FaceRig).</summary>

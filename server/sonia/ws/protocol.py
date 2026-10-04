@@ -40,6 +40,9 @@ GUEST_MAGIC = b"SNGU"
 #: Fases del Modo Jean que Unity puede contar en ``guest_state``.
 GUEST_PHASES = ("entering", "live", "leaving", "off")
 
+#: De quién es el personaje que se edita: Sonia (por defecto) o el invitado del Modo Jean.
+AVATAR_TARGETS = ("sonia", "guest")
+
 #: Formato del audio que se anuncia en ``hello``.
 AUDIO_FORMAT = "pcm_s16le"
 AUDIO_CHANNELS = 1
@@ -67,6 +70,7 @@ MSG_SET_AVATAR = "set_avatar"
 MSG_OPEN_AVATAR_EDITOR = "open_avatar_editor"
 MSG_CLOSE_AVATAR_EDITOR = "close_avatar_editor"
 MSG_GUEST_MODE = "guest_mode"
+MSG_SET_GUEST_AVATAR = "set_guest_avatar"
 MSG_GUEST_ANIMATION = "guest_animation"
 
 # Mensajes de Unity hacia el orquestador.
@@ -266,9 +270,25 @@ def msg_set_avatar(definition: str | None) -> dict[str, Any]:
     return {"type": MSG_SET_AVATAR, "definition": definition}
 
 
-def msg_open_avatar_editor() -> dict[str, Any]:
-    """La pantalla de Sonia pasa a la escena de editar personaje."""
-    return {"type": MSG_OPEN_AVATAR_EDITOR}
+def msg_open_avatar_editor(target: str = "sonia") -> dict[str, Any]:
+    """La pantalla de Sonia pasa a la escena de editar personaje.
+
+    ``target`` dice de quién: ``sonia`` (por defecto) o ``guest``, el invitado
+    del Modo Jean. Unity contesta con el mismo ``target`` en ``avatar_editor`` y
+    ``avatar_saved``.
+    """
+    return {"type": MSG_OPEN_AVATAR_EDITOR, "target": target}
+
+
+def msg_set_guest_avatar(definition: str | None) -> dict[str, Any]:
+    """Aspecto del invitado del Modo Jean; ``None`` es el avatar de prueba de la app."""
+    return {"type": MSG_SET_GUEST_AVATAR, "definition": definition}
+
+
+def parse_avatar_target(msg: dict[str, Any]) -> str:
+    """``target`` de ``avatar_editor`` y ``avatar_saved``: sin él (Unity antigua), Sonia."""
+    target = msg.get("target")
+    return target if target in AVATAR_TARGETS else "sonia"
 
 
 def msg_close_avatar_editor() -> dict[str, Any]:

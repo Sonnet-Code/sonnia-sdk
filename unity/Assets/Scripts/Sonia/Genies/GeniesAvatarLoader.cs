@@ -38,6 +38,10 @@ namespace Sonia
     public class GeniesAvatarLoader : MonoBehaviour
     {
         [SerializeField]
+        [Tooltip("De quién es el avatar: Sonia (set_avatar) o el invitado del Modo Jean (set_guest_avatar).")]
+        private AvatarRole role = AvatarRole.Sonia;
+
+        [SerializeField]
         [Tooltip("Personaje de la app (JSON del SDK): el de set_avatar null y el de arranque si nunca llegó otro.")]
         private TextAsset definition;
 
@@ -81,6 +85,9 @@ namespace Sonia
 
         /// <summary>Archivo de persistentDataPath con la definición del último set_avatar (no existe si fue null).</summary>
         public const string LastAvatarFileName = "sonia-avatar.json";
+
+        /// <summary>Lo mismo para el invitado del Modo Jean (set_guest_avatar).</summary>
+        public const string LastGuestAvatarFileName = "sonia-guest-avatar.json";
 
         /// <summary>Nombre de los avatares que monta el SDK.</summary>
         public const string LiveAvatarName = "Avatar (Genies)";
@@ -138,6 +145,12 @@ namespace Sonia
             get { return definition; }
         }
 
+        /// <summary>De quién es el avatar que pone este cargador.</summary>
+        public AvatarRole Role
+        {
+            get { return role; }
+        }
+
         /// <summary>Definición del avatar en pantalla (null si es el doble del editor).</summary>
         public string ShownDefinition
         {
@@ -171,7 +184,11 @@ namespace Sonia
 
         private string RememberedAvatarPath
         {
-            get { return Path.Combine(Application.persistentDataPath, LastAvatarFileName); }
+            get
+            {
+                string file = role == AvatarRole.Guest ? LastGuestAvatarFileName : LastAvatarFileName;
+                return Path.Combine(Application.persistentDataPath, file);
+            }
         }
 
         private void Awake()
@@ -196,7 +213,16 @@ namespace Sonia
 
         private void OnEnable()
         {
-            if (client != null)
+            if (client == null)
+            {
+                return;
+            }
+
+            if (role == AvatarRole.Guest)
+            {
+                client.OnSetGuestAvatar += HandleSetGuestAvatar;
+            }
+            else
             {
                 client.OnSetAvatar += HandleSetAvatar;
             }
@@ -207,6 +233,7 @@ namespace Sonia
             if (client != null)
             {
                 client.OnSetAvatar -= HandleSetAvatar;
+                client.OnSetGuestAvatar -= HandleSetGuestAvatar;
             }
         }
 
@@ -288,12 +315,23 @@ namespace Sonia
 
         private void HandleSetAvatar(SetAvatarMessage message)
         {
-            if (message == null)
+            if (message != null)
             {
-                return;
+                HandleDefinition(message.Definition, "set_avatar");
             }
+        }
 
-            string requested = string.IsNullOrWhiteSpace(message.Definition) ? null : message.Definition;
+        private void HandleSetGuestAvatar(SetGuestAvatarMessage message)
+        {
+            if (message != null)
+            {
+                HandleDefinition(message.Definition, "set_guest_avatar");
+            }
+        }
+
+        private void HandleDefinition(string definitionJson, string messageName)
+        {
+            string requested = string.IsNullOrWhiteSpace(definitionJson) ? null : definitionJson;
             RememberAvatar(requested);
 
             // Es un mensaje fijo: llega tras cada hello aunque no haya cambiado nada.
@@ -304,7 +342,7 @@ namespace Sonia
                 return;
             }
 
-            Debug.Log("[Sonia] set_avatar: " + (requested == null
+            Debug.Log("[Sonia] " + messageName + ": " + (requested == null
                 ? "el personaje de la app"
                 : "definición de " + requested.Length + " caracteres") + ".", this);
             Request(requested);
@@ -584,7 +622,7 @@ namespace Sonia
                 current = !string.IsNullOrEmpty(_requested) ? _requested : AppDefinition;
             }
 
-            AvatarEditorSession.CurrentDefinition = string.IsNullOrEmpty(current) ? null : current;
+            AvatarEditorSession.SetDefinitionFor(role, string.IsNullOrEmpty(current) ? null : current);
         }
 
         private void AnnounceSnapshot()

@@ -459,13 +459,17 @@ async def test_el_editor_de_personaje_pausa_gpt_live_y_guarda_el_avatar(tmp_path
         await rig.rec.wait_type("set_avatar")
         assert rig.rec.of_type("set_avatar")[-1] == {"type": "set_avatar", "definition": None}
         ok, message = await rig.control.act("open_avatar_editor", {})
-        assert ok and "editor de personaje" in message
+        assert ok and "editor del personaje de Sonia" in message
         await rig.rec.wait_type("open_avatar_editor")
         # Unity avisa de que ya está en la escena del editor: GPT-Live se cierra.
         await rig.client.send(json.dumps({"type": "avatar_editor", "open": True}))
         await conn.wait_type("session.close")
         await wait_until(lambda: not rig.engine.connected)
-        assert rig.control.status()["avatar"] == {"custom": False, "editor_open": True}
+        assert rig.control.status()["avatar"] == {
+            "custom": False,
+            "editor_open": True,
+            "editor_target": "sonia",
+        }
         # Lo que no es una definición de Genies con piezas se ignora.
         for bad in ("[1, 2]", "{}", '{"JsonVersion": "2-0-0", "equippedAssetIds": []}'):
             await rig.client.send(json.dumps({"type": "avatar_saved", "definition": bad}))
@@ -477,7 +481,11 @@ async def test_el_editor_de_personaje_pausa_gpt_live_y_guarda_el_avatar(tmp_path
         )
         # Al salir del editor vuelve a conversar.
         await rig.conn(2)
-        assert rig.control.status()["avatar"] == {"custom": True, "editor_open": False}
+        assert rig.control.status()["avatar"] == {
+            "custom": True,
+            "editor_open": False,
+            "editor_target": "sonia",
+        }
         assert rig.control.status()["settings_sync"]["pending"] == ["avatar"]
         ok, _ = await rig.control.act("close_avatar_editor", {})
         assert ok
@@ -490,6 +498,66 @@ async def test_el_editor_de_personaje_pausa_gpt_live_y_guarda_el_avatar(tmp_path
         )
     # Lo último (el de la app) es lo que queda guardado.
     assert PanelState.load(tmp_path / "cache" / "panel_state.json").avatar is None
+
+
+JEAN = json.dumps({"JsonVersion": "2-0-0", "equippedAssetIds": ["AvatarBase/recJean"]})
+
+
+async def test_el_editor_tambien_edita_el_avatar_de_jean_sin_tocar_a_sonia(
+    tmp_path: Path,
+) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        await rig.conn()
+        await rig.rec.wait_type("set_guest_avatar")
+        assert rig.rec.of_type("set_guest_avatar")[-1] == {
+            "type": "set_guest_avatar",
+            "definition": None,
+        }
+        ok, message = await rig.control.act("open_avatar_editor", {"target": "guest"})
+        assert ok and "de Jean" in message
+        await rig.rec.wait_type("open_avatar_editor")
+        assert rig.rec.of_type("open_avatar_editor")[-1] == {
+            "type": "open_avatar_editor",
+            "target": "guest",
+        }
+        await rig.client.send(
+            json.dumps({"type": "avatar_editor", "open": True, "target": "guest"})
+        )
+        await wait_until(lambda: rig.control.status()["avatar"]["editor_open"])
+        assert rig.control.status()["avatar"]["editor_target"] == "guest"
+        # Una definición sin piezas no vale, tampoco para Jean.
+        empty = json.dumps({"JsonVersion": "2-0-0", "equippedAssetIds": []})
+        await rig.client.send(
+            json.dumps({"type": "avatar_saved", "definition": empty, "target": "guest"})
+        )
+        await rig.client.send(
+            json.dumps({"type": "avatar_saved", "definition": JEAN, "target": "guest"})
+        )
+        await wait_until(lambda: rig.control.status()["guest_avatar"]["custom"])
+        await rig.rec.wait_for(
+            lambda msgs: rig.rec.of_type("set_guest_avatar", msgs)[-1]["definition"] == JEAN
+        )
+        # Sonia no cambia y lo de Jean va a la nube como ajuste compartido aparte.
+        assert rig.control.status()["avatar"]["custom"] is False
+        assert rig.control.shared_settings()["guest_avatar"] == JEAN
+        assert rig.control.shared_settings()["avatar"] is None
+        assert rig.control.status()["settings_sync"]["pending"] == ["guest_avatar"]
+        # Sin target (Unity antigua) sigue siendo Sonia.
+        await rig.client.send(json.dumps({"type": "avatar_saved", "definition": AVATAR}))
+        await wait_until(lambda: rig.control.status()["avatar"]["custom"])
+        assert rig.control.shared_settings()["guest_avatar"] == JEAN
+        # Volver al avatar de prueba de Jean.
+        ok, message = await rig.control.act("reset_avatar", {"target": "guest"})
+        assert ok and "Jean" in message
+        await rig.rec.wait_for(
+            lambda msgs: rig.rec.of_type("set_guest_avatar", msgs)[-1]["definition"] is None
+        )
+        assert rig.control.shared_settings()["avatar"] == AVATAR
+        for bad in ({"target": "perro"},):
+            ok, _ = await rig.control.act("open_avatar_editor", bad)
+            assert not ok
+    # El avatar de Jean se recuerda en disco como el de Sonia.
+    assert PanelState.load(tmp_path / "cache" / "panel_state.json").guest_avatar is None
 
 
 async def test_sin_pantalla_no_se_abre_el_editor_y_si_se_cierra_sonia_vuelve(

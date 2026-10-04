@@ -91,6 +91,7 @@ CAPABILITIES = [
     "tuning",
     "cloud_settings",
     "avatar_editor",
+    "guest_avatar_editor",
 ]
 
 #: Ajustes que se guardan en la nube y comparten todas las Sonias. El modo, el
@@ -106,6 +107,7 @@ SHARED_SETTINGS: tuple[str, ...] = (
     "disabled_animations",
     "tuning",
     "avatar",
+    "guest_avatar",
 )
 
 #: Ajustes de «Developer»: grupo -> valor -> (mínimo, máximo, por defecto). La
@@ -207,6 +209,8 @@ class PanelState:
     #: Definición del avatar de Genies guardada en el editor de personaje (JSON en
     #: texto); ``None``: el personaje que trae la app.
     avatar: str | None = None
+    #: Lo mismo para el invitado del Modo Jean; ``None``: su avatar de prueba.
+    guest_avatar: str | None = None
     #: Modo debug: Sonia quieta (sin GPT-Live ni nada automático) para pruebas visuales.
     debug: bool = False
     #: Gasto del día: segundos de sesión de GPT-Live acumulados en ``usage_date``
@@ -237,6 +241,8 @@ class PanelState:
                 setattr(state, name, raw[name])
         with contextlib.suppress(ValueError):
             state.avatar = _normalize_shared("avatar", raw.get("avatar"))
+        with contextlib.suppress(ValueError):
+            state.guest_avatar = _normalize_shared("guest_avatar", raw.get("guest_avatar"))
         for name in ("volume", "mic_gate", "usage_seconds"):
             value = raw.get(name)
             if _is_number(value):
@@ -341,6 +347,8 @@ class StandControl:
         self._current_animation: str | None = None
         #: ¿Está la pantalla de Sonia en la escena de editar personaje?
         self._avatar_editor_open = False
+        #: De quién es el personaje que se edita: "sonia" o "guest" (Jean).
+        self._avatar_editor_target = "sonia"
         #: Modo Jean (invitado sorpresa); solo con nube (lo engancha ``attach_guest``).
         self._guest: GuestMode | None = None
         #: Segundos de sesión de arranques anteriores del mismo día.
@@ -400,6 +408,7 @@ class StandControl:
         await self._hub.set_sticky("debug", p.msg_set_debug(state.debug))
         await self._hub.set_sticky("tuning", p.msg_set_tuning(state.tuning))
         await self._hub.set_sticky("avatar", p.msg_set_avatar(state.avatar))
+        await self._hub.set_sticky("guest_avatar", p.msg_set_guest_avatar(state.guest_avatar))
         await self._apply_mode(state.mode, announce=False)
         if state.debug:
             logger.info("El panel dejó a Sonia en modo debug: quieta y sin GPT-Live")
@@ -695,12 +704,19 @@ class StandControl:
         )
 
     async def _act_open_avatar_editor(self, params: dict[str, Any]) -> tuple[bool, str]:
+        target = params.get("target", "sonia")
+        if target not in p.AVATAR_TARGETS:
+            raise _BadRequest("¿De quién es el personaje: de Sonia o de Jean?")
         self._need_present()
         if self._hub.client_count == 0:
             raise _BadRequest("La pantalla de Sonia no está conectada.")
-        await self._hub.broadcast_json(p.msg_open_avatar_editor())
+        if self._guest_active:
+            raise _BadRequest("Termina antes el Modo Jean.")
+        self._avatar_editor_target = str(target)
+        await self._hub.broadcast_json(p.msg_open_avatar_editor(str(target)))
+        who = "de Jean" if target == "guest" else "de Sonia"
         return True, (
-            "La pantalla de Sonia pasa al editor de personaje: edítalo allí con el ratón y "
+            f"La pantalla de Sonia pasa al editor del personaje {who}: edítalo allí con el ratón y "
             "pulsa Guardar. Mientras tanto Sonia no conversa."
         )
 
@@ -740,6 +756,14 @@ class StandControl:
         return True, "Hecho."
 
     async def _act_reset_avatar(self, params: dict[str, Any]) -> tuple[bool, str]:
+        target = params.get("target", "sonia")
+        if target not in p.AVATAR_TARGETS:
+            raise _BadRequest("¿De quién es el personaje: de Sonia o de Jean?")
+        if target == "guest":
+            if self.state.guest_avatar is None:
+                return True, "Jean ya tiene el avatar de prueba de la app."
+            await self._set_shared("guest_avatar", None)
+            return True, "Jean vuelve al avatar de prueba de la app (en todas las Sonias)."
         if self.state.avatar is None:
             return True, "Sonia ya tiene el personaje de la app."
         await self._set_shared("avatar", None)
@@ -904,6 +928,9 @@ class StandControl:
         elif key == "avatar":
             state.avatar = value
             await hub.set_sticky("avatar", p.msg_set_avatar(value))
+        elif key == "guest_avatar":
+            state.guest_avatar = value
+            await hub.set_sticky("guest_avatar", p.msg_set_guest_avatar(value))
         else:  # pragma: no cover - SHARED_SETTINGS y esto van juntos
             raise ValueError(f"Ajuste desconocido: {key}")
 
@@ -987,6 +1014,8 @@ class StandControl:
     async def _on_avatar_editor(self, msg: dict[str, Any]) -> None:
         open_ = msg.get("open")
         if isinstance(open_, bool):
+            if open_:
+                self._avatar_editor_target = p.parse_avatar_target(msg)
             await self._set_avatar_editor_open(open_)
 
     async def _set_avatar_editor_open(self, open_: bool) -> None:
@@ -1010,8 +1039,13 @@ class StandControl:
         if definition is None:
             logger.warning("Unity mandó una definición de avatar no válida; se ignora")
             return
-        await self._set_shared("avatar", definition)
-        logger.info("Personaje nuevo guardado desde el editor (%d caracteres)", len(definition))
+        guest = p.parse_avatar_target(msg) == "guest"
+        await self._set_shared("guest_avatar" if guest else "avatar", definition)
+        logger.info(
+            "Personaje nuevo %s guardado desde el editor (%d caracteres)",
+            "de Jean" if guest else "de Sonia",
+            len(definition),
+        )
 
     def status(self) -> dict[str, Any]:
         """La instantánea de ``GET /api/status`` (forma en ``docs/panel.md``)."""
@@ -1052,7 +1086,9 @@ class StandControl:
             "avatar": {
                 "custom": self.state.avatar is not None,
                 "editor_open": self._avatar_editor_open and self._hub.client_count > 0,
+                "editor_target": self._avatar_editor_target,
             },
+            "guest_avatar": {"custom": self.state.guest_avatar is not None},
             "guest": (
                 self._guest.status()
                 if self._guest is not None
@@ -1259,7 +1295,7 @@ def _normalize_shared(key: str, value: Any) -> Any:
         if not isinstance(value, dict):
             raise ValueError(key)
         return merge_tuning(value)
-    if key == "avatar":
+    if key in ("avatar", "guest_avatar"):
         if value is None:
             return None
         definition = p.parse_avatar_definition({"definition": value})

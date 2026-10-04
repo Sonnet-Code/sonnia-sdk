@@ -115,7 +115,7 @@ Integración en `StandControl`, cuando el principal confirme la base:
 
 - **El avatar de Jean** es una segunda definición de Genies:
   - Es un ajuste compartido nuevo, `guest_avatar` (mensaje fijo `set_guest_avatar`), con su copia local para que entre al instante (`SoniaGeniesSnapshot` admite un segundo destino).
-  - Se edita con el mismo editor de personaje con un parámetro «¿a quién editas?» (Sonia o Jean). Mientras no exista, se usa un avatar masculino de los ejemplos de Genies.
+  - Se edita con el mismo editor de personaje: «Editar personaje de Jean» en «Developer» o «Editar mi personaje» en el modal mandan `open_avatar_editor` con `target` `guest`. El editor parte del aspecto actual de Jean y, al guardar, `avatar_saved` lleva el mismo `target` y el orquestador lo guarda en `guest_avatar`, sin tocar a Sonia. Mientras Jean no guarde uno, se usa su avatar de prueba, `Assets/Sonia/Avatar/JeanGeniesAvatar.json`.
 - **`GuestPresenter`**, en la raíz de Sonia, lo crea `SoniaBootstrap` por código como la presencia:
   - Una raíz «Invitado» con su propia pila: `AudioSource` y `AudioStreamPlayer` para la voz de Jean (frames `SNGU`), `PhonemeLipSyncBridge` con uLipSync, `LipSyncController`, `FaceRig`, `MotionPlayer`, `AvatarStateController` (cabeza, parpadeo y asentimientos con la prosodia) y `EyeGazeController`.
   - La pila es la misma de Sonia instanciada otra vez: el lip-sync, los gestos de cabeza y las cejas ya responden a la prosodia de la voz.
@@ -195,5 +195,5 @@ Mensajes JSON de la sala:
 
 - Usar **auriculares** con micro.
 - Pulsar «Preparar voces» una vez con internet, para grabar la frase de entrada con la voz de Sonia.
-- Crear su avatar con el editor de personaje («¿a quién editas?: Jean»).
+- Crear su avatar con «Editar personaje de Jean» (en «Developer» o en el modal), con el Modo Jean apagado. Se edita en la pantalla de Sonia, con su ratón: lo más cómodo es hacerlo antes del evento con Sonia corriendo en su Mac. Queda en la nube para todas las Sonias.
 - Probar desde España antes del día 9. Conviene probar la red del recinto: si filtra WebSockets largos, también caería el panel.

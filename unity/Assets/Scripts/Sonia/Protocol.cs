@@ -40,6 +40,9 @@ namespace Sonia
         public const string SetAvatar = "set_avatar";
         public const string OpenAvatarEditor = "open_avatar_editor";
         public const string CloseAvatarEditor = "close_avatar_editor";
+        public const string SetGuestAvatar = "set_guest_avatar";
+        public const string GuestMode = "guest_mode";
+        public const string GuestAnimation = "guest_animation";
 
         // De Unity hacia el orquestador.
         public const string ClientHello = "client_hello";
@@ -51,6 +54,7 @@ namespace Sonia
         public const string AnimationPlaying = "animation_playing";
         public const string AvatarEditor = "avatar_editor";
         public const string AvatarSaved = "avatar_saved";
+        public const string GuestState = "guest_state";
     }
 
     /// <summary>Valores posibles del campo <c>state</c> del mensaje <c>state</c>.</summary>
@@ -205,10 +209,63 @@ namespace Sonia
         [JsonProperty("definition")] public string Definition;
     }
 
-    /// <summary>El panel pide pasar a la escena de editar personaje.</summary>
+    /// <summary>
+    /// Aspecto del invitado del Modo Jean (mensaje fijo; ajuste compartido
+    /// <c>guest_avatar</c> en la nube): definición de Genies en texto JSON, o null
+    /// para el avatar de prueba que trae la app.
+    /// </summary>
+    [Serializable]
+    public class SetGuestAvatarMessage
+    {
+        [JsonProperty("definition")] public string Definition;
+    }
+
+    /// <summary>
+    /// Modo Jean: entra el invitado (Sonia lo presenta, se dan la mano y ella se
+    /// va) o se despide (vuelve Sonia). Mensaje fijo. Su voz llega en frames
+    /// "SNGU" a <see cref="SampleRate"/>.
+    /// </summary>
+    [Serializable]
+    public class GuestModeMessage
+    {
+        /// <summary>"enter" o "leave".</summary>
+        [JsonProperty("phase")] public string Phase;
+
+        /// <summary>Nombre del invitado (para los registros).</summary>
+        [JsonProperty("name")] public string Name;
+
+        /// <summary>Tasa de la voz del invitado.</summary>
+        [JsonProperty("sample_rate")] public int SampleRate = Protocol.DefaultSampleRate;
+    }
+
+    /// <summary>Un clip de una sola vez en el avatar del invitado (lo lanza Jean desde su modal).</summary>
+    [Serializable]
+    public class GuestAnimationMessage
+    {
+        [JsonProperty("clip")] public string Clip;
+    }
+
+    /// <summary>Un trozo de la voz del invitado (frame binario "SNGU"), envuelto para la cola del cliente.</summary>
+    public sealed class GuestAudioFrame
+    {
+        public AudioFrame Frame;
+    }
+
+    /// <summary>
+    /// El panel pide pasar a la escena de editar personaje. <see cref="Target"/>
+    /// dice de quién: "sonia" (por defecto, también si falta) o "guest", el
+    /// invitado del Modo Jean.
+    /// </summary>
     [Serializable]
     public class OpenAvatarEditorMessage
     {
+        [JsonProperty("target")] public string Target;
+
+        /// <summary>De quién es el personaje que se edita.</summary>
+        public AvatarRole Role
+        {
+            get { return Protocol.ParseAvatarTarget(Target); }
+        }
     }
 
     /// <summary>El panel pide salir del editor de personaje sin guardar.</summary>
@@ -402,13 +459,27 @@ namespace Sonia
         /// <param name="frame">Frame decodificado.</param>
         public static bool TryDecodeAudioFrame(byte[] data, int length, out AudioFrame frame)
         {
+            return TryDecodeFrame(data, length, 'I', 'A', out frame);
+        }
+
+        /// <summary>
+        /// Como <see cref="TryDecodeAudioFrame"/> pero con la voz del invitado del
+        /// Modo Jean (marca "SNGU", misma cabecera).
+        /// </summary>
+        public static bool TryDecodeGuestAudioFrame(byte[] data, int length, out AudioFrame frame)
+        {
+            return TryDecodeFrame(data, length, 'G', 'U', out frame);
+        }
+
+        private static bool TryDecodeFrame(byte[] data, int length, char third, char fourth, out AudioFrame frame)
+        {
             frame = default(AudioFrame);
             if (data == null || length < AudioHeaderSize || length > data.Length)
             {
                 return false;
             }
 
-            if (data[0] != (byte)'S' || data[1] != (byte)'N' || data[2] != (byte)'I' || data[3] != (byte)'A')
+            if (data[0] != (byte)'S' || data[1] != (byte)'N' || data[2] != (byte)third || data[3] != (byte)fourth)
             {
                 return false;
             }
@@ -592,26 +663,51 @@ namespace Sonia
             return message.ToString(Formatting.None);
         }
 
-        /// <summary>La escena de editar personaje se abrió o se cerró.</summary>
-        public static string AvatarEditorMessage(bool open)
+        /// <summary>Fase del Modo Jean en la pantalla: entering, live, leaving u off.</summary>
+        public static string GuestStateMessage(string phase)
         {
             JObject message = new JObject
             {
-                ["type"] = MessageTypes.AvatarEditor,
-                ["open"] = open
+                ["type"] = MessageTypes.GuestState,
+                ["phase"] = phase ?? "off"
             };
             return message.ToString(Formatting.None);
         }
 
-        /// <summary>Se guardó un personaje en el editor: su definición de Genies en texto JSON.</summary>
-        public static string AvatarSavedMessage(string definition)
+        /// <summary>La escena de editar personaje se abrió o se cerró.</summary>
+        public static string AvatarEditorMessage(bool open, AvatarRole role = AvatarRole.Sonia)
+        {
+            JObject message = new JObject
+            {
+                ["type"] = MessageTypes.AvatarEditor,
+                ["open"] = open,
+                ["target"] = AvatarTarget(role)
+            };
+            return message.ToString(Formatting.None);
+        }
+
+        /// <summary>Se guardó un personaje en el editor: su definición de Genies en texto JSON y de quién es.</summary>
+        public static string AvatarSavedMessage(string definition, AvatarRole role = AvatarRole.Sonia)
         {
             JObject message = new JObject
             {
                 ["type"] = MessageTypes.AvatarSaved,
-                ["definition"] = definition ?? string.Empty
+                ["definition"] = definition ?? string.Empty,
+                ["target"] = AvatarTarget(role)
             };
             return message.ToString(Formatting.None);
+        }
+
+        /// <summary>Valor de <c>target</c> en los mensajes del editor de personaje.</summary>
+        public static string AvatarTarget(AvatarRole role)
+        {
+            return role == AvatarRole.Guest ? "guest" : "sonia";
+        }
+
+        /// <summary><c>target</c> de <c>open_avatar_editor</c>: "guest" es el invitado; cualquier otra cosa, Sonia.</summary>
+        public static AvatarRole ParseAvatarTarget(string target)
+        {
+            return target == "guest" ? AvatarRole.Guest : AvatarRole.Sonia;
         }
     }
 }

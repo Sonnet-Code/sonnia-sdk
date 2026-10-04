@@ -208,6 +208,12 @@ namespace Sonia.EditorTools
                 return;
             }
 
+            // Esta copia es la de Sonia: el avatar del invitado del Modo Jean no la toca.
+            if (loader.Role != AvatarRole.Sonia)
+            {
+                return;
+            }
+
             SessionState.SetString(SceneKey, loader.gameObject.scene.path);
 
             // La app arranca con el avatar que lleva Sonia: su definición pasa a ser

@@ -9,7 +9,9 @@
  *     (ack), con lo que el stand ajusta tamaño, calidad y fps a la red;
  *   - reproduce el micro del stand y manda el de Jean (AudioWorklet en
  *     jean-worklet.js), con micro abierto o pulsar para hablar;
- *   - lanza animaciones del avatar de Jean (acción guest_animation).
+ *   - lanza animaciones del avatar de Jean (acción guest_animation);
+ *   - pasa la pantalla de Sonia al editor del personaje de Jean (acción
+ *     open_avatar_editor con target "guest"), antes de activar el modo.
  * Formato de los frames y decisiones en docs/modo-jean.md.
  */
 "use strict";
@@ -190,6 +192,9 @@
     ui.volume = el("input", { type: "range", min: 0, max: 200, step: 5, value: 100, id: "jean-volume" });
     ui.volumeValue = el("output", { class: "control-value", for: "jean-volume", text: "100 %" });
     ui.animations = el("div", { class: "jean-anims" }, el("p", { class: "muted", text: "Cargando animaciones…" }));
+    ui.avatarState = el("p", { class: "jean-avatar-state", text: "—" });
+    ui.avatarEdit = el("button", { type: "button", class: "btn", text: "Editar mi personaje" });
+    ui.avatarClose = el("button", { type: "button", class: "btn", text: "Cerrar el editor" });
     ui.close = el("button", { type: "button", class: "btn btn-small", text: "Cerrar" });
 
     ui.dialog = el(
@@ -229,6 +234,17 @@
             ui.volume,
           ),
           el("section", { class: "jean-section" }, el("h3", { text: "Tus gestos" }), ui.animations),
+          el(
+            "section",
+            { class: "jean-section" },
+            el("h3", { text: "Tu avatar" }),
+            el("p", {
+              class: "help",
+              text: "Se edita en la pantalla de Sonia, con su ratón, con el Modo Jean apagado. Al guardar queda en la nube para todas las Sonias.",
+            }),
+            ui.avatarState,
+            el("div", { class: "button-row" }, ui.avatarEdit, ui.avatarClose),
+          ),
         ),
       ),
     );
@@ -238,6 +254,8 @@
     ui.dialog.addEventListener("close", onDialogClosed);
     ui.start.addEventListener("click", () => sendAction("set_guest_mode", { active: true }));
     ui.stop.addEventListener("click", () => sendAction("set_guest_mode", { active: false }));
+    ui.avatarEdit.addEventListener("click", () => sendAction("open_avatar_editor", { target: "guest" }));
+    ui.avatarClose.addEventListener("click", () => sendAction("close_avatar_editor"));
     ui.mic.addEventListener("click", toggleMic);
     for (const radio of [ui.modeOpen, ui.modePtt]) {
       radio.addEventListener("change", () => {
@@ -342,10 +360,33 @@
     ui.phase.dataset.phase = phase;
     const caps = new Set(Array.isArray(state.status && state.status.capabilities) ? state.status.capabilities : []);
     const supported = caps.has("guest_mode");
-    ui.start.disabled = !supported || phase !== "off";
+    const avatar = objectOf(state.status && state.status.avatar);
+    const editorOpen = Boolean(avatar.editor_open);
+    ui.start.disabled = !supported || phase !== "off" || editorOpen;
     ui.stop.disabled = !supported || phase === "off" || phase === "leaving";
     for (const button of ui.animations.querySelectorAll("button")) button.disabled = !supported || phase !== "live";
+    renderAvatar(caps, phase, avatar);
     renderMic();
+  }
+
+  /** Estado del personaje de Jean y del editor (`avatar` y `guest_avatar` del estado). */
+  function renderAvatar(caps, phase, avatar) {
+    const ui = state.ui;
+    const status = state.status || {};
+    const editing = Boolean(avatar.editor_open);
+    const editingMine = editing && avatar.editor_target === "guest";
+    let text = objectOf(status.guest_avatar).custom ? "Tu personaje, guardado en la nube." : "Avatar de prueba de la app.";
+    if (editingMine) text = "Editando tu personaje en la pantalla de Sonia…";
+    else if (editing) text = "La pantalla de Sonia está en el editor del personaje de Sonia.";
+    setText(ui.avatarState, text);
+    ui.avatarState.dataset.state = editing ? "editing" : "idle";
+    const supported = caps.has("guest_avatar_editor");
+    ui.avatarEdit.disabled = !supported || editing || phase !== "off" || status.mode === "away";
+    ui.avatarClose.disabled = !supported || !editing;
+  }
+
+  function objectOf(value) {
+    return value && typeof value === "object" ? value : {};
   }
 
   function renderAnimations(list) {
