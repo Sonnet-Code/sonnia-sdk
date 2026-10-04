@@ -127,11 +127,11 @@
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg>
             Callar a Sonia
           </button>
-          <button type="button" class="btn" id="greet-btn" data-cap="greet" data-off-modes="away">
+          <button type="button" class="btn" id="greet-btn" data-cap="greet" data-off-modes="away" data-extra="sonia_here">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-6 4z"/></svg>
             Saludar ahora
           </button>
-          <button type="button" class="btn" id="dance-btn" data-cap="gestures" data-off-modes="away">
+          <button type="button" class="btn" id="dance-btn" data-cap="gestures" data-off-modes="away" data-extra="sonia_here">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
             Bailar
           </button>
@@ -182,7 +182,7 @@
         <form class="stack" id="say-form">
           <label class="visually-hidden" for="say-input">Texto que dirá Sonia</label>
           <textarea id="say-input" rows="3" maxlength="600" data-cap="say" placeholder="Por ejemplo: En diez minutos empieza la charla de Flutter en la sala principal."></textarea>
-          <button type="submit" class="btn btn-primary" id="say-btn" data-cap="say">Decirlo ahora</button>
+          <button type="submit" class="btn btn-primary" id="say-btn" data-cap="say" data-extra="sonia_here">Decirlo ahora</button>
         </form>
         <p class="cap-note" data-cap-note="say" hidden>No disponible con el motor de voz actual.</p>
       </section>
@@ -307,10 +307,10 @@
           <h3 id="adv-gestures-title">Gestos</h3>
           <p class="help">Solo se ven cuando Sonia no está hablando.</p>
           <div class="button-row">
-            <button type="button" class="btn" data-gesture="greeting" data-cap="gestures" data-off-modes="away">Saludar con la mano</button>
-            <button type="button" class="btn" data-gesture="soft" data-cap="gestures" data-off-modes="away">Gesto suave</button>
-            <button type="button" class="btn" data-gesture="fourth_wall" data-cap="gestures" data-off-modes="away">Tocar la pantalla</button>
-            <button type="button" class="btn" data-gesture="dance" data-cap="gestures" data-off-modes="away">Bailar</button>
+            <button type="button" class="btn" data-gesture="greeting" data-cap="gestures" data-off-modes="away" data-extra="sonia_here">Saludar con la mano</button>
+            <button type="button" class="btn" data-gesture="soft" data-cap="gestures" data-off-modes="away" data-extra="sonia_here">Gesto suave</button>
+            <button type="button" class="btn" data-gesture="fourth_wall" data-cap="gestures" data-off-modes="away" data-extra="sonia_here">Tocar la pantalla</button>
+            <button type="button" class="btn" data-gesture="dance" data-cap="gestures" data-off-modes="away" data-extra="sonia_here">Bailar</button>
           </div>
           <p class="cap-note" data-cap-note="gestures" hidden>No disponible con el motor de voz actual.</p>
         </section>

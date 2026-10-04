@@ -9,7 +9,9 @@ con el mismo token:
   red. Si el búfer de envío se llena, se salta vídeo antes que audio.
 - Solo en el Modo Jean (``set_guest_media``):
   - sube el micro del stand a 16 kHz en bloques de 100 ms, sin acumular más de
-    300 ms de retraso (lo viejo se tira);
+    300 ms de retraso (lo viejo se tira); mientras suena la voz de Jean en el
+    stand (y ``GUEST_ECHO_TAIL_S`` después) le llega en silencio, para que no
+    se oiga a sí mismo con retraso;
   - baja la voz de Jean y la pasa a Unity como frames ``SNGU``, cortada en
     rachas por ``GuestSpeechSegmenter``.
 - Cada segundo manda las estadísticas (fps, kbit/s, RTT...) que pintan los modales.
@@ -32,6 +34,8 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
+
+import numpy as np
 
 from sonia.config import PanelSettings
 from sonia.guest.media import (
@@ -71,6 +75,10 @@ HEALTHY_CONNECTION_S = 30.0
 #: Con más de esto en el búfer de envío se salta el vídeo (el audio manda).
 VIDEO_SKIP_BUFFER_BYTES = 256 * 1024
 STATS_INTERVAL_S = 1.0
+#: Mientras habla Jean y este tiempo después (lo que tarda su voz en sonar por
+#: los altavoces del stand), el micro del stand le llega en silencio: si no, se
+#: oiría a sí mismo con retraso.
+GUEST_ECHO_TAIL_S = 0.7
 _MAX_SIZE = 4 * 1024 * 1024
 
 
@@ -125,6 +133,7 @@ class GuestLink:
         self._audio_seq = 0
         self._guest_frames = 0
         self._dropped_audio = 0
+        self._stand_muted = False
         self._send_lock = asyncio.Lock()
         self.connected = False
 
@@ -161,6 +170,7 @@ class GuestLink:
             "guest_level": round(self._segmenter.level, 4),
             "guest_frames": self._guest_frames,
             "dropped_audio": self._dropped_audio,
+            "stand_muted": self._stand_muted,
         }
 
     # -- micro del stand ---------------------------------------------------------
@@ -169,6 +179,11 @@ class GuestLink:
         """Un bloque del micro del stand (lo llama el motor con cada bloque)."""
         if not self.connected or not self._guest_media or self._listeners <= 0:
             return
+        # Mientras su voz suena en el stand, Jean recibe silencio en lugar de su
+        # propio eco. Se manda silencio y no nada para no vaciar su colchón.
+        self._stand_muted = self._clock() - self._segmenter.last_voiced_at < GUEST_ECHO_TAIL_S
+        if self._stand_muted:
+            block = np.zeros_like(block)
         for chunk in self._packer.push(block):
             if len(self._pending_audio) == self._pending_audio.maxlen:
                 self._dropped_audio += 1

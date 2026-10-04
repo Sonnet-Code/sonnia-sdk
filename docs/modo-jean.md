@@ -90,7 +90,9 @@ Cada fotograma JPEG lleva su número y la hora de envío del stand. El navegador
   - En el navegador, si `ws.bufferedAmount` pasa de 64 KB, los bloques se tiran: mejor un hueco que un retraso creciente.
   - El orquestador junta 150 ms antes de empezar cada racha de voz y la pasa a Unity como frames `SNGU`. Una racha nueva empieza tras 500 ms de silencio, con `FLAG_LAST` al cerrar la anterior.
 - **El stand a Jean:** el micro del stand (el que usa GPT-Live, ahora cerrada) baja a 16 kHz en bloques de 100 ms (256 kbit/s). En el navegador otro AudioWorklet lo reproduce con un colchón de unos 200 ms, recorta si pasa de 600 ms y tiene su propio volumen.
-- **Eco:** Jean debe usar auriculares; el modal lo avisa. Si no, la voz del stand vuelve al stand. En el stand, GPT-Live está cerrada durante todo el modo, así que nadie contesta solo.
+- **Eco:**
+  - Jean debe usar auriculares; el modal lo avisa. Si no, la voz del stand vuelve al stand. En el stand, GPT-Live está cerrada durante todo el modo, así que nadie contesta solo.
+  - La voz de Jean suena por los altavoces del stand y el micro del stand la recoge. Para que no se oiga a sí mismo con retraso, mientras habla y 0,7 s después (`GUEST_ECHO_TAIL_S`), el micro del stand le llega en silencio (se manda silencio para no vaciar su colchón). Es medio dúplex: si un visitante le habla mientras él habla, no lo oye hasta que calla.
 
 ## 5. Orquestador (`server/sonia/guest/`)
 
@@ -115,24 +117,32 @@ Integración en `StandControl`, cuando el principal confirme la base:
 ## 6. Unity
 
 - **El avatar de Jean** es una segunda definición de Genies:
-  - Es un ajuste compartido nuevo, `guest_avatar` (mensaje fijo `set_guest_avatar`), con su copia local para que entre al instante (`SoniaGeniesSnapshot` admite un segundo destino).
+  - Es un ajuste compartido aparte, `guest_avatar` (mensaje fijo `set_guest_avatar`), que pone su propio `GeniesAvatarLoader` con el rol `Guest`. Recuerda el último en su propio archivo (`sonia-guest-avatar.json`), igual que Sonia. No lleva copia local: en Play entra el avatar vivo del SDK (tarda unos segundos al arrancar, con Jean fuera de cuadro); en modo edición se ve el doble.
   - Se edita con el mismo editor de personaje: «Editar personaje de Jean» en «Developer» o «Editar mi personaje» en el modal mandan `open_avatar_editor` con `target` `guest`. El editor parte del aspecto actual de Jean y, al guardar, `avatar_saved` lleva el mismo `target` y el orquestador lo guarda en `guest_avatar`, sin tocar a Sonia. Mientras Jean no guarde uno, se usa su avatar de prueba, `Assets/Sonia/Avatar/JeanGeniesAvatar.json`.
-- **`GuestPresenter`**, en la raíz de Sonia, lo crea `SoniaBootstrap` por código como la presencia:
-  - Una raíz «Invitado» con su propia pila: `AudioSource` y `AudioStreamPlayer` para la voz de Jean (frames `SNGU`), `PhonemeLipSyncBridge` con uLipSync, `LipSyncController`, `FaceRig`, `MotionPlayer`, `AvatarStateController` (cabeza, parpadeo y asentimientos con la prosodia) y `EyeGazeController`.
-  - La pila es la misma de Sonia instanciada otra vez: el lip-sync, los gestos de cabeza y las cejas ya responden a la prosodia de la voz.
-- **Entrada:**
-  1. La frase de Sonia.
-  2. Plano abierto (el de salida de `CameraFramingController`).
-  3. Jean entra con la `Walk` oficial de Genies hasta 0,55 m a la derecha.
-  4. Los dos se giran uno hacia el otro.
-  5. Apretón de manos: Genies no trae clip, así que se usa `actions-presentItem_intro` en la capa del brazo derecho de los dos, congelado en el brazo extendido. Una corrección con IK humanoide junta las dos manos en el punto medio y las mueve un poco arriba y abajo durante 1,5 s.
-  6. Sonia sale con su presencia, sin letrero (opción nueva `showSign` en `PresenceController.SetPresent`).
-  7. Jean camina al centro y mira a cámara.
-  8. Vuelve el plano medio y Unity avisa con `guest_state` {`phase`: `live`}.
-- **Gestos al hablar:** cabeza, cejas, ojos y asentimientos con la prosodia de su voz (como Sonia). Además, cada 6-12 s de habla continua, un gesto suave del set, sin repetir seguido.
-- **Animaciones a mano:** `guest_animation` lanza cualquier clip de una sola vez del set (los mismos del catálogo de Sonia).
-- **Salida:** Jean saluda con la mano, sale caminando por la derecha y Sonia vuelve con su presencia. Al acabar, `guest_state` {`phase`: `off`}.
-- **Verificación:** capturas 9:16 de cada paso de la entrada y la salida, y del encuadre con Jean en el centro. Para la boca con voz real, el laboratorio de cara alimentando el `AudioStreamPlayer` del invitado.
+- **La raíz «Invitado»** la monta *Sonia > Montar invitado (Modo Jean)* (`Editor/SoniaGuestSetup.cs`) en la escena del stand. Su posición es la marca de Jean: 0,75 m a la izquierda de Sonia en pantalla. Lleva la misma pila de Sonia, otra vez:
+  - voz: `AudioSource`, `AudioStreamPlayer` (frames `SNGU`), `LipSyncController` y `PhonemeLipSyncBridge` con uLipSync, con el perfil de muestra masculino;
+  - cara, cabeza y ojos: `FaceRig`, `AvatarStateController`, `FacialExpressionController` y `EyeGazeController`;
+  - cuerpo: `MotionPlayer` y `AvatarChoreographer` con el set de Sonia, sin bailes por su cuenta;
+  - caminar: `PresenceController` (sale por la izquierda, sin letrero);
+  - avatar: `AvatarBinder` y `GeniesAvatarLoader` (rol `Guest`);
+  - Modo Jean: `HandshakeRig`, `ChoreographerBody` y `GuestPresenter`.
+- **`GuestPresenter`** (`Scripts/Sonia/Guest/`) lleva la secuencia. Escucha `guest_mode`, `guest_animation`, la voz `SNGU`, `set_volume` y `set_tuning` (la boca de Jean lleva los mismos ajustes que la de Sonia) y avisa con `guest_state`.
+- **Entrada** (`entering`):
+  1. Plano entero de los dos (el de salida caminando, centrado entre los dos y más atrás si no caben).
+  2. Jean entra caminando desde la izquierda con su presencia; Sonia le mira llegar.
+  3. Apretón de manos (`HandshakeRig`). Genies no trae clip, así que el brazo derecho de cada uno va con IK de dos huesos a un punto entre los dos, encima del reposo. Las palmas quedan juntas, con el pulgar arriba y los dedos algo cerrados, y suben y bajan un par de veces. Para que los pies casi no se muevan, se giran poco el uno hacia el otro: 18° la raíz y 16° el tronco. Se miran a la cara. Las medidas de la mano salen de los huesos de cada avatar.
+  4. Sonia sale por la derecha sin letrero (`PresenceController.HoldForGuest`). Mientras dure el modo, los `presence` del orquestador se apuntan y no la traen de vuelta, aunque llegue un hello.
+  5. Plano medio de Jean: el de Sonia, llevado a su cabeza (con los ajustes de «Developer»). Unity avisa con `guest_state` `live`.
+- **En directo:** la voz de Jean suena por su reproductor, con su lip-sync, cabeza y cejas con la prosodia. Cada frase nueva puede estrenar gesto; callado, escucha (bucle atento y asentimientos).
+- **Animaciones a mano:** `guest_animation` lanza cualquier clip de una sola vez del catálogo, el mismo que el de Sonia.
+- **Salida** (`leaving`): Jean se despide con la mano y sale por la izquierda mientras Sonia vuelve por la derecha. Plano entero de los dos y, al acabar, el de siempre. Unity avisa con `guest_state` `off`.
+- **Robustez:**
+  - Un `guest_mode` justo tras el hello (reconexión) se aplica sin animación.
+  - Si tras un hello no llega ninguno y Jean estaba dentro (el orquestador se reinició), se despide.
+  - Una secuencia que se queda a medias se completa sin animación (40 s entrando, 30 s saliendo).
+- **El cuerpo es intercambiable:** `GuestPresenter` solo habla con `IAvatarBody`: hablar o callar, a quién atiende, un gesto por nombre y saludar. Hoy lo da `ChoreographerBody` (el coreógrafo y la cabeza de siempre). El motor de comportamiento de Genies entrará con su propio adaptador de `IAvatarBody` en la raíz «Invitado», y el presentador lo prefiere al de respaldo sin cambiar nada más. Caminar, la mano, la voz y la cámara no son del cuerpo.
+- **La cámara** la impone `CameraFramingController.SetOverride` por encima de todos los planos, con el mismo travelling. El plano impuesto entra en `CollectShotPoses`, así que las presencias saben cuándo alguien está de verdad fuera de cuadro.
+- **Verificación:** *Sonia > Comprobar Modo Jean (en Play)* (`Editor/SoniaGuestCheck.cs`) recorre la secuencia sin orquestador, a paso fijo y con el audio a mano. Le hace hablar con una voz de verdad (`Temp/guestcheck/voz.wav`) y guarda capturas 9:16 de cada paso, más dos vistas de las manos (de detrás y de cerca) y las distancias entre palmas.
 
 ## 7. Protocolo nuevo
 

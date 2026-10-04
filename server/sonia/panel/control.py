@@ -589,6 +589,12 @@ class StandControl:
         if self.state.mode == "away":
             raise _BadRequest("Sonia está fuera. Tráela de vuelta primero.")
 
+    def _need_sonia_on_stage(self) -> None:
+        """Lo que hace o dice Sonia: ni fuera ni con el invitado del Modo Jean en su sitio."""
+        self._need_present()
+        if self._guest_active:
+            raise _BadRequest("Sonia le ha dejado el sitio a Jean: termina antes el Modo Jean.")
+
     async def _act_set_mode(self, params: dict[str, Any]) -> tuple[bool, str]:
         mode = params.get("mode")
         if mode not in MODES:
@@ -609,7 +615,7 @@ class StandControl:
 
     async def _act_say(self, params: dict[str, Any]) -> tuple[bool, str]:
         text = _text(params, "text", max_len=400, required=True)
-        self._need_present()
+        self._need_sonia_on_stage()
         if self.state.mode == "conversation":
             if not await self._engine.announce(text):
                 raise _BadRequest("Sonia no está conectada ahora mismo; prueba en unos segundos.")
@@ -677,7 +683,7 @@ class StandControl:
         return True, "Imagen retirada."
 
     async def _act_gesture(self, params: dict[str, Any]) -> tuple[bool, str]:
-        self._need_present()
+        self._need_sonia_on_stage()
         category = params.get("category")
         if category not in GESTURES:
             raise _BadRequest("Gesto no válido.")
@@ -685,7 +691,7 @@ class StandControl:
         return True, "Hecho."
 
     async def _act_animation(self, params: dict[str, Any]) -> tuple[bool, str]:
-        self._need_present()
+        self._need_sonia_on_stage()
         clip = _text(params, "clip", max_len=80, required=True)
         if self._hub.client_count == 0:
             raise _BadRequest("La pantalla de Sonia no está conectada.")
@@ -798,6 +804,7 @@ class StandControl:
         return True, "Sonia vuelve al personaje que trae la app (en todas las Sonias)."
 
     async def _act_greet(self, params: dict[str, Any]) -> tuple[bool, str]:
+        self._need_sonia_on_stage()
         return await self.greet("greeting")
 
     async def _act_showcase(self, params: dict[str, Any]) -> tuple[bool, str]:

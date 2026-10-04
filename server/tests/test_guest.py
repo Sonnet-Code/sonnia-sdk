@@ -405,6 +405,35 @@ async def test_el_micro_del_stand_solo_va_a_quien_lo_oye() -> None:
         assert link.stats()["listeners"] == 1
 
 
+async def test_mientras_habla_jean_no_se_oye_a_si_mismo(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(link_module, "GUEST_ECHO_TAIL_S", 0.3)
+    room = FakeRoom()
+    async with linked(room) as (link, sink):
+        await wait_until(lambda: room.ws is not None and link.connected)
+        await room.ws.send(json.dumps({"type": "viewers", "count": 1, "listeners": 1}))
+        await wait_until(lambda: link.listeners == 1)
+        # Jean habla: su voz va a Unity y el micro del stand le llega en silencio.
+        for seq in range(1, 6):
+            await room.ws.send(
+                encode_room_frame(KIND_GUEST_AUDIO, seq, 0, pcm(tone(0.06)), rate=RATE)
+            )
+        await wait_until(lambda: bool(sink.frames))
+        for _ in range(10):
+            link.push_mic(tone(0.02))
+        await room.wait_for(lambda: len(room.frames(KIND_STAND_AUDIO)) >= 1)
+        assert link.stats()["stand_muted"] is True
+        muted = room.frames(KIND_STAND_AUDIO)[0]
+        assert not any(muted.payload)
+        # Se calla, y pasado el eco vuelve el micro del stand.
+        await asyncio.sleep(0.4)
+        before = len(room.frames(KIND_STAND_AUDIO))
+        for _ in range(10):
+            link.push_mic(tone(0.02))
+        await room.wait_for(lambda: len(room.frames(KIND_STAND_AUDIO)) >= before + 2)
+        assert link.stats()["stand_muted"] is False
+        assert any(room.frames(KIND_STAND_AUDIO)[-1].payload)
+
+
 # ---------------------------------------------------------------------------
 # «Ver cámara»: el supervisor de la sala
 # ---------------------------------------------------------------------------
@@ -647,6 +676,15 @@ async def test_el_modo_jean_presenta_al_invitado_y_devuelve_a_sonia(tmp_path: An
         assert rig.rec.of_type("guest_animation")[-1] == {"type": "guest_animation", "clip": "Wave"}
         ok, message = await rig.control.act("set_mode", {"mode": "greeter"})
         assert not ok and "Modo Jean" in message
+        # Sonia no está en el stand: ni habla, ni saluda, ni hace gestos.
+        for action, params in (
+            ("say", {"text": "Hola"}),
+            ("greet", {}),
+            ("gesture", {"category": "dance"}),
+            ("animation", {"clip": "Wave"}),
+        ):
+            ok, message = await rig.control.act(action, params)
+            assert not ok and "Modo Jean" in message, action
         # Termina: se despide, Unity confirma y vuelve GPT-Live.
         ok, _ = await rig.control.act("set_guest_mode", {"active": False})
         assert ok

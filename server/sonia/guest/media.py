@@ -380,6 +380,13 @@ class GuestSpeechSegmenter:
     _silent_ms: float = 0.0
     _last_audio_at: float = 0.0
     level: float = 0.0
+    #: Cuándo llegó la última voz (no silencio) de Jean, en el reloj de ``push``.
+    last_voiced_at: float = float("-inf")
+
+    @property
+    def talking(self) -> bool:
+        """Cierto con una racha abierta (o empezando a juntar su colchón)."""
+        return self._talking or bool(self._buffer)
 
     def push(self, pcm: bytes, now: float | None = None) -> list[tuple[int, bytes, bool]]:
         now = time.monotonic() if now is None else now
@@ -391,6 +398,8 @@ class GuestSpeechSegmenter:
         self.level = level
         duration_ms = len(samples) * 1000.0 / self.rate
         voiced = level >= self.threshold
+        if voiced:
+            self.last_voiced_at = now
         out: list[tuple[int, bytes, bool]] = []
         if not self._talking:
             if not voiced and not self._buffer:

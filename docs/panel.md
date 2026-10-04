@@ -96,7 +96,8 @@ Cada deslizador se aplica en directo mientras se arrastra (como mucho cada 150 m
 Lo monta `static/jean.js` (con `jean.css` y el AudioWorklet `jean-worklet.js`). La media va por la sala `/api/guest` del panel de Cloudflare, así que la cámara y el micro solo funcionan desde la nube. En el panel local se puede probar la entrada y los gestos. Mientras el modo está activo:
 - GPT-Live está cerrada;
 - el modo saludos no saluda solo;
-- no se puede cambiar el modo de Sonia.
+- no se puede cambiar el modo de Sonia;
+- Sonia no dice ni hace nada desde el panel («Que Sonia diga…», «Saludar ahora», gestos y animaciones): ha dejado su sitio al invitado. Las imágenes sí se pueden mostrar.
 
 ## API HTTP del panel
 
@@ -141,7 +142,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   "guest_avatar": {"custom": false},
   "guest": {"available": true, "phase": "off", "name": "Jean", "unity_phase": null, "intro_ready": true,
             "link": {"connected": false, "viewers": 0, "listeners": 0, "video": {"fps": 0.0, "kbps": 0, "rtt_ms": null, "step": 1, "width": 640, "quality": 65, "lost": 0},
-                     "guest_level": 0.0, "guest_frames": 0, "dropped_audio": 0}},
+                     "guest_level": 0.0, "guest_frames": 0, "dropped_audio": 0, "stand_muted": false}},
   "camera_watch": {"available": true, "active": false, "open": false, "connected": false, "viewers": 0, "live": false,
                    "video": {"fps": 0.0, "kbps": 0, "rtt_ms": null, "step": 1, "width": 640, "quality": 65, "lost": 0}},
   "settings_sync": {"cloud": "online", "synced": true, "pending": [], "rev": 42},
@@ -165,7 +166,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   - `phase`: `off`, `intro`, `entering`, `live` o `leaving`.
   - `unity_phase`: la última que contó Unity.
   - `intro_ready`: si la frase con la que Sonia lo presenta ya está grabada.
-  - `link`: estado de la sala; quién mira (`viewers`) y quién oye el micro del stand (`listeners`, el modal de Jean); los fps, kbit/s, RTT y escalón de calidad del vídeo, el nivel de la voz de Jean y los bloques perdidos.
+  - `link`: estado de la sala; quién mira (`viewers`) y quién oye el micro del stand (`listeners`, el modal de Jean); los fps, kbit/s, RTT y escalón de calidad del vídeo, el nivel de la voz de Jean, los bloques perdidos y si el micro del stand le llega en silencio porque suena su propia voz (`stand_muted`).
 - `camera_watch` («Ver cámara»):
   - `available`: si hay nube y cámara; sin eso no aparece `camera_watch` en `capabilities`.
   - `active`: si alguien pidió ver la cámara y aún no se ha soltado.

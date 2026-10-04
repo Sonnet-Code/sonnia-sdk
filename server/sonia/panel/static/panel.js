@@ -752,6 +752,8 @@
     avatar_open: () => Boolean(avatarInfo().editor_open),
     avatar_custom: () => Boolean(avatarInfo().custom) && !avatarInfo().editor_open,
     guest_avatar_custom: () => Boolean(guestAvatarInfo().custom) && !avatarInfo().editor_open,
+    // Con el Modo Jean, Sonia ha dejado su sitio al invitado: ni habla ni hace gestos.
+    sonia_here: () => !guestActive(),
   };
 
   function avatarInfo() {
@@ -1712,6 +1714,7 @@
       class: "btn btn-small anim-play",
       "data-cap": "animations",
       "data-off-modes": "away",
+      "data-extra": "sonia_here",
       title: clip,
       text: prettyClipName(clip),
     });
