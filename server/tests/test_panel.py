@@ -100,8 +100,10 @@ async def make_panel_rig(
     server = FakeLiveServer()
     registry = build_default_registry(include_look=False)
     hub = Hub(settings.ws, sample_rate=RATE)
-    cache = VoiceCache(settings.panel.voice_cache_dir, settings.live)
     async with running(server) as live_connect, hub:
+        # Si algo graba voces (el calentamiento a los 20 s, «say» en modo saludos),
+        # lo hace contra el GPT-Live falso: ni una conexión a OpenAI.
+        cache = VoiceCache(settings.panel.voice_cache_dir, settings.live, connect=live_connect)
         engine = LiveEngine(
             settings,
             hub=hub,

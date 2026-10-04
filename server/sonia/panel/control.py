@@ -40,6 +40,7 @@ from sonia.ws import protocol as p
 
 if TYPE_CHECKING:  # pragma: no cover - solo para tipado
     from sonia.guest.mode import GuestMode
+    from sonia.guest.room import RoomSupervisor
     from sonia.live.engine import LiveEngine
     from sonia.live.voicecache import VoiceCache
     from sonia.ws.hub import Hub
@@ -351,6 +352,8 @@ class StandControl:
         self._avatar_editor_target = "sonia"
         #: Modo Jean (invitado sorpresa); solo con nube (lo engancha ``attach_guest``).
         self._guest: GuestMode | None = None
+        #: Sala de vídeo de Cloudflare, para «Ver cámara» (la engancha ``attach_room``).
+        self._room: RoomSupervisor | None = None
         #: Segundos de sesión de arranques anteriores del mismo día.
         self._usage_base = 0.0
         self._last_usage_save = time.monotonic()
@@ -369,11 +372,17 @@ class StandControl:
         caps = list(CAPABILITIES)
         if self._guest is not None:
             caps.append("guest_mode")
+        if self._room is not None and self._room.can_watch:
+            caps.append("camera_watch")
         return caps
 
     def attach_guest(self, guest: GuestMode) -> None:
         """Engancha el Modo Jean (lo crea la CLI cuando hay nube)."""
         self._guest = guest
+
+    def attach_room(self, room: RoomSupervisor) -> None:
+        """Engancha la sala de vídeo para «Ver cámara» (la crea la CLI cuando hay nube)."""
+        self._room = room
 
     @property
     def guest_intro_lines(self) -> list[str]:
@@ -421,6 +430,8 @@ class StandControl:
     async def stop(self) -> None:
         if self._guest is not None:
             await self._guest.close()
+        if self._room is not None:
+            await self._room.close()
         self._save_usage()
         tasks = [t for t in [self._loop_task, *self._tasks] if t is not None]
         for task in tasks:
@@ -569,7 +580,9 @@ class StandControl:
         except Exception as exc:
             logger.exception("La acción del panel %s falló", action)
             return False, f"No se pudo: {exc}"
-        logger.info("Panel: %s %s -> %s", action, _summary(params), result[1])
+        # Las renovaciones periódicas (el visor de «Ver cámara») no llenan el registro.
+        level = logging.DEBUG if params.get("keepalive") is True else logging.INFO
+        logger.log(level, "Panel: %s %s -> %s", action, _summary(params), result[1])
         return result
 
     def _need_present(self) -> None:
@@ -744,6 +757,21 @@ class StandControl:
         if not ok:
             raise _BadRequest(message)
         return True, message
+
+    async def _act_watch_camera(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Ver cámara»: la sala solo con vídeo. No toca GPT-Live, Unity ni el micro."""
+        active = _flag(params, "active")
+        room = self._room
+        if room is None or not room.can_watch:
+            raise _BadRequest(
+                "Esta Sonia no puede enseñar la cámara: hace falta conectarla a la nube "
+                "(PANEL_CLOUD_TOKEN) y tener cámara."
+            )
+        if not active:
+            room.unwatch()
+            return True, "La cámara deja de salir del stand en cuanto no quede nadie mirando."
+        room.watch()
+        return True, "Cámara en directo: sale del stand solo mientras alguien la mira."
 
     async def _act_guest_animation(self, params: dict[str, Any]) -> tuple[bool, str]:
         clip = _text(params, "clip", max_len=80, required=True)
@@ -1093,6 +1121,11 @@ class StandControl:
                 self._guest.status()
                 if self._guest is not None
                 else {"available": False, "phase": "off"}
+            ),
+            "camera_watch": (
+                self._room.watch_status()
+                if self._room is not None
+                else {"available": False, "active": False, "live": False, "viewers": 0}
             ),
             "settings_sync": self._settings_sync(),
             "last_error": snap.get("last_error") or None,

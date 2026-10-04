@@ -258,7 +258,9 @@ class FakeSink:
 
 
 @contextlib.asynccontextmanager
-async def linked(room: FakeRoom) -> AsyncIterator[tuple[GuestLink, FakeSink]]:
+async def linked(
+    room: FakeRoom, *, guest_media: bool = True
+) -> AsyncIterator[tuple[GuestLink, FakeSink]]:
     from websockets.asyncio.client import connect as client_connect
     from websockets.asyncio.server import serve
 
@@ -289,6 +291,7 @@ async def linked(room: FakeRoom) -> AsyncIterator[tuple[GuestLink, FakeSink]]:
             grab=grab,
             connect=connect,
         )
+        link.set_guest_media(guest_media)
         task = asyncio.create_task(link.run())
         try:
             yield link, sink
@@ -366,6 +369,177 @@ async def test_la_voz_de_jean_llega_a_unity_por_rachas() -> None:
         assert abs((len(last) - 12) // 2 - int(0.3 * RATE)) <= 1
 
 
+async def test_solo_mirando_sale_el_video_sin_micro_ni_voz() -> None:
+    room = FakeRoom()
+    async with linked(room, guest_media=False) as (link, sink):
+        await wait_until(lambda: room.ws is not None and link.connected)
+        await room.ws.send(json.dumps({"type": "viewers", "count": 1, "listeners": 1}))
+        await room.wait_for(lambda: len(room.frames(KIND_VIDEO)) >= 1)
+        for _ in range(10):
+            link.push_mic(tone(0.02))
+        await room.ws.send(encode_room_frame(KIND_GUEST_AUDIO, 1, 0, pcm(tone(0.3)), rate=RATE))
+        await asyncio.sleep(0.3)
+        # «Ver cámara»: el micro del stand no sale y la voz de nadie llega a Unity.
+        assert room.frames(KIND_STAND_AUDIO) == []
+        assert sink.frames == []
+        assert link.stats()["guest_frames"] == 0
+
+
+async def test_el_micro_del_stand_solo_va_a_quien_lo_oye() -> None:
+    room = FakeRoom()
+    async with linked(room) as (link, _):
+        await wait_until(lambda: room.ws is not None and link.connected)
+        # Dos mirando con «Ver cámara» y ningún modal del Modo Jean: sin micro.
+        await room.ws.send(json.dumps({"type": "viewers", "count": 2, "listeners": 0}))
+        await wait_until(lambda: link.viewers == 2)
+        for _ in range(10):
+            link.push_mic(tone(0.02))
+        await asyncio.sleep(0.2)
+        assert room.frames(KIND_STAND_AUDIO) == []
+        # Entra el modal de Jean: ya oye el stand.
+        await room.ws.send(json.dumps({"type": "viewers", "count": 3, "listeners": 1}))
+        await wait_until(lambda: link.listeners == 1)
+        for _ in range(10):
+            link.push_mic(tone(0.02))
+        await room.wait_for(lambda: len(room.frames(KIND_STAND_AUDIO)) >= 1)
+        assert link.stats()["listeners"] == 1
+
+
+# ---------------------------------------------------------------------------
+# «Ver cámara»: el supervisor de la sala
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def quick_watch(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sonia.guest.room as room_module
+
+    monkeypatch.setattr(room_module, "WATCH_TICK_S", 0.02)
+    monkeypatch.setattr(room_module, "WATCH_GRACE_S", 0.4)
+    monkeypatch.setattr(room_module, "WATCH_CLOSE_GRACE_S", 0.05)
+
+
+class FakeEngine:
+    def __init__(self) -> None:
+        self.listeners: list[Any] = []
+
+    def add_mic_listener(self, listener: Any) -> None:
+        self.listeners.append(listener)
+
+    def remove_mic_listener(self, listener: Any) -> None:
+        if listener in self.listeners:
+            self.listeners.remove(listener)
+
+
+async def test_ver_camara_abre_la_sala_y_la_cierra_sin_nadie_mirando(quick_watch: None) -> None:
+    link = FakeLink()
+    engine = FakeEngine()
+    released: list[bool] = []
+
+    async def release() -> None:
+        released.append(True)
+
+    room = make_room(link, engine, release_camera=release)
+    assert room.watch() is True
+    await wait_until(lambda: link.running)
+    # Solo vídeo: ni micro del stand ni voz de Jean.
+    assert not link.guest_media and engine.listeners == []
+    assert room.watch_status()["active"] and not room.watch_status()["live"]
+    link.viewers = 1
+    assert room.watch_status()["live"] and room.watch_status()["viewers"] == 1
+    await asyncio.sleep(0.6)  # más que el margen: con alguien mirando sigue abierta
+    assert link.running and room.watching
+    assert room.watch() is False  # renovar no la vuelve a abrir
+    assert link.runs == 1
+    link.viewers = 0
+    await wait_until(lambda: not link.running, limit=2.0)
+    assert not room.watching and released == [True]
+    await room.close()
+
+
+async def test_cerrar_corta_la_camara_casi_al_momento(quick_watch: None) -> None:
+    import sonia.guest.room as room_module
+
+    room_module.WATCH_GRACE_S = 5.0
+    link = FakeLink()
+    room = make_room(link, FakeEngine())
+    room.watch()
+    link.viewers = 1
+    await wait_until(lambda: link.running)
+    room.unwatch()
+    await asyncio.sleep(0.2)
+    assert link.running  # aún queda alguien mirando
+    link.viewers = 0
+    await wait_until(lambda: not link.running, limit=1.0)
+    await room.close()
+
+
+async def test_con_el_modo_jean_activo_el_visor_se_suma(quick_watch: None) -> None:
+    link = FakeLink()
+    engine = FakeEngine()
+    room = make_room(link, engine)
+    room.hold_guest()
+    await wait_until(lambda: link.running)
+    assert link.guest_media and engine.listeners == [link.push_mic]
+    room.watch()
+    link.viewers = 1
+    await asyncio.sleep(0.1)
+    assert link.runs == 1  # la misma sala
+    # Termina el Modo Jean: fuera el audio, la cámara sigue para quien mira.
+    await room.release_guest()
+    assert link.running and not link.guest_media and engine.listeners == []
+    link.viewers = 0
+    await wait_until(lambda: not link.running, limit=2.0)
+    await room.close()
+
+
+async def test_ver_camara_desde_el_panel_no_toca_gpt_live_ni_unity(
+    tmp_path: Any, quick_watch: None, caplog: pytest.LogCaptureFixture
+) -> None:
+    from tests.test_panel import make_panel_rig
+
+    async with make_panel_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        ok, message = await rig.control.act("watch_camera", {"active": True})
+        assert not ok and "nube" in message
+        status = rig.control.status()
+        assert "camera_watch" not in status["capabilities"]
+        assert status["camera_watch"] == {
+            "available": False,
+            "active": False,
+            "live": False,
+            "viewers": 0,
+        }
+        link = FakeLink()
+        rig.control.attach_room(make_room(link, rig.engine, camera_available=False))
+        assert "camera_watch" not in rig.control.status()["capabilities"]  # sin cámara
+        rig.control.attach_room(make_room(link, rig.engine))
+        assert "camera_watch" in rig.control.status()["capabilities"]
+        sent_before = len(rig.rec.messages)
+        ok, message = await rig.control.act("watch_camera", {"active": True})
+        assert ok and "mientras alguien" in message
+        await wait_until(lambda: link.running)
+        watch = rig.control.status()["camera_watch"]
+        assert watch["active"] and watch["open"] and not watch["live"]
+        link.viewers = 2
+        assert rig.control.status()["camera_watch"]["live"]
+        assert rig.control.status()["camera_watch"]["viewers"] == 2
+        # Las renovaciones del visor no llenan el registro.
+        with caplog.at_level("INFO", logger="sonia.panel.control"):
+            ok, _ = await rig.control.act("watch_camera", {"active": True, "keepalive": True})
+        assert ok and not [r for r in caplog.records if "watch_camera" in r.getMessage()]
+        # GPT-Live sigue abierto y a Unity no le llega nada nuevo.
+        await asyncio.sleep(0.1)
+        assert rig.engine.connected and conn.of_type("session.close") == []
+        assert len(rig.rec.messages) == sent_before
+        assert not link.guest_media
+        ok, _ = await rig.control.act("watch_camera", {"active": False})
+        assert ok
+        link.viewers = 0
+        await wait_until(lambda: not link.running, limit=2.0)
+        assert rig.control.status()["camera_watch"]["active"] is False
+
+
 # ---------------------------------------------------------------------------
 # GuestMode dentro del panel (con un enlace falso)
 # ---------------------------------------------------------------------------
@@ -377,10 +551,18 @@ class FakeLink:
     def __init__(self, *, enabled: bool = True) -> None:
         self.enabled = enabled
         self.running = False
+        self.runs = 0
         self.mic_blocks = 0
+        self.guest_media = False
+        self.viewers = 0
+
+    @property
+    def connected(self) -> bool:
+        return self.running
 
     async def run(self) -> None:
         self.running = True
+        self.runs += 1
         try:
             await asyncio.Event().wait()
         finally:
@@ -389,8 +571,17 @@ class FakeLink:
     def push_mic(self, block: np.ndarray) -> None:
         self.mic_blocks += 1
 
+    def set_guest_media(self, enabled: bool) -> None:
+        self.guest_media = enabled
+
     def stats(self) -> dict[str, Any]:
-        return {"connected": self.running, "viewers": 0}
+        return {"connected": self.running, "viewers": self.viewers, "video": {"fps": 0.0}}
+
+
+def make_room(link: FakeLink, engine: Any, **kwargs: Any) -> Any:
+    from sonia.guest.room import RoomSupervisor
+
+    return RoomSupervisor(link, engine, **kwargs)  # type: ignore[arg-type]
 
 
 INTRO = "¡Atención, DevFest! Acaba de llegar un invitado sorpresa."
@@ -412,7 +603,7 @@ async def test_el_modo_jean_presenta_al_invitado_y_devuelve_a_sonia(tmp_path: An
         guest = GuestMode(
             hub=rig.hub,
             engine=rig.engine,
-            link=link,  # type: ignore[arg-type]
+            room=make_room(link, rig.engine),
             voice_cache=rig.cache,
             intro_lines=rig.control.guest_intro_lines,
             unity_rate=RATE,
@@ -441,7 +632,7 @@ async def test_el_modo_jean_presenta_al_invitado_y_devuelve_a_sonia(tmp_path: An
             "name": "Jean",
             "sample_rate": RATE,
         }
-        assert guest.phase == "entering" and link.running
+        assert guest.phase == "entering" and link.running and link.guest_media
         # El micro del stand va al enlace mientras dura el modo.
         await rig.engine.push_mic(np.zeros(480, dtype=np.float32))
         assert link.mic_blocks == 1
@@ -464,7 +655,7 @@ async def test_el_modo_jean_presenta_al_invitado_y_devuelve_a_sonia(tmp_path: An
         )
         await rig.client.send(json.dumps({"type": "guest_state", "phase": "off"}))
         await wait_until(lambda: guest.phase == "off")
-        assert not link.running
+        assert not link.running and not link.guest_media
         await rig.engine.push_mic(np.zeros(480, dtype=np.float32))
         assert link.mic_blocks == 1  # ya no se oye desde fuera
         await rig.conn(2)
@@ -487,7 +678,7 @@ async def test_sin_unity_el_modo_jean_sigue_igual(
         guest = GuestMode(
             hub=rig.hub,
             engine=rig.engine,
-            link=link,  # type: ignore[arg-type]
+            room=make_room(link, rig.engine),
             voice_cache=rig.cache,
             intro_lines=[],
             unity_rate=RATE,
@@ -507,7 +698,7 @@ async def test_sin_unity_el_modo_jean_sigue_igual(
             GuestMode(
                 hub=rig.hub,
                 engine=rig.engine,
-                link=FakeLink(enabled=False),  # type: ignore[arg-type]
+                room=make_room(FakeLink(enabled=False), rig.engine),
                 voice_cache=None,
                 intro_lines=[],
                 unity_rate=RATE,

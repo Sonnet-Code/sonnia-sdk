@@ -3,8 +3,9 @@
 Fases: ``off → intro → entering → live → leaving → off``.
 
 1. ``intro``: GPT-Live se cierra (lo hace ``StandControl`` al ver el modo activo),
-   se abre la sala de Cloudflare para que Jean ya vea la cámara, y Sonia dice
-   una frase grabada de ``assets/showcase/invitado.md`` (sin gastar).
+   la sala de Cloudflare se abre con audio (``RoomSupervisor.hold_guest``) para
+   que Jean ya vea y oiga el stand, y Sonia dice una frase grabada de
+   ``assets/showcase/invitado.md`` (sin gastar).
 2. ``entering``: Unity recibe ``guest_mode`` {``phase``: ``enter``}: entra el
    avatar de Jean, se dan la mano y Sonia sale. Unity avisa con
    ``guest_state`` {``phase``: ``live``}.
@@ -29,7 +30,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from sonia.ws import protocol as p
 
 if TYPE_CHECKING:  # pragma: no cover - solo para tipado
-    from sonia.guest.link import GuestLink
+    from sonia.guest.room import RoomSupervisor
     from sonia.live.engine import LiveEngine
     from sonia.live.voicecache import VoiceCache
     from sonia.ws.hub import Hub
@@ -56,7 +57,7 @@ class GuestMode:
         *,
         hub: Hub,
         engine: LiveEngine,
-        link: GuestLink,
+        room: RoomSupervisor,
         voice_cache: VoiceCache | None,
         intro_lines: list[str],
         unity_rate: int,
@@ -66,7 +67,7 @@ class GuestMode:
     ) -> None:
         self._hub = hub
         self._engine = engine
-        self._link = link
+        self._room = room
         self._voice_cache = voice_cache
         self._intro_lines = intro_lines
         self._unity_rate = unity_rate
@@ -78,7 +79,6 @@ class GuestMode:
         self._unity_live = asyncio.Event()
         self._unity_off = asyncio.Event()
         self._sequence: asyncio.Task[None] | None = None
-        self._link_task: asyncio.Task[None] | None = None
 
     @property
     def phase(self) -> GuestPhase:
@@ -90,7 +90,7 @@ class GuestMode:
 
     @property
     def available(self) -> bool:
-        return self._link.enabled
+        return self._room.available
 
     def status(self) -> dict[str, Any]:
         return {
@@ -99,7 +99,7 @@ class GuestMode:
             "name": self._name,
             "unity_phase": self._unity_phase,
             "intro_ready": self._intro_clip() is not None,
-            "link": self._link.stats(),
+            "link": self._room.link.stats(),
         }
 
     # -- control ------------------------------------------------------------------
@@ -107,7 +107,7 @@ class GuestMode:
     async def start(self) -> tuple[bool, str]:
         if self._phase != "off":
             return True, "El Modo Jean ya está en marcha."
-        if not self._link.enabled:
+        if not self._room.available:
             return (
                 False,
                 "Esta Sonia no está conectada a la nube: el Modo Jean necesita PANEL_CLOUD_TOKEN.",
@@ -115,7 +115,7 @@ class GuestMode:
         self._phase = "intro"
         logger.info("Modo Jean: empieza (invitado %s)", self._name)
         await self._on_change()
-        self._start_link()
+        self._room.hold_guest()
         self._sequence = asyncio.create_task(self._enter(), name="guest-enter")
         return True, f"Sonia presenta a {self._name}: en unos segundos el stand te oye."
 
@@ -138,9 +138,9 @@ class GuestMode:
             self._unity_off.set()
 
     async def close(self) -> None:
-        """Al apagar el orquestador: corta la sala y la secuencia sin esperar a Unity."""
+        """Al apagar el orquestador: corta la secuencia y el audio sin esperar a Unity."""
         await self._cancel_sequence()
-        await self._stop_link()
+        await self._room.release_guest()
 
     # -- secuencia ----------------------------------------------------------------
 
@@ -190,7 +190,7 @@ class GuestMode:
         except Exception:
             logger.exception("Modo Jean: fallo en la salida")
         finally:
-            await self._stop_link()
+            await self._room.release_guest()
             self._phase = "off"
             logger.info("Modo Jean: terminado")
             with contextlib.suppress(Exception):
@@ -209,19 +209,3 @@ class GuestMode:
             return None
         ready = [(text, pcm) for text in self._intro_lines if (pcm := cache.get(text)) is not None]
         return self._rng.choice(ready) if ready else None
-
-    # -- media ----------------------------------------------------------------------
-
-    def _start_link(self) -> None:
-        if self._link_task is not None:
-            return
-        self._engine.add_mic_listener(self._link.push_mic)
-        self._link_task = asyncio.create_task(self._link.run(), name="guest-link")
-
-    async def _stop_link(self) -> None:
-        self._engine.remove_mic_listener(self._link.push_mic)
-        task = self._link_task
-        self._link_task = None
-        if task is not None:
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)

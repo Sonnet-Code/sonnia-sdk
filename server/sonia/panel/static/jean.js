@@ -3,10 +3,11 @@
  * Sonnet Code) entre en el stand como invitado sorpresa desde donde esté.
  *
  * Se monta solo al cargar: index.html únicamente incluye este script (después
- * de panel.js) y jean.css. El modal:
+ * de panel.js y room.js) y jean.css. El modal:
  *   - activa y termina el Modo Jean (acción set_guest_mode) y muestra la fase;
- *   - pinta la cámara del stand (JPEG por /api/guest) y confirma cada fotograma
- *     (ack), con lo que el stand ajusta tamaño, calidad y fps a la red;
+ *   - pinta la cámara del stand (visor de room.js, por /api/guest) desde que se
+ *     abre: pide la sala con watch_camera mientras está abierto, así que Jean
+ *     ve el stand antes de entrar;
  *   - reproduce el micro del stand y manda el de Jean (AudioWorklet en
  *     jean-worklet.js), con micro abierto o pulsar para hablar;
  *   - lanza animaciones del avatar de Jean (acción guest_animation);
@@ -17,16 +18,12 @@
 "use strict";
 
 (() => {
-  const STORAGE_KEY = "sonia-panel.instance";
-  const KIND_VIDEO = 1;
-  const KIND_STAND_AUDIO = 2;
+  const Room = window.SoniaRoom;
   const KIND_GUEST_AUDIO = 3;
-  const HEADER_BYTES = 16;
+  const HEADER_BYTES = Room.HEADER_BYTES;
   const MAX_BUFFERED = 64 * 1024; // más que esto pendiente de enviar y se tira la voz
   const STATUS_POLL_MS = 1000;
-  const RETRY_MIN_MS = 1000;
-  const RETRY_MAX_MS = 10000;
-  const ACTION_TIMEOUT_MS = 15000;
+  const WATCH_KEEPALIVE_MS = 10000; // renovación de la sala mientras el modal está abierto
 
   const PHASES = {
     off: "Sonia está sola en el stand.",
@@ -39,14 +36,11 @@
   const state = {
     ui: {},
     open: false,
-    ws: null,
-    retryMs: RETRY_MIN_MS,
-    retryTimer: null,
-    failedConnects: 0,
+    viewer: null, // visor de la sala (room.js)
+    watchTimer: null,
     statusTimer: null,
     status: null,
     phase: "off",
-    agentConnected: false,
     audio: null, // { ctx, player, playerGain, capture, stream, sink }
     micMode: "open", // "open" | "ptt"
     micOn: false,
@@ -54,10 +48,6 @@
     seqOut: 0,
     sentBlocks: 0,
     droppedBlocks: 0,
-    framesShown: 0,
-    fpsShown: 0,
-    lastFpsAt: 0,
-    remoteStats: null,
     animationsKey: null, // null: aún no se ha pintado ninguna lista
   };
 
@@ -80,56 +70,11 @@
     if (node && node.textContent !== text) node.textContent = text;
   }
 
-  function instanceId() {
-    try {
-      return localStorage.getItem(STORAGE_KEY) || null;
-    } catch {
-      return null;
-    }
-  }
-
-  function withInstance(url) {
-    const id = instanceId();
-    if (!id) return url;
-    return `${url}${url.includes("?") ? "&" : "?"}instance=${encodeURIComponent(id)}`;
-  }
-
-  /** El panel local del orquestador (127.0.0.1:8780) no tiene sala de vídeo. */
-  function isLocalPanel() {
-    return /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname) && location.port === "8780";
-  }
-
   async function sendAction(action, params = {}) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ACTION_TIMEOUT_MS);
-    try {
-      const body = { action, ...params };
-      const id = instanceId();
-      if (id) body.instance = id;
-      const response = await fetch("/api/action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Sonia-Panel": "1" },
-        body: JSON.stringify(body),
-        credentials: "same-origin",
-        signal: controller.signal,
-      });
-      let data = null;
-      try {
-        data = await response.json();
-      } catch {
-        data = null;
-      }
-      const ok = response.ok && data && data.ok !== false;
-      const message = (data && typeof data.message === "string" && data.message) || (ok ? "Hecho." : "No se pudo.");
-      note(message, ok ? "ok" : "error");
-      return ok;
-    } catch {
-      note("No se pudo enviar: revisa la conexión.", "error");
-      return false;
-    } finally {
-      clearTimeout(timer);
-      pollStatus();
-    }
+    const result = await Room.action(action, params);
+    note(result.message, result.ok ? "ok" : "error");
+    pollStatus();
+    return result.ok;
   }
 
   function note(message, kind = "info") {
@@ -249,8 +194,20 @@
       ),
     );
     document.body.append(ui.dialog);
+    state.viewer = Room.createViewer({
+      role: "guest",
+      canvas: ui.canvas,
+      empty: ui.videoEmpty,
+      stats: ui.stats,
+      conn: ui.conn,
+      onStandAudio: (pcm, rate) => {
+        if (state.audio) state.audio.player.port.postMessage({ pcm, rate }, [pcm.buffer]);
+      },
+      extraStats: () => (state.droppedBlocks ? `voz perdida: ${state.droppedBlocks}` : ""),
+    });
 
     ui.close.addEventListener("click", closeDialog);
+    ui.dialog.addEventListener("cancel", onDialogClosed);
     ui.dialog.addEventListener("close", onDialogClosed);
     ui.start.addEventListener("click", () => sendAction("set_guest_mode", { active: true }));
     ui.stop.addEventListener("click", () => sendAction("set_guest_mode", { active: false }));
@@ -303,35 +260,47 @@
     renderMic();
     pollStatus();
     state.statusTimer = setInterval(pollStatus, STATUS_POLL_MS);
-    if (isLocalPanel()) {
-      setConn("off", "La cámara y el micro solo van desde el panel de la nube (sonia.sonnetcode.com). Aquí puedes probar la entrada y los gestos.");
+    state.viewer.reset();
+    if (Room.isLocalPanel()) {
+      state.viewer.setConn("off", "La cámara y el micro solo van desde el panel de la nube (sonia.sonnetcode.com). Aquí puedes probar la entrada y los gestos.");
       return;
     }
+    // Jean ve el stand desde que abre el modal, también antes de entrar.
+    keepWatching();
+    state.watchTimer = setInterval(() => keepWatching(true), WATCH_KEEPALIVE_MS);
     // Abrir el modal es un gesto del usuario: el audio del stand puede empezar ya.
     try {
       await ensureAudio();
     } catch {
       note("Este navegador no deja reproducir el sonido del stand.", "error");
     }
-    connect();
+    state.viewer.start();
+  }
+
+  /** Pide (o renueva) la sala con vídeo. Sin avisos: si falla, el visor ya lo dice. */
+  function keepWatching(keepalive = false) {
+    Room.action("watch_camera", keepalive ? { active: true, keepalive: true } : { active: true });
   }
 
   function closeDialog() {
     state.ui.dialog.close();
+    // Al momento: Chrome retrasa el evento close hasta el siguiente fotograma,
+    // que no llega con la pestaña en segundo plano.
+    onDialogClosed();
   }
 
   function onDialogClosed() {
+    if (!state.open) return;
     state.open = false;
     clearInterval(state.statusTimer);
     state.statusTimer = null;
-    clearTimeout(state.retryTimer);
-    state.retryTimer = null;
     stopMic();
-    if (state.ws) {
-      const ws = state.ws;
-      state.ws = null;
-      ws.close(1000, "Modal cerrado");
+    if (state.watchTimer) {
+      clearInterval(state.watchTimer);
+      state.watchTimer = null;
+      Room.action("watch_camera", { active: false });
     }
+    state.viewer.stop();
     if (state.audio) state.audio.player.port.postMessage({ reset: true });
   }
 
@@ -340,7 +309,7 @@
   async function pollStatus() {
     if (!state.open) return;
     try {
-      const response = await fetch(withInstance("/api/status"), { credentials: "same-origin", cache: "no-store" });
+      const response = await fetch(Room.withInstance("/api/status"), { credentials: "same-origin", cache: "no-store" });
       if (!response.ok) return;
       const status = await response.json();
       state.status = status;
@@ -419,120 +388,6 @@
       .trim();
   }
 
-  // ------------------------------------------------------------ conexión con la sala
-
-  function setConn(kind, text) {
-    const ui = state.ui;
-    ui.conn.dataset.state = kind;
-    setText(ui.conn, text);
-  }
-
-  function connect() {
-    if (!state.open || state.ws) return;
-    const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(withInstance(`${scheme}//${location.host}/api/guest`));
-    ws.binaryType = "arraybuffer";
-    state.ws = ws;
-    let opened = false;
-    setConn("connecting", "Conectando con el stand…");
-    ws.addEventListener("open", () => {
-      opened = true;
-      state.retryMs = RETRY_MIN_MS;
-      state.failedConnects = 0;
-      setConn(state.agentConnected ? "live" : "waiting", state.agentConnected ? "Conectado al stand." : "Esperando a que Sonia se conecte…");
-    });
-    ws.addEventListener("message", (event) => onMessage(ws, event.data));
-    ws.addEventListener("close", () => {
-      if (state.ws !== ws) return;
-      state.ws = null;
-      state.agentConnected = false;
-      if (!opened) state.failedConnects += 1;
-      if (!state.open) return;
-      const delay = state.retryMs;
-      state.retryMs = Math.min(RETRY_MAX_MS, state.retryMs * 2);
-      setConn(
-        "retry",
-        state.failedConnects >= 3 && !opened
-          ? "No hay sala de vídeo aquí. El Modo Jean va desde sonia.sonnetcode.com con la Sonia conectada."
-          : `Conexión cortada. Reintento en ${Math.round(delay / 1000)} s…`,
-      );
-      state.retryTimer = setTimeout(connect, delay);
-    });
-  }
-
-  function onMessage(ws, data) {
-    if (typeof data === "string") {
-      let message = null;
-      try {
-        message = JSON.parse(data);
-      } catch {
-        return;
-      }
-      if (!message || typeof message !== "object") return;
-      if (message.type === "agent") {
-        state.agentConnected = message.connected === true;
-        setConn(state.agentConnected ? "live" : "waiting", state.agentConnected ? "Conectado al stand." : "La Sonia del stand no está conectada a la sala.");
-      } else if (message.type === "stats") {
-        state.remoteStats = message;
-        renderStats();
-      }
-      return;
-    }
-    if (!(data instanceof ArrayBuffer) || data.byteLength < HEADER_BYTES) return;
-    const view = new DataView(data);
-    if (view.getUint8(0) !== 0x53 || view.getUint8(1) !== 0x47 || view.getUint8(2) !== 1) return;
-    const kind = view.getUint8(3);
-    const seq = view.getUint32(4, true);
-    const t = view.getUint32(8, true);
-    const rate = view.getUint16(12, true);
-    if (kind === KIND_VIDEO) showFrame(ws, data, seq, t);
-    else if (kind === KIND_STAND_AUDIO && state.audio && rate) {
-      const pcm = new Int16Array(data.slice(HEADER_BYTES));
-      state.audio.player.port.postMessage({ pcm, rate }, [pcm.buffer]);
-    }
-  }
-
-  async function showFrame(ws, data, seq, t) {
-    const ui = state.ui;
-    try {
-      const bitmap = await createImageBitmap(new Blob([new Uint8Array(data, HEADER_BYTES)], { type: "image/jpeg" }));
-      if (ui.canvas.width !== bitmap.width || ui.canvas.height !== bitmap.height) {
-        ui.canvas.width = bitmap.width;
-        ui.canvas.height = bitmap.height;
-      }
-      ui.canvas.getContext("2d").drawImage(bitmap, 0, 0);
-      bitmap.close();
-      ui.videoEmpty.hidden = true;
-      countFrame();
-    } catch {
-      // Un fotograma roto no para el vídeo: se confirma igual para no atascar la ventana.
-    }
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ack", seq, t }));
-  }
-
-  function countFrame() {
-    const now = performance.now();
-    state.framesShown += 1;
-    if (now - state.lastFpsAt >= 1000) {
-      state.fpsShown = (state.framesShown * 1000) / Math.max(1, now - state.lastFpsAt);
-      state.framesShown = 0;
-      state.lastFpsAt = now;
-      renderStats();
-    }
-  }
-
-  function renderStats() {
-    const remote = state.remoteStats;
-    const video = remote && remote.video ? remote.video : null;
-    const parts = [`${state.fpsShown.toFixed(0)} fps`];
-    if (video) {
-      parts.push(`${Math.round(video.kbps || 0)} kbit/s`, `${video.width || "?"} px · calidad ${video.quality || "?"}`);
-      if (typeof video.rtt_ms === "number") parts.push(`ida y vuelta ${Math.round(video.rtt_ms)} ms`);
-    }
-    if (state.droppedBlocks) parts.push(`voz perdida: ${state.droppedBlocks}`);
-    setText(state.ui.stats, parts.join(" · "));
-  }
-
   // ------------------------------------------------------------ audio
 
   async function ensureAudio() {
@@ -600,11 +455,12 @@
     const level = typeof data.level === "number" ? data.level : 0;
     state.ui.meterFill.style.width = `${Math.min(100, Math.sqrt(level) * 220)}%`;
     if (!transmitting() || !data.pcm) return;
-    const ws = state.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const ws = state.viewer.socket;
+    if (!ws) return;
     if (ws.bufferedAmount > MAX_BUFFERED) {
       // La red no da abasto: mejor un hueco que un retraso que crece.
       state.droppedBlocks += 1;
+      state.viewer.renderStats();
       return;
     }
     const pcm = data.pcm;

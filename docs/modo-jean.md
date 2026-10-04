@@ -31,7 +31,7 @@ Jean (navegador, España)                   Cloudflare                          
 ```
 
 - **`GuestRoom`** es un Durable Object nuevo, uno por Sonia (`idFromName(<id de la Sonia>)`, con `locationHint: "enam"` para que viva cerca del stand). Solo reenvía: los frames del stand van a los navegadores y el audio de Jean va al orquestador. No guarda nada y no toca a `ControlRoom`, así que los mensajes de estado y las acciones van por un canal distinto del de la media.
-- **El orquestador** abre `/guest/agent` (mismo `PANEL_CLOUD_TOKEN`) solo mientras el Modo Jean está activo, y manda vídeo solo si alguien mira.
+- **El orquestador** abre `/guest/agent` (mismo `PANEL_CLOUD_TOKEN`) solo mientras la sala hace falta: con el Modo Jean activo o con alguien en «Ver cámara» (`docs/panel.md`). Manda vídeo solo si alguien mira, y el micro del stand solo con el Modo Jean y a su modal.
 - **Las acciones** (activar, terminar, animaciones) van por la API de siempre (`POST /api/action`) y llegan a `StandControl` como cualquier otra.
 
 ### 2.1 Por qué un relé por WebSocket y no WebRTC con Cloudflare Realtime
@@ -98,7 +98,8 @@ Cada fotograma JPEG lleva su número y la hora de envío del stand. El navegador
 |---|---|
 | `media.py` | Formato binario de los frames de la sala, `VideoRateController` y remuestreo y paso a int16 del micro. Sin dependencias de red; con tests. |
 | `link.py` | `GuestLink`: WebSocket a `/guest/agent` con reconexión de espera creciente (0,5 a 10 s). Manda la cámara según el controlador y el micro del stand. Recibe el audio de Jean, lo segmenta en rachas y lo pasa al hub (`SNGU`). Calcula las estadísticas. |
-| `mode.py` | `GuestMode`: la máquina de estados `off → intro → entering → live → leaving → off`. Coordina la frase de Sonia, los mensajes a Unity, el `GuestLink` y la vuelta al modo de antes. Nada de esto tumba el proceso: cada paso tiene tiempo límite y, si Unity no contesta, se sigue. |
+| `mode.py` | `GuestMode`: la máquina de estados `off → intro → entering → live → leaving → off`. Coordina la frase de Sonia, los mensajes a Unity, la sala y la vuelta al modo de antes. Nada de esto tumba el proceso: cada paso tiene tiempo límite y, si Unity no contesta, se sigue. |
+| `room.py` | `RoomSupervisor`: abre `GuestLink` mientras lo necesiten el Modo Jean (con micro del stand y voz de Jean) o «Ver cámara» (solo vídeo, hasta que no quede nadie mirando). Lo comparten los dos: el visor se suma a la sala del Modo Jean y al revés. |
 
 Integración en `StandControl`, cuando el principal confirme la base:
 
@@ -108,7 +109,7 @@ Integración en `StandControl`, cuando el principal confirme la base:
 - **Estado:** `guest` {`phase`, `link`, `viewers`, `stats`, `animations`}.
 - **Capacidad:** `guest_mode`.
 - Mientras el modo está activo no se abre GPT-Live, aunque el modo sea «Conversando», y el modo saludos no saluda solo.
-- **Micro:** el bucle del micro (`cli._live_mic_loop`) pasa también los bloques a `GuestLink.push_mic` cuando está activo.
+- **Micro:** con el modo activo, `RoomSupervisor.hold_guest` engancha `GuestLink.push_mic` al motor (`LiveEngine.add_mic_listener`). El enlace solo lo manda si en la sala hay alguien que lo oye (`listeners`).
 - **Frase de entrada:** va en `assets/showcase/invitado.md` para que «Preparar voces» la grabe con la voz de Sonia. Sin grabar, el modo entra igual pero sin frase y lo registra en el log.
 
 ## 6. Unity
@@ -166,7 +167,7 @@ Mensajes JSON de la sala:
 - **Del navegador:** `ack` {`seq`, `t`}.
 - **Del orquestador:** `stats` {`fps`, `kbps`, `width`, `height`, `quality`, `rtt_ms`}.
 - **Del Durable Object:**
-  - `viewers` {`count`}, al orquestador.
+  - `viewers` {`count`, `listeners`}, al orquestador: cuántos miran y cuántos oyen el micro del stand. Los de «Ver cámara» (`role=watch`) no lo oyen y lo que manden en binario se descarta.
   - `agent` {`connected`}, a los navegadores.
 
 ## 8. Panel
@@ -178,6 +179,7 @@ Mensajes JSON de la sala:
   - Volumen del sonido del stand y silencio.
   - Botones de animaciones del avatar de Jean.
   - Estado de la conexión (conectando, en directo, sin Sonia, reconectando).
+- Al abrirlo, el modal pide la sala con `watch_camera` y la renueva mientras está abierto: Jean ve el stand antes de entrar. El visor (conexión, vídeo, `ack` y estadísticas) es `static/room.js`, el mismo de «Ver cámara».
 - **Solo en la nube:** en el panel local (`127.0.0.1`), el modal dice que el Modo Jean es desde `sonia.sonnetcode.com`. Las acciones sí funcionan en local para probar la entrada.
 
 ## 9. Fases

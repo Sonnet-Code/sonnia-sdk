@@ -1,20 +1,24 @@
-"""Conexión del Modo Jean con la sala de Cloudflare (``GuestRoom``).
+"""Conexión con la sala de Cloudflare (``GuestRoom``): Modo Jean y «Ver cámara».
 
-Mientras el Modo Jean está activo, el orquestador abre un segundo WebSocket
-(aparte del de ``CloudLink``) hacia ``/guest/agent``, con el mismo token:
+Mientras alguien la necesita (lo decide ``RoomSupervisor``), el orquestador
+abre un segundo WebSocket (aparte del de ``CloudLink``) hacia ``/guest/agent``,
+con el mismo token:
 
 - Sube la cámara del stand (JPEG) al ritmo que marca ``VideoRateController``:
   ventana de fotogramas sin confirmar y escalones de tamaño y calidad según la
   red. Si el búfer de envío se llena, se salta vídeo antes que audio.
-- Sube el micro del stand a 16 kHz en bloques de 100 ms, sin acumular más de
-  300 ms de retraso (lo viejo se tira).
-- Baja la voz de Jean y la pasa a Unity como frames ``SNGU``, cortada en
-  rachas por ``GuestSpeechSegmenter``.
-- Cada segundo manda las estadísticas (fps, kbit/s, RTT...) que pinta el modal.
+- Solo en el Modo Jean (``set_guest_media``):
+  - sube el micro del stand a 16 kHz en bloques de 100 ms, sin acumular más de
+    300 ms de retraso (lo viejo se tira);
+  - baja la voz de Jean y la pasa a Unity como frames ``SNGU``, cortada en
+    rachas por ``GuestSpeechSegmenter``.
+- Cada segundo manda las estadísticas (fps, kbit/s, RTT...) que pintan los modales.
 
-Solo manda vídeo y audio si hay alguien mirando (``viewers``). Nada de esto
-puede tumbar a Sonia: cualquier fallo se registra y se reconecta con espera
-creciente.
+Solo manda vídeo si hay alguien mirando (``viewers``), y el micro del stand solo
+si alguno de ellos es el modal del Modo Jean (``listeners``; los de «Ver
+cámara» no lo reciben). Nada se guarda: los fotogramas van de la cámara a la
+sala y de ahí al navegador. Nada de esto puede tumbar a Sonia: cualquier fallo
+se registra y se reconecta con espera creciente.
 """
 
 from __future__ import annotations
@@ -84,7 +88,7 @@ def guest_url(cloud_url: str) -> str:
 
 
 class GuestLink:
-    """WebSocket del Modo Jean: cámara y micro del stand hacia Jean, su voz hacia Unity."""
+    """WebSocket de la sala: cámara (y en el Modo Jean, micro del stand) hacia fuera; voz de Jean hacia Unity."""
 
     def __init__(
         self,
@@ -108,6 +112,8 @@ class GuestLink:
         self._clock = clock
         self._ws: Any = None
         self._viewers = 0
+        self._listeners = 0
+        self._guest_media = False
         self._video = VideoRateController(clock=clock)
         self._video_wake = asyncio.Event()
         self._audio_wake = asyncio.Event()
@@ -128,13 +134,29 @@ class GuestLink:
 
     @property
     def viewers(self) -> int:
+        """Navegadores en la sala: el modal del Modo Jean y los de «Ver cámara»."""
         return self._viewers
+
+    @property
+    def listeners(self) -> int:
+        """Los que además oyen el micro del stand (el modal del Modo Jean)."""
+        return self._listeners
+
+    def set_guest_media(self, enabled: bool) -> None:
+        """Modo Jean: micro del stand hacia la sala y voz de Jean hacia Unity.
+
+        Apagado (solo «Ver cámara»), la sala solo lleva vídeo.
+        """
+        self._guest_media = enabled
+        if not enabled:
+            self._pending_audio.clear()
 
     def stats(self) -> dict[str, Any]:
         """Lo que el panel enseña del enlace (forma de ``guest.link`` en ``docs/modo-jean.md``)."""
         return {
             "connected": self.connected,
             "viewers": self._viewers,
+            "listeners": self._listeners,
             "video": self._video.stats.as_dict(),
             "guest_level": round(self._segmenter.level, 4),
             "guest_frames": self._guest_frames,
@@ -145,7 +167,7 @@ class GuestLink:
 
     def push_mic(self, block: AudioArray) -> None:
         """Un bloque del micro del stand (lo llama el motor con cada bloque)."""
-        if not self.connected or self._viewers <= 0:
+        if not self.connected or not self._guest_media or self._listeners <= 0:
             return
         for chunk in self._packer.push(block):
             if len(self._pending_audio) == self._pending_audio.maxlen:
@@ -159,7 +181,7 @@ class GuestLink:
     async def run(self) -> None:
         """Conecta y reconecta hasta que se cancela."""
         if not self.enabled:
-            logger.warning("Modo Jean sin nube: falta PANEL_CLOUD_URL o PANEL_CLOUD_TOKEN")
+            logger.warning("Sala de vídeo sin nube: falta PANEL_CLOUD_URL o PANEL_CLOUD_TOKEN")
             return
         url = guest_url(self._settings.cloud_url)
         delay = RECONNECT_MIN_S
@@ -170,14 +192,14 @@ class GuestLink:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 - sin sala, Sonia sigue
-                logger.warning("Modo Jean: no se pudo conectar con la sala: %s", exc)
+                logger.warning("Sala: no se pudo conectar: %s", exc)
             else:
                 try:
                     await self._session(ws)
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("Modo Jean: se cortó la sala: %s", exc)
+                    logger.warning("Sala: se cortó la conexión: %s", exc)
                 finally:
                     await self._end_session()
                     with contextlib.suppress(Exception):
@@ -200,7 +222,7 @@ class GuestLink:
         self._ws = ws
         self.connected = True
         self._video.reset()
-        logger.info("Modo Jean: conectada a la sala de Cloudflare")
+        logger.info("Sala: conectada a Cloudflare")
         tasks = [
             asyncio.create_task(self._read(ws), name="guest-read"),
             asyncio.create_task(self._video_loop(ws), name="guest-video"),
@@ -220,6 +242,7 @@ class GuestLink:
         self.connected = False
         self._ws = None
         self._viewers = 0
+        self._listeners = 0
         self._pending_audio.clear()
         self._video.reset()
         # Una racha a medias de Jean se cierra para que Unity no se quede esperando.
@@ -258,7 +281,7 @@ class GuestLink:
             frame = decode_room_frame(data)
         except ValueError:
             return
-        if frame.kind != KIND_GUEST_AUDIO or not frame.payload:
+        if frame.kind != KIND_GUEST_AUDIO or not frame.payload or not self._guest_media:
             return
         pcm = frame.payload
         if frame.rate and frame.rate != self._unity_rate:
@@ -290,11 +313,18 @@ class GuestLink:
             if isinstance(count, int) and not isinstance(count, bool):
                 previous = self._viewers
                 self._viewers = max(0, count)
+                # Una sala anterior a «Ver cámara» no distingue: todos oyen.
+                listeners = msg.get("listeners", count)
+                valid = isinstance(listeners, int) and not isinstance(listeners, bool)
+                self._listeners = min(self._viewers, max(0, listeners)) if valid else 0
+                if self._listeners == 0:
+                    self._pending_audio.clear()
                 if self._viewers == 0:
                     self._video.reset()
-                    self._pending_audio.clear()
+                    if previous > 0:
+                        logger.info("Sala: ya no mira nadie la cámara del stand")
                 elif previous == 0:
-                    logger.info("Modo Jean: alguien mira la cámara del stand")
+                    logger.info("Sala: alguien mira la cámara del stand")
                 self._video_wake.set()
 
     # -- salida: vídeo, micro del stand y estadísticas ---------------------------
@@ -317,7 +347,7 @@ class GuestLink:
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001 - una captura fallida no corta el vídeo
-                logger.exception("Modo Jean: fallo capturando la cámara")
+                logger.exception("Sala: fallo capturando la cámara")
                 jpeg = None
             if not jpeg:
                 await asyncio.sleep(0.5)

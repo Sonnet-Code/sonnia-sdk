@@ -1,18 +1,28 @@
 /**
- * Durable Object `GuestRoom`: la sala del Modo Jean de una Sonia (una por id de
- * Sonia, `idFromName(<id>)`). Solo reenvía media entre el orquestador del stand
- * (el agente, `/guest/agent`) y los navegadores que miran (Jean, `/api/guest`):
+ * Durable Object `GuestRoom`: la sala de vídeo de una Sonia (una por id de
+ * Sonia, `idFromName(<id>)`), para el Modo Jean y para «Ver cámara». Solo
+ * reenvía media entre el orquestador del stand (el agente, `/guest/agent`) y
+ * los navegadores que miran (`/api/guest`). Hay dos clases de navegador:
  *
- * - Binario del agente (cámara JPEG y micro del stand) → a todos los navegadores.
- * - Binario de un navegador (voz de Jean, frames de tipo 3) → al agente.
+ * - El modal del Modo Jean (Jean): ve la cámara, oye el micro del stand y
+ *   manda su voz.
+ * - «Ver cámara» (`role=watch`): solo ve la cámara. No recibe el micro del
+ *   stand y lo que mande en binario se descarta.
+ *
+ * Reglas:
+ * - Binario del agente: la cámara JPEG va a todos; el micro del stand, solo a
+ *   los del Modo Jean.
+ * - Binario de un navegador del Modo Jean (voz de Jean, frames de tipo 3) → al agente.
  * - Texto de un navegador (`ack` de cada fotograma) → al agente; texto del
  *   agente (`stats`) → a los navegadores.
- * - Avisos propios: `viewers` {count} al agente cuando cambia el número de
- *   navegadores, y `agent` {connected} a los navegadores cuando entra o sale.
+ * - Avisos propios: `viewers` {count, listeners} al agente cuando cambia quién
+ *   mira (`listeners`: los que oyen el micro), y `agent` {connected} a los
+ *   navegadores cuando entra o sale.
  *
- * No guarda nada, así que no le afecta hibernar; con media fluyendo no llega a
- * dormir. Formato de los frames en `docs/modo-jean.md`. Va aparte de
- * `ControlRoom` para que el vídeo no comparta cola con el estado y las acciones.
+ * No guarda nada (ni fotogramas ni audio), así que no le afecta hibernar; con
+ * media fluyendo no llega a dormir. Formato de los frames en
+ * `docs/modo-jean.md`. Va aparte de `ControlRoom` para que el vídeo no comparta
+ * cola con el estado y las acciones.
  */
 
 import { DurableObject } from "cloudflare:workers";
@@ -20,12 +30,16 @@ import type { Env } from "./env";
 
 const AGENT_TAG = "agent";
 const VIEWER_TAG = "viewer";
+/** Navegador de «Ver cámara»: solo vídeo. */
+const WATCH_TAG = "watch";
 /** `WebSocket.readyState` abierto. */
 const WS_OPEN = 1;
 /** Tope de un mensaje binario (un JPEG grande ronda 100 KB). */
 const MAX_BINARY_BYTES = 4 * 1024 * 1024;
 /** Tope de un mensaje de texto (acks y estadísticas son diminutos). */
 const MAX_TEXT_CHARS = 16 * 1024;
+/** Tipo de frame del micro del stand (solo para el modal del Modo Jean). */
+const KIND_STAND_AUDIO = 2;
 /** Tipo de frame de la voz del invitado (lo único que un navegador puede mandar en binario). */
 const KIND_GUEST_AUDIO = 3;
 
@@ -40,13 +54,13 @@ export class GuestRoom extends DurableObject<Env> {
     if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Se esperaba un WebSocket.", { status: 426 });
     }
-    const path = new URL(request.url).pathname;
-    if (path === "/agent") return this.accept(AGENT_TAG);
-    if (path === "/viewer") return this.accept(VIEWER_TAG);
+    const url = new URL(request.url);
+    if (url.pathname === "/agent") return this.accept(AGENT_TAG);
+    if (url.pathname === "/viewer") return this.accept(VIEWER_TAG, url.searchParams.get("role") === "watch");
     return new Response("No encontrado.", { status: 404 });
   }
 
-  private accept(tag: string): Response {
+  private accept(tag: string, watchOnly = false): Response {
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
@@ -60,9 +74,9 @@ export class GuestRoom extends DurableObject<Env> {
         }
       }
     }
-    this.ctx.acceptWebSocket(server, [tag]);
+    this.ctx.acceptWebSocket(server, watchOnly ? [tag, WATCH_TAG] : [tag]);
     if (tag === AGENT_TAG) {
-      this.send(server, JSON.stringify({ type: "viewers", count: this.viewers().length }));
+      this.send(server, this.viewersMessage());
       this.broadcast(this.viewers(), JSON.stringify({ type: "agent", connected: true }));
     } else {
       this.send(server, JSON.stringify({ type: "agent", connected: this.agents().length > 0 }));
@@ -81,11 +95,13 @@ export class GuestRoom extends DurableObject<Env> {
     }
     if (message.byteLength > MAX_BINARY_BYTES) return;
     if (fromAgent) {
-      this.broadcast(this.viewers(), message);
+      // El micro del stand solo va al modal del Modo Jean; la cámara, a todos.
+      const kind = message.byteLength >= 4 ? new Uint8Array(message, 0, 4)[3] : 0;
+      this.broadcast(kind === KIND_STAND_AUDIO ? this.listeners() : this.viewers(), message);
       return;
     }
-    // De un navegador solo pasa la voz del invitado ("SG", versión, tipo 3).
-    if (message.byteLength < 16) return;
+    // «Ver cámara» no manda nada; del modal de Jean solo pasa su voz ("SG", versión, tipo 3).
+    if (this.ctx.getTags(ws).includes(WATCH_TAG) || message.byteLength < 16) return;
     const head = new Uint8Array(message, 0, 4);
     if (head[0] !== 0x53 || head[1] !== 0x47 || head[3] !== KIND_GUEST_AUDIO) return;
     this.broadcast(this.agents(), message);
@@ -115,8 +131,16 @@ export class GuestRoom extends DurableObject<Env> {
   }
 
   private notifyViewers(exclude?: WebSocket): void {
-    const count = this.viewers(exclude).length;
-    this.broadcast(this.agents(), JSON.stringify({ type: "viewers", count }));
+    this.broadcast(this.agents(), this.viewersMessage(exclude));
+  }
+
+  /** Cuántos miran y cuántos de ellos oyen el micro del stand. */
+  private viewersMessage(exclude?: WebSocket): string {
+    return JSON.stringify({
+      type: "viewers",
+      count: this.viewers(exclude).length,
+      listeners: this.listeners(exclude).length,
+    });
   }
 
   private agents(exclude?: WebSocket): WebSocket[] {
@@ -125,6 +149,11 @@ export class GuestRoom extends DurableObject<Env> {
 
   private viewers(exclude?: WebSocket): WebSocket[] {
     return this.open(VIEWER_TAG, exclude);
+  }
+
+  /** Navegadores del Modo Jean (los que no son de «Ver cámara»). */
+  private listeners(exclude?: WebSocket): WebSocket[] {
+    return this.viewers(exclude).filter((ws) => !this.ctx.getTags(ws).includes(WATCH_TAG));
   }
 
   private open(tag: string, exclude?: WebSocket): WebSocket[] {

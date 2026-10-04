@@ -24,7 +24,7 @@ import signal
 import sys
 import time
 import wave
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -419,33 +419,55 @@ class _Panel:
     cloud: asyncio.Task[None] | None = None
 
 
-def _guest_frame_grabber(settings: Settings, camera: CameraSource | None) -> FrameGrabber:
-    """Cámara del Modo Jean: tamaño y calidad por captura, según lo que aguante la red.
+@dataclass(slots=True)
+class _RoomCamera:
+    """Cámara de la sala de vídeo (Modo Jean y «Ver cámara»)."""
 
-    Aunque la visión esté apagada (``VISION_SOURCE=none``) el Modo Jean abre la
-    cámara USB por su cuenta; con la cámara de Unity se usa tal cual llega.
+    grab: FrameGrabber
+    available: bool
+    #: Suelta el dispositivo al cerrarse la sala, si era una cámara solo suya.
+    release: Callable[[], Awaitable[None]] | None
+
+
+def _room_camera(settings: Settings, camera: CameraSource | None) -> _RoomCamera:
+    """Cámara de la sala: tamaño y calidad por captura, según lo que aguante la red.
+
+    Comparte el dispositivo con la visión de Sonia: si la visión usa la cámara
+    USB, es el mismo ``OpenCVCamera`` (un solo dispositivo abierto; las capturas
+    se turnan con su candado y leen y codifican en un hilo, fuera del bucle).
+    Con la visión apagada (``VISION_SOURCE=none``) la sala abre la cámara USB por
+    su cuenta y la suelta al cerrarse; con la cámara de Unity se usa tal cual llega.
     """
     import importlib.util
 
-    from sonia.vision.camera import OpenCVCamera
+    from sonia.vision.camera import OpenCVCamera, UnityCamera
 
-    usb: OpenCVCamera | None = camera if isinstance(camera, OpenCVCamera) else None
-    if usb is None and settings.vision.source != "unity":
+    shared = camera if isinstance(camera, OpenCVCamera) else None
+    unity = camera if isinstance(camera, UnityCamera) else None
+    own: OpenCVCamera | None = None
+    if shared is None and unity is None:
         if importlib.util.find_spec("cv2") is not None:
-            usb = OpenCVCamera(settings.vision)
+            own = OpenCVCamera(settings.vision)
         else:
-            logger.warning("Modo Jean sin cámara: falta el extra 'camera' (uv sync --extra camera)")
+            logger.warning(
+                "Sala de vídeo sin cámara: falta el extra 'camera' (uv sync --extra camera)"
+            )
+    usb = shared or own
 
     async def grab(width: int, quality: int) -> bytes | None:
         if usb is not None:
             frame = await usb.capture(max_width=width, quality=quality)
-        elif camera is not None:
-            frame = await camera.capture()
+        elif unity is not None:
+            frame = await unity.capture()
         else:
             return None
         return frame.data if frame is not None else None
 
-    return grab
+    return _RoomCamera(
+        grab=grab,
+        available=usb is not None or unity is not None,
+        release=own.close if own is not None else None,
+    )
 
 
 async def _start_panel(
@@ -497,24 +519,32 @@ async def _start_panel(
     link = CloudLink(settings.panel, control, events, identity)
     if link.enabled:
         cloud = asyncio.create_task(link.run(), name="sonia-cloud-panel")
-        # Modo Jean: la sala de media solo se abre mientras el modo está activo.
+        # Sala de vídeo (Modo Jean y «Ver cámara»): solo abierta mientras alguien la necesita.
         from sonia.guest.link import GuestLink
         from sonia.guest.mode import GuestMode
+        from sonia.guest.room import RoomSupervisor
 
         rate = settings.live.sample_rate
-        guest_link = GuestLink(
-            settings.panel,
-            identity,
-            sink=hub,
-            unity_rate=rate,
-            mic_rate=rate,
-            grab=_guest_frame_grabber(settings, camera),
+        room_camera = _room_camera(settings, camera)
+        room = RoomSupervisor(
+            GuestLink(
+                settings.panel,
+                identity,
+                sink=hub,
+                unity_rate=rate,
+                mic_rate=rate,
+                grab=room_camera.grab,
+            ),
+            engine,
+            camera_available=room_camera.available,
+            release_camera=room_camera.release,
         )
+        control.attach_room(room)
         control.attach_guest(
             GuestMode(
                 hub=hub,
                 engine=engine,
-                link=guest_link,
+                room=room,
                 voice_cache=voice_cache,
                 intro_lines=control.guest_intro_lines,
                 unity_rate=rate,

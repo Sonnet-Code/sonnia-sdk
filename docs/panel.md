@@ -24,6 +24,18 @@ El estado lo dice en `settings_sync`, y el panel lo muestra arriba de «Avanzado
 
 La caché de voces guarda cada frase fija (saludos, frases y cantos del stand) leída una vez por GPT-Live con la voz configurada. Se rellena sola en segundo plano cuando hay clave y Sonia está en `conversation`, o con el botón "Preparar voces". Las frases del modo saludos están en `assets/showcase/saludos.md`.
 
+## Ver cámara
+
+«Ver cámara», en «Acciones rápidas», abre un visor con la cámara del stand en directo y sus estadísticas (fps, kbit/s, tamaño y calidad, ida y vuelta). No hay micro ni secuencia: es solo para ver qué pasa en el stand.
+
+- Va por la sala de vídeo de Cloudflare (`/api/guest` con `role=watch`, la misma del Modo Jean), así que solo funciona desde el panel de la nube. En el local lo dice y no muestra nada.
+- El visor pide la sala con la acción `watch_camera` y la renueva cada 10 s mientras está abierto (`keepalive`, que no llena el registro).
+- El orquestador (`RoomSupervisor`, `server/sonia/guest/room.py`) la cierra sola cuando no queda nadie mirando durante 25 s, o 3 s después de pulsar «Cerrar».
+- No cierra GPT-Live, no anuncia nada y no manda nada a Unity.
+- El micro del stand no sale. Con el Modo Jean activo, el visor solo se suma a la sala y la sala le sigue negando el micro: el audio va solo al modal de Jean.
+- La cámara es la misma de la visión de Sonia: con `VISION_SOURCE=opencv`, el mismo `OpenCVCamera` (un solo dispositivo abierto; las capturas se turnan y leen y codifican en un hilo, fuera del bucle). Con la visión apagada, la sala abre la cámara por su cuenta y la suelta al cerrarse; con `VISION_SOURCE=unity`, usa la de Unity.
+- Mientras alguien mira, la cabecera del panel muestra «Cámara en directo: N mirando» (en el móvil, el icono de la cámara y N) y la fila de la cámara de «¿Funciona todo?» lo repite.
+
 ## Mensajes nuevos del protocolo con Unity
 
 Se suman a `docs/protocolo.md` (versión 1, sin romper nada: Unity ignora tipos desconocidos).
@@ -128,11 +140,13 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   "avatar": {"custom": true, "editor_open": false, "editor_target": "sonia"},
   "guest_avatar": {"custom": false},
   "guest": {"available": true, "phase": "off", "name": "Jean", "unity_phase": null, "intro_ready": true,
-            "link": {"connected": false, "viewers": 0, "video": {"fps": 0.0, "kbps": 0, "rtt_ms": null, "step": 1, "width": 640, "quality": 65, "lost": 0},
+            "link": {"connected": false, "viewers": 0, "listeners": 0, "video": {"fps": 0.0, "kbps": 0, "rtt_ms": null, "step": 1, "width": 640, "quality": 65, "lost": 0},
                      "guest_level": 0.0, "guest_frames": 0, "dropped_audio": 0}},
+  "camera_watch": {"available": true, "active": false, "open": false, "connected": false, "viewers": 0, "live": false,
+                   "video": {"fps": 0.0, "kbps": 0, "rtt_ms": null, "step": 1, "width": 640, "quality": 65, "lost": 0}},
   "settings_sync": {"cloud": "online", "synced": true, "pending": [], "rev": 42},
   "last_error": null,
-  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "animation_toggles", "subtitles", "debug", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache", "tuning", "cloud_settings", "avatar_editor", "guest_avatar_editor", "guest_mode"]
+  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "animation_toggles", "subtitles", "debug", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache", "tuning", "cloud_settings", "avatar_editor", "guest_avatar_editor", "guest_mode", "camera_watch"]
 }
 ```
 
@@ -151,7 +165,14 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   - `phase`: `off`, `intro`, `entering`, `live` o `leaving`.
   - `unity_phase`: la última que contó Unity.
   - `intro_ready`: si la frase con la que Sonia lo presenta ya está grabada.
-  - `link`: estado de la sala; los fps, kbit/s, RTT y escalón de calidad del vídeo, el nivel de la voz de Jean y los bloques perdidos.
+  - `link`: estado de la sala; quién mira (`viewers`) y quién oye el micro del stand (`listeners`, el modal de Jean); los fps, kbit/s, RTT y escalón de calidad del vídeo, el nivel de la voz de Jean y los bloques perdidos.
+- `camera_watch` («Ver cámara»):
+  - `available`: si hay nube y cámara; sin eso no aparece `camera_watch` en `capabilities`.
+  - `active`: si alguien pidió ver la cámara y aún no se ha soltado.
+  - `open` y `connected`: si la sala está abierta y conectada (también por el Modo Jean).
+  - `viewers`: cuántos navegadores miran.
+  - `live`: si la cámara sale ahora del stand (sala conectada y alguien mirando).
+  - `video`: las estadísticas del vídeo.
 - `settings_sync`: `cloud` es `off` (sin `PANEL_CLOUD_TOKEN`), `offline` u `online`; `synced`, si ya llegaron los ajustes de la nube en esta conexión; `pending`, los ajustes cambiados aquí que la nube aún no ha confirmado, y `rev`, la última revisión de la nube aplicada.
 
 ### `GET /api/gallery`
@@ -194,6 +215,7 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `close_avatar_editor` | | Sale del editor de personaje sin guardar. |
 | `reset_avatar` | `target` opcional | Borra el personaje guardado: todas las Sonias vuelven al de la app. Con `target` `guest`, Jean vuelve a su avatar de prueba. |
 | `set_guest_mode` | `active`: bool | Modo Jean: Sonia presenta a Jean y le deja el sitio, o él se despide y vuelve ella. Necesita la nube y la pantalla conectada. |
+| `watch_camera` | `active`: bool; `keepalive` opcional | «Ver cámara»: abre la sala solo con vídeo (o la renueva) y, con `false`, la deja cerrarse en cuanto no quede nadie mirando. No toca GPT-Live, Unity ni el micro. |
 | `guest_animation` | `clip` | Un gesto del avatar de Jean (con el invitado en el stand). |
 | `prepare_voices` | | Graba las frases que falten en la caché de voces. |
 
@@ -212,7 +234,8 @@ Al conectar llega primero un `{"type": "history", "messages": [...], "logs": [..
 - El panel local escucha solo en `127.0.0.1` (`PANEL_HOST`, `PANEL_PORT=8780`).
 - Las peticiones que llegan por Cloudflare (traen `Cf-Connecting-Ip`) necesitan un JWT de Cloudflare Access válido en `Cf-Access-Jwt-Assertion`: firma con las claves de `https://<PANEL_ACCESS_TEAM_DOMAIN>/cdn-cgi/access/certs`, `aud` igual a `PANEL_ACCESS_AUD` y sin caducar. Sin esas dos variables, todo acceso remoto se rechaza.
 - Las acciones exigen la cabecera `X-Sonia-Panel: 1` y el WebSocket comprueba que `Origin` sea el propio panel.
-- El panel muestra lo que dicen los visitantes (transcripción). No muestra la cámara.
+- El panel local muestra lo que dicen los visitantes (transcripción). No muestra la cámara: el directo de «Ver cámara» y del Modo Jean solo va por el panel de Cloudflare, con su acceso.
+- La cámara del stand solo sale mientras alguien la mira: el orquestador abre la sala de vídeo cuando se la piden y la cierra sola cuando no queda nadie. Los fotogramas van de la cámara a la sala y de ahí al navegador, que los pinta y los descarta; no se guardan en disco ni en la nube.
 
 ## Panel en Cloudflare (`cloud/panel/`)
 
@@ -266,13 +289,13 @@ Es la misma API del panel local con un parámetro `instance` (el `id` de la Soni
 - `GET /api/gallery?instance=<id>` → `{"images": [{"id", "url"}]}`: ids que mandó esa Sonia; las imágenes se sirven desde los estáticos del Worker (`/gallery/<archivo>`, copiadas de `assets/gallery` al desplegar). Un id sin archivo en Cloudflare sale sin miniatura.
 - `POST /api/action` con `{"instance": "<id>", "action": ..., ...}` y la cabecera `X-Sonia-Panel: 1` → `{"ok", "message"}`. 503 si esa Sonia no está conectada, 504 si no contesta en 15 s.
 - `WS /api/events?instance=<id>` → igual que el local (`history`, `status`, `message`, `log` de esa Sonia) más `{"type": "instances", ...}` (misma forma que `GET /api/instances`) al conectar y cada vez que cambia la lista o el modo de alguna. El navegador puede mandar `{"type": "select", "instance": "<id>"}` para cambiar de Sonia sin reconectar.
-- `WS /api/guest?instance=<id>` → sala del Modo Jean de esa Sonia (Durable Object `GuestRoom`, uno por Sonia). Recibe:
+- `WS /api/guest?instance=<id>` → sala de vídeo de esa Sonia (Durable Object `GuestRoom`, uno por Sonia), para el Modo Jean y para «Ver cámara». Recibe:
   - la cámara del stand en JPEG;
-  - el micro del stand en PCM a 16 kHz;
+  - el micro del stand en PCM a 16 kHz (solo el modal del Modo Jean);
   - `stats`;
   - `agent` {`connected`}.
 
-  Manda la voz de Jean en PCM a 24 kHz y un `ack` por fotograma. Formato de los frames en `docs/modo-jean.md`. La Sonia entra a la misma sala por `/guest/agent` con `AGENT_TOKEN`, solo mientras el Modo Jean está activo.
+  El modal del Modo Jean manda la voz de Jean en PCM a 24 kHz y un `ack` por fotograma. Con `role=watch` («Ver cámara») el navegador solo ve: no recibe el micro del stand y lo que mande en binario se descarta (los `ack` sí pasan). La sala avisa a la Sonia con `viewers` {`count`, `listeners`}: cuántos miran y cuántos oyen el micro. Formato de los frames en `docs/modo-jean.md`. La Sonia entra a la misma sala por `/guest/agent` con `AGENT_TOKEN`, solo mientras el Modo Jean o «Ver cámara» la necesitan. La sala no guarda nada.
 
 El panel local implementa lo mismo con una sola instancia (`/api/instances` devuelve la de ese equipo y el parámetro `instance` se ignora).
 
@@ -284,7 +307,7 @@ El panel local implementa lo mismo con una sola instancia (`/api/instances` devu
 
 ### Acceso
 
-- `/agent`: solo con `AGENT_TOKEN`.
+- `/agent` y `/guest/agent`: solo con `AGENT_TOKEN`.
 - Todo lo demás (página, estáticos, API, WebSocket): un JWT de Cloudflare Access válido (`Cf-Access-Jwt-Assertion` o la cookie `CF_Authorization`, firmado con las claves de `https://<ACCESS_TEAM_DOMAIN>/cdn-cgi/access/certs`, `aud` = `ACCESS_AUD`) si esas variables están puestas, **o** la sesión de la contraseña del panel (`PANEL_PASSWORD`): `GET /login` muestra un formulario, `POST /login` comprueba la contraseña y deja una cookie `sonia_session` (HttpOnly, Secure, SameSite=Strict, 12 h, firmada con HMAC). Sin sesión: las páginas redirigen a `/login` y la API responde 401. Si no hay ni Access ni contraseña configurados, nadie entra.
 - Cuando se cree la aplicación de Access para `sonia.sonnetcode.com`, la ruta `/agent` necesita una política **Bypass** (o un service token) para que las Sonias sigan conectando.
 - Las mismas cabeceras de seguridad que el panel local (CSP sin scripts en línea, `frame-ancestors 'none'`...).

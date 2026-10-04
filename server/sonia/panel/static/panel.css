@@ -896,6 +896,140 @@ input[type="range"]:disabled {
   color: var(--ink-2);
 }
 
+/* ---------- Cámara en directo («Ver cámara» y Modo Jean) ---------- */
+
+.topbar-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--bad);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.topbar-live[hidden] {
+  display: none;
+}
+
+.topbar-live-long {
+  display: none;
+}
+
+/* En el móvil, solo el icono de la cámara y cuántos miran: el texto largo no cabe. */
+.topbar-live .icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* En los móviles más estrechos, el logo encoge para que quepan el aviso y el modo. */
+@media (max-width: 419px) {
+  .camera-live .brand-logo {
+    height: 15px;
+  }
+}
+
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff;
+  animation: live-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  50% { opacity: 0.35; }
+}
+
+.camera-dialog {
+  width: min(880px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
+.camera-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.camera-head h2 {
+  margin: 0;
+}
+
+.camera-dialog .camera-live {
+  margin: 10px 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--na-bg);
+  color: var(--ink-2);
+  font-weight: 800;
+}
+
+.camera-dialog .camera-live[data-live="true"] {
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+
+.camera-frame {
+  position: relative;
+}
+
+.camera-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #0b1631;
+  border-radius: var(--radius-sm);
+}
+
+.camera-dialog .camera-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: #fff;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.camera-dialog .camera-stats {
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.camera-dialog .camera-conn {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+
+.camera-dialog .camera-conn[data-state="live"] { color: var(--ok); }
+.camera-dialog .camera-conn[data-state="retry"],
+.camera-dialog .camera-conn[data-state="waiting"] { color: var(--warn); }
+
+.camera-dialog .camera-error {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bad-bg);
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.camera-dialog .camera-privacy {
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
 /* ---------- Salud ---------- */
 
 .health-list {
@@ -1657,6 +1791,14 @@ progress {
     display: inline;
   }
 
+  .topbar-live-long {
+    display: inline;
+  }
+
+  .topbar-live-short {
+    display: none;
+  }
+
   .hero-mode {
     font-size: 30px;
   }
@@ -1759,5 +1901,9 @@ progress {
 @media (prefers-reduced-motion: reduce) {
   .meter-fill {
     transition: none;
+  }
+
+  .live-dot {
+    animation: none;
   }
 }

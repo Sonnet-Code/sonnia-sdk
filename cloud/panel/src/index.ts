@@ -165,7 +165,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === "/api/guest") {
-    // Modo Jean: el navegador ve la cámara del stand, oye su micro y manda su voz.
+    // Sala de vídeo: el modal del Modo Jean ve la cámara, oye el micro del stand y
+    // manda su voz; con `role=watch` («Ver cámara») solo ve la cámara.
     if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
       return json({ ok: false, message: "Se esperaba un WebSocket." }, 426);
     }
@@ -176,7 +177,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       instance = instances.find((item) => item.connected)?.id ?? null;
     }
     if (!instance) return json({ ok: false, message: "No hay ninguna Sonia conectada." }, 503);
-    return guestRoom(env, instance).fetch("https://guest/viewer", { headers: { upgrade: "websocket" } });
+    const viewer = url.searchParams.get("role") === "watch" ? "https://guest/viewer?role=watch" : "https://guest/viewer";
+    return guestRoom(env, instance).fetch(viewer, { headers: { upgrade: "websocket" } });
   }
 
   if (path === "/api/action") {

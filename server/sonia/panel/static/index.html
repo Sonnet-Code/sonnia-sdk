@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="/static/panel.css">
   <link rel="stylesheet" href="/static/jean.css">
   <script src="/static/panel.js" defer></script>
+  <script src="/static/room.js" defer></script>
+  <script src="/static/camera.js" defer></script>
   <script src="/static/jean.js" defer></script>
 </head>
 <body>
@@ -19,6 +21,13 @@
     <div class="topbar-inner">
       <img class="brand-logo" src="/static/sonnet-code-logo.svg" alt="Sonnet Code" width="146" height="22">
       <span class="topbar-title">Panel de Sonia</span>
+      <!-- La cámara del stand sale en directo (alguien la mira desde el panel) -->
+      <span class="topbar-live" id="topbar-live" role="status" hidden>
+        <span class="live-dot" aria-hidden="true"></span>
+        <span class="topbar-live-long" id="topbar-live-text">Cámara en directo</span>
+        <svg class="icon topbar-live-short" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>
+        <span class="topbar-live-short" id="topbar-live-short" aria-hidden="true"></span>
+      </span>
       <span class="topbar-status" id="topbar-status" data-mode="">
         <span class="mode-dot" aria-hidden="true"></span>
         <span class="topbar-name" id="topbar-name" hidden></span>
@@ -134,14 +143,19 @@
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 9l8 6M16 9l-8 6"/></svg>
             Quitar imagen
           </button>
-          <button type="button" class="btn quick-wide" id="mute-btn" data-cap="mute" aria-pressed="false">
+          <button type="button" class="btn" id="mute-btn" data-cap="mute" aria-pressed="false">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/><path class="icon-slash" d="M4 4l16 16"/></svg>
             <span id="mute-label">Silenciar micrófono</span>
+          </button>
+          <button type="button" class="btn" id="camera-btn" data-cap="camera_watch">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>
+            <span id="camera-label">Ver cámara</span>
           </button>
         </div>
         <p class="note" data-mode-note="away" hidden>Sonia está fuera: tráela de vuelta con «Conversando» o «Solo saludos» para que salude, baile o enseñe imágenes.</p>
         <p class="cap-note" data-cap-note="greet" hidden>«Saludar ahora» no está disponible con el motor de voz actual.</p>
         <p class="cap-note" data-cap-note="mute" hidden>Silenciar el micrófono no está disponible con el motor de voz actual.</p>
+        <p class="cap-note" data-cap-note="camera_watch" hidden>«Ver cámara» necesita que esta Sonia esté conectada a la nube y tenga cámara.</p>
       </section>
 
       <!-- ===== Imágenes de la galería ===== -->

@@ -258,7 +258,8 @@
 
   function collectElements() {
     const ids = [
-      "topbar-status", "topbar-name", "topbar-text", "topbar-state", "instances", "instance-list",
+      "topbar-status", "topbar-name", "topbar-text", "topbar-state", "topbar-live", "topbar-live-text", "topbar-live-short",
+      "instances", "instance-list",
       "dup-conversing", "dup-conversing-title", "dup-conversing-text", "keep-one-btn", "dup-connected",
       "dup-connected-title", "dup-connected-text", "hero-kicker", "hero-disconnected", "cache-error", "offline-banner", "offline-detail", "slow-banner", "auth-banner",
       "reload-btn", "hero", "hero-mode", "hero-activity", "activity-dot", "hero-health", "hero-muted",
@@ -732,6 +733,7 @@
     renderAdvanced(status);
     renderTuning(status);
     renderAvatar();
+    renderCameraLive(status);
     renderSyncNotes(status);
     refreshControls();
     updateConnectionUi();
@@ -1597,6 +1599,8 @@
       setText(row.icon, ok === "true" ? "✓" : ok === "false" ? "✕" : "–");
       let label = typeof item.label === "string" && item.label ? item.label : "";
       if (!label) label = ok === "true" ? "Bien" : ok === "false" ? "Falla" : "No aplica ahora";
+      const watch = cameraWatch(status);
+      if (key === "camera" && watch.live) label += ` · En directo: ${watch.viewers} mirando`;
       setText(row.label, label);
       const hint = item.ok !== true && typeof item.hint === "string" ? item.hint.trim() : "";
       setText(row.hint, hint);
@@ -1936,6 +1940,28 @@
     if (editingGuest) guestText = "Editando el personaje de Jean en la pantalla de Sonia…";
     setAvatarState(ui.guestAvatarState, guestText, editingGuest);
     setHidden(ui.guestAvatarState, !hasCap("guest_avatar_editor"));
+  }
+
+  /** «Ver cámara» y el Modo Jean: ¿sale la cámara del stand ahora? (`camera_watch` del estado). */
+  function cameraWatch(status) {
+    const watch = status && status.camera_watch;
+    if (!watch || typeof watch !== "object") return { live: false, viewers: 0 };
+    return { live: watch.live === true, viewers: isNumber(watch.viewers) ? watch.viewers : 0 };
+  }
+
+  function renderCameraLive(status) {
+    const watch = cameraWatch(status);
+    const live = watch.live && selectedConnected();
+    setHidden(ui.topbarLive, !live);
+    document.body.classList.toggle("camera-live", live);
+    if (!live) return;
+    const text = `Cámara en directo: ${watch.viewers} mirando`;
+    setText(ui.topbarLiveText, text);
+    setText(ui.topbarLiveShort, String(watch.viewers));
+    if (ui.topbarLive.title !== text) {
+      ui.topbarLive.title = text;
+      ui.topbarLive.setAttribute("aria-label", text);
+    }
   }
 
   function setAvatarState(node, text, editing) {
