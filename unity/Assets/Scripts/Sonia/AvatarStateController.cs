@@ -1,9 +1,22 @@
-// Estado del avatar: mirada y parpadeo.
+// Estado del avatar: cabeza, mirada y parpadeo.
 //
 // El estado llega por el protocolo (idle, listening, thinking, speaking). Las
 // animaciones del cuerpo las lleva AvatarChoreographer; aquí se decide hacia
-// dónde mira Sonia según el estado y se añade el parpadeo. La mirada se aplica
-// en LateUpdate para que no la pise la animación.
+// dónde mira la cabeza y cómo se mueve con la voz, y se parpadea:
+//
+//  - Mirada: al visitante (la cámara), al panel de imágenes un momento cuando
+//    aparece, o arriba y a un lado mientras piensa (un vistazo, no un giro de
+//    perfil: mirar abajo y apartar la cara se leía como enfado).
+//  - Con la voz (eventos de LipSyncController, un poco antes de su sílaba):
+//    asentimientos breves en las sílabas tónicas, un cambio de pose de cabeza
+//    (giro e inclinación pequeños) en cada frase y un asentimiento suave al
+//    terminarla.
+//  - Escuchando: la cabeza ladeada hacia un lado y algún asentimiento de "ajá".
+//  - Parpadeo con forma real (cierra rápido, abre más despacio), a ritmo de
+//    2-5 s, al empezar y acabar frases y en los saltos de mirada; a veces doble
+//    o a medias. El párpado acompaña a la mirada: al mirar abajo baja un poco.
+//
+// Todo se aplica en LateUpdate, sobre la pose de la animación.
 
 using System;
 using UnityEngine;
@@ -20,14 +33,13 @@ namespace Sonia
     }
 
     /// <summary>
-    /// Orienta la cabeza hacia donde toca según el estado y añade parpadeo
-    /// aleatorio. Todo es opcional: sin hueso de cabeza o sin blendshapes de
-    /// ojos el componente no hace nada.
+    /// Orienta la cabeza según el estado y la voz y añade el parpadeo. Todo es
+    /// opcional: sin hueso de cabeza o sin blendshapes de ojos no hace nada.
     /// </summary>
     // Corre después del LateUpdate de Vrm10Instance (orden 11000), que aplica sus
-    // expresiones (a cero) y la mirada; así los blendshapes de boca y parpadeo
-    // que escribimos aquí prevalecen y los ojos ya tienen la mirada aplicada.
-    [DefaultExecutionOrder(12000)]
+    // expresiones (a cero) y la mirada; así los blendshapes de parpadeo que
+    // escribimos aquí prevalecen.
+    [DefaultExecutionOrder(12010)]
     [DisallowMultipleComponent]
     public class AvatarStateController : MonoBehaviour
     {
@@ -37,7 +49,7 @@ namespace Sonia
         private Transform headBone;
 
         [SerializeField]
-        [Tooltip("Raíz del avatar, para calcular el punto al que mira mientras piensa. Por defecto, este objeto.")]
+        [Tooltip("Raíz del avatar: da los ejes (derecha, arriba, delante) del punto de pensar. Por defecto, este objeto.")]
         private Transform avatarRoot;
 
         [SerializeField]
@@ -49,8 +61,8 @@ namespace Sonia
         private Transform thinkingLookTarget;
 
         [SerializeField]
-        [Tooltip("Desplazamiento local, respecto a la raíz del avatar, del punto al que mira mientras piensa. En pantalla vertical conviene más arriba que de lado.")]
-        private Vector3 thinkingLookOffset = new Vector3(0.45f, 0.9f, 1.5f);
+        [Tooltip("Punto al que mira mientras piensa, respecto a la cabeza y en los ejes del avatar (derecha, arriba, delante). Arriba y a un lado: un vistazo de pensar, no apartar la cara.")]
+        private Vector3 thinkingGaze = new Vector3(0.35f, 0.3f, 1.4f);
 
         [SerializeField]
         [Tooltip("Panel de imágenes. Mira hacia él mientras está visible.")]
@@ -66,7 +78,7 @@ namespace Sonia
 
         [SerializeField]
         [Range(0f, 1f)]
-        [Tooltip("Cuánto manda la mirada sobre la rotación que dicta el Animator.")]
+        [Tooltip("Cuánto manda la mirada sobre la rotación que dicta la animación.")]
         private float lookWeight = 0.7f;
 
         [SerializeField]
@@ -98,17 +110,52 @@ namespace Sonia
         private float headSwayDegrees = 1.4f;
 
         [SerializeField]
-        [Range(0f, 8f)]
-        [Tooltip("Grados que baja la cabeza en las sílabas fuertes mientras habla (según la boca del lip-sync).")]
-        private float speechNodDegrees = 2.5f;
+        [Tooltip("Lip-sync: de él llegan los eventos de la voz (sílabas, frases). Opcional.")]
+        private LipSyncController lipSync;
+
+        [Header("Cabeza con la voz")]
+        [SerializeField]
+        [Range(0f, 10f)]
+        [Tooltip("Grados de un asentimiento en una sílaba tónica.")]
+        public float stressNodDegrees = 3.5f;
 
         [SerializeField]
-        [Tooltip("Lip-sync, para acompasar los pequeños asentimientos a la voz. Opcional.")]
-        private LipSyncController lipSync;
+        [Range(0f, 1f)]
+        [Tooltip("Probabilidad de asentir en una sílaba tónica.")]
+        public float stressNodChance = 0.65f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Fuerza mínima (0..1) para que una sílaba cuente como tónica.")]
+        public float stressThreshold = 0.8f;
+
+        [SerializeField]
+        [Range(0f, 10f)]
+        [Tooltip("Grados de giro e inclinación de la pose de cabeza que se elige en cada frase.")]
+        public float phrasePoseDegrees = 4f;
+
+        [SerializeField]
+        [Range(0f, 12f)]
+        [Tooltip("Inclinación de la cabeza al escuchar (ladeada hacia un lado).")]
+        public float listenTiltDegrees = 6f;
+
+        [SerializeField]
+        [Range(0f, 8f)]
+        [Tooltip("Grados de los asentimientos de \"ajá\" al escuchar.")]
+        public float listenNodDegrees = 2.5f;
+
+        [SerializeField]
+        [Tooltip("Segundos mínimo y máximo entre asentimientos al escuchar.")]
+        public Vector2 listenNodInterval = new Vector2(2.8f, 5.5f);
+
+        [SerializeField]
+        [Range(0f, 12f)]
+        [Tooltip("Inclinación de la cabeza al pensar.")]
+        public float thinkTiltDegrees = 5f;
 
         [Header("Parpadeo")]
         [SerializeField]
-        [Tooltip("Malla con los blendshapes de los ojos. Si está vacía se usa la del lip-sync o ninguna.")]
+        [Tooltip("Malla con los blendshapes de los ojos.")]
         private SkinnedMeshRenderer faceRenderer;
 
         [SerializeField]
@@ -120,14 +167,35 @@ namespace Sonia
         private string blinkRightBlendShape = "eyeBlinkRight";
 
         [SerializeField]
-        [Tooltip("Segundos mínimo y máximo entre parpadeos.")]
+        [Tooltip("Segundos mínimo y máximo entre parpadeos espontáneos.")]
         private Vector2 blinkIntervalRange = new Vector2(2.5f, 6f);
 
         [SerializeField]
-        [Tooltip("Duración de un parpadeo en segundos.")]
+        [Tooltip("Duración de un parpadeo en segundos (cierra en un tercio, abre en el resto).")]
         private float blinkDuration = 0.14f;
 
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Probabilidad de parpadear al empezar o acabar una frase y al cambiar de estado.")]
+        public float blinkOnSpeechChance = 0.35f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Probabilidad de que un parpadeo espontáneo sea doble.")]
+        public float doubleBlinkChance = 0.12f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Cuánto baja el párpado superior al mirar abajo (por 10° de mirada).")]
+        public float lidFollowsGaze = 0.25f;
+
+        [SerializeField]
+        [Tooltip("Ojos, para que el párpado acompañe a la mirada. Opcional.")]
+        private EyeGazeController eyeGaze;
+
         private AvatarState _state = AvatarState.Idle;
+        private float _stateSince;
+
         // Desvío de la mirada respecto a la animación, en el espacio local de la
         // cabeza. Se suaviza en local a propósito: si se suavizara la rotación en
         // el mundo, al girar el cuerpo deprisa la cabeza se quedaría "clavada"
@@ -137,13 +205,30 @@ namespace Sonia
         private bool _lookInitialized;
         private bool _imageVisible;
         private float _imageShownAt = -999f;
+        private float _noiseSeed;
+
+        // Gestos de cabeza (grados): cabeceo (positivo baja la barbilla), giro e inclinación.
+        private Spring _pitch;
+        private Spring _yaw;
+        private Spring _roll;
+        private Spring _pitchPose;
+        private float _poseYaw;
+        private float _posePitch;
+        private float _poseRoll;
+        private float _lastNod = -10f;
+        private float _nextListenNod;
+        private int _tiltSide = 1;
+        private bool _subscribed;
+
+        // Parpadeo.
         private int _blinkLeftIndex = -1;
         private int _blinkRightIndex = -1;
         private float _blinkScale = 1f;
         private float _timeToNextBlink;
-        private float _blinkRemaining;
-        private float _noiseSeed;
-        private float _nodLevel;
+        private float _blinkElapsed = -1f;
+        private float _blinkDepth = 1f;
+        private float _pendingSecondBlink = -1f;
+        private float _lid;
 
         // Mirada dirigida desde fuera (salida y entrada caminando: mira hacia
         // dónde va). Manda sobre el visitante, el panel y el punto de pensar.
@@ -201,10 +286,32 @@ namespace Sonia
                 choreographer = GetComponentInChildren<AvatarChoreographer>(true);
             }
 
-            _noiseSeed = UnityEngine.Random.value * 100f;
+            if (eyeGaze == null)
+            {
+                eyeGaze = GetComponentInChildren<EyeGazeController>(true);
+            }
 
+            _noiseSeed = UnityEngine.Random.value * 100f;
             RefreshBlendShapes();
             ScheduleNextBlink();
+        }
+
+        private void OnEnable()
+        {
+            if (lipSync != null && !_subscribed)
+            {
+                lipSync.OnSpeechEvent += HandleSpeechEvent;
+                _subscribed = true;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (lipSync != null && _subscribed)
+            {
+                lipSync.OnSpeechEvent -= HandleSpeechEvent;
+                _subscribed = false;
+            }
         }
 
         /// <summary>Vuelve a resolver los blendshapes de parpadeo (útil si el avatar se asigna tarde).</summary>
@@ -237,7 +344,26 @@ namespace Sonia
         /// <summary>Aplica un estado del avatar.</summary>
         public void SetState(AvatarState state)
         {
+            if (state == _state)
+            {
+                return;
+            }
+
             _state = state;
+            _stateSince = Time.time;
+            _tiltSide = UnityEngine.Random.value < 0.5f ? -1 : 1;
+            _nextListenNod = Time.time + UnityEngine.Random.Range(1.2f, 2.5f);
+            if (state != AvatarState.Speaking)
+            {
+                _poseYaw = 0f;
+                _posePitch = 0f;
+                _poseRoll = 0f;
+            }
+
+            if (UnityEngine.Random.value < blinkOnSpeechChance + 0.15f)
+            {
+                TriggerBlink();
+            }
         }
 
         /// <summary>Convierte el nombre del protocolo al enum; lo desconocido queda en idle.</summary>
@@ -283,14 +409,102 @@ namespace Sonia
         }
 
         // ------------------------------------------------------------------
+        // Voz
+        // ------------------------------------------------------------------
+
+        private void HandleSpeechEvent(SpeechAnalyzer.SpeechEvent e)
+        {
+            float now = Time.time;
+            switch (e.Kind)
+            {
+                case SpeechAnalyzer.EventKind.PhraseStart:
+                    // Cada frase, una pose de cabeza algo distinta: así no habla
+                    // siempre con la cara clavada en el mismo sitio.
+                    _poseYaw = UnityEngine.Random.Range(-1f, 1f) * phrasePoseDegrees;
+                    _poseRoll = UnityEngine.Random.Range(-1f, 1f) * phrasePoseDegrees * 0.8f;
+                    _posePitch = UnityEngine.Random.Range(-0.6f, 0.4f) * phrasePoseDegrees * 0.5f;
+                    if (UnityEngine.Random.value < blinkOnSpeechChance)
+                    {
+                        TriggerBlink();
+                    }
+
+                    break;
+                case SpeechAnalyzer.EventKind.PhraseEnd:
+                    Nod(stressNodDegrees * 0.6f);
+                    _poseYaw *= 0.4f;
+                    _poseRoll *= 0.4f;
+                    _posePitch = 0f;
+                    if (UnityEngine.Random.value < blinkOnSpeechChance)
+                    {
+                        TriggerBlink();
+                    }
+
+                    break;
+                case SpeechAnalyzer.EventKind.Syllable:
+                    if (e.Strength >= stressThreshold && now - _lastNod > 0.45f
+                        && UnityEngine.Random.value < stressNodChance)
+                    {
+                        float strength = Mathf.InverseLerp(stressThreshold, 1f, e.Strength);
+                        Nod(stressNodDegrees * Mathf.Lerp(0.6f, 1f, strength));
+                    }
+
+                    break;
+            }
+        }
+
+        /// <summary>Asentimiento: un empujón al muelle del cabeceo que llega a <paramref name="degrees"/>.</summary>
+        private void Nod(float degrees)
+        {
+            // Con un muelle críticamente amortiguado en reposo, una velocidad v
+            // inicial llega a un máximo de v / (omega · e).
+            const float frequency = 2.6f;
+            float omega = 2f * Mathf.PI * frequency;
+            _pitch.Kick(degrees * omega * 2.718f);
+            _lastNod = Time.time;
+        }
+
+        // ------------------------------------------------------------------
         // Mirada y parpadeo
         // ------------------------------------------------------------------
 
         private void LateUpdate()
         {
             float deltaTime = Time.deltaTime;
+            UpdateGestures(deltaTime);
             UpdateLook(deltaTime);
             UpdateBlink(deltaTime);
+        }
+
+        private void UpdateGestures(float dt)
+        {
+            float now = Time.time;
+            float targetYaw = _poseYaw;
+            float targetRoll = _poseRoll;
+            float targetPitch = _posePitch;
+            switch (_state)
+            {
+                case AvatarState.Listening:
+                    // Ladeada y un poco hacia delante: atenta.
+                    targetRoll = listenTiltDegrees * _tiltSide;
+                    targetPitch = 1.5f;
+                    if (now >= _nextListenNod)
+                    {
+                        _nextListenNod = now + UnityEngine.Random.Range(listenNodInterval.x, listenNodInterval.y);
+                        Nod(listenNodDegrees * UnityEngine.Random.Range(0.7f, 1.1f));
+                    }
+
+                    break;
+                case AvatarState.Thinking:
+                    targetRoll = thinkTiltDegrees * _tiltSide;
+                    break;
+            }
+
+            // El cabeceo tiene dos partes: la pose (lenta) y los asentimientos
+            // (empujones que vuelven solos a cero).
+            _pitch.Step(0f, 2.6f, dt);
+            _pitchPose.Step(targetPitch, 1.2f, dt);
+            _yaw.Step(targetYaw, 1.1f, dt);
+            _roll.Step(targetRoll, 1.0f, dt);
         }
 
         private void UpdateLook(float deltaTime)
@@ -314,24 +528,25 @@ namespace Sonia
             {
                 targetWeight = Mathf.Clamp01(_lookOverrideWeight);
             }
+
             _currentWeight = Mathf.Lerp(_currentWeight, targetWeight, 1f - Mathf.Exp(-3f * deltaTime));
 
             Quaternion desiredOffset = Quaternion.identity;
             Vector3 targetPosition;
+            Vector3 lookDirection = headBone.forward;
             if (TryGetLookPosition(out targetPosition))
             {
                 Vector3 direction = targetPosition - headBone.position;
                 if (direction.sqrMagnitude > 0.0001f)
                 {
-                    // Vaivén lento (ruido Perlin) y un asentimiento leve en las sílabas
-                    // fuertes: una cabeza real nunca se queda clavada mirando un punto.
-                    float swayYaw = (Mathf.PerlinNoise(_noiseSeed, Time.time * 0.35f) - 0.5f) * 2f * headSwayDegrees;
-                    float swayPitch = (Mathf.PerlinNoise(_noiseSeed + 17f, Time.time * 0.28f) - 0.5f) * 2f * headSwayDegrees;
-                    float open = lipSync != null ? lipSync.MouthOpen : 0f;
-                    _nodLevel = Mathf.Lerp(_nodLevel, open, 1f - Mathf.Exp(-6f * deltaTime));
-                    Quaternion desired = Quaternion.LookRotation(direction.normalized, Vector3.up)
+                    lookDirection = direction.normalized;
+
+                    // Vaivén lento (ruido Perlin): una cabeza real nunca se queda clavada.
+                    float swayYaw = FaceCurves.Noise(_noiseSeed, Time.time * 0.35f) * headSwayDegrees;
+                    float swayPitch = FaceCurves.Noise(_noiseSeed + 17f, Time.time * 0.28f) * headSwayDegrees;
+                    Quaternion desired = Quaternion.LookRotation(lookDirection, Vector3.up)
                                          * Quaternion.Euler(headRotationOffset)
-                                         * Quaternion.Euler(swayPitch + _nodLevel * speechNodDegrees, swayYaw, 0f);
+                                         * Quaternion.Euler(swayPitch, swayYaw, 0f);
                     Quaternion limited = Quaternion.RotateTowards(baseRotation, desired, maxLookAngle);
 
                     // Desvío respecto a la animación, en local: viaja con el cuerpo.
@@ -340,7 +555,25 @@ namespace Sonia
             }
 
             _lookOffset = Quaternion.Slerp(_lookOffset, desiredOffset, StepFor(deltaTime));
-            headBone.rotation = baseRotation * Quaternion.Slerp(Quaternion.identity, _lookOffset, _currentWeight);
+            Quaternion looked = baseRotation * Quaternion.Slerp(Quaternion.identity, _lookOffset, _currentWeight);
+
+            // Gestos encima de la mirada, en ejes del mundo alineados con ella:
+            // cabeceo alrededor del eje "derecha", giro alrededor de la vertical
+            // e inclinación alrededor de la dirección de la mirada. Durante los
+            // bailes manda la animación: los gestos se apagan con el peso.
+            Vector3 forward = Vector3.ProjectOnPlane(lookDirection, Vector3.up);
+            if (forward.sqrMagnitude < 0.0001f)
+            {
+                forward = Vector3.ProjectOnPlane(headBone.forward, Vector3.up);
+            }
+
+            forward.Normalize();
+            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+            float gestureWeight = Mathf.InverseLerp(0f, Mathf.Max(0.01f, lookWeight), _currentWeight);
+            Quaternion gesture = Quaternion.AngleAxis(_roll.Value * gestureWeight, forward)
+                                 * Quaternion.AngleAxis((_pitch.Value + _pitchPose.Value) * gestureWeight, right)
+                                 * Quaternion.AngleAxis(_yaw.Value * gestureWeight, Vector3.up);
+            headBone.rotation = gesture * looked;
         }
 
         private float StepFor(float deltaTime)
@@ -375,7 +608,9 @@ namespace Sonia
                 }
 
                 Transform root = avatarRoot != null ? avatarRoot : transform;
-                position = root.TransformPoint(thinkingLookOffset);
+                Vector3 origin = headBone != null ? headBone.position : root.position;
+                Vector3 side = root.right * (thinkingGaze.x * _tiltSide);
+                position = origin + side + Vector3.up * thinkingGaze.y + FacingOf(root) * thinkingGaze.z;
                 return true;
             }
 
@@ -396,6 +631,32 @@ namespace Sonia
             return false;
         }
 
+        /// <summary>Hacia dónde mira el avatar en horizontal: hacia la cámara si la hay.</summary>
+        private Vector3 FacingOf(Transform root)
+        {
+            Vector3 toward = Vector3.zero;
+            if (lookTarget != null && headBone != null)
+            {
+                toward = lookTarget.position - headBone.position;
+            }
+            else if (Camera.main != null && headBone != null)
+            {
+                toward = Camera.main.transform.position - headBone.position;
+            }
+
+            toward = Vector3.ProjectOnPlane(toward, Vector3.up);
+            if (toward.sqrMagnitude < 0.0001f)
+            {
+                toward = Vector3.ProjectOnPlane(root.forward, Vector3.up);
+            }
+
+            return toward.normalized;
+        }
+
+        // ------------------------------------------------------------------
+        // Parpadeo
+        // ------------------------------------------------------------------
+
         private void UpdateBlink(float deltaTime)
         {
             if (faceRenderer == null || (_blinkLeftIndex < 0 && _blinkRightIndex < 0))
@@ -403,40 +664,81 @@ namespace Sonia
                 return;
             }
 
-            if (_blinkRemaining > 0f)
+            float blink = 0f;
+            if (_blinkElapsed >= 0f)
             {
-                _blinkRemaining -= deltaTime;
-                float duration = Mathf.Max(0.02f, blinkDuration);
-                float half = duration * 0.5f;
-                float weight = _blinkRemaining > half
-                    ? Mathf.InverseLerp(duration, half, _blinkRemaining)
-                    : Mathf.InverseLerp(0f, half, _blinkRemaining);
-
-                if (_blinkRemaining <= 0f)
+                _blinkElapsed += deltaTime;
+                float duration = Mathf.Max(0.06f, blinkDuration);
+                float close = duration * 0.35f;
+                float hold = duration * 0.1f;
+                if (_blinkElapsed < close)
                 {
-                    _blinkRemaining = 0f;
-                    weight = 0f;
-                    ScheduleNextBlink();
+                    float t = _blinkElapsed / close;
+                    blink = t * t;
+                }
+                else if (_blinkElapsed < close + hold)
+                {
+                    blink = 1f;
+                }
+                else if (_blinkElapsed < duration)
+                {
+                    float t = (_blinkElapsed - close - hold) / (duration - close - hold);
+                    blink = 1f - (t * (2f - t));
+                }
+                else
+                {
+                    _blinkElapsed = -1f;
+                    if (_pendingSecondBlink >= 0f)
+                    {
+                        _timeToNextBlink = _pendingSecondBlink;
+                        _pendingSecondBlink = -1f;
+                    }
+                    else
+                    {
+                        ScheduleNextBlink();
+                    }
                 }
 
-                ApplyBlink(Mathf.Clamp01(weight) * 100f);
-                return;
+                blink *= _blinkDepth;
+            }
+            else
+            {
+                _timeToNextBlink -= deltaTime;
+                if (_timeToNextBlink <= 0f)
+                {
+                    StartBlink(UnityEngine.Random.value < 0.1f ? 0.6f : 1f);
+                    if (UnityEngine.Random.value < doubleBlinkChance)
+                    {
+                        _pendingSecondBlink = 0.08f;
+                    }
+                }
             }
 
-            _timeToNextBlink -= deltaTime;
-            if (_timeToNextBlink <= 0f)
+            // El párpado superior acompaña a la mirada: al mirar abajo baja.
+            float lidTarget = 0f;
+            if (eyeGaze != null)
             {
-                _blinkRemaining = Mathf.Max(0.02f, blinkDuration);
+                lidTarget = Mathf.Clamp01(eyeGaze.CurrentPitchDown / 10f) * lidFollowsGaze;
             }
+
+            _lid = Mathf.Lerp(_lid, lidTarget, 1f - Mathf.Exp(-12f * deltaTime));
+            float weight = Mathf.Clamp01(Mathf.Max(blink, _lid));
+            ApplyBlink(weight * 100f);
         }
 
         /// <summary>Parpadea ahora mismo (si no está ya parpadeando). Lo usan las sacadas grandes.</summary>
         public void TriggerBlink()
         {
-            if (_blinkRemaining <= 0f)
+            if (_blinkElapsed < 0f)
             {
-                _blinkRemaining = Mathf.Max(0.02f, blinkDuration);
+                StartBlink(1f);
             }
+        }
+
+        private void StartBlink(float depth)
+        {
+            _blinkElapsed = 0f;
+            _blinkDepth = depth;
         }
 
         private void ScheduleNextBlink()

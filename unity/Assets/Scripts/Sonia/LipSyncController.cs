@@ -1,20 +1,28 @@
-// Lip-sync del avatar.
+// Lip-sync del avatar a partir de la voz que suena.
 //
-// Tres fuentes, por orden de preferencia:
-//  1. Fonemas analizados en tiempo real sobre el audio que suena (uLipSync a
-//     través de PhonemeLipSyncBridge): vocales A/I/U/E/O y nasal, con
-//     proporciones que ya vienen mezcladas, así que la boca pasa de una forma a
-//     otra sin saltos. Es lo único que va de verdad al compás de la voz.
-//  2. Visemas con timestamp que envía el orquestador, alineados con el tiempo
-//     del audio reproducido (AudioStreamPlayer.CurrentUtteranceTime). Hoy son
-//     una estimación por texto repartida uniformemente en la duración, así que
-//     solo se usan si no hay fonemas (preferRealtimePhonemes apagado o sin
-//     analizador).
-//  3. Apertura de boca según la envolvente de amplitud de la frase o, si
-//     tampoco hay envolvente, según el nivel RMS del audio que suena.
+// La boca se compone, cada frame, de tres cosas medidas en el audio:
 //
-// Los pesos se suavizan con ataque rápido y caída más lenta, que es como se
-// mueve una boca real, y se acotan para que nunca se abra del todo.
+//  1. Cuánto abre: la envolvente de sílaba (SpeechAnalyzer, ventanas de 5 ms y
+//     control de ganancia). Es lo que más se nota desde lejos y lo que nunca
+//     puede ir a destiempo, así que se toma del propio audio con un pequeño
+//     adelanto: la boca se prepara un poco antes de que suene la sílaba, como
+//     en una persona.
+//  2. Con qué forma: la vocal que reconoce uLipSync (A, E, I, O, U) a través de
+//     PhonemeLipSyncBridge, suavizada y mezclada con una forma neutra según lo
+//     seguro que esté, porque una "o" que no toca se ve más que una "a" de más.
+//  3. Las consonantes que se ven: cierre de labios en los valles hondos entre
+//     sílabas (p, b, m y el resto de oclusivas) y dientes juntos en la "s".
+//
+// Los visemas de Ready Player Me se usan casi enteros (con 0,2 la boca apenas
+// se entreabría) y la mandíbula (jawOpen) se suma en las sílabas fuertes. Todo
+// pasa por muelles críticamente amortiguados.
+//
+// También reparte la prosodia: los eventos de sílaba y de frase del analizador
+// salen por OnSpeechEvent cuando les llega su momento, para que cabeza, cejas y
+// parpadeo vayan con la voz.
+//
+// Los visemas y la envolvente que mandaba el orquestador antiguo ya no llegan
+// con GPT-Live; SetVisemes y SetEnvelope se quedan sin efecto por compatibilidad.
 
 using System;
 using System.Collections.Generic;
@@ -22,14 +30,9 @@ using UnityEngine;
 
 namespace Sonia
 {
-    /// <summary>
-    /// Anima los blendshapes de la cara siguiendo los visemas de cada frase.
-    /// Todo es opcional: sin SkinnedMeshRenderer o sin blendshapes de visemas el
-    /// componente cae al modo de envolvente y no lanza nada.
-    /// </summary>
+    /// <summary>Mueve la boca con la voz que suena y reparte los eventos de prosodia.</summary>
     // Corre después del LateUpdate de Vrm10Instance (orden 11000), que aplica sus
-    // expresiones (a cero) y la mirada; así los blendshapes de boca y parpadeo
-    // que escribimos aquí prevalecen y los ojos ya tienen la mirada aplicada.
+    // expresiones (a cero); así los blendshapes de boca que escribimos aquí prevalecen.
     [DefaultExecutionOrder(12000)]
     [DisallowMultipleComponent]
     public class LipSyncController : MonoBehaviour
@@ -47,47 +50,18 @@ namespace Sonia
 
         [Header("Referencias")]
         [SerializeField]
-        [Tooltip("Malla con los blendshapes de la cara (en Ready Player Me suele ser Wolf3D_Head).")]
+        [Tooltip("Malla con los blendshapes de la cara.")]
         private SkinnedMeshRenderer faceRenderer;
 
         [SerializeField]
-        [Tooltip("Reproductor del que se leen la frase y el tiempo actuales.")]
+        [Tooltip("Reproductor del audio en streaming: de él sale la voz que se analiza.")]
         private AudioStreamPlayer audioPlayer;
 
         [Header("Visemas")]
         [SerializeField]
-        [Tooltip("Mapa visema del protocolo a blendshape. Se rellena con la convención Ready Player Me / Oculus.")]
+        [Tooltip("Mapa visema del protocolo a blendshape (convención Ready Player Me / Oculus por defecto).")]
         private VisemeBinding[] visemeBindings = CreateDefaultBindings();
 
-        [SerializeField]
-        [Range(1f, 60f)]
-        [Tooltip("Velocidad con la que un visema sube (ataque). Más alto, boca más nerviosa.")]
-        private float attackSpeed = 28f;
-
-        [SerializeField]
-        [Range(1f, 60f)]
-        [Tooltip("Velocidad con la que un visema baja (caída). Más bajo, transiciones más suaves.")]
-        private float releaseSpeed = 11f;
-
-        [SerializeField]
-        [Tooltip("Desfase en segundos entre el audio y los visemas. Negativo adelanta la boca.")]
-        private float timeOffsetSeconds;
-
-        [SerializeField]
-        [Range(0f, 100f)]
-        [Tooltip("Peso máximo que se aplica a un visema con w = 1. Al 100 la boca se abre del todo y parece un grito.")]
-        private float visemeMaxWeight = 75f;
-
-        [Header("Fonemas en tiempo real")]
-        [SerializeField]
-        [Tooltip("Segundos de validez de un frame de fonemas. Pasado ese tiempo sin noticias se vuelve al respaldo.")]
-        private float phonemeFrameTimeout = 0.25f;
-
-        [SerializeField]
-        [Tooltip("Con fonemas frescos, usarlos aunque el orquestador haya enviado visemas. Los visemas del orquestador son una estimación por texto repartida uniformemente en la duración del audio y llegan al terminar la síntesis; si tomaran el mando a mitad de frase la boca se desincroniza, sobre todo en la cola.")]
-        private bool preferRealtimePhonemes = true;
-
-        [Header("Respaldo por envolvente")]
         [SerializeField]
         [Tooltip("Blendshape de apertura de mandíbula (convención ARKit).")]
         private string jawOpenBlendShape = "jawOpen";
@@ -108,50 +82,120 @@ namespace Sonia
         [Tooltip("Grados que baja la mandíbula con la boca del todo abierta.")]
         private float jawBoneMaxAngle = 14f;
 
+        [Header("Sincronía")]
         [SerializeField]
-        [Range(0f, 4f)]
-        [Tooltip("Ganancia aplicada a la envolvente antes de abrir la boca.")]
-        private float envelopeGain = 1.2f;
-
-        [SerializeField]
-        [Range(0.1f, 1f)]
-        [Tooltip("Apertura máxima de la mandíbula en el respaldo por envolvente. Con jawOpen al 100 % parece un grito.")]
-        private float maxMouthOpen = 0.6f;
+        [Range(40f, 200f)]
+        [Tooltip("Retardo de la voz respecto al análisis (ms). Es lo que la cara puede ver por delante: adelanto de la boca, cierres antes de la p y gestos que preceden a la sílaba. Se aplica a AudioStreamPlayer al arrancar si el suyo es menor.")]
+        public float voiceDelayMs = 100f;
 
         [SerializeField]
-        [Range(0f, 40f)]
-        [Tooltip("Ganancia aplicada al RMS cuando no hay ni visemas ni envolvente.")]
-        private float rmsGain = 12f;
+        [Range(-60f, 120f)]
+        [Tooltip("Cuánto se adelanta la boca a lo que suena (ms). Positivo: la boca va antes, como en el habla real.")]
+        public float mouthLeadMs = 35f;
 
-        private readonly Dictionary<int, List<VisemeFrame>> _visemesByUtterance =
-            new Dictionary<int, List<VisemeFrame>>();
+        [SerializeField]
+        [Range(0f, 160f)]
+        [Tooltip("Cuánto se adelantan los gestos (cabeza, cejas, parpadeo) a su sílaba (ms).")]
+        public float gestureLeadMs = 70f;
 
-        private readonly Dictionary<int, EnvelopeData> _envelopesByUtterance =
-            new Dictionary<int, EnvelopeData>();
+        [SerializeField]
+        [Range(-1f, 200f)]
+        [Tooltip("Latencia de la salida de audio en ms (lo que tarda el bloque en sonar). -1: un búfer DSP.")]
+        public float outputLatencyMs = -1f;
 
-        private readonly List<int> _cleanupBuffer = new List<int>();
+        [Header("Boca")]
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Peso del visema de la vocal en una sílaba fuerte. Con 1 la boca hace la forma completa de Ready Player Me.")]
+        public float vowelWeight = 0.85f;
+
+        [SerializeField]
+        [Range(0.3f, 1.5f)]
+        [Tooltip("Curva de apertura: menos de 1 abre antes con voz floja.")]
+        public float openCurve = 1f;
+
+        [SerializeField]
+        [Range(0f, 0.6f)]
+        [Tooltip("Mandíbula extra (jawOpen) en las sílabas más fuertes con vocal abierta.")]
+        public float jawBoost = 0.18f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Cuánto manda la vocal reconocida frente a una forma neutra (a, e).")]
+        public float vowelTrust = 0.75f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Cierre de labios (viseme_PP) en los valles entre sílabas: p, b, m y demás oclusivas.")]
+        public float closureWeight = 0.85f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Dientes juntos (viseme_SS) en la s.")]
+        public float sibilantWeight = 0.5f;
+
+        [SerializeField]
+        [Range(2f, 20f)]
+        [Tooltip("Velocidad de la boca (Hz del muelle). Más alto, más nítida; más bajo, más blanda.")]
+        public float mouthSpeed = 10f;
+
+        [SerializeField]
+        [Range(2f, 30f)]
+        [Tooltip("Velocidad del cierre de labios (Hz del muelle). Un cierre lento no se ve.")]
+        public float closureSpeed = 16f;
+
+        [SerializeField]
+        [Range(0.01f, 0.2f)]
+        [Tooltip("Constante de tiempo (s) del suavizado de la vocal reconocida. Muy baja: la forma tiembla.")]
+        public float vowelSmoothing = 0.05f;
+
+        /// <summary>Evento de prosodia cuando le llega su momento (ver gestureLeadMs). Hilo principal.</summary>
+        public event Action<SpeechAnalyzer.SpeechEvent> OnSpeechEvent;
+
+        // Vocales en el orden de los visemas de la boca.
+        private const int VA = 0, VE = 1, VI = 2, VO = 3, VU = 4;
+        private static readonly string[] VowelVisemes = { VisemeIds.AA, VisemeIds.E, VisemeIds.IH, VisemeIds.OH, VisemeIds.OU };
+
+        // Forma neutra de una sílaba cuando no se sabe la vocal: abierta y relajada.
+        private static readonly float[] NeutralMix = { 0.6f, 0.3f, 0.1f, 0f, 0f };
+
+        private struct VowelSample
+        {
+            public long Sample;
+            public float A, E, I, O, U;
+        }
+
+        private SpeechAnalyzer _analyzer;
+        private readonly List<SpeechAnalyzer.SpeechEvent> _eventBuffer = new List<SpeechAnalyzer.SpeechEvent>();
+        private readonly VowelSample[] _vowels = new VowelSample[64];
+        private int _vowelCount;
+        private int _vowelHead;
+        private long _writtenLastFrame;
+        private bool _subscribed;
 
         private int[] _shapeIndices = new int[0];
-        private float[] _currentWeights = new float[0];
-        private float[] _targetWeights = new float[0];
-        private int _jawShapeIndex = -1;
-        private int _mouthShapeIndex = -1;
         private bool _hasVisemeShapes;
-
-        // Los FBX y VRM definen los blendshapes de 0 a 100; los GLB de glTFast
-        // (Ready Player Me) de 0 a 1. Se escribe siempre en la escala de la malla.
+        private int _jawShapeIndex = -1;
+        private int[] _vowelSlots = { -1, -1, -1, -1, -1 };
+        private int _ppSlot = -1;
+        private int _ssSlot = -1;
         private float _shapeScale = 1f;
-        private float _openCurrent;
-        private int _lastUtteranceId = -1;
-
-        // Frame de fonemas en tiempo real: pesos 0..1 por vocal (ya escalados por
-        // el volumen) y momento en que llegó.
-        private float _phA, _phI, _phU, _phE, _phO, _phN;
-        private float _phonemeFrameTime = -999f;
-        private bool _usingPhonemes;
-        private int _frameCursor;
         private Quaternion _jawInitialRotation = Quaternion.identity;
         private bool _hasJawBone;
+
+        private double _clock;
+        private bool _clockReady;
+        private readonly float[] _mix = { 0.6f, 0.3f, 0.1f, 0f, 0f };
+        private Spring _open;
+        private Spring _closure;
+        private Spring _sibilant;
+        private Spring _jaw;
+        private readonly Spring[] _vowelSprings = new Spring[5];
+        private float _roundness;
+        private bool _active;
+        private float[] _accum = new float[0];
+        private int[] _touched = new int[0];
+        private int _touchedCount;
 
         /// <summary>Cierto si la malla tiene blendshapes de visemas utilizables.</summary>
         public bool HasVisemeShapes
@@ -159,50 +203,46 @@ namespace Sonia
             get { return _hasVisemeShapes; }
         }
 
-        /// <summary>Apertura actual de la boca, 0..1, sea cual sea la fuente. Sirve para acompasar gestos a la voz.</summary>
+        /// <summary>Apertura actual de la boca, 0..1. Sirve para acompasar gestos a la voz.</summary>
         public float MouthOpen
         {
-            get
-            {
-                float best = _openCurrent;
-                for (int i = 0; i < _currentWeights.Length; i++)
-                {
-                    if (_shapeIndices[i] >= 0 && _currentWeights[i] > best * 100f)
-                    {
-                        best = _currentWeights[i] / 100f;
-                    }
-                }
-
-                return Mathf.Clamp01(best);
-            }
+            get { return Mathf.Clamp01(_open.Value); }
         }
 
-        /// <summary>Cierto mientras la boca se mueve por los fonemas analizados en tiempo real.</summary>
+        /// <summary>Cuánto redondea los labios ahora (o, u), 0..1: con la boca redonda no cabe una sonrisa ancha.</summary>
+        public float Roundness
+        {
+            get { return _roundness; }
+        }
+
+        /// <summary>Cierto mientras hay voz en la boca (sílabas sonando o a punto de sonar).</summary>
+        public bool IsTalking
+        {
+            get { return _active; }
+        }
+
+        /// <summary>Cierto mientras la vocal llega del análisis de fonemas en tiempo real.</summary>
         public bool UsingPhonemes
         {
-            get { return _usingPhonemes; }
+            get { return _vowelCount > 0; }
         }
 
-        /// <summary>
-        /// Recibe un frame de fonemas en tiempo real (PhonemeLipSyncBridge). Cada
-        /// valor es la fuerza 0..1 de esa vocal ya escalada por el volumen; la
-        /// nasal (n) cierra casi la boca.
-        /// </summary>
-        public void SetPhonemeFrame(float a, float i, float u, float e, float o, float n)
+        /// <summary>Analizador de la voz (nivel, bandas, prosodia). Puede ser null sin reproductor.</summary>
+        public SpeechAnalyzer Analyzer
         {
-            _phA = Mathf.Clamp01(a);
-            _phI = Mathf.Clamp01(i);
-            _phU = Mathf.Clamp01(u);
-            _phE = Mathf.Clamp01(e);
-            _phO = Mathf.Clamp01(o);
-            _phN = Mathf.Clamp01(n);
-            _phonemeFrameTime = Time.time;
+            get { return _analyzer; }
         }
 
-        /// <summary>Olvida el último frame de fonemas (por ejemplo al desactivar el analizador).</summary>
-        public void ClearPhonemeFrame()
+        /// <summary>Muestra (reloj del análisis) que suena ahora mismo.</summary>
+        public double AudibleSample
         {
-            _phonemeFrameTime = -999f;
+            get { return _clock; }
+        }
+
+        /// <summary>Muestras de latencia de la salida que se están suponiendo (para el laboratorio).</summary>
+        public int OutputLatencySamples
+        {
+            get { return LatencySamples(); }
         }
 
         /// <summary>Malla de la cara. Al cambiarla se vuelven a resolver los blendshapes.</summary>
@@ -229,7 +269,34 @@ namespace Sonia
                 _hasJawBone = true;
             }
 
+            if (audioPlayer != null)
+            {
+                _analyzer = new SpeechAnalyzer(audioPlayer.OutputSampleRate);
+                if (audioPlayer.LipSyncLeadMs < voiceDelayMs)
+                {
+                    audioPlayer.LipSyncLeadMs = voiceDelayMs;
+                }
+            }
+
             RebindBlendShapes();
+        }
+
+        private void OnEnable()
+        {
+            if (audioPlayer != null && _analyzer != null && !_subscribed)
+            {
+                audioPlayer.OnAudioFrame += _analyzer.Push;
+                _subscribed = true;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (audioPlayer != null && _analyzer != null && _subscribed)
+            {
+                audioPlayer.OnAudioFrame -= _analyzer.Push;
+                _subscribed = false;
+            }
         }
 
         /// <summary>Mapa por defecto: identificadores del protocolo a nombres Ready Player Me / Oculus.</summary>
@@ -255,10 +322,7 @@ namespace Sonia
             };
         }
 
-        /// <summary>
-        /// Busca en la malla el índice de cada blendshape del mapa. Se puede llamar
-        /// a mano si el avatar se asigna en tiempo de ejecución.
-        /// </summary>
+        /// <summary>Busca en la malla los blendshapes del mapa. Se puede llamar si el avatar cambia en marcha.</summary>
         public void RebindBlendShapes()
         {
             if (visemeBindings == null || visemeBindings.Length == 0)
@@ -268,41 +332,47 @@ namespace Sonia
 
             int count = visemeBindings.Length;
             _shapeIndices = new int[count];
-            _currentWeights = new float[count];
-            _targetWeights = new float[count];
             _hasVisemeShapes = false;
             _jawShapeIndex = -1;
-            _mouthShapeIndex = -1;
 
             Mesh mesh = faceRenderer != null ? faceRenderer.sharedMesh : null;
-            if (mesh == null)
-            {
-                for (int i = 0; i < count; i++)
-                {
-                    _shapeIndices[i] = -1;
-                }
-
-                return;
-            }
-
             for (int i = 0; i < count; i++)
             {
                 VisemeBinding binding = visemeBindings[i];
-                int index = binding == null ? -1 : FindBlendShape(mesh, binding.blendShape);
+                int index = mesh == null || binding == null ? -1 : FindBlendShape(mesh, binding.blendShape);
                 _shapeIndices[i] = index;
-                if (index >= 0)
+                _hasVisemeShapes |= index >= 0;
+            }
+
+            for (int v = 0; v < VowelVisemes.Length; v++)
+            {
+                _vowelSlots[v] = FindBindingSlot(VowelVisemes[v]);
+            }
+
+            _ppSlot = FindBindingSlot(VisemeIds.PP);
+            _ssSlot = FindBindingSlot(VisemeIds.SS);
+            if (mesh != null)
+            {
+                _jawShapeIndex = FindBlendShape(mesh, jawOpenBlendShape);
+                if (_jawShapeIndex < 0)
                 {
-                    _hasVisemeShapes = true;
+                    _jawShapeIndex = FindBlendShape(mesh, mouthOpenBlendShape);
                 }
             }
 
-            _jawShapeIndex = FindBlendShape(mesh, jawOpenBlendShape);
-            if (_jawShapeIndex < 0)
-            {
-                _mouthShapeIndex = FindBlendShape(mesh, mouthOpenBlendShape);
-            }
-
             _shapeScale = BlendShapeScale(mesh);
+
+            // Lo que no se anima (sil, FF, TH, DD...) se deja a cero una vez.
+            if (faceRenderer != null)
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    if (_shapeIndices[i] >= 0)
+                    {
+                        faceRenderer.SetBlendShapeWeight(_shapeIndices[i], 0f);
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -321,11 +391,8 @@ namespace Sonia
             return full > 0.0001f ? full / 100f : 1f;
         }
 
-        /// <summary>
-        /// Busca un blendshape por nombre. Acepta diferencias de mayúsculas y el
-        /// prefijo con punto que añaden algunos importadores ("Head.viseme_aa").
-        /// </summary>
-        private static int FindBlendShape(Mesh mesh, string name)
+        /// <summary>Busca un blendshape por nombre, sin distinguir mayúsculas y aceptando el prefijo con punto.</summary>
+        public static int FindBlendShape(Mesh mesh, string name)
         {
             if (mesh == null || string.IsNullOrEmpty(name))
             {
@@ -353,336 +420,8 @@ namespace Sonia
                 }
 
                 int dot = candidate.LastIndexOf('.');
-                if (dot >= 0 && dot + 1 < candidate.Length)
-                {
-                    string suffix = candidate.Substring(dot + 1);
-                    if (string.Equals(suffix, name, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return i;
-                    }
-                }
-            }
-
-            return -1;
-        }
-
-        // ------------------------------------------------------------------
-        // Datos que llegan por el protocolo
-        // ------------------------------------------------------------------
-
-        /// <summary>Guarda los visemas de una frase.</summary>
-        public void SetVisemes(VisemesMessage message)
-        {
-            if (message == null || message.Frames == null)
-            {
-                return;
-            }
-
-            List<VisemeFrame> frames = new List<VisemeFrame>(message.Frames.Count);
-            for (int i = 0; i < message.Frames.Count; i++)
-            {
-                VisemeFrame frame = message.Frames[i];
-                if (frame != null)
-                {
-                    frames.Add(frame);
-                }
-            }
-
-            frames.Sort(CompareByTime);
-            _visemesByUtterance[message.UtteranceId] = frames;
-            if (message.UtteranceId == _lastUtteranceId)
-            {
-                _frameCursor = 0;
-            }
-        }
-
-        /// <summary>Guarda la envolvente de amplitud de una frase.</summary>
-        public void SetEnvelope(EnvelopeMessage message)
-        {
-            if (message == null || message.Values == null || message.Values.Count == 0)
-            {
-                return;
-            }
-
-            EnvelopeData data = new EnvelopeData
-            {
-                IntervalSeconds = Mathf.Max(0.001f, message.IntervalMs / 1000f),
-                Values = message.Values.ToArray()
-            };
-            _envelopesByUtterance[message.UtteranceId] = data;
-        }
-
-        /// <summary>Suelta los datos de una frase que ya terminó de reproducirse.</summary>
-        public void NotifyUtteranceFinished(int utteranceId)
-        {
-            _visemesByUtterance.Remove(utteranceId);
-            _envelopesByUtterance.Remove(utteranceId);
-        }
-
-        /// <summary>
-        /// Estado interno en texto, para depurar el lip-sync desde el editor o el HUD
-        /// sin necesidad de reflexión.
-        /// </summary>
-        public string DebugInfo()
-        {
-            int utteranceId = -1;
-            float time = 0f;
-            float rms = 0f;
-            if (audioPlayer != null)
-            {
-                audioPlayer.GetPlaybackPosition(out utteranceId, out time, out rms);
-            }
-
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            sb.Append("hasVisemeShapes=").Append(_hasVisemeShapes)
-              .Append(" face=").Append(faceRenderer != null ? faceRenderer.name : "null")
-              .Append(" player=").Append(audioPlayer != null)
-              .Append(" utt=").Append(utteranceId).Append(" t=").Append(time.ToString("F2"))
-              .Append(" lastUtt=").Append(_lastUtteranceId).Append(" cursor=").Append(_frameCursor)
-              .Append(" visemasGuardados=[");
-            foreach (KeyValuePair<int, List<VisemeFrame>> pair in _visemesByUtterance)
-            {
-                sb.Append(pair.Key).Append(':').Append(pair.Value.Count).Append(' ');
-            }
-
-            sb.Append("] envolventes=").Append(_envelopesByUtterance.Count).Append(" slots=[");
-            if (_shapeIndices != null)
-            {
-                for (int i = 0; i < _shapeIndices.Length; i++)
-                {
-                    string viseme = visemeBindings != null && i < visemeBindings.Length && visemeBindings[i] != null
-                        ? visemeBindings[i].viseme
-                        : "?";
-                    sb.Append(viseme).Append('=').Append(_shapeIndices[i]).Append(' ');
-                }
-            }
-
-            sb.Append("] target=[");
-            if (_targetWeights != null)
-            {
-                for (int i = 0; i < _targetWeights.Length; i++)
-                {
-                    sb.Append(_targetWeights[i].ToString("F0")).Append(' ');
-                }
-            }
-
-            sb.Append("] open=").Append(_openCurrent.ToString("F2")).Append(" fonemas=").Append(_usingPhonemes);
-            List<VisemeFrame> frames;
-            if (utteranceId >= 0 && _visemesByUtterance.TryGetValue(utteranceId, out frames) && frames.Count > 0)
-            {
-                int active = FindActiveFrame(frames, time + timeOffsetSeconds);
-                sb.Append(" activo=").Append(active);
-                if (active >= 0)
-                {
-                    sb.Append(" v=").Append(frames[active].V).Append(" slot=").Append(FindBindingSlot(frames[active].V));
-                }
-            }
-
-            return sb.ToString();
-        }
-
-        /// <summary>Interrupción: se olvida todo y se cierra la boca de golpe.</summary>
-        public void StopAndClose()
-        {
-            _visemesByUtterance.Clear();
-            _envelopesByUtterance.Clear();
-            _lastUtteranceId = -1;
-            _frameCursor = 0;
-            _openCurrent = 0f;
-
-            for (int i = 0; i < _currentWeights.Length; i++)
-            {
-                _currentWeights[i] = 0f;
-                _targetWeights[i] = 0f;
-            }
-
-            ApplyWeights();
-            ApplyMouthOpen(0f);
-        }
-
-        // ------------------------------------------------------------------
-        // Animación
-        // ------------------------------------------------------------------
-
-        private void LateUpdate()
-        {
-            int utteranceId = -1;
-            float time = 0f;
-            float rms = 0f;
-            if (audioPlayer != null)
-            {
-                audioPlayer.GetPlaybackPosition(out utteranceId, out time, out rms);
-            }
-
-            time += timeOffsetSeconds;
-
-            if (utteranceId != _lastUtteranceId)
-            {
-                _lastUtteranceId = utteranceId;
-                _frameCursor = 0;
-                DiscardOlderThan(utteranceId);
-            }
-
-            for (int i = 0; i < _targetWeights.Length; i++)
-            {
-                _targetWeights[i] = 0f;
-            }
-
-            float openTarget = 0f;
-            bool usedVisemes = false;
-            bool phonemesFresh = Time.time - _phonemeFrameTime <= Mathf.Max(0.05f, phonemeFrameTimeout);
-            bool phonemesFirst = preferRealtimePhonemes && phonemesFresh;
-
-            if (_hasVisemeShapes && utteranceId >= 0 && !phonemesFirst)
-            {
-                List<VisemeFrame> frames;
-                if (_visemesByUtterance.TryGetValue(utteranceId, out frames) && frames.Count > 0)
-                {
-                    int active = FindActiveFrame(frames, time);
-                    if (active >= 0)
-                    {
-                        int slot = FindBindingSlot(frames[active].V);
-                        if (slot >= 0 && slot < _targetWeights.Length)
-                        {
-                            _targetWeights[slot] = Mathf.Clamp01(frames[active].W) * visemeMaxWeight;
-                        }
-
-                        usedVisemes = true;
-                    }
-                }
-            }
-
-            _usingPhonemes = false;
-            if (!usedVisemes && _hasVisemeShapes && utteranceId >= 0 && phonemesFresh)
-            {
-                AddPhonemeTarget(VisemeIds.AA, _phA);
-                AddPhonemeTarget(VisemeIds.IH, _phI);
-                AddPhonemeTarget(VisemeIds.OU, _phU);
-                AddPhonemeTarget(VisemeIds.E, _phE);
-                AddPhonemeTarget(VisemeIds.OH, _phO);
-                AddPhonemeTarget(VisemeIds.NN, _phN);
-                usedVisemes = true;
-                _usingPhonemes = true;
-            }
-
-            if (!usedVisemes && utteranceId >= 0)
-            {
-                openTarget = ComputeFallbackOpen(utteranceId, time, rms);
-            }
-
-            float attack = 1f - Mathf.Exp(-Mathf.Max(0.01f, attackSpeed) * Time.deltaTime);
-            float release = 1f - Mathf.Exp(-Mathf.Max(0.01f, releaseSpeed) * Time.deltaTime);
-            for (int i = 0; i < _currentWeights.Length; i++)
-            {
-                float target = _targetWeights[i];
-                float step = target > _currentWeights[i] ? attack : release;
-                _currentWeights[i] = Mathf.Lerp(_currentWeights[i], target, step);
-            }
-
-            _openCurrent = Mathf.Lerp(_openCurrent, openTarget, openTarget > _openCurrent ? attack : release);
-
-            // El blendshape de "boca abierta" del respaldo puede ser el mismo que
-            // el de un visema (por ejemplo "Aa"). Con visemas activos, el respaldo
-            // se escribe primero (a cero) y los visemas después, para que nunca
-            // pisen la vocal que toca. Sin visemas, el orden es el contrario.
-            if (usedVisemes)
-            {
-                ApplyMouthOpen(_openCurrent);
-                ApplyWeights();
-            }
-            else
-            {
-                ApplyWeights();
-                ApplyMouthOpen(_openCurrent);
-            }
-        }
-
-        /// <summary>Suma el peso de una vocal al visema que le corresponde.</summary>
-        private void AddPhonemeTarget(string viseme, float weight01)
-        {
-            if (weight01 <= 0f)
-            {
-                return;
-            }
-
-            int slot = FindBindingSlot(viseme);
-            if (slot >= 0 && slot < _targetWeights.Length)
-            {
-                _targetWeights[slot] = Mathf.Min(visemeMaxWeight, _targetWeights[slot] + weight01 * visemeMaxWeight);
-            }
-        }
-
-        private float ComputeFallbackOpen(int utteranceId, float time, float rms)
-        {
-            EnvelopeData envelope;
-            if (_envelopesByUtterance.TryGetValue(utteranceId, out envelope)
-                && envelope.Values != null
-                && envelope.Values.Length > 0)
-            {
-                int index = Mathf.FloorToInt(time / envelope.IntervalSeconds);
-                if (index < 0)
-                {
-                    index = 0;
-                }
-                else if (index >= envelope.Values.Length)
-                {
-                    index = envelope.Values.Length - 1;
-                }
-
-                return Mathf.Clamp01(envelope.Values[index] * envelopeGain);
-            }
-
-            return Mathf.Clamp01(rms * rmsGain);
-        }
-
-        /// <summary>
-        /// Índice del visema activo en el instante dado. Avanza con un cursor
-        /// incremental porque el tiempo casi siempre crece frame a frame.
-        /// </summary>
-        private int FindActiveFrame(List<VisemeFrame> frames, float time)
-        {
-            if (frames.Count == 0 || time < frames[0].T)
-            {
-                return -1;
-            }
-
-            int cursor = _frameCursor;
-            if (cursor < 0 || cursor >= frames.Count)
-            {
-                cursor = 0;
-            }
-
-            if (frames[cursor].T > time)
-            {
-                cursor = 0;
-            }
-
-            while (cursor + 1 < frames.Count && frames[cursor + 1].T <= time)
-            {
-                cursor++;
-            }
-
-            _frameCursor = cursor;
-            return cursor;
-        }
-
-        private int FindBindingSlot(string viseme)
-        {
-            if (string.IsNullOrEmpty(viseme) || visemeBindings == null)
-            {
-                return -1;
-            }
-
-            int usable = Mathf.Min(visemeBindings.Length, _shapeIndices.Length);
-            for (int i = 0; i < usable; i++)
-            {
-                VisemeBinding binding = visemeBindings[i];
-                if (binding == null || _shapeIndices[i] < 0)
-                {
-                    continue;
-                }
-
-                if (string.Equals(binding.viseme, viseme, StringComparison.OrdinalIgnoreCase))
+                if (dot >= 0 && dot + 1 < candidate.Length
+                    && string.Equals(candidate.Substring(dot + 1), name, StringComparison.OrdinalIgnoreCase))
                 {
                     return i;
                 }
@@ -691,92 +430,365 @@ namespace Sonia
             return -1;
         }
 
-        private void ApplyWeights()
+        private int FindBindingSlot(string viseme)
+        {
+            if (visemeBindings == null)
+            {
+                return -1;
+            }
+
+            for (int i = 0; i < visemeBindings.Length && i < _shapeIndices.Length; i++)
+            {
+                VisemeBinding binding = visemeBindings[i];
+                if (binding != null && _shapeIndices[i] >= 0
+                    && string.Equals(binding.viseme, viseme, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        // ------------------------------------------------------------------
+        // Entradas
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Proporciones de vocal que reconoce uLipSync (PhonemeLipSyncBridge),
+        /// calculadas sobre una ventana de <paramref name="windowSamples"/>
+        /// muestras que acaba en el último audio que vio el analizador.
+        /// </summary>
+        public void PushVowelRatios(float a, float i, float u, float e, float o, int windowSamples)
+        {
+            float sum = a + i + u + e + o;
+            if (sum <= 0.0001f)
+            {
+                return;
+            }
+
+            VowelSample sample = new VowelSample
+            {
+                // El análisis de fonemas de este frame usó el audio que había al
+                // terminar el anterior; la ventana se fecha en su centro.
+                Sample = _writtenLastFrame - (windowSamples / 2),
+                A = a / sum,
+                E = e / sum,
+                I = i / sum,
+                O = o / sum,
+                U = u / sum
+            };
+            _vowelHead = (_vowelHead + 1) % _vowels.Length;
+            _vowels[_vowelHead] = sample;
+            _vowelCount = Mathf.Min(_vowelCount + 1, _vowels.Length);
+        }
+
+        /// <summary>Compatibilidad: los visemas por texto del orquestador ya no se usan (la boca sale del audio).</summary>
+        public void SetVisemes(VisemesMessage message)
+        {
+        }
+
+        /// <summary>Compatibilidad: la envolvente del orquestador ya no se usa (el nivel se mide aquí).</summary>
+        public void SetEnvelope(EnvelopeMessage message)
+        {
+        }
+
+        /// <summary>Una frase terminó de sonar. No hay nada que soltar: todo se mide sobre la marcha.</summary>
+        public void NotifyUtteranceFinished(int utteranceId)
+        {
+        }
+
+        /// <summary>Interrupción: se olvida la voz pendiente y la boca se cierra en el acto.</summary>
+        public void StopAndClose()
+        {
+            if (_analyzer != null)
+            {
+                _analyzer.ClearEvents();
+            }
+
+            _open.Reset();
+            _closure.Reset();
+            _sibilant.Reset();
+            _jaw.Reset();
+            for (int v = 0; v < _vowelSprings.Length; v++)
+            {
+                _vowelSprings[v].Reset();
+            }
+
+            _vowelCount = 0;
+            _active = false;
+            _roundness = 0f;
+            Apply(0f);
+        }
+
+        /// <summary>Estado interno en texto, para depurar desde el editor o el HUD.</summary>
+        public string DebugInfo()
+        {
+            return "face=" + (faceRenderer != null ? faceRenderer.name : "null")
+                   + " visemas=" + _hasVisemeShapes
+                   + " reloj=" + _clock.ToString("F0")
+                   + " abre=" + _open.Value.ToString("F2")
+                   + " cierre=" + _closure.Value.ToString("F2")
+                   + " s=" + _sibilant.Value.ToString("F2")
+                   + " vocal=[" + _mix[VA].ToString("F2") + " " + _mix[VE].ToString("F2") + " " + _mix[VI].ToString("F2")
+                   + " " + _mix[VO].ToString("F2") + " " + _mix[VU].ToString("F2") + "]";
+        }
+
+        // ------------------------------------------------------------------
+        // Animación
+        // ------------------------------------------------------------------
+
+        private void Update()
+        {
+            if (_analyzer == null)
+            {
+                return;
+            }
+
+            // Lo que haya llegado del hilo de audio se analiza antes de que nadie
+            // (cara, cabeza) lo consulte en LateUpdate.
+            _writtenLastFrame = _analyzer.Written;
+            _analyzer.Process();
+            AdvanceClock(Time.deltaTime);
+            DispatchEvents();
+        }
+
+        private int LatencySamples()
+        {
+            int rate = _analyzer != null ? _analyzer.SampleRate : 48000;
+            if (outputLatencyMs >= 0f)
+            {
+                return Mathf.RoundToInt(outputLatencyMs / 1000f * rate);
+            }
+
+            int length;
+            int buffers;
+            AudioSettings.GetDSPBufferSize(out length, out buffers);
+            return Mathf.Max(0, length);
+        }
+
+        /// <summary>
+        /// Reloj de lo que suena: lo último que vio el análisis menos el retardo
+        /// de la voz y la latencia de salida. Los bloques de audio llegan a
+        /// saltos (21 ms con 1024 muestras a 48 kHz), así que el reloj avanza con
+        /// el tiempo del juego y se corrige poco a poco hacia la medida.
+        /// </summary>
+        private void AdvanceClock(float dt)
+        {
+            int rate = _analyzer.SampleRate;
+            float delayMs = audioPlayer != null ? audioPlayer.LipSyncLeadMs : 0f;
+            double measured = _analyzer.Written - (delayMs / 1000.0 * rate) - LatencySamples();
+            if (!_clockReady || Math.Abs(measured - _clock) > rate * 0.1)
+            {
+                _clock = measured;
+                _clockReady = true;
+                return;
+            }
+
+            _clock += dt * rate;
+            _clock += (measured - _clock) * Mathf.Clamp01(dt * 6f);
+        }
+
+        private void DispatchEvents()
+        {
+            _eventBuffer.Clear();
+            double horizon = _clock + gestureLeadMs / 1000.0 * _analyzer.SampleRate;
+            _analyzer.TakeEvents((long)horizon, _eventBuffer);
+            Action<SpeechAnalyzer.SpeechEvent> handler = OnSpeechEvent;
+            for (int i = 0; i < _eventBuffer.Count; i++)
+            {
+                if (handler != null)
+                {
+                    handler(_eventBuffer[i]);
+                }
+            }
+        }
+
+        private void LateUpdate()
+        {
+            float dt = Time.deltaTime;
+            if (_analyzer == null)
+            {
+                return;
+            }
+
+            int rate = _analyzer.SampleRate;
+            double at = _clock + mouthLeadMs / 1000.0 * rate;
+            SpeechAnalyzer.Features f = _analyzer.Sample(at);
+            float closure = _analyzer.ClosureAt(at, 0.07f);
+            float nasal = f.Nasality * 0.5f;
+            closure = Mathf.Max(closure, nasal);
+
+            // Apertura: la envolvente de sílaba con su curva, recortada por el
+            // cierre de labios y por la s (dientes juntos).
+            float open = Mathf.Pow(Mathf.Clamp01(f.Syllable), openCurve);
+            float sib = f.Sibilance;
+            float openTarget = open * (1f - closure) * (1f - 0.6f * sib);
+            _active = f.Voiced || openTarget > 0.05f;
+
+            UpdateVowelMix(at, dt);
+
+            _open.Step(openTarget, mouthSpeed * 1.4f, mouthSpeed, dt);
+            _closure.Step(closure * closureWeight, closureSpeed, closureSpeed * 0.7f, dt);
+            _sibilant.Step(sib * sibilantWeight * (1f - closure), mouthSpeed, dt);
+
+            float a = Mathf.Clamp01(_open.Value);
+            for (int v = 0; v < _vowelSprings.Length; v++)
+            {
+                _vowelSprings[v].Step(a * vowelWeight * _mix[v], mouthSpeed * 1.4f, mouthSpeed, dt);
+            }
+
+            float jawTarget = jawBoost * Mathf.Clamp01((a - 0.5f) / 0.5f) * (_mix[VA] + 0.6f * _mix[VO] + 0.3f * _mix[VE]);
+            _jaw.Step(jawTarget, mouthSpeed, dt);
+            _roundness = Mathf.Clamp01((_mix[VO] + _mix[VU]) * a * 1.6f);
+            Apply(a);
+        }
+
+        /// <summary>Mezcla de vocales en el instante pedido: la del clasificador, suavizada y con confianza.</summary>
+        private void UpdateVowelMix(double at, float dt)
+        {
+            float a, e, i, o, u;
+            if (!SampleVowels(at, out a, out e, out i, out o, out u))
+            {
+                // Sin clasificador: forma neutra.
+                a = NeutralMix[VA];
+                e = NeutralMix[VE];
+                i = NeutralMix[VI];
+                o = NeutralMix[VO];
+                u = NeutralMix[VU];
+            }
+
+            // Se afila la distribución (una vocal clara manda) y se mide la
+            // confianza: con 0,2 en cada vocal no se sabe nada; con 0,6 en una, sí.
+            float sa = a * a, se = e * e, si = i * i, so = o * o, su = u * u;
+            float sum = Mathf.Max(0.0001f, sa + se + si + so + su);
+            float max = Mathf.Max(Mathf.Max(a, e), Mathf.Max(Mathf.Max(i, o), u));
+            float trust = Mathf.Clamp01((max - 0.3f) / 0.35f) * vowelTrust;
+            float k = 1f - Mathf.Exp(-dt / Mathf.Max(0.005f, vowelSmoothing));
+            _mix[VA] = Mathf.Lerp(_mix[VA], Mathf.Lerp(NeutralMix[VA], sa / sum, trust), k);
+            _mix[VE] = Mathf.Lerp(_mix[VE], Mathf.Lerp(NeutralMix[VE], se / sum, trust), k);
+            _mix[VI] = Mathf.Lerp(_mix[VI], Mathf.Lerp(NeutralMix[VI], si / sum, trust), k);
+            _mix[VO] = Mathf.Lerp(_mix[VO], Mathf.Lerp(NeutralMix[VO], so / sum, trust), k);
+            _mix[VU] = Mathf.Lerp(_mix[VU], Mathf.Lerp(NeutralMix[VU], su / sum, trust), k);
+        }
+
+        private bool SampleVowels(double at, out float a, out float e, out float i, out float o, out float u)
+        {
+            a = e = i = o = u = 0f;
+            if (_vowelCount == 0)
+            {
+                return false;
+            }
+
+            // La muestra más cercana al instante pedido (las hay cada frame).
+            int best = -1;
+            double bestDistance = double.MaxValue;
+            for (int n = 0; n < _vowelCount; n++)
+            {
+                int index = (_vowelHead - n + _vowels.Length) % _vowels.Length;
+                double distance = Math.Abs(_vowels[index].Sample - at);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = index;
+                }
+            }
+
+            if (best < 0 || bestDistance > _analyzer.SampleRate * 0.25)
+            {
+                return false;
+            }
+
+            VowelSample s = _vowels[best];
+            a = s.A;
+            e = s.E;
+            i = s.I;
+            o = s.O;
+            u = s.U;
+            return true;
+        }
+
+        private void Apply(float open)
         {
             if (faceRenderer == null)
             {
                 return;
             }
 
-            for (int i = 0; i < _currentWeights.Length; i++)
+            // Se acumula por blendshape antes de escribir: en los VRM varios
+            // visemas comparten el mismo (la s y la i son "Ih").
+            BeginAccumulate();
+            float keep = 1f - Mathf.Clamp01(_closure.Value);
+            for (int v = 0; v < _vowelSlots.Length; v++)
             {
-                int index = _shapeIndices[i];
-                if (index >= 0)
-                {
-                    faceRenderer.SetBlendShapeWeight(index, _currentWeights[i] * _shapeScale);
-                }
-            }
-        }
-
-        private void ApplyMouthOpen(float amount)
-        {
-            float clamped = Mathf.Clamp01(amount) * Mathf.Clamp(maxMouthOpen, 0.1f, 1f);
-
-            if (faceRenderer != null)
-            {
-                if (_jawShapeIndex >= 0)
-                {
-                    faceRenderer.SetBlendShapeWeight(_jawShapeIndex, clamped * 100f * _shapeScale);
-                }
-                else if (_mouthShapeIndex >= 0)
-                {
-                    faceRenderer.SetBlendShapeWeight(_mouthShapeIndex, clamped * 100f * _shapeScale);
-                }
+                Accumulate(_vowelSlots[v], _vowelSprings[v].Value * keep);
             }
 
-            if (_hasJawBone && jawBone != null && _jawShapeIndex < 0 && _mouthShapeIndex < 0)
+            Accumulate(_ppSlot, _closure.Value);
+            Accumulate(_ssSlot, _sibilant.Value);
+
+            float scale = 100f * _shapeScale;
+            for (int n = 0; n < _touchedCount; n++)
+            {
+                int index = _touched[n];
+                faceRenderer.SetBlendShapeWeight(index, Mathf.Clamp01(_accum[index]) * scale);
+                _accum[index] = 0f;
+            }
+
+            if (_jawShapeIndex >= 0)
+            {
+                // Sin visemas (avatares con solo jawOpen), la mandíbula hace todo el trabajo.
+                float jaw = _hasVisemeShapes ? _jaw.Value * keep : open * 0.5f * keep;
+                faceRenderer.SetBlendShapeWeight(_jawShapeIndex, Mathf.Clamp01(jaw) * scale);
+            }
+            else if (_hasJawBone && jawBone != null)
             {
                 Vector3 axis = jawOpenAxis.sqrMagnitude > 0.0001f ? jawOpenAxis.normalized : Vector3.right;
-                jawBone.localRotation = _jawInitialRotation * Quaternion.AngleAxis(clamped * jawBoneMaxAngle, axis);
+                jawBone.localRotation = _jawInitialRotation * Quaternion.AngleAxis(open * keep * jawBoneMaxAngle, axis);
             }
         }
 
-        /// <summary>Suelta los datos de frases anteriores a la que suena ahora.</summary>
-        private void DiscardOlderThan(int utteranceId)
+        private void BeginAccumulate()
         {
-            if (utteranceId < 0)
+            int count = faceRenderer.sharedMesh != null ? faceRenderer.sharedMesh.blendShapeCount : 0;
+            if (_accum.Length != count)
+            {
+                _accum = new float[count];
+                _touched = new int[Mathf.Max(1, visemeBindings != null ? visemeBindings.Length : 1)];
+            }
+
+            _touchedCount = 0;
+        }
+
+        private void Accumulate(int slot, float weight01)
+        {
+            if (slot < 0 || slot >= _shapeIndices.Length)
             {
                 return;
             }
 
-            _cleanupBuffer.Clear();
-            foreach (KeyValuePair<int, List<VisemeFrame>> entry in _visemesByUtterance)
+            int index = _shapeIndices[slot];
+            if (index < 0 || index >= _accum.Length)
             {
-                if (entry.Key < utteranceId)
+                return;
+            }
+
+            bool seen = false;
+            for (int n = 0; n < _touchedCount; n++)
+            {
+                if (_touched[n] == index)
                 {
-                    _cleanupBuffer.Add(entry.Key);
+                    seen = true;
+                    break;
                 }
             }
 
-            for (int i = 0; i < _cleanupBuffer.Count; i++)
+            if (!seen && _touchedCount < _touched.Length)
             {
-                _visemesByUtterance.Remove(_cleanupBuffer[i]);
+                _touched[_touchedCount++] = index;
             }
 
-            _cleanupBuffer.Clear();
-            foreach (KeyValuePair<int, EnvelopeData> entry in _envelopesByUtterance)
-            {
-                if (entry.Key < utteranceId)
-                {
-                    _cleanupBuffer.Add(entry.Key);
-                }
-            }
-
-            for (int i = 0; i < _cleanupBuffer.Count; i++)
-            {
-                _envelopesByUtterance.Remove(_cleanupBuffer[i]);
-            }
-        }
-
-        private static int CompareByTime(VisemeFrame a, VisemeFrame b)
-        {
-            return a.T.CompareTo(b.T);
-        }
-
-        private sealed class EnvelopeData
-        {
-            public float IntervalSeconds;
-            public float[] Values;
+            _accum[index] += weight01;
         }
     }
 }
