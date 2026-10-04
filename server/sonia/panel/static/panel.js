@@ -248,7 +248,8 @@
       "say-input", "say-btn", "notes-form", "notes-input", "notes-btn", "notes-state", "volume-input",
       "volume-value", "gate-input", "gate-value", "gate-meter-fill", "gate-meter-mark",
       "gate-meter-caption", "health-list", "last-error", "last-error-text", "chat", "chat-empty",
-      "voice-select", "voice-btn", "showcase-input", "anim-groups", "ask-form", "ask-input", "ask-btn",
+      "voice-select", "voice-btn", "showcase-input", "anim-groups", "debug-input", "subtitles-input",
+      "hero-debug", "ask-form", "ask-input", "ask-btn",
       "restart-btn", "cache-progress", "cache-text", "cache-btn", "session-facts", "usage-facts", "log",
       "toasts", "confirm-dialog", "confirm-title", "confirm-text", "confirm-ok", "away-dialog",
       "away-title", "away-help", "away-text", "away-ok",
@@ -853,6 +854,7 @@
     sessionKey = "";
     usageKey = "";
     animKey = "";
+    animTiles.clear();
     ui.animGroups.replaceChildren();
     healthKeys = "";
     healthRows.clear();
@@ -1098,13 +1100,15 @@
     const connected = selectedConnected();
     if (ui.hero.dataset.mode !== mode) ui.hero.dataset.mode = mode;
     // Desconectada, el estado que se ve es el último conocido: se dice así.
-    setText(ui.heroMode, connected ? MODES[mode].sentence : "Sonia desconectada");
+    const sentence = status.debug === true ? "Sonia en modo debug" : MODES[mode].sentence;
+    setText(ui.heroMode, connected ? sentence : "Sonia desconectada");
     setText(ui.heroActivity, connected ? activityText(status) : `Lo último que se supo: ${MODES[mode].short.toLowerCase()}`);
     const state = activityState(status);
     if (ui.activityDot.dataset.state !== state) ui.activityDot.dataset.state = state;
 
     const mic = (status.health && status.health.mic) || {};
     setHidden(ui.heroMuted, !(mic.muted && mode === "conversation"));
+    setHidden(ui.heroDebug, status.debug !== true);
 
     setHidden(ui.awaySign, mode !== "away");
     setText(ui.awaySignText, status.away_message || DEFAULT_AWAY_MESSAGE);
@@ -1622,16 +1626,27 @@
     return capitalize(clip.replace(/^Dance_/, "").replace(/_+/g, " ").trim());
   }
 
+  /** Fichas pintadas: clip → {item, button, toggle}, para actualizarlas sin rehacerlas. */
+  const animTiles = new Map();
+
   /** Botones de cada animación que tiene la app de Unity, por grupos. */
   function renderAnimations(status) {
     const list = Array.isArray(status.animations)
       ? status.animations.filter((a) => a && typeof a.clip === "string" && typeof a.group === "string")
       : [];
     const supported = app.caps.has("animations");
-    const key = `${supported}|${JSON.stringify(list)}`;
-    if (key === animKey) return;
-    animKey = key;
-    if (!supported) {
+    const toggles = app.caps.has("animation_toggles");
+    const key = `${supported}|${toggles}|${JSON.stringify(list)}`;
+    if (key !== animKey) {
+      animKey = key;
+      buildAnimationTiles(supported ? list : null, toggles);
+    }
+    updateAnimationTiles(status);
+  }
+
+  function buildAnimationTiles(list, toggles) {
+    animTiles.clear();
+    if (!list) {
       ui.animGroups.replaceChildren();
       return;
     }
@@ -1649,30 +1664,59 @@
         .map(([group, label]) => {
           const clips = list.filter((a) => a.group === group);
           if (clips.length === 0) return null;
-          return el(
-            "div",
-            { class: "anim-group" },
-            el("h4", { text: label }),
-            el(
-              "div",
-              { class: "anim-row" },
-              ...clips.map(({ clip }) => {
-                const button = el("button", {
-                  type: "button",
-                  class: "btn btn-small",
-                  "data-cap": "animations",
-                  "data-off-modes": "away",
-                  title: clip,
-                  text: prettyClipName(clip),
-                });
-                button.addEventListener("click", () => sendAction("animation", { clip }, { button }));
-                return button;
-              }),
-            ),
-          );
+          return el("div", { class: "anim-group" }, el("h4", { text: label }), el("div", { class: "anim-row" }, ...clips.map(({ clip }) => animationTile(clip, toggles))));
         })
         .filter(Boolean),
     );
+  }
+
+  /** Una ficha: el botón que la lanza y, si el orquestador lo admite, «La usa». */
+  function animationTile(clip, toggles) {
+    const button = el("button", {
+      type: "button",
+      class: "btn btn-small anim-play",
+      "data-cap": "animations",
+      "data-off-modes": "away",
+      title: clip,
+      text: prettyClipName(clip),
+    });
+    button.addEventListener("click", () => sendAction("animation", { clip }, { button }));
+    const item = el("div", { class: "anim-item" }, button);
+    let toggle = null;
+    if (toggles) {
+      toggle = el("input", { type: "checkbox", "data-cap": "animation_toggles", "aria-label": `Sonia usa «${prettyClipName(clip)}» por su cuenta` });
+      toggle.checked = true;
+      toggle.addEventListener("change", () => onAnimationToggle(clip, toggle));
+      item.append(el("label", { class: "anim-toggle" }, toggle, el("span", { text: "La usa" })));
+    }
+    animTiles.set(clip, { item, button, toggle });
+    return item;
+  }
+
+  /** Marca la que está sonando y las que Sonia no usa por su cuenta. */
+  function updateAnimationTiles(status) {
+    const disabled = new Set(Array.isArray(status.disabled_animations) ? status.disabled_animations : []);
+    const playing = typeof status.current_animation === "string" ? status.current_animation : null;
+    for (const [clip, tile] of animTiles) {
+      const off = disabled.has(clip);
+      const isPlaying = clip === playing;
+      if (tile.item.classList.contains("is-off") !== off) tile.item.classList.toggle("is-off", off);
+      if (tile.item.classList.contains("is-playing") !== isPlaying) tile.item.classList.toggle("is-playing", isPlaying);
+      if (tile.toggle && !isLocked(tile.toggle) && tile.toggle.checked === off) tile.toggle.checked = !off;
+    }
+  }
+
+  async function onAnimationToggle(clip, input) {
+    const enabled = input.checked;
+    lockControl(input);
+    const tile = animTiles.get(clip);
+    if (tile) tile.item.classList.toggle("is-off", !enabled);
+    const result = await sendAction("set_animation_enabled", { clip, enabled }, { button: input });
+    if (!result.ok) {
+      input.checked = !enabled;
+      if (tile) tile.item.classList.toggle("is-off", enabled);
+    }
+    lockControl(input);
   }
 
   function renderAdvanced(status) {
@@ -1696,6 +1740,8 @@
 
     // Interruptores
     if (!isLocked(ui.showcaseInput)) ui.showcaseInput.checked = Boolean(status.showcase && status.showcase.enabled);
+    if (!isLocked(ui.debugInput)) ui.debugInput.checked = status.debug === true;
+    if (!isLocked(ui.subtitlesInput)) ui.subtitlesInput.checked = status.subtitles !== false;
 
     renderAnimations(status);
 
@@ -1766,6 +1812,15 @@
     const enabled = input.checked;
     lockControl(input);
     const result = await sendAction("showcase", { enabled }, { button: input });
+    if (!result.ok) input.checked = !enabled;
+    lockControl(input);
+  }
+
+  /** Interruptor sencillo: manda la acción y, si falla, vuelve a como estaba. */
+  async function onSwitchChange(input, action) {
+    const enabled = input.checked;
+    lockControl(input);
+    const result = await sendAction(action, { enabled }, { button: input });
     if (!result.ok) input.checked = !enabled;
     lockControl(input);
   }
@@ -2072,6 +2127,8 @@
     });
     ui.voiceBtn.addEventListener("click", onVoiceChange);
     ui.showcaseInput.addEventListener("change", onShowcaseChange);
+    ui.debugInput.addEventListener("change", () => onSwitchChange(ui.debugInput, "set_debug"));
+    ui.subtitlesInput.addEventListener("change", () => onSwitchChange(ui.subtitlesInput, "set_subtitles"));
     for (const button of ui.gestureButtons) {
       button.addEventListener("click", () => sendAction("gesture", { category: button.dataset.gesture }, { button }));
     }

@@ -84,6 +84,9 @@ namespace Sonia
         private int _pendingSubtitleId = -1;
         private string _pendingSubtitle;
 
+        // El panel puede apagar los subtítulos (set_subtitles): no se pinta nada.
+        private bool _subtitlesOn = true;
+
         [Header("Entrada")]
         [SerializeField]
         [Tooltip("Campo de texto para enviar un turno escrito con Enter.")]
@@ -123,6 +126,7 @@ namespace Sonia
                 client.OnTranscript += HandleTranscript;
                 client.OnSpeechStart += HandleSpeechStart;
                 client.OnAudioFrame += HandleAudioFrame;
+                client.OnSetSubtitles += HandleSetSubtitles;
             }
 
             if (inputField != null)
@@ -146,6 +150,7 @@ namespace Sonia
                 client.OnTranscript -= HandleTranscript;
                 client.OnSpeechStart -= HandleSpeechStart;
                 client.OnAudioFrame -= HandleAudioFrame;
+                client.OnSetSubtitles -= HandleSetSubtitles;
             }
 
             if (inputField != null)
@@ -262,9 +267,26 @@ namespace Sonia
             }
         }
 
-        private void HandleTranscript(TranscriptMessage message)
+        /// <summary>El panel enciende o apaga los subtítulos; apagados se borran los que hubiera.</summary>
+        private void HandleSetSubtitles(SetSubtitlesMessage message)
         {
             if (message == null)
+            {
+                return;
+            }
+
+            _subtitlesOn = message.Enabled;
+            if (!_subtitlesOn)
+            {
+                _pendingSubtitle = null;
+                userLabel.Set(string.Empty);
+                assistantLabel.Set(string.Empty);
+            }
+        }
+
+        private void HandleTranscript(TranscriptMessage message)
+        {
+            if (message == null || !_subtitlesOn)
             {
                 return;
             }
@@ -289,7 +311,7 @@ namespace Sonia
 
         private void HandleSpeechStart(SpeechStartMessage message)
         {
-            if (message != null && !string.IsNullOrEmpty(message.Text))
+            if (_subtitlesOn && message != null && !string.IsNullOrEmpty(message.Text))
             {
                 _pendingSubtitleId = message.UtteranceId;
                 _pendingSubtitle = message.Text;
@@ -317,7 +339,10 @@ namespace Sonia
             }
 
             client.SendTextInput(text);
-            userLabel.Set(text);
+            if (_subtitlesOn)
+            {
+                userLabel.Set(text);
+            }
 
             if (inputField != null)
             {

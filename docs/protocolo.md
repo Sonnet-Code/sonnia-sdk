@@ -136,6 +136,30 @@ Volumen de la voz de Sonia, de 0 a 1,5 (1 es el normal). También fijo: se repit
 {"type": "set_volume", "value": 0.8}
 ```
 
+### `set_subtitles`
+
+Subtítulos en pantalla sí o no (interruptor del panel). Fijo: se repite tras `hello`. Apagados, Unity borra los que hubiera y no pinta ni lo que dice el visitante ni lo que dice Sonia; `transcript` sigue llegando igual.
+
+```json
+{"type": "set_subtitles", "enabled": false}
+```
+
+### `set_disabled_animations`
+
+Clips que Sonia no debe usar por su cuenta (casillas «La usa» del panel). Fijo: se repite tras `hello`. Unity da al coreógrafo una copia del set sin esos clips; con `play_animation` siguen sonando. Desactivar el saludo apaga también el saludo automático y el de `attention` con `greeting`.
+
+```json
+{"type": "set_disabled_animations", "clips": ["Dance_Gangnam", "Dismissive"]}
+```
+
+### `set_debug`
+
+Modo debug del panel. Fijo: se repite tras `hello`. Activo, el coreógrafo se queda sin gestos de atención, bailes, variaciones de reposo y de pensar ni asentimientos: solo los bucles base, los gestos al hablar, el caminar y el de presentar imagen. Lo que se lanza con `play_animation` suena igual. El orquestador, además, cierra GPT-Live y no saluda solo.
+
+```json
+{"type": "set_debug", "enabled": true}
+```
+
 ### `error`
 
 ```json
@@ -203,6 +227,14 @@ Unity lo envía al recibir `hello`: el catálogo de clips que el panel puede lan
 
 ```json
 {"type": "animations", "animations": [{"clip": "Greeting", "group": "greeting"}, {"clip": "Dance_HipHop", "group": "dance"}]}
+```
+
+### `animation_playing`
+
+Qué clip de una sola vez suena ahora en el avatar (capa de cuerpo, luego torso y luego brazo), o `null` si solo suena un bucle base. Unity lo manda cuando cambia y otra vez tras cada `hello`; el panel resalta ese botón de «Animaciones», también cuando Sonia lo hace por su cuenta.
+
+```json
+{"type": "animation_playing", "clip": "Dance_Jazz"}
 ```
 
 ### `request_frame` (orquestador → Unity)

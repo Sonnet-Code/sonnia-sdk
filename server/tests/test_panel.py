@@ -222,7 +222,10 @@ async def test_el_modo_guardado_se_aplica_al_arrancar_sin_conectar(tmp_path: Pat
         from websockets.asyncio.client import connect
 
         async with connect(f"ws://127.0.0.1:{rig.hub.port}/") as late:
-            kinds = [json.loads(await late.recv()) for _ in range(3)]
+            # Tras hello llegan todos los mensajes fijos; el letrero, el último.
+            kinds = [json.loads(await late.recv())]
+            while kinds[-1]["type"] != "presence" and len(kinds) < 10:
+                kinds.append(json.loads(await late.recv()))
         assert kinds[0]["type"] == "hello"
         assert {"type": "set_volume", "value": 0.6} in kinds
         assert {"type": "presence", "present": False, "message": "En una charla"} in kinds
@@ -319,6 +322,108 @@ async def test_animaciones_con_la_lista_que_manda_unity(tmp_path: Path) -> None:
         ok, message = await rig.control.act("animation", {"clip": "Dance_HipHop"})
         assert not ok and "fuera" in message
         assert len(rig.rec.of_type("play_animation")) == 1
+
+
+async def test_animaciones_desactivadas_se_guardan_y_llegan_a_unity(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        await rig.rec.wait_type("set_disabled_animations")
+        assert rig.rec.of_type("set_disabled_animations")[-1]["clips"] == []
+        ok, message = await rig.control.act(
+            "set_animation_enabled", {"clip": "Dance_Gangnam", "enabled": False}
+        )
+        assert ok and "ya no" in message
+        await rig.rec.wait_type("set_disabled_animations", count=2)
+        assert rig.rec.of_type("set_disabled_animations")[-1]["clips"] == ["Dance_Gangnam"]
+        assert rig.control.status()["disabled_animations"] == ["Dance_Gangnam"]
+        assert "animation_toggles" in rig.control.status()["capabilities"]
+        # Con la lista de Unity se rechaza lo que no existe.
+        await rig.client.send(
+            json.dumps(
+                {"type": "animations", "animations": [{"clip": "Dance_Gangnam", "group": "dance"}]}
+            )
+        )
+        await wait_until(lambda: bool(rig.control.status()["animations"]))
+        ok, _ = await rig.control.act(
+            "set_animation_enabled", {"clip": "Moonwalk", "enabled": False}
+        )
+        assert not ok
+        saved = PanelState.load(Path(rig.settings.panel.state_file))
+        assert saved.disabled_animations == ["Dance_Gangnam"]
+        ok, _ = await rig.control.act(
+            "set_animation_enabled", {"clip": "Dance_Gangnam", "enabled": True}
+        )
+        assert ok and rig.control.status()["disabled_animations"] == []
+
+
+async def test_modo_debug_apaga_gpt_live_y_los_saludos(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        ok, message = await rig.control.act("set_debug", {"enabled": True})
+        assert ok and "quieta" in message
+        await conn.wait_type("session.close")
+        await wait_until(lambda: not rig.engine.connected)
+        assert rig.rec.of_type("set_debug")[-1] == {"type": "set_debug", "enabled": True}
+        status = rig.control.status()
+        assert status["debug"] is True and status["health"]["internet"]["ok"] is None
+        # «Conversando» no abre GPT-Live mientras dure el modo debug.
+        await rig.control.act("set_mode", {"mode": "greeter"})
+        await rig.control.act("set_mode", {"mode": "conversation"})
+        await asyncio.sleep(0.3)
+        assert rig.server.attempts == 1
+        # Ni el bucle de saludos: aunque toque saludar, no saluda.
+        write_clip(rig.cache, GREETING)
+        await rig.control.act("set_mode", {"mode": "greeter"})
+        rig.control._next_greet_at = 0.0
+        await asyncio.sleep(1.3)
+        assert not rig.rec.of_type("speech_start")
+        # Los botones del panel sí funcionan.
+        ok, _ = await rig.control.act("greet", {})
+        assert ok
+        await rig.rec.wait_type("speech_start")
+        # Al quitarlo vuelve lo normal: en «Conversando» se abre sesión.
+        await rig.control.act("set_mode", {"mode": "conversation"})
+        ok, _ = await rig.control.act("set_debug", {"enabled": False})
+        assert ok
+        await rig.conn(2)
+        assert rig.rec.of_type("set_debug")[-1]["enabled"] is False
+
+
+async def test_el_estado_dice_que_animacion_suena(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        assert rig.control.status()["current_animation"] is None
+        await rig.client.send(json.dumps({"type": "animation_playing", "clip": "Dance_Jazz"}))
+        await wait_until(lambda: rig.control.status()["current_animation"] == "Dance_Jazz")
+        await rig.client.send(json.dumps({"type": "animation_playing", "clip": None}))
+        await wait_until(lambda: rig.control.status()["current_animation"] is None)
+
+
+async def test_subtitulos_se_apagan_y_se_recuerdan(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        await rig.rec.wait_type("set_subtitles")
+        assert rig.rec.of_type("set_subtitles")[-1]["enabled"] is True
+        ok, message = await rig.control.act("set_subtitles", {"enabled": False})
+        assert ok and "ocultos" in message
+        await rig.rec.wait_type("set_subtitles", count=2)
+        assert rig.rec.of_type("set_subtitles")[-1] == {"type": "set_subtitles", "enabled": False}
+        assert rig.control.status()["subtitles"] is False
+        ok, _ = await rig.control.act("set_subtitles", {"enabled": "no"})
+        assert not ok
+    # Tras un reinicio se aplica lo guardado, también a los Unity que se conecten después.
+    state = PanelState.load(tmp_path / "cache" / "panel_state.json")
+    assert state.subtitles is False
+    async with make_panel_rig(tmp_path, state=state) as rig:
+        await rig.rec.wait_type("set_subtitles")
+        assert rig.rec.of_type("set_subtitles")[-1]["enabled"] is False
+
+
+async def test_el_estado_viejo_del_panel_carga_con_los_valores_nuevos_por_defecto(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "panel_state.json"
+    path.write_text(json.dumps({"mode": "greeter", "volume": 0.7}), encoding="utf-8")
+    state = PanelState.load(path)
+    assert state.mode == "greeter" and state.subtitles is True
+    assert state.disabled_animations == []
 
 
 async def test_silenciar_el_micro_manda_silencio(tmp_path: Path) -> None:

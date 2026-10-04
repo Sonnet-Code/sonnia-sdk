@@ -52,6 +52,9 @@ MSG_REQUEST_FRAME = "request_frame"
 MSG_PRESENCE = "presence"
 MSG_SET_VOLUME = "set_volume"
 MSG_PLAY_ANIMATION = "play_animation"
+MSG_SET_SUBTITLES = "set_subtitles"
+MSG_SET_DISABLED_ANIMATIONS = "set_disabled_animations"
+MSG_SET_DEBUG = "set_debug"
 
 # Mensajes de Unity hacia el orquestador.
 MSG_CLIENT_HELLO = "client_hello"
@@ -60,6 +63,7 @@ MSG_PLAYBACK_DONE = "playback_done"
 MSG_TEXT_INPUT = "text_input"
 MSG_CAMERA_FRAME = "camera_frame"
 MSG_ANIMATIONS = "animations"
+MSG_ANIMATION_PLAYING = "animation_playing"
 
 #: Tope de clips que se aceptan en ``animations`` (el set real tiene unos 40).
 MAX_ANIMATIONS = 200
@@ -199,6 +203,21 @@ def msg_set_volume(value: float) -> dict[str, Any]:
     return {"type": MSG_SET_VOLUME, "value": round(max(0.0, min(1.5, float(value))), 3)}
 
 
+def msg_set_subtitles(enabled: bool) -> dict[str, Any]:
+    """Subtítulos en la pantalla de Unity sí o no (lo que dicen el visitante y Sonia)."""
+    return {"type": MSG_SET_SUBTITLES, "enabled": bool(enabled)}
+
+
+def msg_set_disabled_animations(clips: list[str]) -> dict[str, Any]:
+    """Clips que Sonia no debe usar por su cuenta (sí se pueden lanzar con ``play_animation``)."""
+    return {"type": MSG_SET_DISABLED_ANIMATIONS, "clips": sorted(set(clips))}
+
+
+def msg_set_debug(enabled: bool) -> dict[str, Any]:
+    """Modo debug: el avatar no lanza gestos, bailes ni variaciones por su cuenta."""
+    return {"type": MSG_SET_DEBUG, "enabled": bool(enabled)}
+
+
 def msg_request_frame() -> dict[str, Any]:
     """Pide a Unity una captura de su cámara (solo con ``VISION_SOURCE=unity``)."""
     return {"type": MSG_REQUEST_FRAME}
@@ -230,6 +249,14 @@ def parse_client_message(text: str | bytes) -> dict[str, Any] | None:
     if not isinstance(parsed.get("type"), str):
         return None
     return parsed
+
+
+def parse_animation_playing(msg: dict[str, Any]) -> str | None:
+    """Clip del catálogo que suena ahora según ``animation_playing`` (``None``: ninguno)."""
+    clip = msg.get("clip")
+    if isinstance(clip, str) and 0 < len(clip.strip()) <= 80:
+        return clip.strip()
+    return None
 
 
 def parse_animations(msg: dict[str, Any]) -> list[dict[str, str]]:

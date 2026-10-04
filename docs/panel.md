@@ -45,7 +45,11 @@ Además de `dance`, `fourth_wall` y `soft`, `greeting` hace el saludo con la man
 
 ### `animations` (Unity → orquestador) y `play_animation` (orquestador → Unity)
 
-Unity manda al recibir `hello` la lista de clips que se pueden lanzar uno a uno (`AnimationCatalog.cs`: todo lo de una sola vez del set, sin los bucles base ni el caminar). El orquestador la publica en `animations` del estado y el bloque «Animaciones» de Avanzado pinta un botón por clip, agrupados (saludo, bailes, hacia el público, gestos suaves, al hablar, en reposo, pensando, escuchando). Cada botón manda la acción `animation` y el orquestador la pasa a Unity como `play_animation`. Forma de los mensajes en `docs/protocolo.md`.
+Unity manda al recibir `hello` la lista de clips que se pueden lanzar uno a uno (`AnimationCatalog.cs`: todo lo de una sola vez del set, sin los bucles base ni el caminar). El orquestador la publica en `animations` del estado y el bloque «Animaciones» de Avanzado pinta un botón por clip, agrupados (saludo, bailes, hacia el público, gestos suaves, al hablar, en reposo, pensando, escuchando). Cada botón manda la acción `animation` y el orquestador la pasa a Unity como `play_animation`. Unity avisa con `animation_playing` de qué clip suena (también los que Sonia hace sola) y el panel pinta ese botón en azul. La casilla «La usa» de cada ficha manda `set_animation_enabled`; las desmarcadas viajan a Unity en el mensaje fijo `set_disabled_animations` y Sonia deja de hacerlas por su cuenta, aunque su botón las sigue lanzando. Forma de los mensajes en `docs/protocolo.md`.
+
+### `set_subtitles` y `set_debug` (orquestador → Unity)
+
+Interruptores de Avanzado, guardados en `cache/panel_state.json` y repetidos tras `hello` como el volumen. «Subtítulos» oculta en la pantalla lo que dicen el visitante y Sonia. «Modo debug» deja a Sonia quieta para pruebas visuales: el orquestador cierra GPT-Live (aunque el modo sea «Conversando»), no saluda solo en «Solo saludos» y no graba voces al arrancar; Unity se queda sin gestos, bailes ni variaciones automáticas. Los botones del panel (animaciones, saludar, imágenes) siguen funcionando, y la cabecera del panel avisa mientras está activo.
 
 Mientras suena una frase grabada (saludos, avisos y números del stand de la caché de voces), el micrófono manda silencio a GPT-Live hasta que termina más `CLIP_ECHO_TAIL_S`: la frase no la dijo él y, si la oyera por los altavoces, la contestaría.
 
@@ -73,6 +77,10 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   "usage": {"live_seconds": 1840.0, "cost_usd": 1.53},
   "image": null,
   "animations": [{"clip": "Greeting", "group": "greeting"}, {"clip": "Dance_HipHop", "group": "dance"}],
+  "current_animation": "Dance_HipHop",
+  "disabled_animations": ["Dance_Gangnam"],
+  "subtitles": true,
+  "debug": false,
   "showcase": {"enabled": true},
   "voice": "marin",
   "voices": ["marin", "cedar", "coral", "sage", "shimmer"],
@@ -81,14 +89,14 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   "notes": "La charla de IA se movió a la sala B.",
   "voice_cache": {"ready": 18, "total": 25, "busy": false},
   "last_error": null,
-  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache"]
+  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "animation_toggles", "subtitles", "debug", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache"]
 }
 ```
 
 - `health.*.ok` es `true`, `false` o `null` (no aplica, por ejemplo la cámara desactivada o GPT-Live en modo saludos). `label` es una frase corta para el operador y `hint`, si no está bien, qué hacer.
 - `capabilities` dice qué controles funcionan; la página desactiva los que no estén en la lista y muestra una nota junto a ellos.
 - `image` es `null` o `{"id": "logo-sonnet", "caption": "..."}`; `last_error` es `null` o un texto.
-- `animations` es la lista que mandó Unity al conectar (vacía si la app de Unity es anterior a este mensaje o aún no se ha conectado).
+- `animations` es la lista que mandó Unity al conectar (vacía si la app de Unity es anterior a este mensaje o aún no se ha conectado). `current_animation` es el clip que suena según `animation_playing` (`null` si ninguno o sin pantalla) y `disabled_animations`, los que Sonia no usa por su cuenta.
 - `health.mic.level` es el nivel RMS del micrófono (0 a 1, con decaimiento rápido), la misma escala que `mic_gate`. Llega con el estado cada medio segundo.
 - `usage` es el gasto del día (desde medianoche, sumando los reinicios del orquestador): segundos de sesión de GPT-Live y su coste aproximado con `PANEL_LIVE_PRICE_PER_MINUTE`.
 - `voice_cache` trae también `error` (texto del último fallo al grabar, o vacío).
@@ -118,6 +126,9 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `hide_image` | | Retira la imagen. |
 | `gesture` | `category`: `greeting`, `dance`, `fourth_wall`, `soft` | Gesto en el avatar. |
 | `animation` | `clip`: un nombre de `animations` | Reproduce ese clip una vez, en cualquier estado (no estando "Fuera"). |
+| `set_animation_enabled` | `clip`, `enabled`: bool | Que Sonia use o no ese clip por su cuenta. |
+| `set_subtitles` | `enabled`: bool | Subtítulos en pantalla sí o no. |
+| `set_debug` | `enabled`: bool | Modo debug: Sonia quieta, sin GPT-Live ni nada automático. |
 | `greet` | | Saludo con frase grabada ahora mismo (modos `conversation` y `greeter`). |
 | `showcase` | `enabled`: bool | Animación de stand (frases y bailes solos) sí o no. |
 | `set_volume` | `value`: 0 a 1,5 | Volumen de la voz. |

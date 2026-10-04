@@ -72,6 +72,9 @@
         <p class="hero-warning" id="hero-muted" hidden>
           Micrófono silenciado: Sonia no oye a nadie.
         </p>
+        <p class="hero-warning" id="hero-debug" hidden>
+          Modo debug: Sonia está quieta y desconectada de OpenAI. Se quita en «Avanzado».
+        </p>
         <div class="away-sign" id="away-sign" hidden>
           <span class="away-sign-label">Letrero en pantalla:</span>
           <q class="away-sign-text" id="away-sign-text"></q>
@@ -238,9 +241,30 @@
 
     <!-- ===== Avanzado (plegado) ===== -->
     <details class="card advanced" id="avanzado">
-      <summary><span>Avanzado</span><span class="summary-hint">Voz, gestos, animaciones, gasto y registro</span></summary>
+      <summary><span>Avanzado</span><span class="summary-hint">Modo debug, subtítulos, voz, animaciones, gasto y registro</span></summary>
 
       <div class="adv-grid">
+        <section class="adv-block" aria-labelledby="adv-debug-title">
+          <h3 id="adv-debug-title">Modo debug</h3>
+          <label class="switch">
+            <input type="checkbox" role="switch" id="debug-input" data-cap="debug">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Sonia quieta para pruebas visuales</span>
+          </label>
+          <p class="help">Sin GPT-Live (no gasta), sin saludos, frases ni bailes automáticos, y en pantalla sin gestos por su cuenta. Los botones del panel siguen funcionando.</p>
+          <p class="cap-note" data-cap-note="debug" hidden>Esta Sonia no tiene aún el modo debug: hay que actualizar el orquestador.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-subtitles-title">
+          <h3 id="adv-subtitles-title">Subtítulos</h3>
+          <label class="switch">
+            <input type="checkbox" role="switch" id="subtitles-input" data-cap="subtitles">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Mostrar en pantalla lo que dicen el visitante y Sonia</span>
+          </label>
+          <p class="cap-note" data-cap-note="subtitles" hidden>Esta Sonia no tiene aún este interruptor: hay que actualizar el orquestador.</p>
+        </section>
+
         <section class="adv-block" aria-labelledby="adv-voice-title">
           <h3 id="adv-voice-title">Voz de Sonia</h3>
           <p class="help warn-text">Cambiar la voz empieza una conversación nueva: Sonia olvida lo que estaba hablando.</p>
@@ -276,7 +300,7 @@
 
         <section class="adv-block adv-wide" aria-labelledby="adv-anim-title">
           <h3 id="adv-anim-title">Animaciones</h3>
-          <p class="help">Cada botón hace una animación concreta. Si Sonia está hablando, corta sus gestos un momento y luego sigue.</p>
+          <p class="help">Cada botón hace una animación concreta; la que está sonando se ve en azul. Si Sonia está hablando, corta sus gestos un momento y luego sigue. Desmarca «La usa» para que Sonia no la haga por su cuenta (con el botón sigue saliendo).</p>
           <div class="anim-groups" id="anim-groups"></div>
           <p class="cap-note" data-cap-note="animations" hidden>Esta Sonia no tiene aún las animaciones: hay que actualizar el orquestador.</p>
         </section>

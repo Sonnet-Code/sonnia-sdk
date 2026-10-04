@@ -2,6 +2,7 @@
 // lip-sync, el estado del avatar, el panel de imágenes y la cámara, y aplica los
 // ajustes de kiosco para el stand.
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Sonia
@@ -111,6 +112,17 @@ namespace Sonia
         // Momento del último hello (para aplicar sin animación el presence que lo sigue).
         private float _helloAt = -999f;
 
+        // Set de animaciones completo (el asset) y la copia sin lo que el panel
+        // desactivó, que es la que usa el coreógrafo para lo que hace solo.
+        private SoniaMotionSet _fullMotionSet;
+        private SoniaMotionSet _filteredMotionSet;
+        private readonly HashSet<string> _disabledClips = new HashSet<string>();
+        private bool _debugQuiet;
+
+        // Último clip avisado con animation_playing (para mandar solo los cambios).
+        private string _reportedClip;
+        private bool _clipReported;
+
         private void Awake()
         {
             ResolveReferences();
@@ -137,6 +149,8 @@ namespace Sonia
                 client.OnHideImage += HandleHideImage;
                 client.OnAttention += HandleAttention;
                 client.OnPlayAnimation += HandlePlayAnimation;
+                client.OnSetDisabledAnimations += HandleSetDisabledAnimations;
+                client.OnSetDebug += HandleSetDebug;
                 client.OnPresence += HandlePresence;
                 client.OnSetVolume += HandleSetVolume;
                 client.OnError += HandleError;
@@ -168,6 +182,8 @@ namespace Sonia
                 client.OnHideImage -= HandleHideImage;
                 client.OnAttention -= HandleAttention;
                 client.OnPlayAnimation -= HandlePlayAnimation;
+                client.OnSetDisabledAnimations -= HandleSetDisabledAnimations;
+                client.OnSetDebug -= HandleSetDebug;
                 client.OnPresence -= HandlePresence;
                 client.OnSetVolume -= HandleSetVolume;
                 client.OnError -= HandleError;
@@ -348,17 +364,176 @@ namespace Sonia
             }
 
             SendAnimationCatalog();
+            _clipReported = false;
+        }
+
+        /// <summary>
+        /// El set completo, tal cual lo asignó la escena. Se apunta la primera vez
+        /// porque luego el coreógrafo recibe la copia filtrada.
+        /// </summary>
+        private SoniaMotionSet FullMotionSet
+        {
+            get
+            {
+                if (_fullMotionSet == null && choreographer != null)
+                {
+                    _fullMotionSet = choreographer.MotionSet;
+                }
+
+                return _fullMotionSet;
+            }
         }
 
         /// <summary>Le dice al orquestador qué animaciones puede lanzar el panel una a una.</summary>
         private void SendAnimationCatalog()
         {
-            if (client == null || choreographer == null || choreographer.MotionSet == null)
+            if (client == null || FullMotionSet == null)
             {
                 return;
             }
 
-            client.SendAnimations(AnimationCatalog.ToPairs(AnimationCatalog.Build(choreographer.MotionSet)));
+            client.SendAnimations(AnimationCatalog.ToPairs(AnimationCatalog.Build(FullMotionSet)));
+        }
+
+        private void HandleSetDisabledAnimations(SetDisabledAnimationsMessage message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            _disabledClips.Clear();
+            if (message.Clips != null)
+            {
+                foreach (string clip in message.Clips)
+                {
+                    if (!string.IsNullOrEmpty(clip))
+                    {
+                        _disabledClips.Add(clip);
+                    }
+                }
+            }
+
+            ApplyMotionFilter();
+            if (logEvents)
+            {
+                Debug.Log("[Sonia] animaciones que no usa por su cuenta: " + _disabledClips.Count, this);
+            }
+        }
+
+        private void HandleSetDebug(SetDebugMessage message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            _debugQuiet = message.Enabled;
+            ApplyMotionFilter();
+            if (logEvents)
+            {
+                Debug.Log("[Sonia] modo debug " + (_debugQuiet ? "activado: nada automático" : "desactivado"), this);
+            }
+        }
+
+        /// <summary>
+        /// Da al coreógrafo el set sin lo que no debe hacer por su cuenta: las
+        /// animaciones desactivadas en el panel y, en modo debug, todos los gestos
+        /// de atención, bailes, variaciones y asentimientos. Los bucles base, el
+        /// caminar y el gesto de presentar imagen se quedan. Lo que se lanza desde
+        /// el panel (play_animation) sale del set completo y suena igual.
+        /// </summary>
+        private void ApplyMotionFilter()
+        {
+            SoniaMotionSet full = FullMotionSet;
+            if (choreographer == null || full == null)
+            {
+                return;
+            }
+
+            if (_filteredMotionSet != null)
+            {
+                Destroy(_filteredMotionSet);
+                _filteredMotionSet = null;
+            }
+
+            if (_disabledClips.Count == 0 && !_debugQuiet)
+            {
+                choreographer.MotionSet = full;
+                return;
+            }
+
+            SoniaMotionSet copy = Instantiate(full);
+            copy.name = full.name + " (filtrado)";
+            copy.talking = KeepEnabled(full.talking);
+            copy.greeting = full.greeting != null && _disabledClips.Contains(full.greeting.name) ? null : full.greeting;
+            copy.idleVariations = _debugQuiet ? new AnimationClip[0] : KeepEnabled(full.idleVariations);
+            copy.thinkingVariations = _debugQuiet ? new AnimationClip[0] : KeepEnabled(full.thinkingVariations);
+            copy.nods = _debugQuiet ? new AnimationClip[0] : KeepEnabled(full.nods);
+
+            List<AttentionMotion> attention = new List<AttentionMotion>();
+            if (!_debugQuiet && full.attention != null)
+            {
+                foreach (AttentionMotion motion in full.attention)
+                {
+                    if (motion != null && motion.clip != null && !_disabledClips.Contains(motion.clip.name))
+                    {
+                        attention.Add(motion);
+                    }
+                }
+            }
+
+            copy.attention = attention.ToArray();
+            _filteredMotionSet = copy;
+            choreographer.MotionSet = copy;
+        }
+
+        private AnimationClip[] KeepEnabled(AnimationClip[] clips)
+        {
+            List<AnimationClip> kept = new List<AnimationClip>();
+            if (clips != null)
+            {
+                foreach (AnimationClip clip in clips)
+                {
+                    if (clip != null && !_disabledClips.Contains(clip.name))
+                    {
+                        kept.Add(clip);
+                    }
+                }
+            }
+
+            return kept.ToArray();
+        }
+
+        /// <summary>
+        /// Avisa al panel de qué clip del catálogo suena (para resaltar su botón),
+        /// solo cuando cambia. Los bucles base no cuentan: sin gesto, null.
+        /// </summary>
+        private void ReportPlayingAnimation()
+        {
+            if (client == null || !client.IsConnected || choreographer == null || choreographer.Player == null
+                || !choreographer.Player.IsReady)
+            {
+                return;
+            }
+
+            MotionPlayer player = choreographer.Player;
+            string playing = OneShotName(player.CurrentClip(MotionPlayer.BodyLayer))
+                             ?? OneShotName(player.CurrentClip(MotionPlayer.UpperLayer))
+                             ?? OneShotName(player.CurrentClip(MotionPlayer.RightArmLayer));
+            if (_clipReported && playing == _reportedClip)
+            {
+                return;
+            }
+
+            _clipReported = true;
+            _reportedClip = playing;
+            client.SendAnimationPlaying(playing);
+        }
+
+        private static string OneShotName(AnimationClip clip)
+        {
+            return clip != null && !clip.isLooping ? clip.name : null;
         }
 
         /// <summary>
@@ -373,7 +548,7 @@ namespace Sonia
             }
 
             AnimationCatalog.Entry entry;
-            if (!AnimationCatalog.TryFind(choreographer.MotionSet, message.Clip, out entry))
+            if (!AnimationCatalog.TryFind(FullMotionSet, message.Clip, out entry))
             {
                 Debug.LogWarning("[Sonia] el panel pidió una animación que no está en el set: " + message.Clip, this);
                 return;
@@ -484,6 +659,8 @@ namespace Sonia
 
         private void Update()
         {
+            ReportPlayingAnimation();
+
             if (_pendingSpeakingState && Time.time - _pendingSince > speakingAudioTimeout)
             {
                 // El TTS tarda demasiado: se aplica el estado (cejas, cabeza) pero

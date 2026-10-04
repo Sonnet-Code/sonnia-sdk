@@ -57,6 +57,9 @@ CAPABILITIES = [
     "images",
     "gestures",
     "animations",
+    "animation_toggles",
+    "subtitles",
+    "debug",
     "greet",
     "showcase",
     "volume",
@@ -93,6 +96,12 @@ class PanelState:
     mic_gate: float | None = None
     voice: str | None = None
     showcase: bool | None = None
+    #: Subtítulos en la pantalla de Unity.
+    subtitles: bool = True
+    #: Clips que Sonia no usa por su cuenta (bloque «Animaciones»).
+    disabled_animations: list[str] = field(default_factory=list)
+    #: Modo debug: Sonia quieta (sin GPT-Live ni nada automático) para pruebas visuales.
+    debug: bool = False
     #: Gasto del día: segundos de sesión de GPT-Live acumulados en ``usage_date``
     #: (sobrevive a los reinicios del orquestador).
     usage_date: str = ""
@@ -119,9 +128,12 @@ class PanelState:
             value = raw.get(name)
             if isinstance(value, int | float) and not isinstance(value, bool):
                 setattr(state, name, float(value))
-        for name in ("showcase",):
+        for name in ("showcase", "subtitles", "debug"):
             if isinstance(raw.get(name), bool):
                 setattr(state, name, raw[name])
+        disabled = raw.get("disabled_animations")
+        if isinstance(disabled, list):
+            state.disabled_animations = sorted({c for c in disabled if isinstance(c, str) and c})
         return state
 
     def save(self, path: Path) -> None:
@@ -190,12 +202,15 @@ class StandControl:
         self._image: dict[str, Any] | None = None
         #: Clips que Unity dice tener (mensaje ``animations`` al conectar).
         self._animations: list[dict[str, str]] = []
+        #: Clip del catálogo que suena ahora en Unity (``animation_playing``).
+        self._current_animation: str | None = None
         #: Segundos de sesión de arranques anteriores del mismo día.
         self._usage_base = 0.0
         self._last_usage_save = time.monotonic()
         self._roll_usage_day(engine_seconds=0.0)
         hub.add_listener(self._watch_outgoing)
         hub.on(p.MSG_ANIMATIONS, self._on_animations)
+        hub.on(p.MSG_ANIMATION_PLAYING, self._on_animation_playing)
 
     # -- ciclo de vida --------------------------------------------------------
 
@@ -216,11 +231,18 @@ class StandControl:
         if state.notes:
             await engine.set_notes(state.notes)
         await self._hub.set_sticky("volume", p.msg_set_volume(state.volume))
+        await self._hub.set_sticky("subtitles", p.msg_set_subtitles(state.subtitles))
+        await self._hub.set_sticky(
+            "disabled_animations", p.msg_set_disabled_animations(state.disabled_animations)
+        )
+        await self._hub.set_sticky("debug", p.msg_set_debug(state.debug))
         await self._apply_mode(state.mode, announce=False)
-        if state.mode != "conversation":
+        if state.debug:
+            logger.info("El panel dejó a Sonia en modo debug: quieta y sin GPT-Live")
+        elif state.mode != "conversation":
             logger.info("El panel dejó a Sonia en modo %s: no se abre GPT-Live", state.mode)
         self._loop_task = asyncio.create_task(self._loop(), name="sonia-panel-loop")
-        if self._voice_cache is not None and self._settings.live.api_key:
+        if self._voice_cache is not None and self._settings.live.api_key and not state.debug:
             self._spawn(self._prepare_voices(delay=VOICE_WARMUP_DELAY_S), "voice-warmup")
 
     async def stop(self) -> None:
@@ -254,7 +276,8 @@ class StandControl:
             return
         await hub.set_sticky("presence", p.msg_presence(True, self._away_message))
         if mode == "conversation":
-            await engine.set_active(True)
+            # En modo debug no se abre GPT-Live aunque el modo sea «Conversando».
+            await engine.set_active(not self.state.debug)
         else:
             await engine.set_active(False)
             self._next_greet_at = time.monotonic() + GREETER_FIRST_DELAY_S
@@ -271,7 +294,11 @@ class StandControl:
             try:
                 if time.monotonic() - self._last_usage_save >= USAGE_SAVE_S:
                     self._save_usage()
-                if self.state.mode == "greeter" and time.monotonic() >= self._next_greet_at:
+                if (
+                    self.state.mode == "greeter"
+                    and not self.state.debug
+                    and time.monotonic() >= self._next_greet_at
+                ):
                     self._schedule_next_greeting()
                     await self.greet()
             except asyncio.CancelledError:
@@ -476,6 +503,28 @@ class StandControl:
         await self._hub.broadcast_json(p.msg_play_animation(clip))
         return True, f"Sonia hace «{clip}»."
 
+    async def _act_set_animation_enabled(self, params: dict[str, Any]) -> tuple[bool, str]:
+        clip = _text(params, "clip", max_len=80, required=True)
+        enabled = _flag(params, "enabled")
+        known = {a["clip"] for a in self._animations}
+        if known and clip not in known:
+            raise _BadRequest("Esa animación no está en la app de Sonia.")
+        disabled = set(self.state.disabled_animations)
+        if enabled:
+            disabled.discard(clip)
+        else:
+            disabled.add(clip)
+        self.state.disabled_animations = sorted(disabled)
+        self._save()
+        await self._hub.set_sticky(
+            "disabled_animations", p.msg_set_disabled_animations(self.state.disabled_animations)
+        )
+        return True, (
+            f"Sonia vuelve a usar «{clip}» por su cuenta."
+            if enabled
+            else f"Sonia ya no hará «{clip}» por su cuenta (sigue disponible en su botón)."
+        )
+
     async def _act_greet(self, params: dict[str, Any]) -> tuple[bool, str]:
         return await self.greet("greeting")
 
@@ -489,6 +538,35 @@ class StandControl:
             "Sonia dirá frases y bailará sola cuando no haya nadie."
             if enabled
             else "Sonia ya no dirá frases ni bailará sola."
+        )
+
+    async def _act_set_debug(self, params: dict[str, Any]) -> tuple[bool, str]:
+        enabled = _flag(params, "enabled")
+        if enabled == self.state.debug:
+            return True, "Modo debug activado." if enabled else "Modo debug desactivado."
+        self.state.debug = enabled
+        self._save()
+        await self._hub.set_sticky("debug", p.msg_set_debug(enabled))
+        if enabled:
+            logger.info("Panel: modo debug activado; GPT-Live apagada y Sonia quieta")
+            await self._engine.set_active(False)
+            return True, (
+                "Modo debug: Sonia se queda quieta y desconectada de OpenAI. "
+                "Los botones del panel siguen funcionando."
+            )
+        logger.info("Panel: modo debug desactivado; vuelve el modo %s", self.state.mode)
+        await self._apply_mode(self.state.mode, announce=False)
+        return True, "Modo debug desactivado: Sonia vuelve a su modo normal."
+
+    async def _act_set_subtitles(self, params: dict[str, Any]) -> tuple[bool, str]:
+        enabled = _flag(params, "enabled")
+        self.state.subtitles = enabled
+        self._save()
+        await self._hub.set_sticky("subtitles", p.msg_set_subtitles(enabled))
+        return True, (
+            "Subtítulos visibles en la pantalla."
+            if enabled
+            else "Subtítulos ocultos: en la pantalla no sale lo que se dice."
         )
 
     async def _act_set_volume(self, params: dict[str, Any]) -> tuple[bool, str]:
@@ -557,6 +635,9 @@ class StandControl:
         self._animations = p.parse_animations(msg)
         logger.info("Unity tiene %d animaciones para el panel", len(self._animations))
 
+    def _on_animation_playing(self, msg: dict[str, Any]) -> None:
+        self._current_animation = p.parse_animation_playing(msg)
+
     def status(self) -> dict[str, Any]:
         """La instantánea de ``GET /api/status`` (forma en ``docs/panel.md``)."""
         settings = self._settings
@@ -581,6 +662,10 @@ class StandControl:
             },
             "image": self._image,
             "animations": self._animations,
+            "current_animation": self._current_animation if self._hub.client_count else None,
+            "disabled_animations": self.state.disabled_animations,
+            "subtitles": self.state.subtitles,
+            "debug": self.state.debug,
             "showcase": {"enabled": engine.showcase_enabled},
             "voice": settings.live.voice,
             "voices": VOICES,
@@ -603,7 +688,9 @@ class StandControl:
                 "Abre la app de Sonia en el ordenador del stand (o ciérrala y ábrela otra vez).",
             )
         )
-        if mode != "conversation":
+        if self.state.debug:
+            internet = _health(None, "Modo debug: no conversa, así que no gasta")
+        elif mode != "conversation":
             internet = _health(None, "No conversa ahora, así que no gasta")
         elif snap.get("connected"):
             internet = _health(True, "Conversación conectada")
@@ -622,7 +709,7 @@ class StandControl:
         level = float(snap.get("mic_level") or 0.0)
         mic_age = snap.get("mic_age_s")
         sound_age = snap.get("mic_sound_age_s")
-        if mode != "conversation":
+        if mode != "conversation" or self.state.debug:
             mic = _health(None, "No se usa en este modo")
         elif snap.get("mic_muted"):
             mic = _health(

@@ -101,6 +101,15 @@ namespace Sonia
         /// <summary>El panel pide una animación concreta del catálogo.</summary>
         public event Action<PlayAnimationMessage> OnPlayAnimation;
 
+        /// <summary>Subtítulos en pantalla sí o no.</summary>
+        public event Action<SetSubtitlesMessage> OnSetSubtitles;
+
+        /// <summary>Clips que Sonia no debe usar por su cuenta.</summary>
+        public event Action<SetDisabledAnimationsMessage> OnSetDisabledAnimations;
+
+        /// <summary>Modo debug del panel: nada automático en el cuerpo.</summary>
+        public event Action<SetDebugMessage> OnSetDebug;
+
         /// <summary>Sonia se va de la pantalla (modo "Fuera") o vuelve.</summary>
         public event Action<PresenceMessage> OnPresence;
 
@@ -298,6 +307,12 @@ namespace Sonia
         public void SendAnimations(IList<KeyValuePair<string, string>> clips)
         {
             SendJson(Protocol.AnimationsMessage(clips));
+        }
+
+        /// <summary>Avisa de qué clip del catálogo suena ahora (null: ninguno).</summary>
+        public void SendAnimationPlaying(string clip)
+        {
+            SendJson(Protocol.AnimationPlayingMessage(clip));
         }
 
         private void SendJson(string json)
@@ -569,6 +584,12 @@ namespace Sonia
                     return Protocol.Deserialize<AttentionMessage>(payload);
                 case MessageTypes.PlayAnimation:
                     return Protocol.Deserialize<PlayAnimationMessage>(payload);
+                case MessageTypes.SetSubtitles:
+                    return Protocol.Deserialize<SetSubtitlesMessage>(payload);
+                case MessageTypes.SetDisabledAnimations:
+                    return Protocol.Deserialize<SetDisabledAnimationsMessage>(payload);
+                case MessageTypes.SetDebug:
+                    return Protocol.Deserialize<SetDebugMessage>(payload);
                 case MessageTypes.Presence:
                     return Protocol.Deserialize<PresenceMessage>(payload);
                 case MessageTypes.SetVolume:
@@ -719,6 +740,27 @@ namespace Sonia
             if (playAnimation != null)
             {
                 Raise(OnPlayAnimation, playAnimation);
+                return;
+            }
+
+            SetSubtitlesMessage setSubtitles = message as SetSubtitlesMessage;
+            if (setSubtitles != null)
+            {
+                Raise(OnSetSubtitles, setSubtitles);
+                return;
+            }
+
+            SetDisabledAnimationsMessage setDisabled = message as SetDisabledAnimationsMessage;
+            if (setDisabled != null)
+            {
+                Raise(OnSetDisabledAnimations, setDisabled);
+                return;
+            }
+
+            SetDebugMessage setDebug = message as SetDebugMessage;
+            if (setDebug != null)
+            {
+                Raise(OnSetDebug, setDebug);
                 return;
             }
 

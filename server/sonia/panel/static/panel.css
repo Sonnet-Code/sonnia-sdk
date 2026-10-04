@@ -1150,9 +1150,68 @@ input[type="range"]:disabled {
   gap: 8px;
 }
 
-.anim-row .btn {
+.anim-item {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+.anim-item .btn {
+  width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+/* La animación que suena ahora en la pantalla */
+.anim-item.is-playing .anim-play {
+  background: var(--blue);
+  border-color: var(--blue-strong);
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(3, 113, 245, 0.25);
+}
+
+.anim-item.is-playing .anim-play::before {
+  content: "";
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff;
+  animation: anim-pulse 1s ease-in-out infinite;
+}
+
+@keyframes anim-pulse {
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-item.is-playing .anim-play::before { animation: none; }
+}
+
+/* Sonia no la usa por su cuenta */
+.anim-item.is-off .anim-play {
+  border-style: dashed;
+  color: var(--na);
+  text-decoration: line-through;
+}
+
+.anim-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  font-size: 14px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.anim-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--blue);
 }
 
 /* Interruptor */

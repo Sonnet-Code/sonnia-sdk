@@ -33,6 +33,9 @@ namespace Sonia
         public const string Presence = "presence";
         public const string SetVolume = "set_volume";
         public const string PlayAnimation = "play_animation";
+        public const string SetSubtitles = "set_subtitles";
+        public const string SetDisabledAnimations = "set_disabled_animations";
+        public const string SetDebug = "set_debug";
 
         // De Unity hacia el orquestador.
         public const string ClientHello = "client_hello";
@@ -41,6 +44,7 @@ namespace Sonia
         public const string TextInput = "text_input";
         public const string CameraFrame = "camera_frame";
         public const string Animations = "animations";
+        public const string AnimationPlaying = "animation_playing";
     }
 
     /// <summary>Valores posibles del campo <c>state</c> del mensaje <c>state</c>.</summary>
@@ -149,6 +153,27 @@ namespace Sonia
     {
         /// <summary>Nombre del clip, tal cual va en el mensaje <c>animations</c>.</summary>
         [JsonProperty("clip")] public string Clip;
+    }
+
+    /// <summary>Subtítulos en pantalla sí o no (panel, mensaje fijo: se repite tras <c>hello</c>).</summary>
+    [Serializable]
+    public class SetSubtitlesMessage
+    {
+        [JsonProperty("enabled")] public bool Enabled = true;
+    }
+
+    /// <summary>Clips que Sonia no usa por su cuenta (panel, mensaje fijo). Con <c>play_animation</c> sí suenan.</summary>
+    [Serializable]
+    public class SetDisabledAnimationsMessage
+    {
+        [JsonProperty("clips")] public List<string> Clips = new List<string>();
+    }
+
+    /// <summary>Modo debug del panel (mensaje fijo): el avatar no lanza gestos, bailes ni variaciones por su cuenta.</summary>
+    [Serializable]
+    public class SetDebugMessage
+    {
+        [JsonProperty("enabled")] public bool Enabled;
     }
 
     /// <summary>
@@ -474,6 +499,17 @@ namespace Sonia
             {
                 ["type"] = MessageTypes.Animations,
                 ["animations"] = list
+            };
+            return message.ToString(Formatting.None);
+        }
+
+        /// <summary>Clip del catálogo que suena ahora en el avatar, o null si ninguno.</summary>
+        public static string AnimationPlayingMessage(string clip)
+        {
+            JObject message = new JObject
+            {
+                ["type"] = MessageTypes.AnimationPlaying,
+                ["clip"] = string.IsNullOrEmpty(clip) ? JValue.CreateNull() : new JValue(clip)
             };
             return message.ToString(Formatting.None);
         }
