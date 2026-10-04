@@ -126,12 +126,19 @@ namespace Sonia
         private float _glanceTimer;
         private float _glanceRemaining;
         private float _noiseSeed;
+        private float _lastPitch;
         private bool _ready;
 
         /// <summary>Desviación actual de la mirada respecto al objetivo (yaw, pitch en grados).</summary>
         public Vector2 CurrentOffset
         {
             get { return _current; }
+        }
+
+        /// <summary>Grados que miran los ojos hacia abajo dentro de la cabeza (0 si miran al frente o arriba). El párpado lo sigue.</summary>
+        public float CurrentPitchDown
+        {
+            get { return Mathf.Max(0f, _lastPitch); }
         }
 
         private void Awake()
@@ -387,6 +394,7 @@ namespace Sonia
             float pitch = -Mathf.Asin(Mathf.Clamp(inRest.y, -1f, 1f)) * Mathf.Rad2Deg * gazeGain + offset.y;
             yaw = Mathf.Clamp(yaw, -maxYaw, maxYaw);
             pitch = Mathf.Clamp(pitch, -maxPitch, maxPitch);
+            _lastPitch = pitch;
 
             eye.localRotation = rest * Quaternion.Euler(pitch, yaw, 0f);
         }

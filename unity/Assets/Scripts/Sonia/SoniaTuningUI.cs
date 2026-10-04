@@ -3,8 +3,8 @@
 // Para encontrar la configuración de mirada, cabeza y expresiones que se vea
 // natural hay que tocar valores mientras Sonia habla y se mueve, no en el
 // inspector con el juego parado. Este panel lista deslizadores para los campos
-// públicos con [Range] de EyeGazeController, AvatarStateController y
-// FacialExpressionController (y algunos privados por nombre), y guarda los
+// con [Range] de EyeGazeController, AvatarStateController,
+// FacialExpressionController y LipSyncController (y algunos más por nombre), y guarda los
 // valores en un JSON en Application.persistentDataPath, que se vuelve a
 // aplicar al arrancar. "Imprimir" escribe los valores en la consola para
 // pasarlos a la escena.
@@ -77,16 +77,12 @@ namespace Sonia
                 new[]
                 {
                     "lookWeight", "wideShotLookWeight", "maxLookAngle", "lookSmoothing", "headSwayDegrees",
-                    "speechNodDegrees", "blinkIntervalRange", "blinkDuration"
+                    "blinkIntervalRange", "blinkDuration", "listenNodInterval"
                 }
             },
             {
-                typeof(LipSyncController),
-                new[] { "visemeMaxWeight", "attackSpeed", "releaseSpeed", "maxMouthOpen" }
-            },
-            {
-                typeof(PhonemeLipSyncBridge),
-                new[] { "rawVolumeRange", "volumeCurve", "minOpenWhileVoiced" }
+                typeof(FacialExpressionController),
+                new[] { "microInterval" }
             }
         };
 
@@ -314,7 +310,6 @@ namespace Sonia
             AddComponentSection<AvatarStateController>(content.transform, "Cabeza y parpadeo");
             AddComponentSection<FacialExpressionController>(content.transform, "Expresiones");
             AddComponentSection<LipSyncController>(content.transform, "Boca");
-            AddComponentSection<PhonemeLipSyncBridge>(content.transform, "Fonemas");
 
             // Nace cerrado: el primer Toggle lo abre.
             _canvas.SetActive(false);

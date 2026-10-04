@@ -1,32 +1,93 @@
-// Expresiones faciales: cejas, párpados, sonrisa y mejillas.
+// Expresiones faciales: cejas, párpados, mejillas, sonrisa y gestos de labios.
 //
-// Una cara que solo mueve la boca parece un muñeco. Aquí se añaden, sobre los
-// blendshapes ARKit del avatar (Ready Player Me los trae todos), los gestos
-// pequeños que hace una persona sin darse cuenta:
+// Una cara que solo mueve la boca parece un muñeco. Sobre los blendshapes ARKit
+// del avatar se compone, cada frame:
 //
-//  - Cejas que suben con la energía de la voz (sílabas fuertes, énfasis) y un
-//    "levantamiento" breve al empezar a hablar o al escuchar algo.
-//  - Ceño leve al pensar, con los ojos entornados.
-//  - Sonrisa de base distinta por estado (escuchar > reposo > hablar > pensar)
-//    con las mejillas acompañando.
-//  - Párpados: entornar un poco al sonreír y al hablar fuerte, abrir más en un
-//    énfasis o al empezar a escuchar.
-//  - Vaivén lento (ruido Perlin) en cejas y párpados para que nunca estén
-//    clavados.
+//  - Un gesto de base por estado: en reposo una sonrisa amable; escuchando,
+//    cejas algo arriba y sonrisa abierta (interés); pensando, una ceja arriba y
+//    la otra abajo, los labios apretados y llevados a un lado ("mmm"); hablando,
+//    una sonrisa de conversación.
+//  - La voz: las sílabas tónicas levantan las cejas y abren un poco los ojos, el
+//    arranque de cada frase hace un "flash" de cejas y el final, una sonrisa que
+//    sube y baja. Los eventos llegan del analizador de voz de LipSyncController
+//    un poco antes de su sílaba, como en una persona.
+//  - Microexpresiones al azar en reposo y escuchando (cejas, media sonrisa,
+//    labios apretados, entornar los ojos), para que la cara nunca esté quieta.
+//  - Coordinación con la boca: con los labios redondos (o, u) o cerrados (p, b,
+//    m) la sonrisa baja, porque las dos cosas a la vez deforman la boca.
 //
-// Escribe solo blendshapes que no tocan ni el lip-sync (visemas, jawOpen) ni
-// el parpadeo (eyeBlink*), así que no se pisan. Sin blendshapes ARKit (VRM
-// antiguos) no hace nada.
+// Todo pasa por muelles críticamente amortiguados y lleva una asimetría suave
+// entre lado izquierdo y derecho. No toca visemas, jawOpen ni el parpadeo.
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Sonia
 {
-    /// <summary>Cejas, párpados, sonrisa y mejillas según el estado y la voz.</summary>
+    /// <summary>Cejas, párpados, mejillas, sonrisa y gestos de labios según el estado y la voz.</summary>
     [DefaultExecutionOrder(12050)]
     [DisallowMultipleComponent]
     public class FacialExpressionController : MonoBehaviour
     {
+        /// <summary>Canales de expresión (blendshapes ARKit).</summary>
+        private enum Ch
+        {
+            BrowInnerUp,
+            BrowOuterUpL,
+            BrowOuterUpR,
+            BrowDownL,
+            BrowDownR,
+            EyeSquintL,
+            EyeSquintR,
+            EyeWideL,
+            EyeWideR,
+            CheekSquintL,
+            CheekSquintR,
+            SmileL,
+            SmileR,
+            DimpleL,
+            DimpleR,
+            PressL,
+            PressR,
+            MouthLeft,
+            MouthRight,
+            Pucker,
+            FrownL,
+            FrownR,
+            SneerL,
+            SneerR,
+            Count
+        }
+
+        private static readonly string[] ChannelNames =
+        {
+            "browInnerUp", "browOuterUpLeft", "browOuterUpRight", "browDownLeft", "browDownRight",
+            "eyeSquintLeft", "eyeSquintRight", "eyeWideLeft", "eyeWideRight", "cheekSquintLeft", "cheekSquintRight",
+            "mouthSmileLeft", "mouthSmileRight", "mouthDimpleLeft", "mouthDimpleRight", "mouthPressLeft",
+            "mouthPressRight", "mouthLeft", "mouthRight", "mouthPucker", "mouthFrownLeft", "mouthFrownRight",
+            "noseSneerLeft", "noseSneerRight"
+        };
+
+        /// <summary>Un gesto pasajero: pesos por canal con una envolvente de subida y bajada.</summary>
+        private struct Gesture
+        {
+            public float Start;
+            public float Duration;
+            public float Peak;
+            public float Gain;
+            public int Kind;
+            public bool Left;
+        }
+
+        // Gestos pasajeros (Kind): cada uno es una pequeña receta de canales.
+        private const int GBrowFlash = 0;
+        private const int GBrowEmphasis = 1;
+        private const int GSmilePulse = 2;
+        private const int GHalfSmile = 3;
+        private const int GLipPress = 4;
+        private const int GSquint = 5;
+        private const int GBrowKnit = 6;
+
         [Header("Referencias")]
         [SerializeField]
         [Tooltip("Malla con los blendshapes ARKit de la cara.")]
@@ -37,74 +98,87 @@ namespace Sonia
         private AvatarStateController stateController;
 
         [SerializeField]
-        [Tooltip("Lip-sync, para leer la apertura de boca y acompasar cejas y párpados a la voz.")]
+        [Tooltip("Lip-sync: forma de la boca y eventos de la voz (sílabas, frases).")]
         private LipSyncController lipSync;
 
         [Header("Sonrisa de base (0..1)")]
-        [SerializeField, Range(0f, 1f)] public float smileIdle = 0.22f;
-        [SerializeField, Range(0f, 1f)] public float smileListening = 0.30f;
-        [SerializeField, Range(0f, 1f)] public float smileThinking = 0.08f;
-        [SerializeField, Range(0f, 1f)] public float smileSpeaking = 0.14f;
+        [Range(0f, 1f)] public float restSmile = 0.3f;
+        [Range(0f, 1f)] public float listenSmile = 0.4f;
+        [Range(0f, 1f)] public float thinkSmile = 0.08f;
+        [Range(0f, 1f)] public float talkSmile = 0.26f;
 
-        [Header("Cejas")]
-        [SerializeField, Range(0f, 1f)]
-        [Tooltip("Cuánto suben las cejas con la energía de la voz al hablar.")]
-        public float browSpeechAmount = 0.45f;
+        [Header("Voz")]
+        [Range(0f, 1f)]
+        [Tooltip("Cejas en una sílaba tónica.")]
+        public float stressBrows = 0.5f;
 
-        [SerializeField, Range(0f, 1f)]
-        [Tooltip("Levantamiento breve de cejas al empezar a escuchar o a hablar.")]
-        public float browFlashAmount = 0.5f;
+        [Range(0f, 1f)]
+        [Tooltip("Probabilidad de que una sílaba tónica levante las cejas (no todas lo hacen).")]
+        public float stressBrowChance = 0.55f;
 
-        [SerializeField, Range(0f, 1f)]
-        [Tooltip("Ceño al pensar.")]
-        public float browThinkingFrown = 0.35f;
+        [Range(0f, 1f)]
+        [Tooltip("Fuerza mínima (0..1) para que una sílaba cuente como tónica.")]
+        public float stressThreshold = 0.82f;
 
-        [SerializeField, Range(0f, 1f)]
-        [Tooltip("Vaivén aleatorio permanente de cejas.")]
-        public float browIdleWander = 0.12f;
+        [Range(0f, 1f)]
+        [Tooltip("Flash de cejas al arrancar una frase.")]
+        public float phraseBrows = 0.45f;
 
-        [Header("Párpados")]
-        [SerializeField, Range(0f, 1f)]
-        [Tooltip("Cuánto se entornan los ojos al sonreír.")]
-        public float squintWithSmile = 0.35f;
+        [Range(0f, 1f)]
+        [Tooltip("Sonrisa extra al acabar una frase.")]
+        public float phraseEndSmile = 0.2f;
 
-        [SerializeField, Range(0f, 1f)]
-        [Tooltip("Cuánto se entornan los ojos en las sílabas fuertes.")]
-        public float squintWithSpeech = 0.25f;
+        [Range(0f, 1f)]
+        [Tooltip("Cuánto baja la sonrisa con los labios redondos o cerrados.")]
+        public float mouthShapeSmileCut = 0.75f;
 
-        [SerializeField, Range(0f, 1f)]
-        [Tooltip("Cuánto se abren los ojos en un énfasis o al empezar a escuchar.")]
-        public float wideOnEmphasis = 0.4f;
+        [Header("Vida")]
+        [Tooltip("Segundos mínimo y máximo entre microexpresiones en reposo y escuchando.")]
+        public Vector2 microInterval = new Vector2(2.5f, 6f);
 
-        [Header("Ritmo")]
-        [SerializeField, Range(0.5f, 20f)]
-        [Tooltip("Velocidad con la que las expresiones alcanzan su valor.")]
-        public float smoothing = 6f;
+        [Range(0f, 1f)]
+        [Tooltip("Intensidad de las microexpresiones.")]
+        public float microAmount = 0.6f;
 
-        [SerializeField, Range(0f, 1f)]
-        [Tooltip("Apertura de boca a partir de la cual una sílaba cuenta como énfasis.")]
-        public float emphasisThreshold = 0.5f;
+        [Range(0f, 0.3f)]
+        [Tooltip("Vaivén lento y continuo de cejas y sonrisa.")]
+        public float wander = 0.07f;
 
-        private AvatarState _state = AvatarState.Idle;
+        [Range(0f, 0.3f)]
+        [Tooltip("Asimetría entre lado izquierdo y derecho.")]
+        public float asymmetry = 0.12f;
+
+        [Range(1f, 15f)]
+        [Tooltip("Velocidad de los cambios de expresión (Hz del muelle).")]
+        public float expressionSpeed = 3.5f;
+
+        [Range(2f, 20f)]
+        [Tooltip("Velocidad de las cejas en los gestos de la voz (Hz del muelle).")]
+        public float browSpeed = 7f;
+
+        private readonly int[] _index = new int[(int)Ch.Count];
+        private readonly float[] _target = new float[(int)Ch.Count];
+        private readonly Spring[] _springs = new Spring[(int)Ch.Count];
+        private readonly List<Gesture> _gestures = new List<Gesture>();
         private float _scale = 1f;
-        private float _noiseSeed;
-        private float _flash;
-        private float _emphasis;
-        private float _energy;
         private bool _ready;
-
-        // índices
-        private int _browInnerUp, _browOuterUpL, _browOuterUpR, _browDownL, _browDownR;
-        private int _smileL, _smileR, _cheekL, _cheekR, _squintL, _squintR, _wideL, _wideR, _mouthPress, _noseL, _noseR;
-
-        // valores actuales (suavizados)
-        private float _cBrowUp, _cBrowOuter, _cBrowDown, _cSmile, _cCheek, _cSquint, _cWide;
+        private bool _subscribed;
+        private float _seed;
+        private float _nextMicro;
+        private float _lastStressBrow = -10f;
+        private AvatarState _state = AvatarState.Idle;
+        private float _stateSince;
+        private int _thinkSide = 1;
 
         /// <summary>Malla de la cara.</summary>
         public SkinnedMeshRenderer FaceRenderer
         {
             get { return faceRenderer; }
-            set { faceRenderer = value; Bind(); }
+            set
+            {
+                faceRenderer = value;
+                Bind();
+            }
         }
 
         private void Awake()
@@ -119,8 +193,27 @@ namespace Sonia
                 lipSync = GetComponentInChildren<LipSyncController>(true);
             }
 
-            _noiseSeed = Random.value * 100f;
+            _seed = Random.value * 100f;
+            _nextMicro = Time.time + Random.Range(microInterval.x, microInterval.y);
             Bind();
+        }
+
+        private void OnEnable()
+        {
+            if (lipSync != null && !_subscribed)
+            {
+                lipSync.OnSpeechEvent += HandleSpeechEvent;
+                _subscribed = true;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (lipSync != null && _subscribed)
+            {
+                lipSync.OnSpeechEvent -= HandleSpeechEvent;
+                _subscribed = false;
+            }
         }
 
         /// <summary>Resuelve los blendshapes. Se llama sola; repetir si cambia la malla.</summary>
@@ -134,45 +227,59 @@ namespace Sonia
             }
 
             _scale = LipSyncController.BlendShapeScale(mesh);
-            _browInnerUp = Find(mesh, "browInnerUp");
-            _browOuterUpL = Find(mesh, "browOuterUpLeft");
-            _browOuterUpR = Find(mesh, "browOuterUpRight");
-            _browDownL = Find(mesh, "browDownLeft");
-            _browDownR = Find(mesh, "browDownRight");
-            _smileL = Find(mesh, "mouthSmileLeft");
-            _smileR = Find(mesh, "mouthSmileRight");
-            _cheekL = Find(mesh, "cheekSquintLeft");
-            _cheekR = Find(mesh, "cheekSquintRight");
-            _squintL = Find(mesh, "eyeSquintLeft");
-            _squintR = Find(mesh, "eyeSquintRight");
-            _wideL = Find(mesh, "eyeWideLeft");
-            _wideR = Find(mesh, "eyeWideRight");
-            _mouthPress = Find(mesh, "mouthPressLeft");
-            _noseL = Find(mesh, "noseSneerLeft");
-            _noseR = Find(mesh, "noseSneerRight");
-            _ready = _browInnerUp >= 0 || _smileL >= 0 || _squintL >= 0;
+            bool any = false;
+            for (int i = 0; i < _index.Length; i++)
+            {
+                _index[i] = LipSyncController.FindBlendShape(mesh, ChannelNames[i]);
+                any |= _index[i] >= 0;
+            }
+
+            _ready = any;
         }
 
-        private static int Find(Mesh mesh, string name)
+        // ------------------------------------------------------------------
+        // Voz
+        // ------------------------------------------------------------------
+
+        private void HandleSpeechEvent(SpeechAnalyzer.SpeechEvent e)
         {
-            int index = mesh.GetBlendShapeIndex(name);
-            if (index >= 0)
+            float now = Time.time;
+            switch (e.Kind)
             {
-                return index;
-            }
+                case SpeechAnalyzer.EventKind.PhraseStart:
+                    AddGesture(GBrowFlash, 0.55f, 0.3f, phraseBrows * Random.Range(0.75f, 1.1f));
+                    break;
+                case SpeechAnalyzer.EventKind.PhraseEnd:
+                    AddGesture(GSmilePulse, 1.3f, 0.35f, phraseEndSmile * Random.Range(0.7f, 1.2f));
+                    break;
+                case SpeechAnalyzer.EventKind.Syllable:
+                    if (e.Strength >= stressThreshold && now - _lastStressBrow > 0.7f && Random.value < stressBrowChance)
+                    {
+                        _lastStressBrow = now;
+                        float strength = Mathf.InverseLerp(stressThreshold, 1f, e.Strength);
+                        AddGesture(GBrowEmphasis, Random.Range(0.35f, 0.55f), 0.3f, stressBrows * Mathf.Lerp(0.6f, 1f, strength));
+                    }
 
-            for (int i = 0; i < mesh.blendShapeCount; i++)
-            {
-                string candidate = mesh.GetBlendShapeName(i);
-                int dot = candidate.LastIndexOf('.');
-                if (dot >= 0 && candidate.Substring(dot + 1) == name)
-                {
-                    return i;
-                }
+                    break;
             }
-
-            return -1;
         }
+
+        private void AddGesture(int kind, float duration, float peak, float gain)
+        {
+            if (_gestures.Count > 12)
+            {
+                _gestures.RemoveAt(0);
+            }
+
+            _gestures.Add(new Gesture
+            {
+                Kind = kind, Start = Time.time, Duration = duration, Peak = peak, Gain = gain, Left = Random.value < 0.5f
+            });
+        }
+
+        // ------------------------------------------------------------------
+        // Composición
+        // ------------------------------------------------------------------
 
         private void LateUpdate()
         {
@@ -182,82 +289,251 @@ namespace Sonia
             }
 
             float dt = Time.deltaTime;
+            float now = Time.time;
             AvatarState state = stateController != null ? stateController.State : AvatarState.Idle;
             if (state != _state)
             {
-                // Un levantamiento breve de cejas marca el cambio: "te escucho", "voy".
-                if (state == AvatarState.Listening || state == AvatarState.Speaking)
-                {
-                    _flash = 1f;
-                }
-
-                _state = state;
+                OnStateChanged(state, now);
             }
 
-            _flash = Mathf.MoveTowards(_flash, 0f, dt * 1.6f);
+            for (int i = 0; i < _target.Length; i++)
+            {
+                _target[i] = 0f;
+            }
 
-            // La boca puede moverse en cualquier estado (frases del stand, bailes
-            // cantados): las cejas y los párpados siguen a la voz siempre.
-            float open = lipSync != null ? lipSync.MouthOpen : 0f;
-            _energy = Mathf.Lerp(_energy, open, 1f - Mathf.Exp(-8f * dt));
-            float emphasisTarget = open > emphasisThreshold ? 1f : 0f;
-            _emphasis = Mathf.Lerp(_emphasis, emphasisTarget, 1f - Mathf.Exp(-(emphasisTarget > _emphasis ? 14f : 4f) * dt));
+            float talking = lipSync != null && lipSync.IsTalking ? 1f : 0f;
+            ComposeBase(state, now, talking);
+            UpdateMicro(state, now, talking);
+            ComposeGestures(now);
+            ApplyMouthCoordination();
 
-            float wander = (Mathf.PerlinNoise(_noiseSeed, Time.time * 0.23f) - 0.5f) * 2f;
-            float wander2 = (Mathf.PerlinNoise(_noiseSeed + 47f, Time.time * 0.31f) - 0.5f) * 2f;
+            for (int i = 0; i < _target.Length; i++)
+            {
+                bool brow = i <= (int)Ch.BrowDownR || i == (int)Ch.EyeWideL || i == (int)Ch.EyeWideR;
+                float speed = brow ? browSpeed : expressionSpeed;
+                _springs[i].Step(Mathf.Clamp01(_target[i]), speed, speed * 0.8f, dt);
+                if (_index[i] >= 0)
+                {
+                    faceRenderer.SetBlendShapeWeight(_index[i], Mathf.Clamp01(_springs[i].Value) * 100f * _scale);
+                }
+            }
+        }
 
+        private void OnStateChanged(AvatarState state, float now)
+        {
+            if (state == AvatarState.Listening)
+            {
+                // "Te escucho": flash de cejas y ojos algo más abiertos.
+                AddGesture(GBrowFlash, 0.6f, 0.3f, 0.45f);
+            }
+            else if (state == AvatarState.Thinking)
+            {
+                _thinkSide = Random.value < 0.5f ? -1 : 1;
+            }
+
+            _state = state;
+            _stateSince = now;
+        }
+
+        private void Set(Ch channel, float value)
+        {
+            _target[(int)channel] += value;
+        }
+
+        /// <summary>Lado izquierdo y derecho con asimetría lenta.</summary>
+        private void SetPair(Ch left, Ch right, float value, float noiseOffset)
+        {
+            float skew = FaceCurves.Noise(_seed + noiseOffset, Time.time * 0.11f) * asymmetry;
+            _target[(int)left] += value * (1f + skew);
+            _target[(int)right] += value * (1f - skew);
+        }
+
+        private void ComposeBase(AvatarState state, float now, float talking)
+        {
+            float w1 = FaceCurves.Noise(_seed, now * 0.21f) * wander;
+            float w2 = FaceCurves.Noise(_seed + 37f, now * 0.17f) * wander;
             float smile;
             switch (state)
             {
-                case AvatarState.Listening: smile = smileListening; break;
-                case AvatarState.Thinking: smile = smileThinking; break;
-                case AvatarState.Speaking: smile = smileSpeaking; break;
-                default: smile = smileIdle; break;
+                case AvatarState.Listening:
+                    smile = listenSmile;
+                    Set(Ch.BrowInnerUp, 0.18f + w1);
+                    SetPair(Ch.BrowOuterUpL, Ch.BrowOuterUpR, 0.14f + w1 * 0.5f, 3f);
+                    SetPair(Ch.EyeWideL, Ch.EyeWideR, 0.06f, 5f);
+                    break;
+                case AvatarState.Thinking:
+                {
+                    smile = thinkSmile;
+                    // "Mmm": una ceja arriba y la otra frunce; labios apretados y a un lado.
+                    float t = Mathf.Clamp01((now - _stateSince) / 0.4f);
+                    Set(Ch.BrowInnerUp, 0.25f * t);
+                    Set(_thinkSide > 0 ? Ch.BrowOuterUpL : Ch.BrowOuterUpR, 0.35f * t);
+                    Set(_thinkSide > 0 ? Ch.BrowDownR : Ch.BrowDownL, 0.3f * t);
+                    SetPair(Ch.EyeSquintL, Ch.EyeSquintR, 0.18f * t, 7f);
+                    SetPair(Ch.PressL, Ch.PressR, 0.35f * t, 9f);
+                    Set(_thinkSide > 0 ? Ch.MouthLeft : Ch.MouthRight, 0.22f * t);
+                    Set(Ch.Pucker, 0.08f * t);
+                    break;
+                }
+
+                case AvatarState.Speaking:
+                    smile = talkSmile;
+                    Set(Ch.BrowInnerUp, 0.08f + Mathf.Max(0f, w1));
+                    SetPair(Ch.BrowOuterUpL, Ch.BrowOuterUpR, 0.06f + Mathf.Max(0f, w2) * 0.6f, 3f);
+                    break;
+                default:
+                    smile = restSmile;
+                    Set(Ch.BrowInnerUp, 0.04f + Mathf.Max(0f, w1) * 0.7f);
+                    break;
             }
 
-            smile = Mathf.Clamp01(smile + wander2 * 0.05f);
+            // Frases del stand en reposo (ambient): sonrisa de hablar.
+            if (state == AvatarState.Idle && talking > 0f)
+            {
+                smile = Mathf.Max(smile, talkSmile);
+            }
 
-            float browUp = Mathf.Clamp01(_energy * browSpeechAmount + _flash * browFlashAmount + Mathf.Max(0f, wander) * browIdleWander);
-            float browOuter = Mathf.Clamp01(_emphasis * browSpeechAmount * 0.6f + _flash * browFlashAmount * 0.5f);
-            float browDown = state == AvatarState.Thinking ? Mathf.Clamp01(browThinkingFrown + wander * 0.08f) : Mathf.Max(0f, -wander) * browIdleWander * 0.5f;
-            float squint = Mathf.Clamp01(smile * squintWithSmile + _energy * squintWithSpeech + (state == AvatarState.Thinking ? 0.2f : 0f));
-            float wide = Mathf.Clamp01(_emphasis * wideOnEmphasis * 0.5f + _flash * wideOnEmphasis);
-
-            // Abrir los ojos y entornarlos a la vez no tiene sentido: gana el más fuerte.
-            if (wide > squint) { squint *= 0.3f; } else { wide *= 0.3f; }
-
-            float k = 1f - Mathf.Exp(-smoothing * dt);
-            _cBrowUp = Mathf.Lerp(_cBrowUp, browUp, k);
-            _cBrowOuter = Mathf.Lerp(_cBrowOuter, browOuter, k);
-            _cBrowDown = Mathf.Lerp(_cBrowDown, browDown, k);
-            _cSmile = Mathf.Lerp(_cSmile, smile, k);
-            _cCheek = Mathf.Lerp(_cCheek, smile * 0.6f, k);
-            _cSquint = Mathf.Lerp(_cSquint, squint, k);
-            _cWide = Mathf.Lerp(_cWide, wide, k);
-
-            Write(_browInnerUp, _cBrowUp);
-            Write(_browOuterUpL, _cBrowOuter);
-            Write(_browOuterUpR, _cBrowOuter * 0.9f);
-            Write(_browDownL, _cBrowDown);
-            Write(_browDownR, _cBrowDown * 0.9f);
-            Write(_smileL, _cSmile);
-            Write(_smileR, _cSmile * 0.95f);
-            Write(_cheekL, _cCheek);
-            Write(_cheekR, _cCheek);
-            Write(_squintL, _cSquint);
-            Write(_squintR, _cSquint);
-            Write(_wideL, _cWide);
-            Write(_wideR, _cWide);
-            Write(_noseL, _emphasis * 0.08f);
-            Write(_noseR, _emphasis * 0.08f);
+            smile = Mathf.Clamp01(smile + w2);
+            SetPair(Ch.SmileL, Ch.SmileR, smile, 11f);
+            SetPair(Ch.CheekSquintL, Ch.CheekSquintR, smile * 0.55f, 13f);
+            SetPair(Ch.EyeSquintL, Ch.EyeSquintR, smile * 0.3f, 15f);
+            SetPair(Ch.DimpleL, Ch.DimpleR, smile * 0.25f, 17f);
         }
 
-        private void Write(int index, float weight01)
+        private void UpdateMicro(AvatarState state, float now, float talking)
         {
-            if (index >= 0)
+            if (now < _nextMicro)
             {
-                faceRenderer.SetBlendShapeWeight(index, Mathf.Clamp01(weight01) * 100f * _scale);
+                return;
             }
+
+            _nextMicro = now + Random.Range(microInterval.x, microInterval.y);
+            if (state == AvatarState.Thinking || talking > 0f)
+            {
+                return;
+            }
+
+            float roll = Random.value;
+            float gain = microAmount * Random.Range(0.6f, 1f);
+            if (state == AvatarState.Listening)
+            {
+                // Escuchando: gestos de interés.
+                if (roll < 0.35f)
+                {
+                    AddGesture(GBrowFlash, 0.6f, 0.3f, 0.35f * gain);
+                }
+                else if (roll < 0.65f)
+                {
+                    AddGesture(GSmilePulse, 1.4f, 0.3f, 0.25f * gain);
+                }
+                else if (roll < 0.85f)
+                {
+                    AddGesture(GHalfSmile, 1.6f, 0.3f, 0.3f * gain);
+                }
+                else
+                {
+                    AddGesture(GBrowKnit, 1.1f, 0.35f, 0.3f * gain);
+                }
+
+                return;
+            }
+
+            if (roll < 0.25f)
+            {
+                AddGesture(GHalfSmile, 1.8f, 0.3f, 0.3f * gain);
+            }
+            else if (roll < 0.45f)
+            {
+                AddGesture(GBrowFlash, 0.7f, 0.3f, 0.3f * gain);
+            }
+            else if (roll < 0.65f)
+            {
+                AddGesture(GLipPress, 1.2f, 0.35f, 0.35f * gain);
+            }
+            else if (roll < 0.85f)
+            {
+                AddGesture(GSquint, 1.4f, 0.35f, 0.25f * gain);
+            }
+            else
+            {
+                AddGesture(GSmilePulse, 1.6f, 0.3f, 0.2f * gain);
+            }
+        }
+
+        private void ComposeGestures(float now)
+        {
+            for (int i = _gestures.Count - 1; i >= 0; i--)
+            {
+                Gesture g = _gestures[i];
+                float t = (now - g.Start) / Mathf.Max(0.05f, g.Duration);
+                if (t >= 1f)
+                {
+                    _gestures.RemoveAt(i);
+                    continue;
+                }
+
+                float k = FaceCurves.Bump(t, g.Peak) * g.Gain;
+                switch (g.Kind)
+                {
+                    case GBrowFlash:
+                        Set(Ch.BrowInnerUp, k);
+                        SetPair(Ch.BrowOuterUpL, Ch.BrowOuterUpR, k * 0.8f, 21f);
+                        SetPair(Ch.EyeWideL, Ch.EyeWideR, k * 0.3f, 23f);
+                        break;
+                    case GBrowEmphasis:
+                        Set(Ch.BrowInnerUp, k * 0.8f);
+                        SetPair(Ch.BrowOuterUpL, Ch.BrowOuterUpR, k, 25f);
+                        SetPair(Ch.EyeWideL, Ch.EyeWideR, k * 0.2f, 27f);
+                        break;
+                    case GSmilePulse:
+                        SetPair(Ch.SmileL, Ch.SmileR, k, 29f);
+                        SetPair(Ch.CheekSquintL, Ch.CheekSquintR, k * 0.6f, 31f);
+                        SetPair(Ch.EyeSquintL, Ch.EyeSquintR, k * 0.35f, 33f);
+                        break;
+                    case GHalfSmile:
+                        Set(g.Left ? Ch.SmileL : Ch.SmileR, k);
+                        Set(g.Left ? Ch.DimpleL : Ch.DimpleR, k * 0.5f);
+                        Set(g.Left ? Ch.CheekSquintL : Ch.CheekSquintR, k * 0.4f);
+                        break;
+                    case GLipPress:
+                        SetPair(Ch.PressL, Ch.PressR, k, 35f);
+                        Set(Ch.BrowInnerUp, k * 0.2f);
+                        break;
+                    case GSquint:
+                        SetPair(Ch.EyeSquintL, Ch.EyeSquintR, k, 37f);
+                        SetPair(Ch.CheekSquintL, Ch.CheekSquintR, k * 0.3f, 39f);
+                        break;
+                    case GBrowKnit:
+                        SetPair(Ch.BrowDownL, Ch.BrowDownR, k * 0.6f, 41f);
+                        Set(Ch.BrowInnerUp, k * 0.5f);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>Con la boca redonda o cerrada, la sonrisa baja: las dos cosas a la vez la deforman.</summary>
+        private void ApplyMouthCoordination()
+        {
+            if (lipSync == null)
+            {
+                return;
+            }
+
+            float cut = Mathf.Clamp01(lipSync.Roundness) * mouthShapeSmileCut;
+            float keep = 1f - cut;
+            _target[(int)Ch.SmileL] *= keep;
+            _target[(int)Ch.SmileR] *= keep;
+            _target[(int)Ch.DimpleL] *= keep;
+            _target[(int)Ch.DimpleR] *= keep;
+
+            // Hablando, los labios no se aprietan ni se van a un lado.
+            float open = lipSync.MouthOpen;
+            float free = 1f - Mathf.Clamp01(open * 2f);
+            _target[(int)Ch.PressL] *= free;
+            _target[(int)Ch.PressR] *= free;
+            _target[(int)Ch.MouthLeft] *= free;
+            _target[(int)Ch.MouthRight] *= free;
+            _target[(int)Ch.Pucker] *= free;
         }
     }
 }
