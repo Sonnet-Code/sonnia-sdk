@@ -7,12 +7,15 @@
  */
 
 import type { ControlRoom } from "./control-room";
+import type { GuestRoom } from "./guest-room";
 
 export interface Env {
   /** Estáticos de `public/` (página del panel y galería). */
   ASSETS: Fetcher;
   /** El Durable Object con el estado de todas las Sonias. */
   CONTROL_ROOM: DurableObjectNamespace<ControlRoom>;
+  /** Una sala del Modo Jean por Sonia (media entre el stand y el invitado). */
+  GUEST_ROOM: DurableObjectNamespace<GuestRoom>;
 
   /** Token compartido con las Sonias (`PANEL_CLOUD_TOKEN` en su `.env`). */
   AGENT_TOKEN?: string;

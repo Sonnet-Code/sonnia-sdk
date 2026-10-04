@@ -39,6 +39,7 @@ from sonia.types import ActionContext
 from sonia.ws import protocol as p
 
 if TYPE_CHECKING:  # pragma: no cover - solo para tipado
+    from sonia.guest.mode import GuestMode
     from sonia.live.engine import LiveEngine
     from sonia.live.voicecache import VoiceCache
     from sonia.ws.hub import Hub
@@ -272,11 +273,13 @@ class _GreeterBit:
 
 @dataclass
 class _Material:
-    """Frases fijas: saludos, frases del stand y cantos para bailar."""
+    """Frases fijas: saludos, frases del stand, cantos y entradas del Modo Jean."""
 
     greetings: list[str] = field(default_factory=list)
     phrases: list[str] = field(default_factory=list)
     songs: list[str] = field(default_factory=list)
+    #: Lo que dice Sonia al presentar al invitado sorpresa (Modo Jean).
+    guest_intros: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dir(cls, directory: Path) -> _Material:
@@ -284,10 +287,11 @@ class _Material:
             greetings=load_lines(directory / "saludos.md"),
             phrases=load_lines(directory / "frases.md"),
             songs=load_lines(directory / "cantos.md"),
+            guest_intros=load_lines(directory / "invitado.md"),
         )
 
     def all_texts(self) -> list[str]:
-        return [*self.greetings, *self.phrases, *self.songs]
+        return [*self.greetings, *self.phrases, *self.songs, *self.guest_intros]
 
 
 class StandControl:
@@ -337,6 +341,8 @@ class StandControl:
         self._current_animation: str | None = None
         #: ¿Está la pantalla de Sonia en la escena de editar personaje?
         self._avatar_editor_open = False
+        #: Modo Jean (invitado sorpresa); solo con nube (lo engancha ``attach_guest``).
+        self._guest: GuestMode | None = None
         #: Segundos de sesión de arranques anteriores del mismo día.
         self._usage_base = 0.0
         self._last_usage_save = time.monotonic()
@@ -346,12 +352,33 @@ class StandControl:
         hub.on(p.MSG_ANIMATION_PLAYING, self._on_animation_playing)
         hub.on(p.MSG_AVATAR_EDITOR, self._on_avatar_editor)
         hub.on(p.MSG_AVATAR_SAVED, self._on_avatar_saved)
+        hub.on(p.MSG_GUEST_STATE, self._on_guest_state)
 
     # -- ciclo de vida --------------------------------------------------------
 
     @property
     def capabilities(self) -> list[str]:
-        return list(CAPABILITIES)
+        caps = list(CAPABILITIES)
+        if self._guest is not None:
+            caps.append("guest_mode")
+        return caps
+
+    def attach_guest(self, guest: GuestMode) -> None:
+        """Engancha el Modo Jean (lo crea la CLI cuando hay nube)."""
+        self._guest = guest
+
+    @property
+    def guest_intro_lines(self) -> list[str]:
+        """Frases con las que Sonia presenta al invitado (se graban con «Preparar voces»)."""
+        return self._material.guest_intros
+
+    @property
+    def _guest_active(self) -> bool:
+        return self._guest is not None and self._guest.active
+
+    async def guest_changed(self) -> None:
+        """El Modo Jean empezó o terminó: GPT-Live y el modo se ajustan."""
+        await self._apply_mode(self.state.mode, announce=False)
 
     async def start(self) -> None:
         """Aplica lo guardado y arranca el bucle de saludos. Antes de ``engine.run()``."""
@@ -383,6 +410,8 @@ class StandControl:
             self._spawn(self._prepare_voices(delay=VOICE_WARMUP_DELAY_S), "voice-warmup")
 
     async def stop(self) -> None:
+        if self._guest is not None:
+            await self._guest.close()
         self._save_usage()
         tasks = [t for t in [self._loop_task, *self._tasks] if t is not None]
         for task in tasks:
@@ -413,8 +442,11 @@ class StandControl:
             return
         await hub.set_sticky("presence", p.msg_presence(True, self._away_message))
         if mode == "conversation":
-            # En modo debug o con el editor de personaje en pantalla no se abre GPT-Live.
-            await engine.set_active(not self.state.debug and not self._avatar_editor_open)
+            # En modo debug, con el editor de personaje en pantalla o con el invitado
+            # del Modo Jean no se abre GPT-Live.
+            await engine.set_active(
+                not self.state.debug and not self._avatar_editor_open and not self._guest_active
+            )
         else:
             await engine.set_active(False)
             self._next_greet_at = time.monotonic() + GREETER_FIRST_DELAY_S
@@ -438,6 +470,7 @@ class StandControl:
                     self.state.mode == "greeter"
                     and not self.state.debug
                     and not self._avatar_editor_open
+                    and not self._guest_active
                     and time.monotonic() >= self._next_greet_at
                 ):
                     self._schedule_next_greeting()
@@ -538,6 +571,8 @@ class StandControl:
         mode = params.get("mode")
         if mode not in MODES:
             raise _BadRequest("Modo no válido.")
+        if self._guest_active and mode != self.state.mode:
+            raise _BadRequest("Termina antes el Modo Jean: Sonia no está en el stand.")
         await self.set_mode(mode)
         return True, {
             "conversation": "Sonia vuelve a conversar.",
@@ -672,6 +707,37 @@ class StandControl:
     async def _act_close_avatar_editor(self, params: dict[str, Any]) -> tuple[bool, str]:
         await self._hub.broadcast_json(p.msg_close_avatar_editor())
         return True, "Editor de personaje cerrado sin guardar: Sonia vuelve."
+
+    async def _act_set_guest_mode(self, params: dict[str, Any]) -> tuple[bool, str]:
+        active = _flag(params, "active")
+        guest = self._guest
+        if guest is None:
+            raise _BadRequest(
+                "Esta Sonia no tiene el Modo Jean: hace falta conectarla a la nube "
+                "(PANEL_CLOUD_TOKEN)."
+            )
+        if active:
+            self._need_present()
+            if self._hub.client_count == 0:
+                raise _BadRequest("La pantalla de Sonia no está conectada.")
+            if self._avatar_editor_open:
+                raise _BadRequest("Cierra antes el editor de personaje.")
+            ok, message = await guest.start()
+        else:
+            ok, message = await guest.stop()
+        if not ok:
+            raise _BadRequest(message)
+        return True, message
+
+    async def _act_guest_animation(self, params: dict[str, Any]) -> tuple[bool, str]:
+        clip = _text(params, "clip", max_len=80, required=True)
+        if self._guest is None or self._guest.phase not in ("entering", "live"):
+            raise _BadRequest("El invitado no está en el stand.")
+        known = {a["clip"] for a in self._animations}
+        if known and clip not in known:
+            raise _BadRequest("Esa animación no está en la app de Sonia.")
+        await self._hub.broadcast_json(p.msg_guest_animation(clip))
+        return True, "Hecho."
 
     async def _act_reset_avatar(self, params: dict[str, Any]) -> tuple[bool, str]:
         if self.state.avatar is None:
@@ -934,6 +1000,11 @@ class StandControl:
         else:
             await self._apply_mode(self.state.mode, announce=False)
 
+    def _on_guest_state(self, msg: dict[str, Any]) -> None:
+        phase = p.parse_guest_state(msg)
+        if phase is not None and self._guest is not None:
+            self._guest.on_unity_state(phase)
+
     async def _on_avatar_saved(self, msg: dict[str, Any]) -> None:
         definition = p.parse_avatar_definition(msg)
         if definition is None:
@@ -982,6 +1053,11 @@ class StandControl:
                 "custom": self.state.avatar is not None,
                 "editor_open": self._avatar_editor_open and self._hub.client_count > 0,
             },
+            "guest": (
+                self._guest.status()
+                if self._guest is not None
+                else {"available": False, "phase": "off"}
+            ),
             "settings_sync": self._settings_sync(),
             "last_error": snap.get("last_error") or None,
             "capabilities": self.capabilities,

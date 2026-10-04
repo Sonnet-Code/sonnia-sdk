@@ -37,6 +37,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+import numpy as np
+
 from sonia.actions.gallery import Gallery
 from sonia.actions.registry import ActionRegistry
 from sonia.config import Settings
@@ -259,6 +261,8 @@ class LiveEngine:
 
         # Micrófono (para el panel).
         self._mic_manual_mute = False
+        #: Oyentes de cada bloque del micro (el Modo Jean lo manda a España).
+        self._mic_listeners: list[Callable[[AudioArray], None]] = []
         #: Hasta cuándo el micrófono manda silencio porque suena una frase grabada.
         self._clip_mute_until = 0.0
         self._clip_uid = 0
@@ -355,6 +359,15 @@ class LiveEngine:
         self._last_mic_at = now
         if level > MIC_SILENCE_RMS:
             self._last_sound_at = now
+        if self._mic_listeners:
+            # El Modo Jean oye el stand aunque GPT-Live esté cerrada; silenciado
+            # desde el panel, tampoco lo oye él.
+            heard = np.zeros_like(block) if self._mic_manual_mute else block
+            for listener in list(self._mic_listeners):
+                try:
+                    listener(heard)
+                except Exception:  # noqa: BLE001 - un oyente roto no corta el micro
+                    logger.exception("Error en un oyente del micrófono")
         client = self._client
         if client is None or self._restarting:
             return
@@ -1268,6 +1281,14 @@ class LiveEngine:
     @property
     def notes(self) -> str:
         return self._notes
+
+    def add_mic_listener(self, listener: Callable[[AudioArray], None]) -> None:
+        """``listener(block)`` con cada bloque del micro, haya sesión o no (síncrono y barato)."""
+        self._mic_listeners.append(listener)
+
+    def remove_mic_listener(self, listener: Callable[[AudioArray], None]) -> None:
+        with contextlib.suppress(ValueError):
+            self._mic_listeners.remove(listener)
 
     def set_mic_muted(self, muted: bool) -> None:
         self._mic_manual_mute = muted

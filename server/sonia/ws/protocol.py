@@ -33,6 +33,13 @@ HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # 12
 #: Bit 0 de ``flags``: último chunk de la frase.
 FLAG_LAST = 1
 
+#: Marca de los frames binarios con la voz del invitado del Modo Jean (misma
+#: cabecera que ``MAGIC``; los Unity antiguos los ignoran).
+GUEST_MAGIC = b"SNGU"
+
+#: Fases del Modo Jean que Unity puede contar en ``guest_state``.
+GUEST_PHASES = ("entering", "live", "leaving", "off")
+
 #: Formato del audio que se anuncia en ``hello``.
 AUDIO_FORMAT = "pcm_s16le"
 AUDIO_CHANNELS = 1
@@ -59,6 +66,8 @@ MSG_SET_TUNING = "set_tuning"
 MSG_SET_AVATAR = "set_avatar"
 MSG_OPEN_AVATAR_EDITOR = "open_avatar_editor"
 MSG_CLOSE_AVATAR_EDITOR = "close_avatar_editor"
+MSG_GUEST_MODE = "guest_mode"
+MSG_GUEST_ANIMATION = "guest_animation"
 
 # Mensajes de Unity hacia el orquestador.
 MSG_CLIENT_HELLO = "client_hello"
@@ -70,6 +79,7 @@ MSG_ANIMATIONS = "animations"
 MSG_ANIMATION_PLAYING = "animation_playing"
 MSG_AVATAR_EDITOR = "avatar_editor"
 MSG_AVATAR_SAVED = "avatar_saved"
+MSG_GUEST_STATE = "guest_state"
 
 #: Tope de clips que se aceptan en ``animations`` (el set real tiene unos 40).
 MAX_ANIMATIONS = 200
@@ -93,17 +103,23 @@ def encode_audio_frame(utterance_id: int, pcm: bytes, is_last: bool) -> bytes:
     return struct.pack(HEADER_FORMAT, MAGIC, utterance_id, flags) + pcm
 
 
-def decode_audio_frame(data: bytes) -> tuple[int, bool, bytes]:
-    """Deshace ``encode_audio_frame``.
+def encode_guest_audio_frame(utterance_id: int, pcm: bytes, is_last: bool) -> bytes:
+    """Como ``encode_audio_frame`` pero con la voz del invitado (marca ``SNGU``)."""
+    flags = FLAG_LAST if is_last else 0
+    return struct.pack(HEADER_FORMAT, GUEST_MAGIC, utterance_id & 0xFFFFFFFF, flags) + pcm
+
+
+def decode_audio_frame(data: bytes, *, magic: bytes = MAGIC) -> tuple[int, bool, bytes]:
+    """Deshace ``encode_audio_frame`` (o, con ``magic=GUEST_MAGIC``, ``encode_guest_audio_frame``).
 
     Devuelve ``(utterance_id, is_last, pcm)``. Lanza ``ValueError`` si el frame
     es demasiado corto o la marca no es la esperada.
     """
     if len(data) < HEADER_SIZE:
         raise ValueError(f"frame de audio demasiado corto: {len(data)} bytes")
-    magic, utterance_id, flags = struct.unpack(HEADER_FORMAT, data[:HEADER_SIZE])
-    if magic != MAGIC:
-        raise ValueError(f"marca de frame inválida: {magic!r}")
+    found, utterance_id, flags = struct.unpack(HEADER_FORMAT, data[:HEADER_SIZE])
+    if found != magic:
+        raise ValueError(f"marca de frame inválida: {found!r}")
     return utterance_id, bool(flags & FLAG_LAST), data[HEADER_SIZE:]
 
 
@@ -260,6 +276,19 @@ def msg_close_avatar_editor() -> dict[str, Any]:
     return {"type": MSG_CLOSE_AVATAR_EDITOR}
 
 
+def msg_guest_mode(phase: str, name: str, sample_rate: int) -> dict[str, Any]:
+    """Modo Jean: ``enter`` (Sonia presenta al invitado y le deja el sitio) o ``leave``.
+
+    La voz del invitado llega en frames ``SNGU`` a ``sample_rate``.
+    """
+    return {"type": MSG_GUEST_MODE, "phase": phase, "name": name, "sample_rate": int(sample_rate)}
+
+
+def msg_guest_animation(clip: str) -> dict[str, Any]:
+    """Un clip de una sola vez en el avatar del invitado."""
+    return {"type": MSG_GUEST_ANIMATION, "clip": str(clip)}
+
+
 def msg_request_frame() -> dict[str, Any]:
     """Pide a Unity una captura de su cámara (solo con ``VISION_SOURCE=unity``)."""
     return {"type": MSG_REQUEST_FRAME}
@@ -324,6 +353,12 @@ def parse_avatar_definition(msg: dict[str, Any]) -> str | None:
     if not isinstance(pieces, list) or not any(isinstance(p, str) and p for p in pieces):
         return None
     return definition
+
+
+def parse_guest_state(msg: dict[str, Any]) -> str | None:
+    """Fase del Modo Jean que cuenta Unity en ``guest_state`` (``None`` si no vale)."""
+    phase = msg.get("phase")
+    return phase if phase in GUEST_PHASES else None
 
 
 def parse_animations(msg: dict[str, Any]) -> list[dict[str, str]]:

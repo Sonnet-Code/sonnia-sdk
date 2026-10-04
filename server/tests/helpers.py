@@ -37,7 +37,13 @@ class Recorder:
         with contextlib.suppress(Exception):
             async for raw in client:
                 if isinstance(raw, bytes | bytearray):
-                    self.messages.append(("audio", *p.decode_audio_frame(bytes(raw))))
+                    data = bytes(raw)
+                    if data[:4] == p.GUEST_MAGIC:
+                        # Voz del invitado del Modo Jean.
+                        decoded = p.decode_audio_frame(data, magic=p.GUEST_MAGIC)
+                        self.messages.append(("guest", *decoded))
+                    else:
+                        self.messages.append(("audio", *p.decode_audio_frame(data)))
                 else:
                     self.messages.append(json.loads(raw))
                 self._event.set()
@@ -64,7 +70,7 @@ class Recorder:
         return [m["state"] for m in self.of_type("state", msgs)]
 
     def audio(self, utterance_id: int | None = None) -> list[tuple[str, int, bool, bytes]]:
-        frames = [m for m in self.messages if isinstance(m, tuple)]
+        frames = [m for m in self.messages if isinstance(m, tuple) and m[0] == "audio"]
         if utterance_id is None:
             return frames
         return [f for f in frames if f[1] == utterance_id]
@@ -73,7 +79,7 @@ class Recorder:
         """Secuencia de tipos, con los frames binarios contraídos a ``audio``."""
         out: list[str] = []
         for m in self.messages:
-            kind = "audio" if isinstance(m, tuple) else m["type"]
+            kind = m[0] if isinstance(m, tuple) else m["type"]
             if kind == "audio" and out and out[-1] == "audio":
                 continue
             out.append(kind)

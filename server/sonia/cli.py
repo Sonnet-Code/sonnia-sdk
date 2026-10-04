@@ -34,6 +34,7 @@ from sonia.actions import Gallery, build_default_registry
 from sonia.actions.registry import ActionRegistry
 from sonia.audio.capture import list_input_devices, resolve_input_device
 from sonia.config import Settings, load_settings
+from sonia.guest.link import FrameGrabber
 from sonia.live.audio import silence_blocks
 from sonia.live.engine import LiveEngine
 from sonia.live.oneshot import probe_session, speak_text
@@ -418,6 +419,35 @@ class _Panel:
     cloud: asyncio.Task[None] | None = None
 
 
+def _guest_frame_grabber(settings: Settings, camera: CameraSource | None) -> FrameGrabber:
+    """Cámara del Modo Jean: tamaño y calidad por captura, según lo que aguante la red.
+
+    Aunque la visión esté apagada (``VISION_SOURCE=none``) el Modo Jean abre la
+    cámara USB por su cuenta; con la cámara de Unity se usa tal cual llega.
+    """
+    import importlib.util
+
+    from sonia.vision.camera import OpenCVCamera
+
+    usb: OpenCVCamera | None = camera if isinstance(camera, OpenCVCamera) else None
+    if usb is None and settings.vision.source != "unity":
+        if importlib.util.find_spec("cv2") is not None:
+            usb = OpenCVCamera(settings.vision)
+        else:
+            logger.warning("Modo Jean sin cámara: falta el extra 'camera' (uv sync --extra camera)")
+
+    async def grab(width: int, quality: int) -> bytes | None:
+        if usb is not None:
+            frame = await usb.capture(max_width=width, quality=quality)
+        elif camera is not None:
+            frame = await camera.capture()
+        else:
+            return None
+        return frame.data if frame is not None else None
+
+    return grab
+
+
 async def _start_panel(
     settings: Settings,
     hub: Hub,
@@ -425,6 +455,7 @@ async def _start_panel(
     *,
     engine: LiveEngine,
     voice_cache: VoiceCache | None = None,
+    camera: CameraSource | None = None,
 ) -> _Panel | None:
     """Arranca el panel de control (``docs/panel.md``). Antes de ``engine.run()``.
 
@@ -466,6 +497,30 @@ async def _start_panel(
     link = CloudLink(settings.panel, control, events, identity)
     if link.enabled:
         cloud = asyncio.create_task(link.run(), name="sonia-cloud-panel")
+        # Modo Jean: la sala de media solo se abre mientras el modo está activo.
+        from sonia.guest.link import GuestLink
+        from sonia.guest.mode import GuestMode
+
+        rate = settings.live.sample_rate
+        guest_link = GuestLink(
+            settings.panel,
+            identity,
+            sink=hub,
+            unity_rate=rate,
+            mic_rate=rate,
+            grab=_guest_frame_grabber(settings, camera),
+        )
+        control.attach_guest(
+            GuestMode(
+                hub=hub,
+                engine=engine,
+                link=guest_link,
+                voice_cache=voice_cache,
+                intro_lines=control.guest_intro_lines,
+                unity_rate=rate,
+                on_change=control.guest_changed,
+            )
+        )
     else:
         logger.info("Sin PANEL_CLOUD_TOKEN: esta Sonia no se conecta al panel de Cloudflare")
     return _Panel(control, server, logs, cloud)
@@ -510,6 +565,7 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
                 components.registry,
                 engine=engine,
                 voice_cache=voice_cache,
+                camera=components.camera,
             )
             tasks.append(asyncio.create_task(engine.run(), name="live-engine"))
             source = (

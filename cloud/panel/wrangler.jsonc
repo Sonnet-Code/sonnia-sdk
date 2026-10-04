@@ -22,12 +22,19 @@
     "run_worker_first": true
   },
 
-  // Un único Durable Object ("control") con el estado de todas las Sonias.
+  // Un único Durable Object ("control") con el estado de todas las Sonias y,
+  // aparte, una sala del Modo Jean por Sonia (solo reenvía media; no guarda nada).
   // El plan free de Workers solo admite Durable Objects con SQLite.
   "durable_objects": {
-    "bindings": [{ "name": "CONTROL_ROOM", "class_name": "ControlRoom" }]
+    "bindings": [
+      { "name": "CONTROL_ROOM", "class_name": "ControlRoom" },
+      { "name": "GUEST_ROOM", "class_name": "GuestRoom" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ControlRoom"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ControlRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["GuestRoom"] }
+  ],
 
   // Registros muestreados: los mensajes de estado de las Sonias llegan cada
   // 0,5 s mientras alguien mira y agotarían la cuota gratuita de logs.

@@ -2,6 +2,8 @@
  * Worker `sonia-panel`: panel de control de Sonia en Cloudflare.
  *
  * - `/agent`: WebSocket de cada Sonia, solo con `AGENT_TOKEN`.
+ * - `/guest/agent`: WebSocket del Modo Jean de cada Sonia (cámara, micro y voz
+ *   del invitado), también con `AGENT_TOKEN`; el navegador entra por `/api/guest`.
  * - `/login`, `/logout`: entrada con la contraseña del panel.
  * - Todo lo demás (página, estáticos, API y WebSocket del navegador) exige un
  *   JWT de Cloudflare Access o la sesión de la contraseña.
@@ -15,6 +17,7 @@ import { json, rawJson, redirect, sameOrigin, text, withSecurityHeaders } from "
 import { bouncePage, handleLoginGet, handleLoginPost, handleLogout } from "./login";
 
 export { ControlRoom } from "./control-room";
+export { GuestRoom } from "./guest-room";
 
 /** Estáticos que se ven sin sesión (los usa la página de entrada). */
 const PUBLIC_PATHS = new Set(["/static/sonnet-code-logo.svg", "/static/favicon.svg", "/favicon.ico"]);
@@ -34,6 +37,14 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
+/**
+ * La sala del Modo Jean de una Sonia. Vive en el este de Norteamérica: casi de
+ * camino entre España (Jean) y Santo Domingo (el stand).
+ */
+function guestRoom(env: Env, instance: string): DurableObjectStub<import("./guest-room").GuestRoom> {
+  return env.GUEST_ROOM.get(env.GUEST_ROOM.idFromName(instance), { locationHint: "enam" });
+}
+
 function controlRoom(env: Env): DurableObjectStub<import("./control-room").ControlRoom> {
   return env.CONTROL_ROOM.get(env.CONTROL_ROOM.idFromName("control"));
 }
@@ -44,6 +55,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   const method = request.method;
 
   if (path === "/agent") return handleAgent(request, env);
+  if (path === "/guest/agent") return handleGuestAgent(request, env);
   if (path === "/login") {
     if (method === "POST") return handleLoginPost(request, env);
     if (method === "GET" || method === "HEAD") return handleLoginGet(request, env);
@@ -87,7 +99,8 @@ function decodeHeader(value: string | null): string {
   }
 }
 
-async function handleAgent(request: Request, env: Env): Promise<Response> {
+/** Comprueba el WebSocket de una Sonia (token e id). Devuelve su id y nombre, o la respuesta de error. */
+async function checkAgent(request: Request, env: Env): Promise<{ id: string; name: string } | Response> {
   if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
     return text("Se esperaba un WebSocket.", 426);
   }
@@ -107,11 +120,25 @@ async function handleAgent(request: Request, env: Env): Promise<Response> {
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .trim()
     .slice(0, 80);
+  return { id, name };
+}
+
+async function handleAgent(request: Request, env: Env): Promise<Response> {
+  const agent = await checkAgent(request, env);
+  if (agent instanceof Response) return agent;
+  const { id, name } = agent;
 
   const target = new URL("https://control/agent");
   target.searchParams.set("id", id);
   target.searchParams.set("name", name || id);
   return controlRoom(env).fetch(target.toString(), { headers: { upgrade: "websocket" } });
+}
+
+/** Modo Jean: la Sonia sube cámara y micro y baja la voz del invitado. */
+async function handleGuestAgent(request: Request, env: Env): Promise<Response> {
+  const agent = await checkAgent(request, env);
+  if (agent instanceof Response) return agent;
+  return guestRoom(env, agent.id).fetch("https://guest/agent", { headers: { upgrade: "websocket" } });
 }
 
 // ------------------------------------------------------------ API del navegador
@@ -135,6 +162,21 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const instance = instanceParam(url);
     if (instance) target.searchParams.set("instance", instance);
     return controlRoom(env).fetch(target.toString(), { headers: { upgrade: "websocket" } });
+  }
+
+  if (path === "/api/guest") {
+    // Modo Jean: el navegador ve la cámara del stand, oye su micro y manda su voz.
+    if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+      return json({ ok: false, message: "Se esperaba un WebSocket." }, 426);
+    }
+    if (!sameOrigin(request)) return json({ ok: false, message: "Origen no permitido." }, 403);
+    let instance = instanceParam(url);
+    if (!instance) {
+      const { instances } = await controlRoom(env).getInstances();
+      instance = instances.find((item) => item.connected)?.id ?? null;
+    }
+    if (!instance) return json({ ok: false, message: "No hay ninguna Sonia conectada." }, 503);
+    return guestRoom(env, instance).fetch("https://guest/viewer", { headers: { upgrade: "websocket" } });
   }
 
   if (path === "/api/action") {

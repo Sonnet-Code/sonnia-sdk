@@ -189,6 +189,31 @@ Botones de «Developer» en el panel. `open_avatar_editor` pasa la pantalla de S
 {"type": "open_avatar_editor"}
 ```
 
+### `guest_mode`
+
+Modo Jean (`docs/modo-jean.md`): un invitado (Jean, CTO de Sonnet Code) entra en el stand y habla desde lejos con su avatar. Fijo: se repite tras `hello`; si llega nada más conectar, Unity lo aplica sin animación (invitado ya en su sitio o ya fuera).
+
+```json
+{"type": "guest_mode", "phase": "enter", "name": "Jean", "sample_rate": 24000}
+```
+
+- `enter`:
+  1. Entra el avatar del invitado caminando.
+  2. Sonia y él se dan la mano.
+  3. Sonia sale caminando, sin letrero.
+  4. El invitado queda en el centro con el plano medio.
+- `leave`: el invitado se despide y sale, y Sonia vuelve.
+- La voz del invitado llega en frames binarios `SNGU` (ver "Frames binarios") a `sample_rate`. Su avatar la reproduce con su propio lip-sync, cabeza, cejas y gestos.
+- Unity responde con `guest_state` en cada cambio de fase.
+
+### `guest_animation`
+
+Un clip de una sola vez en el avatar del invitado (los mismos del catálogo de `animations`). Lo lanza Jean desde el modal del Modo Jean.
+
+```json
+{"type": "guest_animation", "clip": "WaveGeneric"}
+```
+
 ### `error`
 
 ```json
@@ -207,6 +232,8 @@ Cabecera de 12 bytes, little endian, seguida del PCM s16le mono (la voz de GPT-L
 | 12 | n | pcm | muestras int16 LE, mono, a la tasa anunciada en `hello` |
 
 Los chunks son de unos 100 ms y llegan a ritmo real. Unity los encola en un buffer circular y los reproduce sin esperar a que llegue la frase completa. El último chunk de una frase (bit 0 de `flags`) puede ir vacío.
+
+La voz del invitado del Modo Jean usa la misma cabecera con el magic `SNGU`, a la `sample_rate` de `guest_mode`. Llega en rachas: una racha es una frase, que se corta tras 500 ms de silencio y lleva unos 150 ms de colchón al empezar. Los bloques son de 60 ms. Unity la manda al reproductor del invitado, no al de Sonia. Las versiones que no la conocen la ignoran porque la marca no coincide.
 
 ## De Unity al orquestador
 
@@ -280,6 +307,14 @@ Se pulsó Guardar en el editor de personaje. `definition` es la definición del 
 
 ```json
 {"type": "avatar_saved", "definition": "{\"JsonVersion\": \"2-0-0\", ...}"}
+```
+
+### `guest_state`
+
+Fase del Modo Jean en la pantalla: `entering` (entrando), `live` (el invitado ya está y habla), `leaving` (despidiéndose) y `off` (Sonia de vuelta). El orquestador espera `live` como mucho 25 s y `off` como mucho 20 s. Si no llegan, sigue igual: una app antigua no deja el modo colgado.
+
+```json
+{"type": "guest_state", "phase": "live"}
 ```
 
 ### `request_frame` (orquestador → Unity)

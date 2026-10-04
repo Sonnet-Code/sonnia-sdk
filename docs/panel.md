@@ -72,6 +72,17 @@ Cada deslizador se aplica en directo mientras se arrastra (como mucho cada 150 m
 
 **Personaje**: «Editar personaje» pasa la pantalla de Sonia a la escena de editar personaje de Genies (`open_avatar_editor`). Se edita allí, en el equipo del stand y con el ratón; el panel no edita el avatar. Mientras la escena está abierta Sonia no conversa (GPT-Live cerrado) y el panel lo dice. Al pulsar Guardar en el editor, Unity manda la definición (`avatar_saved`), el orquestador la guarda en la nube como ajuste compartido (`avatar`) y todas las Sonias la reciben en el mensaje fijo `set_avatar`. «Cerrar sin guardar» sale del editor y «Volver al personaje de la app» borra el aspecto guardado.
 
+**Modo Jean**: «Abrir Modo Jean» abre un modal para que Jean (CTO de Sonnet Code) entre en el stand desde lejos como invitado sorpresa (diseño completo en `docs/modo-jean.md`). Desde el modal:
+- activa y termina el modo (`set_guest_mode`);
+- ve la cámara del stand y oye su micro;
+- habla por su micro, abierto o pulsando para hablar;
+- lanza los gestos de su avatar (`guest_animation`).
+
+Lo monta `static/jean.js` (con `jean.css` y el AudioWorklet `jean-worklet.js`). La media va por la sala `/api/guest` del panel de Cloudflare, así que la cámara y el micro solo funcionan desde la nube. En el panel local se puede probar la entrada y los gestos. Mientras el modo está activo:
+- GPT-Live está cerrada;
+- el modo saludos no saluda solo;
+- no se puede cambiar el modo de Sonia.
+
 ## API HTTP del panel
 
 Todo bajo el mismo origen que la página. Respuestas JSON en UTF-8.
@@ -112,9 +123,12 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
     "camera": {"height": 0.0, "distance": 0.0, "side": 0.0, "zoom": 1.0, "tilt": 0.0}
   },
   "avatar": {"custom": true, "editor_open": false},
+  "guest": {"available": true, "phase": "off", "name": "Jean", "unity_phase": null, "intro_ready": true,
+            "link": {"connected": false, "viewers": 0, "video": {"fps": 0.0, "kbps": 0, "rtt_ms": null, "step": 1, "width": 640, "quality": 65, "lost": 0},
+                     "guest_level": 0.0, "guest_frames": 0, "dropped_audio": 0}},
   "settings_sync": {"cloud": "online", "synced": true, "pending": [], "rev": 42},
   "last_error": null,
-  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "animation_toggles", "subtitles", "debug", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache", "tuning", "cloud_settings", "avatar_editor"]
+  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "animation_toggles", "subtitles", "debug", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache", "tuning", "cloud_settings", "avatar_editor", "guest_mode"]
 }
 ```
 
@@ -127,6 +141,12 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
 - `voice_cache` trae también `error` (texto del último fallo al grabar, o vacío).
 - `tuning` son los ajustes de «Developer» (forma de `set_tuning`).
 - `avatar`: `custom`, si hay un personaje guardado desde el editor (si no, el de la app); `editor_open`, si la pantalla está ahora en la escena de editar personaje.
+- `guest` (Modo Jean):
+  - `available`: si esta Sonia tiene nube; sin ella no hay Modo Jean, y tampoco aparece `guest_mode` en `capabilities`.
+  - `phase`: `off`, `intro`, `entering`, `live` o `leaving`.
+  - `unity_phase`: la última que contó Unity.
+  - `intro_ready`: si la frase con la que Sonia lo presenta ya está grabada.
+  - `link`: estado de la sala; los fps, kbit/s, RTT y escalón de calidad del vídeo, el nivel de la voz de Jean y los bloques perdidos.
 - `settings_sync`: `cloud` es `off` (sin `PANEL_CLOUD_TOKEN`), `offline` u `online`; `synced`, si ya llegaron los ajustes de la nube en esta conexión; `pending`, los ajustes cambiados aquí que la nube aún no ha confirmado, y `rev`, la última revisión de la nube aplicada.
 
 ### `GET /api/gallery`
@@ -168,6 +188,8 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `open_avatar_editor` | | La pantalla de Sonia pasa a la escena de editar personaje (no estando "Fuera"). |
 | `close_avatar_editor` | | Sale del editor de personaje sin guardar. |
 | `reset_avatar` | | Borra el personaje guardado: todas las Sonias vuelven al de la app. |
+| `set_guest_mode` | `active`: bool | Modo Jean: Sonia presenta a Jean y le deja el sitio, o él se despide y vuelve ella. Necesita la nube y la pantalla conectada. |
+| `guest_animation` | `clip` | Un gesto del avatar de Jean (con el invitado en el stand). |
 | `prepare_voices` | | Graba las frases que falten en la caché de voces. |
 
 ### `WS /api/events`
@@ -239,6 +261,13 @@ Es la misma API del panel local con un parámetro `instance` (el `id` de la Soni
 - `GET /api/gallery?instance=<id>` → `{"images": [{"id", "url"}]}`: ids que mandó esa Sonia; las imágenes se sirven desde los estáticos del Worker (`/gallery/<archivo>`, copiadas de `assets/gallery` al desplegar). Un id sin archivo en Cloudflare sale sin miniatura.
 - `POST /api/action` con `{"instance": "<id>", "action": ..., ...}` y la cabecera `X-Sonia-Panel: 1` → `{"ok", "message"}`. 503 si esa Sonia no está conectada, 504 si no contesta en 15 s.
 - `WS /api/events?instance=<id>` → igual que el local (`history`, `status`, `message`, `log` de esa Sonia) más `{"type": "instances", ...}` (misma forma que `GET /api/instances`) al conectar y cada vez que cambia la lista o el modo de alguna. El navegador puede mandar `{"type": "select", "instance": "<id>"}` para cambiar de Sonia sin reconectar.
+- `WS /api/guest?instance=<id>` → sala del Modo Jean de esa Sonia (Durable Object `GuestRoom`, uno por Sonia). Recibe:
+  - la cámara del stand en JPEG;
+  - el micro del stand en PCM a 16 kHz;
+  - `stats`;
+  - `agent` {`connected`}.
+
+  Manda la voz de Jean en PCM a 24 kHz y un `ack` por fotograma. Formato de los frames en `docs/modo-jean.md`. La Sonia entra a la misma sala por `/guest/agent` con `AGENT_TOKEN`, solo mientras el Modo Jean está activo.
 
 El panel local implementa lo mismo con una sola instancia (`/api/instances` devuelve la de ese equipo y el parámetro `instance` se ignora).
 

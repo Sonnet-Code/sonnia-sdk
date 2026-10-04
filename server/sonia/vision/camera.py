@@ -167,7 +167,7 @@ class OpenCVCamera:
 
     # -- captura -----------------------------------------------------------
 
-    def _read_sync(self, device: Any) -> Frame | None:
+    def _read_sync(self, device: Any, max_width: int, quality: int) -> Frame | None:
         """Descarta los frames viejos del buffer, lee el actual y lo codifica.
 
         El redimensionado y el JPEG van en el mismo hilo que la lectura: son
@@ -178,14 +178,22 @@ class OpenCVCamera:
         ok, bgr = device.read()
         if not ok:
             return None
-        return encode_frame(bgr, self._settings.max_width, self._settings.jpeg_quality)
+        return encode_frame(bgr, max_width, quality)
 
-    async def capture(self) -> Frame | None:
+    async def capture(
+        self, *, max_width: int | None = None, quality: int | None = None
+    ) -> Frame | None:
+        """Una captura reciente. ``max_width`` y ``quality`` cambian solo esta
+        (el Modo Jean los ajusta a lo que aguanta la red)."""
+        width = self._settings.max_width if max_width is None else max_width
+        jpeg_quality = self._settings.jpeg_quality if quality is None else quality
         async with self._lock:
             device = await self._ensure_open()
             if device is None:
                 return None
-            task = asyncio.create_task(asyncio.to_thread(self._read_sync, device))
+            task = asyncio.create_task(
+                asyncio.to_thread(self._read_sync, device, width, jpeg_quality)
+            )
             try:
                 frame = await asyncio.wait_for(asyncio.shield(task), timeout=READ_TIMEOUT_S)
             except TimeoutError:
