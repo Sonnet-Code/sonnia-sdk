@@ -28,8 +28,9 @@ def user_with_image(text: str, frame: Frame, detail: str = "low") -> Message:
     """Turno del usuario con una captura adjunta.
 
     La imagen viaja como ``image_url`` con una data URL, que es el formato
-    estándar. ``detail`` se manda por compatibilidad; los servidores que no lo
-    entienden lo ignoran.
+    estándar. ``detail`` es el campo de OpenAI: fuera de ella no está documentado,
+    así que ``LLMClient`` lo sustituye por ``LLM_IMAGE_DETAIL`` (o lo quita con
+    ``off``) antes de enviar.
     """
     content: list[dict[str, Any]] = []
     if text:

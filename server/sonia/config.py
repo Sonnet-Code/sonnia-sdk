@@ -8,7 +8,8 @@ configuración a mano.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,7 +21,8 @@ class LLMSettings(BaseSettings):
     """Modelo con visión que describe la cámara (GPT-Live no acepta imágenes).
 
     Cualquier endpoint compatible con OpenAI (Chat Completions). Por defecto la
-    API de OpenAI; si falta ``LLM_API_KEY`` se usa ``OPENAI_API_KEY``.
+    API de OpenAI; si falta ``LLM_API_KEY`` se usa ``OPENAI_API_KEY``, pero solo
+    contra la propia OpenAI (ver :attr:`key`).
     """
 
     model_config = SettingsConfigDict(
@@ -29,10 +31,16 @@ class LLMSettings(BaseSettings):
 
     base_url: str = "https://api.openai.com/v1"
     model: str = "gpt-6-luna"
-    api_key: str = Field(default="", validation_alias=AliasChoices("LLM_API_KEY", "OPENAI_API_KEY"))
+    #: ``LLM_API_KEY``: la clave del servidor del modelo.
+    api_key: str = Field(default="", repr=False)
+    #: ``OPENAI_API_KEY``, que solo vale si ``base_url`` es la API de OpenAI.
+    openai_api_key: str = Field(
+        default="", validation_alias=AliasChoices("OPENAI_API_KEY"), repr=False
+    )
     #: Si es False, Sonia no mira la cámara (sin notas de la cámara ni ``look``).
     supports_vision: bool = True
-    #: Se envía como ``reasoning_effort`` si no está vacío.
+    #: Se envía como ``reasoning_effort`` salvo que valga ``off``. Un valor vacío no
+    #: sirve para quitarlo: en el ``.env`` equivale a no poner la variable y vuelve ``low``.
     reasoning_effort: str = "low"
     #: Se envía solo si no es None (algunos modelos solo admiten su valor por defecto).
     temperature: float | None = None
@@ -41,7 +49,32 @@ class LLMSettings(BaseSettings):
     #: ``max_completion_tokens`` en sus modelos de razonamiento; otros servidores,
     #: ``max_tokens``.
     max_tokens_param: Literal["max_tokens", "max_completion_tokens"] = "max_completion_tokens"
+    #: ``detail`` con el que se manda cada imagen (low, high, auto). ``off`` no lo
+    #: envía: fuera de OpenAI el campo no está documentado y un servidor estricto puede
+    #: rechazar la petición.
+    image_detail: str = "low"
+    #: Campos extra del cuerpo de la petición, como JSON en ``LLM_EXTRA_BODY``, para
+    #: lo propio de cada servidor. Kimi K2.6 razona por defecto y se le apaga con
+    #: ``{"thinking": {"type": "disabled"}}``.
+    extra_body: dict[str, Any] = Field(default_factory=dict)
     request_timeout: float = 60.0
+
+    @property
+    def key(self) -> str:
+        """Clave que se manda: ``LLM_API_KEY`` o, contra la API de OpenAI, ``OPENAI_API_KEY``.
+
+        Con otro proveedor (Kimi, un servidor propio...) y sin ``LLM_API_KEY``
+        queda vacía: la clave de OpenAI nunca sale hacia otro servidor.
+        """
+        if self.api_key:
+            return self.api_key
+        return self.openai_api_key if is_openai_url(self.base_url) else ""
+
+
+def is_openai_url(url: str) -> bool:
+    """¿Es ``url`` la API de OpenAI (``api.openai.com`` por HTTPS)?"""
+    parsed = urlparse(url.strip())
+    return parsed.scheme == "https" and (parsed.hostname or "") == "api.openai.com"
 
 
 class AudioSettings(BaseSettings):

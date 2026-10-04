@@ -7,6 +7,7 @@ falsos: nunca se hace una petición real. La cámara y el micrófono se simulan.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import wave
 from pathlib import Path
@@ -271,7 +272,68 @@ async def test_check_avisa_si_el_modelo_no_acepta_imagenes(
     results = await cli.run_checks(make_settings(tmp_path, vision=VisionSettings(source="unity")))
     vision = next(r for r in results if r.name == "Visión")
     assert vision.ok is False and vision.critical is False
-    assert "LLM_SUPPORTS_VISION=false" in vision.detail
+    # Ya no sugiere apagar la cámara entera: lo que falla es la configuración del modelo.
+    assert "LLM_API_KEY" in vision.detail and "LLM_SUPPORTS_VISION=false" not in vision.detail
+
+
+async def test_la_clave_de_openai_no_sale_hacia_otro_proveedor(
+    tmp_path: Path,
+    fake_llm: type[FakeLLMClient],
+    fake_live: list[LiveSettings],
+    fake_audio: list[dict[str, Any]],
+) -> None:
+    kimi = LLMSettings(
+        base_url="https://api.moonshot.ai/v1", api_key="", openai_api_key="clave-de-openai"
+    )
+    assert kimi.key == ""
+    assert LLMSettings(base_url="https://api.openai.com/v1", openai_api_key="o").key == "o"
+    assert LLMSettings(base_url="https://api.moonshot.ai/v1", api_key="k").key == "k"
+    # Sin clave para ese proveedor, la cámara se apaga en vez de fallar en cada turno.
+    settings = make_settings(tmp_path, vision=VisionSettings(source="unity"), llm=kimi)
+    components = cli.build_components(settings)
+    assert not components.policy.enabled and components.llm is None
+    results = await cli.run_checks(settings)
+    vision = next(r for r in results if r.name == "Visión")
+    assert vision.ok is False and "falta LLM_API_KEY" in vision.detail
+
+
+def _jpeg_segments(raw: bytes) -> list[tuple[int, int]]:
+    """(marcador, longitud) de cada segmento hasta SOS; falla si hay bytes sueltos entre ellos."""
+    assert raw[:2] == b"\xff\xd8", "no empieza por SOI"
+    assert raw[-2:] == b"\xff\xd9", "no acaba en EOI"
+    segments: list[tuple[int, int]] = []
+    pos = 2
+    while True:
+        assert raw[pos] == 0xFF, f"bytes sueltos antes del marcador en el byte {pos}"
+        marker = raw[pos + 1]
+        length = int.from_bytes(raw[pos + 2 : pos + 4], "big")
+        segments.append((marker, length))
+        if marker == 0xDA:  # SOS: a partir de aquí van los datos de la imagen
+            return segments
+        pos += 2 + length
+
+
+def test_la_imagen_de_prueba_de_check_es_un_jpeg_valido() -> None:
+    """Una imagen corrupta haría que un servidor estricto dé la visión por rota.
+
+    La anterior tenía una tabla de cuantización 3 bytes más corta de lo declarado:
+    ``sonia check`` fallaba en la visión y su propia ayuda sugería apagar la cámara.
+    """
+    raw = base64.b64decode(cli._PROBE_JPEG_B64, validate=True)
+    markers = [marker for marker, _ in _jpeg_segments(raw)]
+    assert markers.count(0xDB) == 2  # tablas de cuantización
+    assert 0xC0 in markers  # SOF0: dimensiones
+    assert markers.count(0xC4) == 4  # tablas de Huffman
+    assert len(raw) < 2_000  # sigue siendo diminuta
+
+
+def test_la_imagen_de_prueba_se_decodifica() -> None:
+    cv2 = pytest.importorskip("cv2")
+    raw = base64.b64decode(cli._PROBE_JPEG_B64, validate=True)
+    image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+    assert image is not None
+    height, width = image.shape[:2]
+    assert min(height, width) >= 56  # por encima del mínimo de cualquier modelo con visión
 
 
 def test_main_check_devuelve_codigo_de_salida(

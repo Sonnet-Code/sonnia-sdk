@@ -61,21 +61,28 @@ CHAT_EXIT_GRACE_S = 30.0
 #: Espera antes de reabrir el micrófono cuando falla o deja de entregar audio.
 MIC_RETRY_DELAY_S = 5.0
 
-#: JPEG gris de 16x16 para comprobar que el endpoint acepta ``image_url``.
+#: JPEG gris de 112x112 para comprobar que el endpoint acepta ``image_url``. Tiene que
+#: ser un JPEG que cualquier decodificador lea (``tests/test_cli.py`` lo comprueba): el
+#: anterior, de 16x16, tenía una tabla de cuantización truncada, un servidor que valida
+#: la imagen lo rechazaba y ``sonia check`` daba la visión por rota (y sugería apagarla).
 #: Va embebido para que ``sonia check`` no dependa del extra de la cámara.
 _PROBE_JPEG_B64 = (
-    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4p"
-    "LSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09P"
-    "T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAQABADASIA"
-    "AhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQA"
-    "AAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3"
-    "ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWm"
-    "p6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEA"
-    "AwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSEx"
-    "BhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElK"
-    "U1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3"
-    "uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwAooooA"
-    "/9k="
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQY"
+    "GBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYa"
+    "KCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAAR"
+    "CABwAHADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAA"
+    "AgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkK"
+    "FhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWG"
+    "h4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl"
+    "5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREA"
+    "AgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYk"
+    "NOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOE"
+    "hYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk"
+    "5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwAooooAKKKKACiiigAooooAKKKKACiiigAo"
+    "oooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKK"
+    "ACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAo"
+    "oooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKK"
+    "ACiiigAooooA/9k="
 )
 
 
@@ -310,7 +317,7 @@ def build_components(settings: Settings, *, with_camera: bool = True) -> Compone
     if not with_camera:
         vision = vision.model_copy(update={"source": "none"})
     camera = build_camera(vision, request_frame, has_clients=lambda: hub.client_count > 0)
-    policy = VisionPolicy(vision, settings.llm.supports_vision)
+    policy = VisionPolicy(vision, _vision_model_ready(settings))
     registry = build_default_registry(include_look=policy.enabled)
     llm = LLMClient(settings.llm) if policy.enabled else None
     return Components(
@@ -322,6 +329,22 @@ def build_components(settings: Settings, *, with_camera: bool = True) -> Compone
         llm=llm,
         narrator=VisionNarrator(llm) if llm is not None else None,
     )
+
+
+def _vision_model_ready(settings: Settings, *, warn: bool = True) -> bool:
+    """¿Hay modelo de visión con clave? Sin clave, la cámara se apaga con un aviso claro."""
+    llm = settings.llm
+    if not llm.supports_vision:
+        return False
+    if llm.key:
+        return True
+    if warn:
+        logger.warning(
+            "Cámara apagada: %s no es la API de OpenAI y falta LLM_API_KEY "
+            "(la clave de OpenAI no se manda a otros servidores)",
+            llm.base_url,
+        )
+    return False
 
 
 def _missing_live_key(settings: Settings) -> bool:
@@ -705,6 +728,14 @@ async def check_vision_model(settings: Settings) -> CheckResult:
         return CheckResult(
             "Visión", True, "desactivada (sin cámara o LLM_SUPPORTS_VISION=false)", False
         )
+    if not _vision_model_ready(settings, warn=False):
+        return CheckResult(
+            "Visión",
+            False,
+            f"falta LLM_API_KEY para {settings.llm.base_url} "
+            "(la clave de OpenAI solo se usa con la API de OpenAI)",
+            False,
+        )
     llm = await check_llm(settings)
     if not llm.ok:
         return CheckResult("Visión", False, llm.detail, False)
@@ -747,7 +778,11 @@ async def check_vision_features(settings: Settings) -> CheckResult:
             await asyncio.wait_for(client.probe(image), timeout=settings.llm.request_timeout)
     except Exception as exc:
         return CheckResult(
-            "Visión", False, f"no acepta imágenes ({exc}); prueba LLM_SUPPORTS_VISION=false", False
+            "Visión",
+            False,
+            f"no acepta imágenes ({exc}); revisa LLM_BASE_URL, LLM_MODEL y LLM_API_KEY "
+            "(docs/informe-vision.md)",
+            False,
         )
     return CheckResult("Visión", True, "acepta imágenes", False)
 

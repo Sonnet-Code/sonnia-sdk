@@ -41,6 +41,14 @@ _TOTAL_TIMEOUT_FACTOR = 4.0
 
 _CONNECT_TIMEOUT = 10.0
 
+#: Valor de ``LLM_REASONING_EFFORT`` y ``LLM_IMAGE_DETAIL`` que significa "no enviar el
+#: campo". Un valor vacío no vale: en el ``.env`` equivale a no poner la variable.
+_OFF = "off"
+
+#: Campos del cuerpo que ``LLM_EXTRA_BODY`` no puede pisar: sin ellos el cliente
+#: no entendería la respuesta (``stream``) o no sería la misma petición.
+_PROTECTED_BODY_KEYS = frozenset({"model", "messages", "stream"})
+
 
 class LLMError(RuntimeError):
     """Fallo al hablar con el servidor del modelo."""
@@ -80,7 +88,7 @@ class LLMClient:
             timeout=timeout,
             transport=transport,
             headers={
-                "Authorization": f"Bearer {settings.api_key}",
+                "Authorization": f"Bearer {settings.key}",
                 "Content-Type": "application/json",
                 "Accept": "text/event-stream",
             },
@@ -109,14 +117,18 @@ class LLMClient:
         settings = self._settings
         body: dict[str, Any] = {
             "model": settings.model,
-            "messages": messages,
+            "messages": _with_image_detail(messages, settings.image_detail),
             "stream": stream,
             settings.max_tokens_param: settings.max_tokens if max_tokens is None else max_tokens,
         }
         if settings.temperature is not None:
             body["temperature"] = settings.temperature
-        if settings.reasoning_effort.strip():
-            body["reasoning_effort"] = settings.reasoning_effort
+        effort = settings.reasoning_effort.strip()
+        if effort and effort.lower() != _OFF:
+            body["reasoning_effort"] = effort
+        for key, value in settings.extra_body.items():
+            if key not in _PROTECTED_BODY_KEYS:
+                body[key] = value
         # Nota: no se envía ``stream_options.include_usage``. Varios servidores
         # locales rechazan la petición entera si no lo soportan.
         return body
@@ -226,6 +238,14 @@ class LLMClient:
         """Construye el evento final del turno."""
         content = "".join(state.content)
         reasoning = "".join(state.reasoning) or None
+        if not content.strip() and state.finish_reason == "length":
+            # Un modelo que razona gasta el tope pensando y no llega a contestar: sin
+            # este aviso la descripción de la cámara sale vacía sin dar pistas.
+            logger.warning(
+                "El modelo agotó el tope de %d tokens sin dar texto (¿razonando?); "
+                "sube LLM_MAX_TOKENS o baja LLM_REASONING_EFFORT",
+                self._settings.max_tokens,
+            )
         return TurnDone(
             content=content,
             reasoning_content=reasoning,
@@ -302,6 +322,32 @@ class _Retry(Exception):
 # ---------------------------------------------------------------------------
 # Utilidades de parseo
 # ---------------------------------------------------------------------------
+
+
+def _with_image_detail(messages: list[Message], detail: str) -> list[Message]:
+    """Copia de ``messages`` con el ``detail`` de cada imagen puesto a ``detail``.
+
+    ``off`` (o vacío) lo quita. Se hace aquí y no al construir el mensaje para que
+    valga igual para todas las peticiones, incluidas las de ``sonia check``.
+    """
+    value = detail.strip()
+    send = bool(value) and value.lower() != _OFF
+
+    def adjust(part: Any) -> Any:
+        image = part.get("image_url") if isinstance(part, dict) else None
+        if not isinstance(image, dict):
+            return part
+        image = {key: item for key, item in image.items() if key != "detail"}
+        if send:
+            image["detail"] = value
+        return {**part, "image_url": image}
+
+    return [
+        {**message, "content": [adjust(part) for part in message["content"]]}
+        if isinstance(message.get("content"), list)
+        else message
+        for message in messages
+    ]
 
 
 def _sse_data(line: str) -> str | None:
