@@ -321,6 +321,7 @@ veces que haga falta sin acumular basura:
 | **Sonia > Actualizar componentes** | Añade al objeto `Sonia` de una escena ya creada los componentes que le falten y recablea `SoniaBootstrap` |
 | **Sonia > Colocar avatar** | Instancia el modelo (VRM o GLB), le construye Avatar Humanoid si no lo trae, lo cablea (lip-sync, fonemas, parpadeo, mirada de ojos, coreógrafo) y deja cámara, panel, telón e iluminación de estudio en su sitio |
 | **Sonia > Captura vertical 9:16** | Guarda un PNG 1080x1920 de la cámara principal en `unity/Temp`, con el HUD compuesto encima (`SoniaCapture.Render` renderiza aparte la cámara superpuesta del HUD, porque fuera del bucle de juego URP no dibuja la pila) |
+| **Sonia > Actualizar copia del avatar del SDK** | Entra en Play, deja que el SDK de Genies monte el avatar de `Assets/Sonia/Avatar/SoniaGeniesAvatar.json`, lo guarda como prefab en `Assets/Sonia/Avatar/SoniaGeniesAvatar/`, sale de Play y lo coloca con **Colocar avatar** (ver "Copia local del avatar de Genies") |
 
 El HUD (`SoniaHUD`, Screen Space - Camera) se dibuja con `HudCamera`, una
 cámara superpuesta hija de la principal (URP camera stacking) que solo ve la
@@ -353,6 +354,70 @@ modelo no lo hace antes.
 Un montaje desde cero se hace en ese orden. Cualquier comprobación de encuadre
 se mira con la captura vertical: las capturas normales del editor salen en 16:9
 y engañan, porque en 9:16 se ve mucho menos a lo ancho.
+
+### Copia local del avatar de Genies
+
+El SDK de Genies solo monta el avatar en Play (sesión, descargas y montaje
+nativo): en modo edición no existe y, al arrancar, tardaba unos segundos en
+sustituir al doble (Sticker), con un cambio de cara visible. Por eso en la escena
+va una **copia local** del avatar de la definición, hecha con **Sonia >
+Actualizar copia del avatar del SDK** (`Editor/SoniaGeniesSnapshot.cs`):
+
+- Es un prefab normal en `Assets/Sonia/Avatar/SoniaGeniesAvatar/`: mallas
+  clonadas del SDK (la cara con sus 84 formas FACS), materiales con los mismos
+  shaders del SDK (`MegaSkin`, `MegaHair`, `MegaEyes`, `MegaFlair`, URP/Lit),
+  texturas en PNG (las descargadas o generadas en Play se leen por GPU
+  respetando sRGB o lineal; las que ya son del paquete se referencian; los
+  tatuajes de la piel son un `Texture2DArray` de 8 capas), el Avatar Humanoid
+  del SDK y las físicas de pelo de Genies (`DynamicsStructure`), que funcionan
+  sin el SDK.
+- Las medidas de la cara que aplica `SkeletonModifierBehaviour` en cada
+  fotograma (nariz, boca, mandíbula y cuencas) van horneadas en los huesos:
+  nada los anima. Los ojos se guardan en el reposo de `EyeGazeController`, el
+  pelo en la pose de casa de sus partículas y la cara con todas las formas a 0.
+- `GeniesAvatarSnapshot` (en la raíz de la copia) guarda la definición JSON de
+  la que salió. Si es la que toca, `GeniesAvatarLoader` no carga nada del SDK:
+  Sonia sale al instante, igual en modo edición que en Play, y funciona sin red
+  (plan B "Solo saludos"). La comparación es por huella
+  (`GeniesAvatarSnapshot.HashDefinition`, FNV-1a de 64 bits) sin contar espacios
+  ni saltos de línea fuera de las cadenas: da igual que el JSON venga sangrado,
+  compacto o con CRLF. `alwaysLoadLive` en el inspector fuerza la carga del SDK.
+- **Colocar avatar** usa la copia si existe (si no, Sticker) y deja el avatar en
+  el primer fotograma del reposo, no en T.
+
+**Qué avatar lleva Sonia.** Lo decide el orquestador con el mensaje fijo
+`set_avatar` (`{"definition": "<json>"}` con el personaje guardado en la nube
+desde el editor de personaje, o `null` para el de la app,
+`SoniaGeniesAvatar.json`). Hasta que llega, Sonia arranca con el último que
+llegó en otra sesión, que se recuerda en `persistentDataPath/sonia-avatar.json`
+(`null` borra el archivo), y si nunca llegó ninguno, con el de la app. Si la
+definición que toca es la de la copia, se pone la copia; si no, se carga del SDK
+lejos de la cámara mientras Sonia sigue con el que tenía, y cuando está
+completo `AvatarBinder` lo cambia en un solo fotograma y se libera el anterior.
+Las cargas van en fila: si llegan dos `set_avatar` seguidos, gana el último. Con
+el editor de personaje en pantalla (`AvatarEditorSession.IsOpen`) el cambio
+espera a que se cierre. `AvatarEditorSession.CurrentDefinition` siempre tiene la
+definición que lleva Sonia (con la que arranca el editor de personaje).
+
+**La copia se rehace sola en el editor de Unity.** Cuando en Play Sonia se pone
+un avatar del SDK que no tiene copia, su definición se escribe en
+`SoniaGeniesAvatar.json` (sangrada, para leer bien los cambios en git) y se
+copia en cuanto es seguro: lleva un segundo puesto, no hay otra carga en marcha,
+el editor de personaje está cerrado y Sonia está callada (como mucho se espera
+30 s). Copiar congela el editor unos 15 s (medido: de 13 a 17 s). Si se sale de Play antes, se
+vuelve a entrar un momento en Play para hacerla (una vez por cambio). Al volver a
+modo edición la copia se coloca en la escena del stand y se guarda la escena, sin
+diálogos; si la escena del stand no es la abierta y hay escenas sin guardar, se
+coloca en cuanto se abra. Consecuencia: en el editor, el personaje de la app
+(el de `set_avatar null` y el de las builds) pasa a ser siempre el último que
+llevó Sonia. En una build no se escribe nada: carga del SDK el que toca y la
+copia que lleva dentro solo se usa si coincide o si no hay red.
+- Comprobado contra el avatar del SDK en la misma pose: diferencia media de
+  0,08/255 en un primer plano de la cara. El lip-sync da la misma sincronía que
+  con el avatar del SDK (laboratorio de cara: r = 0,92, boca 17 ms por delante)
+  y el modo Fuera funciona igual.
+- Ocupa unos 61 MB (48 MB de PNG y 12 MB de mallas en YAML). Rehazla solo cuando
+  cambie el avatar: cada avatar nuevo añade lo mismo al historial de git.
 
 ### Cambiar de avatar
 
