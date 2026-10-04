@@ -302,7 +302,12 @@ def parse_animation_playing(msg: dict[str, Any]) -> str | None:
 
 
 def parse_avatar_definition(msg: dict[str, Any]) -> str | None:
-    """Definición de ``avatar_saved``: un objeto JSON en texto, o ``None`` si no vale."""
+    """Definición de ``avatar_saved``, o ``None`` si no vale.
+
+    Tiene que ser una definición de Genies (``JsonVersion`` y al menos una pieza
+    en ``equippedAssetIds``): una vacía dejaría sin cuerpo ni ropa a todas las
+    Sonias, porque se guarda en la nube y la cargan todas.
+    """
     definition = msg.get("definition")
     if not isinstance(definition, str):
         return None
@@ -313,7 +318,12 @@ def parse_avatar_definition(msg: dict[str, Any]) -> str | None:
         parsed = json.loads(definition)
     except ValueError:
         return None
-    return definition if isinstance(parsed, dict) else None
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("JsonVersion"), str):
+        return None
+    pieces = parsed.get("equippedAssetIds")
+    if not isinstance(pieces, list) or not any(isinstance(p, str) and p for p in pieces):
+        return None
+    return definition
 
 
 def parse_animations(msg: dict[str, Any]) -> list[dict[str, str]]:

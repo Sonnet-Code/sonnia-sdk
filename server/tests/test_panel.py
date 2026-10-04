@@ -466,8 +466,9 @@ async def test_el_editor_de_personaje_pausa_gpt_live_y_guarda_el_avatar(tmp_path
         await conn.wait_type("session.close")
         await wait_until(lambda: not rig.engine.connected)
         assert rig.control.status()["avatar"] == {"custom": False, "editor_open": True}
-        # Lo que no es una definición válida se ignora.
-        await rig.client.send(json.dumps({"type": "avatar_saved", "definition": "[1, 2]"}))
+        # Lo que no es una definición de Genies con piezas se ignora.
+        for bad in ("[1, 2]", "{}", '{"JsonVersion": "2-0-0", "equippedAssetIds": []}'):
+            await rig.client.send(json.dumps({"type": "avatar_saved", "definition": bad}))
         await rig.client.send(json.dumps({"type": "avatar_saved", "definition": AVATAR}))
         await rig.client.send(json.dumps({"type": "avatar_editor", "open": False}))
         await wait_until(lambda: rig.control.status()["avatar"]["custom"])
