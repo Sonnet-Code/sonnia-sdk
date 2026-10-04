@@ -464,6 +464,22 @@ async def test_sin_clave_no_intenta_conectar() -> None:
 # ---------------------------------------------------------------------------
 
 
+async def test_los_subtitulos_no_muestran_marcas_de_sonido(tmp_path: Path) -> None:
+    # "[laugh]", "[tongue click]"... no deben verse en la pantalla del stand.
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.hear("[tongue click] Bueno, ¿cómo te va?")
+        await conn.say("[laugh] Me encantaría, ")
+        await conn.audio(pcm(2_400))
+        await conn.say("pero no [sig")
+        await conn.say("h] tengo WhatsApp.")
+        await rig.rec.wait_type("speech_end")
+        shown = [m["text"] for m in rig.rec.of_type("transcript")]
+        shown += [m["text"] for m in rig.rec.of_type("speech_start")]
+        assert shown and not any("[" in t or "]" in t for t in shown)
+        assert "Me encantaría, pero no tengo WhatsApp." in shown
+
+
 async def test_la_voz_llega_a_unity_como_una_frase_con_subtitulos(tmp_path: Path) -> None:
     async with make_rig(tmp_path) as rig:
         conn = await rig.conn()

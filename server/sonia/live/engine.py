@@ -169,7 +169,8 @@ class _Segment:
 
     @property
     def text(self) -> str:
-        return " ".join("".join(self.parts).split())
+        # Sin "[laugh]" ni "[sigh]": va a los subtítulos que ve el público.
+        return clean_transcript("".join(self.parts))
 
 
 @dataclass(slots=True)
