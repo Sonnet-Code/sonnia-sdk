@@ -243,6 +243,7 @@
     <details class="card advanced" id="avanzado">
       <summary><span>Avanzado</span><span class="summary-hint">Modo debug, subtítulos, voz, animaciones, gasto y registro</span></summary>
 
+      <p class="sync-note" data-sync-note hidden></p>
       <div class="adv-grid">
         <section class="adv-block" aria-labelledby="adv-debug-title">
           <h3 id="adv-debug-title">Modo debug</h3>
@@ -349,6 +350,41 @@
           <div class="log" id="log" tabindex="0" aria-label="Registro del orquestador"></div>
         </section>
       </div>
+    </details>
+
+    <!-- ===== Developer (plegado): boca y cámara, guardados en la nube ===== -->
+    <details class="card advanced developer" id="developer">
+      <summary><span>Developer</span><span class="summary-hint">Personaje, apertura de la boca y encuadre de la cámara</span></summary>
+
+      <p class="sync-note" data-sync-note hidden></p>
+      <div class="adv-grid">
+        <section class="adv-block" aria-labelledby="dev-avatar-title">
+          <h3 id="dev-avatar-title">Personaje</h3>
+          <p class="help">Pone la pantalla de Sonia en el editor de personaje de Genies. Se edita allí, con el ratón; al guardar, el aspecto nuevo queda en la nube y lo usan todas las Sonias. Mientras tanto Sonia no conversa.</p>
+          <p class="avatar-state" id="avatar-state">Personaje de la app.</p>
+          <div class="button-row">
+            <button type="button" class="btn btn-primary" id="avatar-edit-btn" data-cap="avatar_editor" data-off-modes="away" data-extra="avatar_closed">Editar personaje</button>
+            <button type="button" class="btn" id="avatar-close-btn" data-cap="avatar_editor" data-extra="avatar_open">Cerrar sin guardar</button>
+          </div>
+          <button type="button" class="btn btn-small tune-reset" id="avatar-reset-btn" data-cap="avatar_editor" data-extra="avatar_custom">Volver al personaje de la app</button>
+          <p class="cap-note" data-cap-note="avatar_editor" hidden>Esta Sonia no tiene aún el editor de personaje: hay que actualizar el orquestador.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="dev-mouth-title">
+          <h3 id="dev-mouth-title">Boca</h3>
+          <p class="help">Se nota al momento mientras Sonia habla: prueba con «Saludar ahora», que no gasta.</p>
+          <div class="tune-list" id="tune-mouth"></div>
+          <button type="button" class="btn btn-small tune-reset" data-reset-tuning="mouth" data-cap="tuning">Restablecer la boca</button>
+        </section>
+
+        <section class="adv-block" aria-labelledby="dev-camera-title">
+          <h3 id="dev-camera-title">Cámara</h3>
+          <p class="help">Mueve el encuadre de siempre, el de Sonia hablando. La cámara llega suave, sin saltos.</p>
+          <div class="tune-list" id="tune-camera"></div>
+          <button type="button" class="btn btn-small tune-reset" data-reset-tuning="camera" data-cap="tuning">Restablecer la cámara</button>
+        </section>
+      </div>
+      <p class="cap-note dev-cap-note" data-cap-note="tuning" hidden>Esta Sonia no tiene aún los ajustes de Developer: hay que actualizar el orquestador.</p>
     </details>
   </main>
 

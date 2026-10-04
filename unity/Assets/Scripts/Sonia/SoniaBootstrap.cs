@@ -151,6 +151,7 @@ namespace Sonia
                 client.OnPlayAnimation += HandlePlayAnimation;
                 client.OnSetDisabledAnimations += HandleSetDisabledAnimations;
                 client.OnSetDebug += HandleSetDebug;
+                client.OnSetTuning += HandleSetTuning;
                 client.OnPresence += HandlePresence;
                 client.OnSetVolume += HandleSetVolume;
                 client.OnError += HandleError;
@@ -184,6 +185,7 @@ namespace Sonia
                 client.OnPlayAnimation -= HandlePlayAnimation;
                 client.OnSetDisabledAnimations -= HandleSetDisabledAnimations;
                 client.OnSetDebug -= HandleSetDebug;
+                client.OnSetTuning -= HandleSetTuning;
                 client.OnPresence -= HandlePresence;
                 client.OnSetVolume -= HandleSetVolume;
                 client.OnError -= HandleError;
@@ -260,6 +262,13 @@ namespace Sonia
             if (cameraFraming != null)
             {
                 cameraFraming.Presence = presence;
+            }
+
+            if (GetComponent<AvatarEditorLauncher>() == null)
+            {
+                // También por código: abre la escena del editor de personaje cuando
+                // la pide el panel y la cierra al guardar o salir.
+                gameObject.AddComponent<AvatarEditorLauncher>();
             }
         }
 
@@ -433,6 +442,32 @@ namespace Sonia
             if (logEvents)
             {
                 Debug.Log("[Sonia] modo debug " + (_debugQuiet ? "activado: nada automático" : "desactivado"), this);
+            }
+        }
+
+        /// <summary>Ajustes de «Developer» del panel: boca (lip-sync) y encuadre de la cámara.</summary>
+        private void HandleSetTuning(SetTuningMessage message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            MouthTuning mouth = message.Mouth ?? new MouthTuning();
+            CameraTuning view = message.Camera ?? new CameraTuning();
+            if (lipSync != null)
+            {
+                lipSync.ApplyTuning(mouth.Open, mouth.Jaw, mouth.Closure, mouth.Speed);
+            }
+
+            if (cameraFraming != null)
+            {
+                cameraFraming.SetTuning(new Vector3(view.Side, view.Height, view.Distance), view.Zoom, view.Tilt);
+            }
+
+            if (logEvents)
+            {
+                Debug.Log("[Sonia] Developer: boca x" + mouth.Open.ToString("F2") + ", zoom x" + view.Zoom.ToString("F2"), this);
             }
         }
 

@@ -12,7 +12,15 @@ El orquestador sigue sirviendo el mismo panel en `http://127.0.0.1:8780/` como r
 | `greeter` (Solo saludos) | Sin conversación: no oye ni mira. Cada cierto tiempo saluda, hace un gesto o baila diciendo una frase grabada con su voz. | Nada: las frases salen de la caché de voces (`cache/voice`). |
 | `away` (Fuera) | Se va de la pantalla caminando y deja un letrero ("Me fui a ver una charla, regreso en un momento"). | Nada. |
 
-El modo, el texto del letrero, los avisos del día, el volumen, la sensibilidad del micrófono, la voz y la animación de stand se guardan en `cache/panel_state.json` y se recuperan si el orquestador se reinicia (un reinicio estando "Fuera" no la trae de vuelta).
+## Dónde se guardan los ajustes
+
+Los ajustes son de Sonia, no de un equipo: el texto del letrero, los avisos del día, el volumen, la sensibilidad del micrófono, la voz, la animación de stand, los subtítulos, las animaciones que no usa por su cuenta, los de «Developer» (boca y cámara) y el personaje guardado en el editor se guardan **en la nube** y valen para todas las Sonias (`SHARED_SETTINGS` en `server/sonia/panel/control.py`). Da igual desde dónde se cambien, el panel de Cloudflare o el local (`http://127.0.0.1:8780`): el orquestador los aplica al momento y los sube a la nube, que los reparte a las demás Sonias conectadas.
+
+Cada orquestador guarda además una copia en `cache/panel_state.json`, así que sin internet arranca con lo último que supo y lo que se cambie desde el panel local queda apuntado como pendiente (`pending_settings`) hasta que la nube lo confirma al volver la conexión. Si con la red caída se cambia algo aquí y otra Sonia cambia lo mismo, gana el último cambio que llega a la nube.
+
+El modo (Conversando, Solo saludos, Fuera), el modo debug y el gasto del día son de cada Sonia y no viajan a la nube: con dos Sonias encendidas por error, cada una sigue en su modo y desde el panel de Cloudflare se elige cuál conversa (ver "Duplicados"). Esos se guardan solo en `cache/panel_state.json` y se recuperan si el orquestador se reinicia (un reinicio estando "Fuera" no la trae de vuelta).
+
+El estado lo dice en `settings_sync`, y el panel lo muestra arriba de «Avanzado» y de «Developer»: guardado en la nube, guardando, sin conexión (con lo que falta por subir) o sin nube configurada (falta `PANEL_CLOUD_TOKEN`).
 
 La caché de voces guarda cada frase fija (saludos, frases y cantos del stand) leída una vez por GPT-Live con la voz configurada. Se rellena sola en segundo plano cuando hay clave y Sonia está en `conversation`, o con el botón "Preparar voces". Las frases del modo saludos están en `assets/showcase/saludos.md`.
 
@@ -53,6 +61,17 @@ Interruptores de Avanzado, guardados en `cache/panel_state.json` y repetidos tra
 
 Mientras suena una frase grabada (saludos, avisos y números del stand de la caché de voces), el micrófono manda silencio a GPT-Live hasta que termina más `CLIP_ECHO_TAIL_S`: la frase no la dijo él y, si la oyera por los altavoces, la contestaría.
 
+### Developer y `set_tuning` (orquestador → Unity)
+
+Sección plegada debajo de «Avanzado» para ajustar a ojo, con Sonia en pantalla:
+
+- **Boca**: apertura (vocales y mandíbula), mandíbula en las sílabas fuertes, cierre de labios en p, b y m, y rapidez. Son multiplicadores de lo que trae la escena (100 % = tal cual). Para verlo sin gastar, «Saludar ahora» reproduce una frase grabada.
+- **Cámara**: zoom, altura, distancia, lateral e inclinación sobre el encuadre de siempre (el plano medio de Sonia hablando). El plano de imagen se mueve con él; los de cuerpo entero (bailes y modo Fuera) no.
+
+Cada deslizador se aplica en directo mientras se arrastra (como mucho cada 150 ms) y cada sección tiene su botón de restablecer. Los valores van a Unity en el mensaje fijo `set_tuning` (forma en `docs/protocolo.md`) y se guardan en la nube como el resto de ajustes.
+
+**Personaje**: «Editar personaje» pasa la pantalla de Sonia a la escena de editar personaje de Genies (`open_avatar_editor`). Se edita allí, en el equipo del stand y con el ratón; el panel no edita el avatar. Mientras la escena está abierta Sonia no conversa (GPT-Live cerrado) y el panel lo dice. Al pulsar Guardar en el editor, Unity manda la definición (`avatar_saved`), el orquestador la guarda en la nube como ajuste compartido (`avatar`) y todas las Sonias la reciben en el mensaje fijo `set_avatar`. «Cerrar sin guardar» sale del editor y «Volver al personaje de la app» borra el aspecto guardado.
+
 ## API HTTP del panel
 
 Todo bajo el mismo origen que la página. Respuestas JSON en UTF-8.
@@ -88,8 +107,14 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   "mic_gate": 0.0,
   "notes": "La charla de IA se movió a la sala B.",
   "voice_cache": {"ready": 18, "total": 25, "busy": false},
+  "tuning": {
+    "mouth": {"open": 1.0, "jaw": 1.0, "closure": 1.0, "speed": 1.0},
+    "camera": {"height": 0.0, "distance": 0.0, "side": 0.0, "zoom": 1.0, "tilt": 0.0}
+  },
+  "avatar": {"custom": true, "editor_open": false},
+  "settings_sync": {"cloud": "online", "synced": true, "pending": [], "rev": 42},
   "last_error": null,
-  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "animation_toggles", "subtitles", "debug", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache"]
+  "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "animation_toggles", "subtitles", "debug", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache", "tuning", "cloud_settings", "avatar_editor"]
 }
 ```
 
@@ -100,6 +125,9 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
 - `health.mic.level` es el nivel RMS del micrófono (0 a 1, con decaimiento rápido), la misma escala que `mic_gate`. Llega con el estado cada medio segundo.
 - `usage` es el gasto del día (desde medianoche, sumando los reinicios del orquestador): segundos de sesión de GPT-Live y su coste aproximado con `PANEL_LIVE_PRICE_PER_MINUTE`.
 - `voice_cache` trae también `error` (texto del último fallo al grabar, o vacío).
+- `tuning` son los ajustes de «Developer» (forma de `set_tuning`).
+- `avatar`: `custom`, si hay un personaje guardado desde el editor (si no, el de la app); `editor_open`, si la pantalla está ahora en la escena de editar personaje.
+- `settings_sync`: `cloud` es `off` (sin `PANEL_CLOUD_TOKEN`), `offline` u `online`; `synced`, si ya llegaron los ajustes de la nube en esta conexión; `pending`, los ajustes cambiados aquí que la nube aún no ha confirmado, y `rev`, la última revisión de la nube aplicada.
 
 ### `GET /api/gallery`
 
@@ -135,6 +163,11 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `set_mic_gate` | `value`: 0 a 0,2 | Puerta de ruido: por debajo de este nivel el micrófono manda silencio. |
 | `set_voice` | `voice` | Cambia la voz; reinicia la conversación. |
 | `set_notes` | `text` | Avisos del día que Sonia debe conocer; se le pasan al momento. |
+| `set_tuning` | `mouth` y/o `camera`: valores sueltos de `tuning` | Ajustes de «Developer»; se mezclan con los que hay y se recortan a sus límites. |
+| `reset_tuning` | `part`: `mouth`, `camera` o `all` | Vuelve esa parte de «Developer» a como viene de la escena. |
+| `open_avatar_editor` | | La pantalla de Sonia pasa a la escena de editar personaje (no estando "Fuera"). |
+| `close_avatar_editor` | | Sale del editor de personaje sin guardar. |
+| `reset_avatar` | | Borra el personaje guardado: todas las Sonias vuelven al de la app. |
 | `prepare_voices` | | Graba las frases que falten en la caché de voces. |
 
 ### `WS /api/events`
@@ -172,7 +205,8 @@ Mensajes **agente → Durable Object**:
 
 | `type` | Campos | Cuándo |
 |---|---|---|
-| `hello` | `instance` (`id`, `name`, `host`, `engine`, `version`), `status`, `history` (`messages`, `logs`), `gallery` (lista de ids) | Al conectar y como respuesta a `sync`. |
+| `hello` | `instance` (`id`, `name`, `host`, `engine`, `version`), `status`, `history` (`messages`, `logs`), `gallery` (lista de ids), `settings` (`values`: todos los ajustes compartidos; `pending`: los cambiados aquí sin confirmar; `seq`: número del último cambio) | Al conectar y como respuesta a `sync`. |
+| `settings` | `changes` (ajustes cambiados aquí, con su valor), `seq` | Cuando un panel cambia un ajuste compartido (se juntan los de 0,4 s). |
 | `status` | `status` (la instantánea de `GET /api/status`) | Cada 0,5 s si alguien mira esa Sonia (`viewers` > 0); si no, cada 15 s. |
 | `message` | `message` (lo mismo que el panel local manda en `{"type": "message"}`, con `time`) | Al momento. |
 | `log` | `level`, `time`, `text` | Al momento. |
@@ -185,6 +219,16 @@ Mensajes **Durable Object → agente**:
 | `action` | `request_id`, `action`, `params` | `StandControl.act(action, params)` y responde con `result`. |
 | `viewers` | `count` | Ajusta la frecuencia de `status`. |
 | `sync` | | Vuelve a mandar `hello` (el Durable Object pudo hibernar y perder el historial en memoria). |
+| `settings` | `settings` (todos los ajustes de la nube), `rev`, `ack` (último `seq` de esa Sonia que ya incluyen) | Los aplica sin pisar lo cambiado aquí después de `ack` (aún en camino). |
+
+#### Ajustes compartidos
+
+El Durable Object guarda un único documento de ajustes (clave `settings` de su almacenamiento, con `rev`, `updated_at` y `updated_by`):
+
+- Al recibir un `hello` con `settings`, si aún no hay documento, esa Sonia lo siembra con todos sus `values`; si ya lo hay, solo se mezclan sus `pending` (lo que cambió sin conexión). Siempre se le contesta con `settings`.
+- Al recibir `settings` con `changes`, los mezcla, sube `rev` y lo guarda (una escritura) si algo cambió de verdad; contesta a esa Sonia con su `ack` y reparte el documento a las demás conectadas.
+- Una Sonia anterior a esto (su `hello` sin `settings`) ni siembra ni recibe ajustes.
+- Tope de 256 KB en JSON.
 
 ### API del navegador en Cloudflare
 

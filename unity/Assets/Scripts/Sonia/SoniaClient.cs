@@ -110,6 +110,18 @@ namespace Sonia
         /// <summary>Modo debug del panel: nada automático en el cuerpo.</summary>
         public event Action<SetDebugMessage> OnSetDebug;
 
+        /// <summary>Ajustes de «Developer» del panel: boca y cámara.</summary>
+        public event Action<SetTuningMessage> OnSetTuning;
+
+        /// <summary>Aspecto de Sonia: definición del avatar de Genies (null: el de la app).</summary>
+        public event Action<SetAvatarMessage> OnSetAvatar;
+
+        /// <summary>El panel pide pasar a la escena de editar personaje.</summary>
+        public event Action<OpenAvatarEditorMessage> OnOpenAvatarEditor;
+
+        /// <summary>El panel pide salir del editor de personaje sin guardar.</summary>
+        public event Action<CloseAvatarEditorMessage> OnCloseAvatarEditor;
+
         /// <summary>Sonia se va de la pantalla (modo "Fuera") o vuelve.</summary>
         public event Action<PresenceMessage> OnPresence;
 
@@ -313,6 +325,23 @@ namespace Sonia
         public void SendAnimationPlaying(string clip)
         {
             SendJson(Protocol.AnimationPlayingMessage(clip));
+        }
+
+        /// <summary>Avisa de que la escena de editar personaje se abrió o se cerró.</summary>
+        public void SendAvatarEditor(bool open)
+        {
+            SendJson(Protocol.AvatarEditorMessage(open));
+        }
+
+        /// <summary>Manda la definición del personaje guardado en el editor.</summary>
+        public void SendAvatarSaved(string definition)
+        {
+            if (string.IsNullOrEmpty(definition))
+            {
+                return;
+            }
+
+            SendJson(Protocol.AvatarSavedMessage(definition));
         }
 
         private void SendJson(string json)
@@ -590,6 +619,14 @@ namespace Sonia
                     return Protocol.Deserialize<SetDisabledAnimationsMessage>(payload);
                 case MessageTypes.SetDebug:
                     return Protocol.Deserialize<SetDebugMessage>(payload);
+                case MessageTypes.SetTuning:
+                    return Protocol.Deserialize<SetTuningMessage>(payload);
+                case MessageTypes.SetAvatar:
+                    return Protocol.Deserialize<SetAvatarMessage>(payload);
+                case MessageTypes.OpenAvatarEditor:
+                    return Protocol.Deserialize<OpenAvatarEditorMessage>(payload);
+                case MessageTypes.CloseAvatarEditor:
+                    return Protocol.Deserialize<CloseAvatarEditorMessage>(payload);
                 case MessageTypes.Presence:
                     return Protocol.Deserialize<PresenceMessage>(payload);
                 case MessageTypes.SetVolume:
@@ -761,6 +798,34 @@ namespace Sonia
             if (setDebug != null)
             {
                 Raise(OnSetDebug, setDebug);
+                return;
+            }
+
+            SetTuningMessage setTuning = message as SetTuningMessage;
+            if (setTuning != null)
+            {
+                Raise(OnSetTuning, setTuning);
+                return;
+            }
+
+            SetAvatarMessage setAvatar = message as SetAvatarMessage;
+            if (setAvatar != null)
+            {
+                Raise(OnSetAvatar, setAvatar);
+                return;
+            }
+
+            OpenAvatarEditorMessage openEditor = message as OpenAvatarEditorMessage;
+            if (openEditor != null)
+            {
+                Raise(OnOpenAvatarEditor, openEditor);
+                return;
+            }
+
+            CloseAvatarEditorMessage closeEditor = message as CloseAvatarEditorMessage;
+            if (closeEditor != null)
+            {
+                Raise(OnCloseAvatarEditor, closeEditor);
                 return;
             }
 

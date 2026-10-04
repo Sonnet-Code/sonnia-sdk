@@ -9,6 +9,12 @@ Por la conexión sube lo mismo que ve el panel local (estado, conversación,
 registro) y baja cada acción del operador, que se ejecuta con
 :meth:`StandControl.act` exactamente igual que desde el panel local.
 
+También viajan los ajustes compartidos (``SHARED_SETTINGS``): la nube guarda
+una copia única para todas las Sonias. Lo que cambia cualquier panel, también
+el local, sube como ``settings`` y la nube lo reparte a las demás; al conectar,
+el ``hello`` lleva lo cambiado aquí sin conexión y la nube contesta con sus
+ajustes, que esta Sonia aplica.
+
 Nada de esto puede tumbar a Sonia: si Cloudflare no responde, se reintenta con
 espera creciente y la demo sigue igual.
 """
@@ -49,8 +55,15 @@ HEALTHY_CONNECTION_S = 60.0
 #: Tope de un mensaje entrante (las acciones son pequeñas).
 _MAX_SIZE = 1024 * 1024
 
+#: Los cambios de ajustes se juntan durante esto antes de subir (un deslizador
+#: del panel manda varios por segundo mientras se arrastra).
+SETTINGS_DEBOUNCE_S = 0.4
+
 #: Marca interna para despertar el bucle de envío (no se manda a Cloudflare).
 _WAKE: dict[str, Any] = {"type": "_wake"}
+
+#: Marca interna: hay ajustes cambiados que subir.
+_SETTINGS: dict[str, Any] = {"type": "_settings"}
 
 
 class CloudLink:
@@ -75,6 +88,8 @@ class CloudLink:
         self._tasks: set[asyncio.Task[None]] = set()
         self._queue: asyncio.Queue[dict[str, Any]] | None = None
         self.connected = False
+        control.add_settings_listener(self._on_settings_changed)
+        control.set_cloud_state("offline" if self.enabled else "off")
 
     @property
     def enabled(self) -> bool:
@@ -104,6 +119,7 @@ class CloudLink:
                     logger.warning("Se cortó la conexión con el panel de Cloudflare: %s", exc)
                 finally:
                     self.connected = False
+                    self._control.set_cloud_state("offline")
                     with contextlib.suppress(Exception):
                         await ws.close()
             if time.monotonic() - started > HEALTHY_CONNECTION_S:
@@ -123,9 +139,11 @@ class CloudLink:
         self._queue = queue
         reader = asyncio.create_task(self._read(ws), name="sonia-cloud-read")
         getter: asyncio.Task[dict[str, Any]] | None = None
+        flush_at: float | None = None
         try:
             await self._send(ws, self._hello())
             self.connected = True
+            self._control.set_cloud_state("online")
             logger.info(
                 "Conectada al panel de Cloudflare como «%s» (%s)",
                 self._identity.name,
@@ -135,6 +153,8 @@ class CloudLink:
             while True:
                 interval = FAST_STATUS_S if self._viewers > 0 else SLOW_STATUS_S
                 timeout = max(0.05, interval - (time.monotonic() - last_status))
+                if flush_at is not None:
+                    timeout = min(timeout, max(0.0, flush_at - time.monotonic()))
                 if getter is None:
                     getter = asyncio.create_task(queue.get(), name="sonia-cloud-queue")
                 # Se espera a la vez lo que hay que subir y al lector: si
@@ -148,8 +168,14 @@ class CloudLink:
                 if getter in done:
                     item = getter.result()
                     getter = None
-                    if item is not _WAKE:
+                    if item is _SETTINGS:
+                        if flush_at is None:
+                            flush_at = time.monotonic() + SETTINGS_DEBOUNCE_S
+                    elif item is not _WAKE:
                         await self._send(ws, item)
+                if flush_at is not None and time.monotonic() >= flush_at:
+                    flush_at = None
+                    await self._send_settings(ws)
                 if time.monotonic() - last_status >= interval:
                     await self._send(ws, {"type": "status", "status": self._control.status()})
                     last_status = time.monotonic()
@@ -187,8 +213,32 @@ class CloudLink:
                                 self._queue.put_nowait(_WAKE)
                 elif kind == "sync":
                     await self._send(ws, self._hello())
+                elif kind == "settings":
+                    await self._apply_settings(msg)
         except ConnectionClosed:
             return
+
+    async def _apply_settings(self, msg: dict[str, Any]) -> None:
+        """Ajustes que manda la nube (al conectar o porque otro panel los cambió)."""
+        values = msg.get("settings")
+        if not isinstance(values, dict):
+            return
+        try:
+            await self._control.apply_cloud_settings(
+                values, rev=_int(msg.get("rev")), ack=_int(msg.get("ack"))
+            )
+        except Exception:
+            logger.exception("No se pudieron aplicar los ajustes de la nube")
+
+    def _on_settings_changed(self) -> None:
+        if self._queue is not None:
+            with contextlib.suppress(asyncio.QueueFull):
+                self._queue.put_nowait(_SETTINGS)
+
+    async def _send_settings(self, ws: Any) -> None:
+        changes, seq = self._control.pending_settings()
+        if changes:
+            await self._send(ws, {"type": "settings", "changes": changes, "seq": seq})
 
     async def _run_action(self, ws: Any, msg: dict[str, Any]) -> None:
         request_id = msg.get("request_id")
@@ -211,7 +261,9 @@ class CloudLink:
     def _hello(self) -> dict[str, Any]:
         history = self._events.history()
         identity = self._identity
-        status = self._control.status()
+        control = self._control
+        status = control.status()
+        pending, seq = control.pending_settings()
         return {
             "type": "hello",
             "instance": {
@@ -223,7 +275,14 @@ class CloudLink:
             },
             "status": status,
             "history": {"messages": history["messages"], "logs": history["logs"]},
-            "gallery": self._control.gallery().ids(),
+            "gallery": control.gallery().ids(),
+            # Todos los ajustes (por si la nube aún no tiene ninguno) y cuáles
+            # cambiaron aquí sin conexión: esos mandan sobre los de la nube.
+            "settings": {
+                "values": control.shared_settings(),
+                "pending": sorted(pending),
+                "seq": seq,
+            },
         }
 
     async def _send(self, ws: Any, item: dict[str, Any]) -> None:
@@ -244,6 +303,10 @@ async def _default_connect(url: str, headers: dict[str, str]) -> Any:
         ping_timeout=20,
         compression=None,
     )
+
+
+def _int(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def _header_safe(text: str) -> str:

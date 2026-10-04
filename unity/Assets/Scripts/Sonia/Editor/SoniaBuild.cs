@@ -22,6 +22,29 @@ namespace Sonia.EditorTools
         private const string ScenePath = "Assets/Scenes/SampleScene.unity";
         private const string BuildRoot = "Build";
 
+        /// <summary>
+        /// Escenas de la build: la de Sonia primero (es la que arranca) y la del
+        /// editor de personaje, que AvatarEditorLauncher carga por nombre encima.
+        /// </summary>
+        public static readonly string[] Scenes =
+        {
+            ScenePath,
+            "Assets/Sonia/AvatarEditor/Scenes/" + AvatarEditorLauncher.DefaultSceneName + ".unity"
+        };
+
+        /// <summary>Deja las escenas de la build en Build Settings (también las usa Play en el editor).</summary>
+        [MenuItem("Sonia/Escenas de la build")]
+        public static void ConfigureScenes()
+        {
+            EditorBuildSettingsScene[] scenes = new EditorBuildSettingsScene[Scenes.Length];
+            for (int i = 0; i < Scenes.Length; i++)
+            {
+                scenes[i] = new EditorBuildSettingsScene(Scenes[i], true);
+            }
+
+            EditorBuildSettings.scenes = scenes;
+        }
+
         [MenuItem("Sonia/Build macOS")]
         public static void BuildMac()
         {
@@ -43,7 +66,7 @@ namespace Sonia.EditorTools
                 "Sonia mira por la cámara para saludar a quien se acerca al stand.";
             PlayerSettings.macOS.microphoneUsageDescription =
                 "Sonia escucha por el micrófono para conversar.";
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+            ConfigureScenes();
 
             string outputDir = Path.Combine(BuildRoot, folder);
             Directory.CreateDirectory(outputDir);
@@ -51,7 +74,7 @@ namespace Sonia.EditorTools
 
             BuildPlayerOptions options = new BuildPlayerOptions
             {
-                scenes = new[] { ScenePath },
+                scenes = Scenes,
                 locationPathName = output,
                 target = target,
                 targetGroup = BuildPipeline.GetBuildTargetGroup(target),

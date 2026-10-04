@@ -23,6 +23,11 @@
 // entero para que el paseo se vea (en el plano medio no se ven las piernas y
 // saldría de cuadro en un paso). Ese movimiento es un travelling con
 // SmoothDamp, que arranca y frena suave; el resto conserva su suavizado.
+//
+// El panel (sección «Developer») puede mover el plano base: desplazamiento,
+// zoom e inclinación sobre la pose que dejó el menú del editor. El plano de
+// panel va con él (es un desplazamiento del base); los de cuerpo entero
+// (abierto y salida) se quedan en su sitio.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -125,6 +130,14 @@ namespace Sonia
         private Vector3 _basePosition;
         private Quaternion _baseRotation;
         private float _baseFieldOfView;
+
+        // Pose de la escena (la del menú del editor), antes de los ajustes de «Developer».
+        private Vector3 _capturedPosition;
+        private Quaternion _capturedRotation = Quaternion.identity;
+        private float _capturedFieldOfView = 40f;
+        private Vector3 _tuningOffset;
+        private float _tuningZoom = 1f;
+        private float _tuningTilt;
         private bool _wide;
         private bool _panel;
         private bool _presenceShot;
@@ -182,11 +195,11 @@ namespace Sonia
             }
 
             poses.Add(new ShotPose(_basePosition, _baseRotation, _baseFieldOfView));
-            poses.Add(new ShotPose(wideShotPosition, _baseRotation, WideFieldOfView()));
+            poses.Add(new ShotPose(wideShotPosition, _capturedRotation, WideFieldOfView()));
             poses.Add(new ShotPose(PanelPosition(), _baseRotation, PanelFieldOfView()));
             if (presenceShotEnabled)
             {
-                poses.Add(new ShotPose(PresencePosition(), _baseRotation, PresenceFieldOfView()));
+                poses.Add(new ShotPose(PresencePosition(), _capturedRotation, PresenceFieldOfView()));
             }
         }
 
@@ -232,10 +245,54 @@ namespace Sonia
                 return;
             }
 
-            _basePosition = targetCamera.transform.position;
-            _baseRotation = targetCamera.transform.rotation;
-            _baseFieldOfView = targetCamera.fieldOfView;
+            _capturedPosition = targetCamera.transform.position;
+            _capturedRotation = targetCamera.transform.rotation;
+            _capturedFieldOfView = targetCamera.fieldOfView;
             _ready = true;
+            ApplyTuningToBase();
+        }
+
+        /// <summary>
+        /// Ajustes de «Developer» del panel sobre el plano base: <paramref name="offset"/>
+        /// en metros (x a la derecha de la pantalla, y arriba, z alejándose de
+        /// Sonia), <paramref name="zoom"/> (más de 1 acerca) e
+        /// <paramref name="tiltDegrees"/> (positivo mira más abajo). La cámara
+        /// llega suave al encuadre nuevo con su interpolación de siempre.
+        /// </summary>
+        public void SetTuning(Vector3 offset, float zoom, float tiltDegrees)
+        {
+            _tuningOffset = offset;
+            _tuningZoom = Mathf.Clamp(zoom, 0.25f, 4f);
+            _tuningTilt = Mathf.Clamp(tiltDegrees, -45f, 45f);
+            ApplyTuningToBase();
+        }
+
+        private void ApplyTuningToBase()
+        {
+            if (!_ready)
+            {
+                return;
+            }
+
+            // Lateral y distancia en el plano del suelo, según hacia dónde mira la cámara.
+            Vector3 forward = _capturedRotation * Vector3.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.000001f)
+            {
+                forward = Vector3.forward;
+            }
+
+            forward.Normalize();
+            Vector3 right = Vector3.Cross(Vector3.up, forward);
+            _basePosition = _capturedPosition
+                            + right * _tuningOffset.x
+                            + Vector3.up * _tuningOffset.y
+                            - forward * _tuningOffset.z;
+            _baseRotation = _capturedRotation * Quaternion.Euler(_tuningTilt, 0f, 0f);
+
+            // El zoom estrecha el campo de visión como un objetivo más largo.
+            float halfTan = Mathf.Tan(_capturedFieldOfView * 0.5f * Mathf.Deg2Rad) / _tuningZoom;
+            _baseFieldOfView = Mathf.Clamp(2f * Mathf.Atan(halfTan) * Mathf.Rad2Deg, 5f, 120f);
         }
 
         /// <summary>Vuelve al plano medio de golpe, sin animación.</summary>
@@ -277,17 +334,20 @@ namespace Sonia
             _panel = panelShotEnabled && !_presenceShot && !_wide && imagePanel != null && imagePanel.IsVisible;
 
             Vector3 targetPosition = _basePosition;
+            Quaternion targetRotation = _baseRotation;
             float targetFieldOfView = _baseFieldOfView;
 
             if (_presenceShot)
             {
                 targetPosition = PresencePosition();
+                targetRotation = _capturedRotation;
                 targetFieldOfView = PresenceFieldOfView();
                 _dolly = true;
             }
             else if (_wide)
             {
                 targetPosition = wideShotPosition;
+                targetRotation = _capturedRotation;
                 targetFieldOfView = WideFieldOfView();
             }
             else if (_panel)
@@ -305,7 +365,7 @@ namespace Sonia
                 _dollyVelocity = Vector3.zero;
                 _fieldOfViewVelocity = 0f;
                 cameraTransform.position = targetPosition;
-                cameraTransform.rotation = _baseRotation;
+                cameraTransform.rotation = targetRotation;
                 targetCamera.fieldOfView = targetFieldOfView;
                 return;
             }
@@ -320,7 +380,7 @@ namespace Sonia
                 targetCamera.fieldOfView = Mathf.SmoothDamp(
                     targetCamera.fieldOfView, targetFieldOfView, ref _fieldOfViewVelocity, smoothTime, Mathf.Infinity, dt);
                 cameraTransform.rotation = Quaternion.Slerp(
-                    cameraTransform.rotation, _baseRotation, 1f - Mathf.Exp(-4f * dt));
+                    cameraTransform.rotation, targetRotation, 1f - Mathf.Exp(-4f * dt));
 
                 bool arrived = (cameraTransform.position - targetPosition).sqrMagnitude < 0.000004f
                                && _dollyVelocity.sqrMagnitude < 0.0001f
@@ -337,13 +397,13 @@ namespace Sonia
 
             float step = 1f - Mathf.Exp(-Mathf.Max(0.2f, smoothing) * dt);
             cameraTransform.position = Vector3.Lerp(cameraTransform.position, targetPosition, step);
-            cameraTransform.rotation = Quaternion.Slerp(cameraTransform.rotation, _baseRotation, step);
+            cameraTransform.rotation = Quaternion.Slerp(cameraTransform.rotation, targetRotation, step);
             targetCamera.fieldOfView = Mathf.Lerp(targetCamera.fieldOfView, targetFieldOfView, step);
         }
 
         private float WideFieldOfView()
         {
-            return wideShotFieldOfView > 0f ? wideShotFieldOfView : _baseFieldOfView;
+            return wideShotFieldOfView > 0f ? wideShotFieldOfView : _capturedFieldOfView;
         }
 
         private Vector3 PanelPosition()

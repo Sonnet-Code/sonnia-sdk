@@ -55,6 +55,10 @@ MSG_PLAY_ANIMATION = "play_animation"
 MSG_SET_SUBTITLES = "set_subtitles"
 MSG_SET_DISABLED_ANIMATIONS = "set_disabled_animations"
 MSG_SET_DEBUG = "set_debug"
+MSG_SET_TUNING = "set_tuning"
+MSG_SET_AVATAR = "set_avatar"
+MSG_OPEN_AVATAR_EDITOR = "open_avatar_editor"
+MSG_CLOSE_AVATAR_EDITOR = "close_avatar_editor"
 
 # Mensajes de Unity hacia el orquestador.
 MSG_CLIENT_HELLO = "client_hello"
@@ -64,9 +68,14 @@ MSG_TEXT_INPUT = "text_input"
 MSG_CAMERA_FRAME = "camera_frame"
 MSG_ANIMATIONS = "animations"
 MSG_ANIMATION_PLAYING = "animation_playing"
+MSG_AVATAR_EDITOR = "avatar_editor"
+MSG_AVATAR_SAVED = "avatar_saved"
 
 #: Tope de clips que se aceptan en ``animations`` (el set real tiene unos 40).
 MAX_ANIMATIONS = 200
+
+#: Tope de la definición del avatar de Genies (JSON en texto; la real ronda 4 KB).
+MAX_AVATAR_DEFINITION = 64 * 1024
 
 
 Role = Literal["user", "assistant"]
@@ -218,6 +227,39 @@ def msg_set_debug(enabled: bool) -> dict[str, Any]:
     return {"type": MSG_SET_DEBUG, "enabled": bool(enabled)}
 
 
+def msg_set_tuning(tuning: dict[str, dict[str, float]]) -> dict[str, Any]:
+    """Ajustes de «Developer»: boca (multiplicadores) y cámara (desplazamientos y zoom).
+
+    ``mouth``: ``open``, ``jaw``, ``closure`` y ``speed`` multiplican lo que
+    trae la escena (1 = tal cual). ``camera``: ``height``, ``distance`` y
+    ``side`` en metros sobre el plano base, ``zoom`` (más de 1 acerca) y
+    ``tilt`` en grados (positivo mira más abajo).
+    """
+    return {
+        "type": MSG_SET_TUNING,
+        "mouth": {k: float(v) for k, v in tuning.get("mouth", {}).items()},
+        "camera": {k: float(v) for k, v in tuning.get("camera", {}).items()},
+    }
+
+
+def msg_set_avatar(definition: str | None) -> dict[str, Any]:
+    """Aspecto de Sonia: definición del avatar de Genies (JSON en texto).
+
+    ``None`` es el personaje que trae la app (``SoniaGeniesAvatar.json``).
+    """
+    return {"type": MSG_SET_AVATAR, "definition": definition}
+
+
+def msg_open_avatar_editor() -> dict[str, Any]:
+    """La pantalla de Sonia pasa a la escena de editar personaje."""
+    return {"type": MSG_OPEN_AVATAR_EDITOR}
+
+
+def msg_close_avatar_editor() -> dict[str, Any]:
+    """Sale del editor de personaje sin guardar y vuelve a Sonia."""
+    return {"type": MSG_CLOSE_AVATAR_EDITOR}
+
+
 def msg_request_frame() -> dict[str, Any]:
     """Pide a Unity una captura de su cámara (solo con ``VISION_SOURCE=unity``)."""
     return {"type": MSG_REQUEST_FRAME}
@@ -257,6 +299,21 @@ def parse_animation_playing(msg: dict[str, Any]) -> str | None:
     if isinstance(clip, str) and 0 < len(clip.strip()) <= 80:
         return clip.strip()
     return None
+
+
+def parse_avatar_definition(msg: dict[str, Any]) -> str | None:
+    """Definición de ``avatar_saved``: un objeto JSON en texto, o ``None`` si no vale."""
+    definition = msg.get("definition")
+    if not isinstance(definition, str):
+        return None
+    definition = definition.strip()
+    if not definition or len(definition) > MAX_AVATAR_DEFINITION:
+        return None
+    try:
+        parsed = json.loads(definition)
+    except ValueError:
+        return None
+    return definition if isinstance(parsed, dict) else None
 
 
 def parse_animations(msg: dict[str, Any]) -> list[dict[str, str]]:

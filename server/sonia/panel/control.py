@@ -6,6 +6,15 @@ que el equipo cambia para que sobreviva a un reinicio y traduce el estado
 técnico a frases que entiende cualquiera del stand ("La pantalla de Sonia no
 está conectada: abre la app").
 
+Los ajustes (letrero, avisos, volumen, voz, subtítulos, animaciones,
+Developer...) son de Sonia, no de un equipo: se guardan en la nube y valen
+para todas las Sonias (``SHARED_SETTINGS``). Se cambien desde el panel de
+Cloudflare o desde el local, quedan apuntados como pendientes hasta que la
+nube los confirma (``CloudLink``), así que un cambio hecho sin internet sube
+en cuanto vuelve la conexión. El modo, el modo debug y el gasto son de cada
+Sonia: con dos encendidas por error, cada una sigue en el suyo y el panel
+deja elegir cuál conversa.
+
 """
 
 from __future__ import annotations
@@ -14,11 +23,13 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import random
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeGuard
 
 from sonia.actions.gallery import Gallery
 from sonia.actions.registry import ActionRegistry
@@ -32,7 +43,16 @@ if TYPE_CHECKING:  # pragma: no cover - solo para tipado
     from sonia.live.voicecache import VoiceCache
     from sonia.ws.hub import Hub
 
-__all__ = ["DEFAULT_AWAY_MESSAGE", "MODES", "PanelState", "StandControl"]
+__all__ = [
+    "DEFAULT_AWAY_MESSAGE",
+    "MODES",
+    "SHARED_SETTINGS",
+    "TUNING_LIMITS",
+    "PanelState",
+    "StandControl",
+    "default_tuning",
+    "merge_tuning",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +87,51 @@ CAPABILITIES = [
     "voice",
     "notes",
     "voice_cache",
+    "tuning",
+    "cloud_settings",
+    "avatar_editor",
 ]
+
+#: Ajustes que se guardan en la nube y comparten todas las Sonias. El modo, el
+#: modo debug y el gasto no están: son de cada equipo.
+SHARED_SETTINGS: tuple[str, ...] = (
+    "away_message",
+    "notes",
+    "volume",
+    "mic_gate",
+    "voice",
+    "showcase",
+    "subtitles",
+    "disabled_animations",
+    "tuning",
+    "avatar",
+)
+
+#: Ajustes de «Developer»: grupo -> valor -> (mínimo, máximo, por defecto). La
+#: boca va en multiplicadores de lo que trae la escena de Unity (1 = tal cual) y
+#: la cámara en desplazamientos sobre su plano base (metros y grados) más un
+#: zoom que estrecha o abre el campo de visión.
+TUNING_LIMITS: dict[str, dict[str, tuple[float, float, float]]] = {
+    "mouth": {
+        "open": (0.0, 2.0, 1.0),  # apertura de vocales y mandíbula
+        "jaw": (0.0, 3.0, 1.0),  # mandíbula extra en las sílabas fuertes
+        "closure": (0.0, 1.5, 1.0),  # cierre de labios en p, b, m
+        "speed": (0.5, 2.0, 1.0),  # rapidez de la boca
+    },
+    "camera": {
+        "height": (-0.5, 0.5, 0.0),  # metros, + sube
+        "distance": (-0.6, 1.0, 0.0),  # metros, + se aleja
+        "side": (-0.4, 0.4, 0.0),  # metros, + a la derecha de la pantalla
+        "zoom": (0.5, 2.0, 1.0),  # >1 acerca (campo de visión más estrecho)
+        "tilt": (-15.0, 15.0, 0.0),  # grados, + mira más abajo
+    },
+}
+
+#: Tope del texto de los avisos del día.
+NOTES_MAX_LEN = 1_000
+
+#: Tope del texto del letrero de «Fuera».
+AWAY_MESSAGE_MAX_LEN = 140
 
 #: Primer saludo al entrar en el modo saludos.
 GREETER_FIRST_DELAY_S = 4.0
@@ -85,9 +149,46 @@ MIC_DEAF_S = 30.0
 USAGE_SAVE_S = 30.0
 
 
+def default_tuning() -> dict[str, dict[str, float]]:
+    """Ajustes de «Developer» sin tocar: la boca y la cámara como vienen de la escena."""
+    return {
+        group: {name: limits[2] for name, limits in values.items()}
+        for group, values in TUNING_LIMITS.items()
+    }
+
+
+def merge_tuning(*sources: Any) -> dict[str, dict[str, float]]:
+    """Ajustes de «Developer» completos a partir de los valores por defecto.
+
+    Cada fuente (grupo -> valor -> número) se mezcla encima de la anterior,
+    recortada a ``TUNING_LIMITS``. Lo desconocido o mal formado se ignora, así
+    que sirve igual para lo guardado en disco, lo que manda la nube y los
+    cambios parciales de un deslizador del panel.
+    """
+    result = default_tuning()
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        for group, values in source.items():
+            limits = TUNING_LIMITS.get(group)
+            if limits is None or not isinstance(values, dict):
+                continue
+            for name, value in values.items():
+                bounds = limits.get(name)
+                if bounds is None or not _is_number(value) or not math.isfinite(value):
+                    continue
+                result[group][name] = round(max(bounds[0], min(bounds[1], float(value))), 4)
+    return result
+
+
 @dataclass
 class PanelState:
-    """Lo que el equipo cambia desde el panel y se guarda en disco."""
+    """Lo que el equipo cambia desde el panel y se guarda en disco.
+
+    Es la copia local: los ajustes de ``SHARED_SETTINGS`` mandan desde la nube
+    en cuanto hay conexión, y lo de aquí es lo último que se supo de ella más
+    lo cambiado en este equipo que aún no ha subido (``pending_settings``).
+    """
 
     mode: Mode = "conversation"
     away_message: str = DEFAULT_AWAY_MESSAGE
@@ -100,12 +201,21 @@ class PanelState:
     subtitles: bool = True
     #: Clips que Sonia no usa por su cuenta (bloque «Animaciones»).
     disabled_animations: list[str] = field(default_factory=list)
+    #: Ajustes de «Developer»: boca y cámara (ver ``TUNING_LIMITS``).
+    tuning: dict[str, dict[str, float]] = field(default_factory=default_tuning)
+    #: Definición del avatar de Genies guardada en el editor de personaje (JSON en
+    #: texto); ``None``: el personaje que trae la app.
+    avatar: str | None = None
     #: Modo debug: Sonia quieta (sin GPT-Live ni nada automático) para pruebas visuales.
     debug: bool = False
     #: Gasto del día: segundos de sesión de GPT-Live acumulados en ``usage_date``
     #: (sobrevive a los reinicios del orquestador).
     usage_date: str = ""
     usage_seconds: float = 0.0
+    #: Revisión de los ajustes compartidos que mandó la nube por última vez.
+    cloud_rev: int = 0
+    #: Ajustes compartidos cambiados en este equipo que la nube aún no ha confirmado.
+    pending_settings: list[str] = field(default_factory=list)
 
     @classmethod
     def load(cls, path: Path) -> PanelState:
@@ -124,9 +234,11 @@ class PanelState:
         for name in ("away_message", "notes", "voice", "usage_date"):
             if isinstance(raw.get(name), str):
                 setattr(state, name, raw[name])
+        with contextlib.suppress(ValueError):
+            state.avatar = _normalize_shared("avatar", raw.get("avatar"))
         for name in ("volume", "mic_gate", "usage_seconds"):
             value = raw.get(name)
-            if isinstance(value, int | float) and not isinstance(value, bool):
+            if _is_number(value):
                 setattr(state, name, float(value))
         for name in ("showcase", "subtitles", "debug"):
             if isinstance(raw.get(name), bool):
@@ -134,6 +246,12 @@ class PanelState:
         disabled = raw.get("disabled_animations")
         if isinstance(disabled, list):
             state.disabled_animations = sorted({c for c in disabled if isinstance(c, str) and c})
+        state.tuning = merge_tuning(raw.get("tuning"))
+        if isinstance(raw.get("cloud_rev"), int) and not isinstance(raw["cloud_rev"], bool):
+            state.cloud_rev = max(0, raw["cloud_rev"])
+        pending = raw.get("pending_settings")
+        if isinstance(pending, list):
+            state.pending_settings = sorted({k for k in pending if k in SHARED_SETTINGS})
         return state
 
     def save(self, path: Path) -> None:
@@ -195,6 +313,19 @@ class StandControl:
         self._rng = rng or random.Random()
         self._state_path = Path(settings.panel.state_file)
         self.state = PanelState.load(self._state_path)
+        # Lo que trae este equipo en su .env: un ajuste compartido a None
+        # (nunca tocado desde el panel) vuelve a esto.
+        self._default_voice = settings.live.voice
+        self._default_gate = settings.live.gate_rms
+        self._default_showcase = engine.showcase_enabled
+        #: Ajuste compartido -> número del último cambio hecho aquí sin confirmar por la nube.
+        self._pending = {key: n for n, key in enumerate(self.state.pending_settings, start=1)}
+        self._settings_seq = len(self._pending)
+        self._settings_listeners: list[Callable[[], None]] = []
+        #: Conexión con la nube: ``off`` (sin token), ``offline`` u ``online``.
+        self._cloud_state = "off"
+        #: ¿Llegaron ya los ajustes de la nube en esta conexión?
+        self._cloud_synced = False
         self._tasks: set[asyncio.Task[Any]] = set()
         self._loop_task: asyncio.Task[None] | None = None
         self._next_greet_at = 0.0
@@ -204,6 +335,8 @@ class StandControl:
         self._animations: list[dict[str, str]] = []
         #: Clip del catálogo que suena ahora en Unity (``animation_playing``).
         self._current_animation: str | None = None
+        #: ¿Está la pantalla de Sonia en la escena de editar personaje?
+        self._avatar_editor_open = False
         #: Segundos de sesión de arranques anteriores del mismo día.
         self._usage_base = 0.0
         self._last_usage_save = time.monotonic()
@@ -211,6 +344,8 @@ class StandControl:
         hub.add_listener(self._watch_outgoing)
         hub.on(p.MSG_ANIMATIONS, self._on_animations)
         hub.on(p.MSG_ANIMATION_PLAYING, self._on_animation_playing)
+        hub.on(p.MSG_AVATAR_EDITOR, self._on_avatar_editor)
+        hub.on(p.MSG_AVATAR_SAVED, self._on_avatar_saved)
 
     # -- ciclo de vida --------------------------------------------------------
 
@@ -236,6 +371,8 @@ class StandControl:
             "disabled_animations", p.msg_set_disabled_animations(state.disabled_animations)
         )
         await self._hub.set_sticky("debug", p.msg_set_debug(state.debug))
+        await self._hub.set_sticky("tuning", p.msg_set_tuning(state.tuning))
+        await self._hub.set_sticky("avatar", p.msg_set_avatar(state.avatar))
         await self._apply_mode(state.mode, announce=False)
         if state.debug:
             logger.info("El panel dejó a Sonia en modo debug: quieta y sin GPT-Live")
@@ -276,8 +413,8 @@ class StandControl:
             return
         await hub.set_sticky("presence", p.msg_presence(True, self._away_message))
         if mode == "conversation":
-            # En modo debug no se abre GPT-Live aunque el modo sea «Conversando».
-            await engine.set_active(not self.state.debug)
+            # En modo debug o con el editor de personaje en pantalla no se abre GPT-Live.
+            await engine.set_active(not self.state.debug and not self._avatar_editor_open)
         else:
             await engine.set_active(False)
             self._next_greet_at = time.monotonic() + GREETER_FIRST_DELAY_S
@@ -292,11 +429,15 @@ class StandControl:
         while True:
             await asyncio.sleep(1.0)
             try:
+                if self._avatar_editor_open and self._hub.client_count == 0:
+                    # La pantalla se cerró con el editor abierto: Sonia vuelve a su modo.
+                    await self._set_avatar_editor_open(False)
                 if time.monotonic() - self._last_usage_save >= USAGE_SAVE_S:
                     self._save_usage()
                 if (
                     self.state.mode == "greeter"
                     and not self.state.debug
+                    and not self._avatar_editor_open
                     and time.monotonic() >= self._next_greet_at
                 ):
                     self._schedule_next_greeting()
@@ -405,11 +546,8 @@ class StandControl:
         }[mode]
 
     async def _act_set_away_message(self, params: dict[str, Any]) -> tuple[bool, str]:
-        text = _text(params, "text", max_len=140)
-        self.state.away_message = text or DEFAULT_AWAY_MESSAGE
-        self._save()
-        if self.state.mode == "away":
-            await self._hub.set_sticky("presence", p.msg_presence(False, self._away_message))
+        text = _text(params, "text", max_len=AWAY_MESSAGE_MAX_LEN)
+        await self._set_shared("away_message", text or DEFAULT_AWAY_MESSAGE)
         return True, "Letrero actualizado."
 
     async def _act_say(self, params: dict[str, Any]) -> tuple[bool, str]:
@@ -514,26 +652,39 @@ class StandControl:
             disabled.discard(clip)
         else:
             disabled.add(clip)
-        self.state.disabled_animations = sorted(disabled)
-        self._save()
-        await self._hub.set_sticky(
-            "disabled_animations", p.msg_set_disabled_animations(self.state.disabled_animations)
-        )
+        await self._set_shared("disabled_animations", sorted(disabled))
         return True, (
             f"Sonia vuelve a usar «{clip}» por su cuenta."
             if enabled
             else f"Sonia ya no hará «{clip}» por su cuenta (sigue disponible en su botón)."
         )
 
+    async def _act_open_avatar_editor(self, params: dict[str, Any]) -> tuple[bool, str]:
+        self._need_present()
+        if self._hub.client_count == 0:
+            raise _BadRequest("La pantalla de Sonia no está conectada.")
+        await self._hub.broadcast_json(p.msg_open_avatar_editor())
+        return True, (
+            "La pantalla de Sonia pasa al editor de personaje: edítalo allí con el ratón y "
+            "pulsa Guardar. Mientras tanto Sonia no conversa."
+        )
+
+    async def _act_close_avatar_editor(self, params: dict[str, Any]) -> tuple[bool, str]:
+        await self._hub.broadcast_json(p.msg_close_avatar_editor())
+        return True, "Editor de personaje cerrado sin guardar: Sonia vuelve."
+
+    async def _act_reset_avatar(self, params: dict[str, Any]) -> tuple[bool, str]:
+        if self.state.avatar is None:
+            return True, "Sonia ya tiene el personaje de la app."
+        await self._set_shared("avatar", None)
+        return True, "Sonia vuelve al personaje que trae la app (en todas las Sonias)."
+
     async def _act_greet(self, params: dict[str, Any]) -> tuple[bool, str]:
         return await self.greet("greeting")
 
     async def _act_showcase(self, params: dict[str, Any]) -> tuple[bool, str]:
-        engine = self._engine
         enabled = _flag(params, "enabled")
-        engine.set_showcase_enabled(enabled)
-        self.state.showcase = enabled
-        self._save()
+        await self._set_shared("showcase", enabled)
         return True, (
             "Sonia dirá frases y bailará sola cuando no haya nadie."
             if enabled
@@ -560,9 +711,7 @@ class StandControl:
 
     async def _act_set_subtitles(self, params: dict[str, Any]) -> tuple[bool, str]:
         enabled = _flag(params, "enabled")
-        self.state.subtitles = enabled
-        self._save()
-        await self._hub.set_sticky("subtitles", p.msg_set_subtitles(enabled))
+        await self._set_shared("subtitles", enabled)
         return True, (
             "Subtítulos visibles en la pantalla."
             if enabled
@@ -571,43 +720,52 @@ class StandControl:
 
     async def _act_set_volume(self, params: dict[str, Any]) -> tuple[bool, str]:
         value = _number(params, "value", 0.0, 1.5)
-        self.state.volume = value
-        self._save()
-        await self._hub.set_sticky("volume", p.msg_set_volume(value))
+        await self._set_shared("volume", value)
         return True, f"Volumen al {value * 100:.0f} %."
 
     async def _act_set_mic_gate(self, params: dict[str, Any]) -> tuple[bool, str]:
-        engine = self._engine
         value = _number(params, "value", 0.0, 0.2)
-        engine.set_gate(value)
-        self.state.mic_gate = value
-        self._save()
+        await self._set_shared("mic_gate", value)
         if value <= 0:
             return True, "Filtro de ruido apagado: Sonia oye todo."
         return True, "Filtro de ruido ajustado."
 
     async def _act_set_voice(self, params: dict[str, Any]) -> tuple[bool, str]:
-        engine = self._engine
         voice = params.get("voice")
         if voice not in VOICES:
             raise _BadRequest("Voz no válida.")
         if voice == self._settings.live.voice:
             return True, "Esa voz ya está puesta."
-        self._settings.live.voice = str(voice)
-        self.state.voice = str(voice)
-        self._save()
-        await engine.restart_session(f"voz cambiada a {voice}")
-        if self._voice_cache is not None and self._settings.live.api_key:
-            self._spawn(self._prepare_voices(delay=5.0), "voice-change")
+        await self._set_shared("voice", str(voice))
         return True, f"Voz cambiada a {voice}. La conversación empieza de nuevo."
 
     async def _act_set_notes(self, params: dict[str, Any]) -> tuple[bool, str]:
-        engine = self._engine
-        text = _text(params, "text", max_len=1_000)
-        await engine.set_notes(text)
-        self.state.notes = text
-        self._save()
+        text = _text(params, "text", max_len=NOTES_MAX_LEN)
+        await self._set_shared("notes", text)
         return True, "Avisos guardados. Sonia ya los conoce." if text else "Avisos borrados."
+
+    async def _act_set_tuning(self, params: dict[str, Any]) -> tuple[bool, str]:
+        changes = {group: params[group] for group in TUNING_LIMITS if group in params}
+        if not changes or not all(isinstance(values, dict) for values in changes.values()):
+            raise _BadRequest("Faltan los valores de la boca o de la cámara.")
+        await self._set_shared("tuning", merge_tuning(self.state.tuning, changes))
+        return True, "Ajuste aplicado."
+
+    async def _act_reset_tuning(self, params: dict[str, Any]) -> tuple[bool, str]:
+        part = params.get("part", "all")
+        if part not in (*TUNING_LIMITS, "all"):
+            raise _BadRequest("¿Qué hay que restablecer: la boca, la cámara o todo?")
+        defaults = default_tuning()
+        if part == "all":
+            tuning = defaults
+        else:
+            tuning = merge_tuning(self.state.tuning, {part: defaults[part]})
+        await self._set_shared("tuning", tuning)
+        return True, {
+            "mouth": "Boca como viene de la escena.",
+            "camera": "Cámara en su encuadre de siempre.",
+            "all": "Boca y cámara como vienen de la escena.",
+        }[str(part)]
 
     async def _act_prepare_voices(self, params: dict[str, Any]) -> tuple[bool, str]:
         if self._voice_cache is None:
@@ -621,6 +779,128 @@ class StandControl:
             return True, "Todas las frases ya están grabadas."
         self._spawn(self._prepare_voices(), "voice-prepare")
         return True, f"Grabando {len(missing)} frases; tarda unos segundos por frase."
+
+    # -- ajustes compartidos (nube) --------------------------------------------
+
+    async def _set_shared(self, key: str, value: Any) -> None:
+        """Un ajuste compartido cambiado desde un panel: se aplica y queda pendiente de subir."""
+        if _same(getattr(self.state, key), value):
+            return
+        await self._apply_shared(key, value)
+        self._settings_seq += 1
+        self._pending[key] = self._settings_seq
+        self.state.pending_settings = sorted(self._pending)
+        self._save()
+        for listener in list(self._settings_listeners):
+            try:
+                listener()
+            except Exception:
+                logger.exception("Error avisando de un ajuste cambiado")
+
+    async def _apply_shared(self, key: str, value: Any) -> None:
+        """Aplica un ajuste compartido ya validado al estado, al motor y a Unity."""
+        state = self.state
+        engine = self._engine
+        hub = self._hub
+        if key == "away_message":
+            state.away_message = value
+            if state.mode == "away":
+                await hub.set_sticky("presence", p.msg_presence(False, self._away_message))
+        elif key == "notes":
+            await engine.set_notes(value)
+            state.notes = value
+        elif key == "volume":
+            state.volume = value
+            await hub.set_sticky("volume", p.msg_set_volume(value))
+        elif key == "mic_gate":
+            state.mic_gate = value
+            engine.set_gate(self._default_gate if value is None else value)
+        elif key == "voice":
+            state.voice = value
+            voice = self._default_voice if value is None else value
+            if voice != self._settings.live.voice:
+                self._settings.live.voice = voice
+                await engine.restart_session(f"voz cambiada a {voice}")
+                if self._voice_cache is not None and self._settings.live.api_key:
+                    self._spawn(self._prepare_voices(delay=5.0), "voice-change")
+        elif key == "showcase":
+            state.showcase = value
+            engine.set_showcase_enabled(self._default_showcase if value is None else value)
+        elif key == "subtitles":
+            state.subtitles = value
+            await hub.set_sticky("subtitles", p.msg_set_subtitles(value))
+        elif key == "disabled_animations":
+            state.disabled_animations = value
+            await hub.set_sticky("disabled_animations", p.msg_set_disabled_animations(value))
+        elif key == "tuning":
+            state.tuning = value
+            await hub.set_sticky("tuning", p.msg_set_tuning(value))
+        elif key == "avatar":
+            state.avatar = value
+            await hub.set_sticky("avatar", p.msg_set_avatar(value))
+        else:  # pragma: no cover - SHARED_SETTINGS y esto van juntos
+            raise ValueError(f"Ajuste desconocido: {key}")
+
+    def add_settings_listener(self, callback: Callable[[], None]) -> None:
+        """``callback()`` cada vez que un panel cambia un ajuste compartido."""
+        self._settings_listeners.append(callback)
+
+    def shared_settings(self) -> dict[str, Any]:
+        """Todos los ajustes compartidos, en tipos JSON (para la nube)."""
+        return {key: _copy(getattr(self.state, key)) for key in SHARED_SETTINGS}
+
+    def pending_settings(self) -> tuple[dict[str, Any], int]:
+        """Lo cambiado aquí que la nube aún no confirmó y el número del último cambio."""
+        changes = {key: _copy(getattr(self.state, key)) for key in sorted(self._pending)}
+        return changes, self._settings_seq
+
+    def set_cloud_state(self, state: Literal["off", "offline", "online"]) -> None:
+        """Lo pone ``CloudLink``: si hay nube y si está conectada ahora."""
+        if state != "online":
+            self._cloud_synced = False
+        self._cloud_state = state
+
+    async def apply_cloud_settings(
+        self, values: dict[str, Any], *, rev: int, ack: int
+    ) -> list[str]:
+        """Aplica los ajustes que manda la nube y devuelve los que cambiaron aquí.
+
+        ``ack`` es el número del último cambio de este equipo que la nube ya
+        tiene: lo cambiado aquí después (aún en camino) no se pisa.
+        """
+        changed: list[str] = []
+        for key in SHARED_SETTINGS:
+            if key not in values or self._pending.get(key, 0) > ack:
+                continue
+            try:
+                value = _normalize_shared(key, values[key])
+            except ValueError:
+                logger.warning("Ajuste de la nube no válido, se ignora: %s", key)
+                continue
+            if _same(getattr(self.state, key), value):
+                continue
+            try:
+                await self._apply_shared(key, value)
+            except Exception:
+                logger.exception("No se pudo aplicar el ajuste %s de la nube", key)
+                continue
+            changed.append(key)
+        self._pending = {key: n for key, n in self._pending.items() if n > ack}
+        self.state.pending_settings = sorted(self._pending)
+        self.state.cloud_rev = max(0, rev)
+        self._cloud_synced = True
+        self._save()
+        if changed:
+            logger.info("Ajustes de la nube aplicados: %s", ", ".join(changed))
+        return changed
+
+    def _settings_sync(self) -> dict[str, Any]:
+        return {
+            "cloud": self._cloud_state,
+            "synced": self._cloud_synced,
+            "pending": sorted(self._pending),
+            "rev": self.state.cloud_rev,
+        }
 
     # -- estado ---------------------------------------------------------------
 
@@ -637,6 +917,30 @@ class StandControl:
 
     def _on_animation_playing(self, msg: dict[str, Any]) -> None:
         self._current_animation = p.parse_animation_playing(msg)
+
+    async def _on_avatar_editor(self, msg: dict[str, Any]) -> None:
+        open_ = msg.get("open")
+        if isinstance(open_, bool):
+            await self._set_avatar_editor_open(open_)
+
+    async def _set_avatar_editor_open(self, open_: bool) -> None:
+        """Con el editor de personaje en pantalla Sonia no conversa; al salir vuelve a su modo."""
+        if open_ == self._avatar_editor_open:
+            return
+        self._avatar_editor_open = open_
+        logger.info("Editor de personaje %s", "abierto" if open_ else "cerrado")
+        if open_:
+            await self._engine.set_active(False)
+        else:
+            await self._apply_mode(self.state.mode, announce=False)
+
+    async def _on_avatar_saved(self, msg: dict[str, Any]) -> None:
+        definition = p.parse_avatar_definition(msg)
+        if definition is None:
+            logger.warning("Unity mandó una definición de avatar no válida; se ignora")
+            return
+        await self._set_shared("avatar", definition)
+        logger.info("Personaje nuevo guardado desde el editor (%d caracteres)", len(definition))
 
     def status(self) -> dict[str, Any]:
         """La instantánea de ``GET /api/status`` (forma en ``docs/panel.md``)."""
@@ -673,6 +977,12 @@ class StandControl:
             "mic_gate": snap.get("mic_gate", 0.0),
             "notes": engine.notes,
             "voice_cache": self._voice_cache_status(),
+            "tuning": self.state.tuning,
+            "avatar": {
+                "custom": self.state.avatar is not None,
+                "editor_open": self._avatar_editor_open and self._hub.client_count > 0,
+            },
+            "settings_sync": self._settings_sync(),
             "last_error": snap.get("last_error") or None,
             "capabilities": self.capabilities,
         }
@@ -818,9 +1128,69 @@ def _flag(params: dict[str, Any], name: str) -> bool:
 
 def _number(params: dict[str, Any], name: str, low: float, high: float) -> float:
     value = params.get(name)
-    if not isinstance(value, int | float) or isinstance(value, bool):
+    if not _is_number(value) or not math.isfinite(value):
         raise _BadRequest(f"«{name}» tiene que ser un número.")
     return max(low, min(high, float(value)))
+
+
+def _is_number(value: Any) -> TypeGuard[int | float]:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _copy(value: Any) -> Any:
+    """Copia de un ajuste para mandarlo fuera sin compartir listas ni diccionarios."""
+    return json.loads(json.dumps(value))
+
+
+def _same(a: Any, b: Any) -> bool:
+    """¿Mismo ajuste? Compara como JSON (``1`` y ``1.0`` cuentan igual)."""
+    return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True) or a == b
+
+
+def _normalize_shared(key: str, value: Any) -> Any:
+    """Valida un ajuste compartido que llega de la nube. ``ValueError`` si no vale."""
+    if key == "away_message":
+        if not isinstance(value, str):
+            raise ValueError(key)
+        return value.strip()[:AWAY_MESSAGE_MAX_LEN] or DEFAULT_AWAY_MESSAGE
+    if key == "notes":
+        if not isinstance(value, str):
+            raise ValueError(key)
+        return value.strip()[:NOTES_MAX_LEN]
+    if key in ("volume", "mic_gate"):
+        if value is None and key == "mic_gate":
+            return None
+        if not _is_number(value) or not math.isfinite(value):
+            raise ValueError(key)
+        return max(0.0, min(1.5 if key == "volume" else 0.2, float(value)))
+    if key == "voice":
+        if value is None or value in VOICES:
+            return value
+        raise ValueError(key)
+    if key == "showcase":
+        if value is None or isinstance(value, bool):
+            return value
+        raise ValueError(key)
+    if key == "subtitles":
+        if isinstance(value, bool):
+            return value
+        raise ValueError(key)
+    if key == "disabled_animations":
+        if not isinstance(value, list):
+            raise ValueError(key)
+        return sorted({c for c in value if isinstance(c, str) and c})
+    if key == "tuning":
+        if not isinstance(value, dict):
+            raise ValueError(key)
+        return merge_tuning(value)
+    if key == "avatar":
+        if value is None:
+            return None
+        definition = p.parse_avatar_definition({"definition": value})
+        if definition is None:
+            raise ValueError(key)
+        return definition
+    raise ValueError(key)
 
 
 def _summary(params: dict[str, Any]) -> str:

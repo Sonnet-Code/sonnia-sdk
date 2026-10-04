@@ -74,6 +74,11 @@ namespace Sonia
         public float vowelWeight = 0.85f;
 
         [SerializeField]
+        [Range(0f, 2f)]
+        [Tooltip("Intensidad de la apertura: multiplica vocales y mandíbula (1 = tal cual). La ajusta el panel (Developer).")]
+        public float openScale = 1f;
+
+        [SerializeField]
         [Range(0.3f, 1.5f)]
         [Tooltip("Curva de apertura: menos de 1 abre antes con voz floja.")]
         public float openCurve = 1f;
@@ -153,6 +158,13 @@ namespace Sonia
         private readonly Spring[] _vowelSprings = new Spring[5];
         private float _roundness;
         private bool _active;
+
+        // Valores de la escena antes de los multiplicadores de «Developer».
+        private bool _tuningBaseCaptured;
+        private float _baseJawBoost;
+        private float _baseClosureWeight;
+        private float _baseMouthSpeed;
+        private float _baseClosureSpeed;
 
         /// <summary>Cierto si la cara tiene canales de visemas utilizables.</summary>
         public bool HasVisemeShapes
@@ -539,6 +551,30 @@ namespace Sonia
             Apply(a);
         }
 
+        /// <summary>
+        /// Ajustes de «Developer» del panel: multiplicadores sobre lo que trae la
+        /// escena (1 = tal cual) para la apertura, la mandíbula extra, el cierre de
+        /// labios y la rapidez. Los valores de la escena se guardan la primera vez.
+        /// </summary>
+        public void ApplyTuning(float open, float jaw, float closure, float speed)
+        {
+            if (!_tuningBaseCaptured)
+            {
+                _baseJawBoost = jawBoost;
+                _baseClosureWeight = closureWeight;
+                _baseMouthSpeed = mouthSpeed;
+                _baseClosureSpeed = closureSpeed;
+                _tuningBaseCaptured = true;
+            }
+
+            float pace = Mathf.Clamp(speed, 0.25f, 4f);
+            openScale = Mathf.Clamp(open, 0f, 2f);
+            jawBoost = Mathf.Clamp01(_baseJawBoost * Mathf.Max(0f, jaw));
+            closureWeight = Mathf.Clamp01(_baseClosureWeight * Mathf.Max(0f, closure));
+            mouthSpeed = Mathf.Clamp(_baseMouthSpeed * pace, 1f, 40f);
+            closureSpeed = Mathf.Clamp(_baseClosureSpeed * pace, 1f, 60f);
+        }
+
         /// <summary>Mezcla de vocales en el instante pedido: la del clasificador, suavizada y con confianza.</summary>
         private void UpdateVowelMix(double at, float dt)
         {
@@ -612,17 +648,20 @@ namespace Sonia
 
             // FaceRig suma lo de todos y escribe una vez: varios canales comparten
             // formas (en Genies casi todas las vocales llevan JAW_DROP).
+            // La intensidad de «Developer» escala lo que abre (vocales y mandíbula),
+            // no los cierres: una p sigue juntando los labios igual.
             float keep = 1f - Mathf.Clamp01(_closure.Value);
+            float scale = Mathf.Max(0f, openScale);
             for (int v = 0; v < _vowelChannels.Length; v++)
             {
-                faceRig.Add(_vowelChannels[v], _vowelSprings[v].Value * keep);
+                faceRig.Add(_vowelChannels[v], _vowelSprings[v].Value * keep * scale);
             }
 
             faceRig.Add(_ppChannel, _closure.Value);
             faceRig.Add(_ssChannel, _sibilant.Value);
 
             // Sin visemas (avatares con solo jawOpen), la mandíbula hace todo el trabajo.
-            float jaw = _hasVisemeShapes ? _jaw.Value * keep : open * 0.5f * keep;
+            float jaw = (_hasVisemeShapes ? _jaw.Value * keep : open * 0.5f * keep) * scale;
             faceRig.Add(_jawChannel, Mathf.Clamp01(jaw));
         }
     }

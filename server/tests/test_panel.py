@@ -416,6 +416,96 @@ async def test_subtitulos_se_apagan_y_se_recuerdan(tmp_path: Path) -> None:
         assert rig.rec.of_type("set_subtitles")[-1]["enabled"] is False
 
 
+async def test_developer_ajusta_boca_y_camara_y_llega_a_unity(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        await rig.rec.wait_type("set_tuning")
+        first = rig.rec.of_type("set_tuning")[-1]
+        assert first["mouth"] == {"open": 1.0, "jaw": 1.0, "closure": 1.0, "speed": 1.0}
+        assert first["camera"]["zoom"] == 1.0 and first["camera"]["height"] == 0.0
+        ok, _ = await rig.control.act(
+            "set_tuning", {"mouth": {"open": 1.4, "nariz": 2}, "camera": {"height": 9, "zoom": 1.2}}
+        )
+        assert ok
+        await rig.rec.wait_type("set_tuning", count=2)
+        sent = rig.rec.of_type("set_tuning")[-1]
+        assert sent["mouth"] == {"open": 1.4, "jaw": 1.0, "closure": 1.0, "speed": 1.0}
+        assert sent["camera"]["height"] == 0.5  # recortado al máximo
+        assert sent["camera"]["zoom"] == 1.2
+        # Restablecer la cámara no toca la boca.
+        ok, _ = await rig.control.act("reset_tuning", {"part": "camera"})
+        assert ok
+        tuning = rig.control.status()["tuning"]
+        assert tuning["camera"]["height"] == 0.0 and tuning["mouth"]["open"] == 1.4
+        for bad in ({}, {"mouth": 3}, {"camera": "alto"}):
+            ok, _ = await rig.control.act("set_tuning", bad)
+            assert not ok
+        ok, _ = await rig.control.act("reset_tuning", {"part": "pies"})
+        assert not ok
+    # Se recuerda y, sin nube, queda pendiente de subir.
+    state = PanelState.load(tmp_path / "cache" / "panel_state.json")
+    assert state.tuning["mouth"]["open"] == 1.4
+    assert state.pending_settings == ["tuning"]
+    async with make_panel_rig(tmp_path, state=state) as rig:
+        await rig.rec.wait_type("set_tuning")
+        assert rig.rec.of_type("set_tuning")[-1]["mouth"]["open"] == 1.4
+
+
+AVATAR = json.dumps({"JsonVersion": "2-0-0", "equippedAssetIds": ["AvatarBase/rec1"]})
+
+
+async def test_el_editor_de_personaje_pausa_gpt_live_y_guarda_el_avatar(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await rig.rec.wait_type("set_avatar")
+        assert rig.rec.of_type("set_avatar")[-1] == {"type": "set_avatar", "definition": None}
+        ok, message = await rig.control.act("open_avatar_editor", {})
+        assert ok and "editor de personaje" in message
+        await rig.rec.wait_type("open_avatar_editor")
+        # Unity avisa de que ya está en la escena del editor: GPT-Live se cierra.
+        await rig.client.send(json.dumps({"type": "avatar_editor", "open": True}))
+        await conn.wait_type("session.close")
+        await wait_until(lambda: not rig.engine.connected)
+        assert rig.control.status()["avatar"] == {"custom": False, "editor_open": True}
+        # Lo que no es una definición válida se ignora.
+        await rig.client.send(json.dumps({"type": "avatar_saved", "definition": "[1, 2]"}))
+        await rig.client.send(json.dumps({"type": "avatar_saved", "definition": AVATAR}))
+        await rig.client.send(json.dumps({"type": "avatar_editor", "open": False}))
+        await wait_until(lambda: rig.control.status()["avatar"]["custom"])
+        await rig.rec.wait_for(
+            lambda msgs: rig.rec.of_type("set_avatar", msgs)[-1]["definition"] == AVATAR
+        )
+        # Al salir del editor vuelve a conversar.
+        await rig.conn(2)
+        assert rig.control.status()["avatar"] == {"custom": True, "editor_open": False}
+        assert rig.control.status()["settings_sync"]["pending"] == ["avatar"]
+        ok, _ = await rig.control.act("close_avatar_editor", {})
+        assert ok
+        await rig.rec.wait_type("close_avatar_editor")
+        # Volver al personaje de la app.
+        ok, _ = await rig.control.act("reset_avatar", {})
+        assert ok
+        await rig.rec.wait_for(
+            lambda msgs: rig.rec.of_type("set_avatar", msgs)[-1]["definition"] is None
+        )
+    # Lo último (el de la app) es lo que queda guardado.
+    assert PanelState.load(tmp_path / "cache" / "panel_state.json").avatar is None
+
+
+async def test_sin_pantalla_no_se_abre_el_editor_y_si_se_cierra_sonia_vuelve(
+    tmp_path: Path,
+) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await rig.client.send(json.dumps({"type": "avatar_editor", "open": True}))
+        await conn.wait_type("session.close")
+        # La app de Unity se cierra con el editor abierto: Sonia vuelve a su modo.
+        await rig.client.close()
+        await rig.conn(2)
+        assert rig.control.status()["avatar"]["editor_open"] is False
+        ok, message = await rig.control.act("open_avatar_editor", {})
+        assert not ok and "no está conectada" in message
+
+
 async def test_el_estado_viejo_del_panel_carga_con_los_valores_nuevos_por_defecto(
     tmp_path: Path,
 ) -> None:
@@ -424,6 +514,8 @@ async def test_el_estado_viejo_del_panel_carga_con_los_valores_nuevos_por_defect
     state = PanelState.load(path)
     assert state.mode == "greeter" and state.subtitles is True
     assert state.disabled_animations == []
+    assert state.tuning["camera"]["zoom"] == 1.0
+    assert state.cloud_rev == 0 and state.pending_settings == []
 
 
 async def test_silenciar_el_micro_manda_silencio(tmp_path: Path) -> None:

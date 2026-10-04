@@ -47,6 +47,25 @@
   const MAX_CHAT_LINES = 200;
   const MAX_LOG_LINES = 400;
   const MAX_TOASTS = 3;
+  const TUNING_SEND_MS = 150; // un deslizador de Developer manda como mucho esto a menudo
+
+  // Ajustes de «Developer». Mismos límites que TUNING_LIMITS en control.py: la
+  // boca en multiplicadores de lo que trae la escena y la cámara sobre su plano base.
+  const TUNING_SPEC = {
+    mouth: [
+      { key: "open", label: "Apertura de la boca", min: 0, max: 2, step: 0.05, def: 1, unit: "%", ends: ["Cerrada", "Muy abierta"] },
+      { key: "jaw", label: "Mandíbula en las sílabas fuertes", min: 0, max: 3, step: 0.1, def: 1, unit: "%", ends: ["Nada", "Mucha"] },
+      { key: "closure", label: "Cierre de labios (p, b, m)", min: 0, max: 1.5, step: 0.05, def: 1, unit: "%", ends: ["Sin cierre", "Muy marcado"] },
+      { key: "speed", label: "Rapidez de la boca", min: 0.5, max: 2, step: 0.05, def: 1, unit: "%", ends: ["Blanda", "Nítida"] },
+    ],
+    camera: [
+      { key: "zoom", label: "Zoom", min: 0.5, max: 2, step: 0.05, def: 1, unit: "%", ends: ["Más lejos", "Más cerca"] },
+      { key: "height", label: "Altura", min: -0.5, max: 0.5, step: 0.01, def: 0, unit: "cm", ends: ["Más abajo", "Más arriba"] },
+      { key: "distance", label: "Distancia", min: -0.6, max: 1, step: 0.02, def: 0, unit: "cm", ends: ["Más cerca", "Más lejos"] },
+      { key: "side", label: "Lateral", min: -0.4, max: 0.4, step: 0.01, def: 0, unit: "cm", ends: ["Izquierda", "Derecha"] },
+      { key: "tilt", label: "Inclinación", min: -15, max: 15, step: 0.5, def: 0, unit: "°", ends: ["Mira arriba", "Mira abajo"] },
+    ],
+  };
 
   const MODES = {
     conversation: { short: "Conversando", sentence: "Sonia está conversando", already: "Sonia ya está conversando." },
@@ -249,7 +268,8 @@
       "volume-value", "gate-input", "gate-value", "gate-meter-fill", "gate-meter-mark",
       "gate-meter-caption", "health-list", "last-error", "last-error-text", "chat", "chat-empty",
       "voice-select", "voice-btn", "showcase-input", "anim-groups", "debug-input", "subtitles-input",
-      "hero-debug", "ask-form", "ask-input", "ask-btn",
+      "hero-debug", "ask-form", "ask-input", "ask-btn", "tune-mouth", "tune-camera",
+      "avatar-state", "avatar-edit-btn", "avatar-close-btn", "avatar-reset-btn",
       "restart-btn", "cache-progress", "cache-text", "cache-btn", "session-facts", "usage-facts", "log",
       "toasts", "confirm-dialog", "confirm-title", "confirm-text", "confirm-ok", "away-dialog",
       "away-title", "away-help", "away-text", "away-ok",
@@ -260,6 +280,9 @@
     }
     ui.modeButtons = Array.from(document.querySelectorAll("[data-set-mode]"));
     ui.gestureButtons = Array.from(document.querySelectorAll("[data-gesture]"));
+    ui.resetTuningButtons = Array.from(document.querySelectorAll("[data-reset-tuning]"));
+    ui.syncNotes = Array.from(document.querySelectorAll("[data-sync-note]"));
+    ui.tuningInputs = [];
   }
 
   // ------------------------------------------------------------ avisos flotantes
@@ -706,6 +729,9 @@
     renderHealth(status);
     renderNotes(status);
     renderAdvanced(status);
+    renderTuning(status);
+    renderAvatar();
+    renderSyncNotes(status);
     refreshControls();
     updateConnectionUi();
   }
@@ -718,7 +744,15 @@
     },
     logo: () => app.galleryState !== "ready" || Boolean(logoImageId()),
     voice: () => Boolean(ui.voiceSelect.value) && ui.voiceSelect.value !== (app.status && app.status.voice),
+    avatar_closed: () => !avatarInfo().editor_open,
+    avatar_open: () => Boolean(avatarInfo().editor_open),
+    avatar_custom: () => Boolean(avatarInfo().custom) && !avatarInfo().editor_open,
   };
+
+  function avatarInfo() {
+    const avatar = app.status && app.status.avatar;
+    return avatar && typeof avatar === "object" ? avatar : {};
+  }
 
   /**
    * Habilita o deshabilita cada control según las capacidades del motor, el
@@ -1777,6 +1811,158 @@
     return key;
   }
 
+  // ------------------------------------------------------------ Developer
+
+  /** Pinta los deslizadores de Developer a partir de TUNING_SPEC (una vez, al arrancar). */
+  function buildTuning() {
+    const lists = { mouth: ui.tuneMouth, camera: ui.tuneCamera };
+    for (const [group, specs] of Object.entries(TUNING_SPEC)) {
+      lists[group].replaceChildren(...specs.map((spec) => tuningControl(group, spec)));
+    }
+    ui.tuningInputs = Array.from(document.querySelectorAll("input[data-tune-group]"));
+  }
+
+  function tuningControl(group, spec) {
+    const id = `tune-${group}-${spec.key}`;
+    const input = el("input", {
+      type: "range",
+      id,
+      min: String(spec.min),
+      max: String(spec.max),
+      step: String(spec.step),
+      value: String(spec.def),
+      "data-cap": "tuning",
+      "data-tune-group": group,
+      "data-tune-key": spec.key,
+    });
+    input.spec = spec;
+    const label = el("label", { class: "control-label", text: spec.label });
+    label.htmlFor = id;
+    const output = el("output", { class: "control-value", id: `${id}-value`, text: formatTuning(spec, spec.def) });
+    output.setAttribute("for", id);
+    input.output = output;
+    return el(
+      "div",
+      { class: "control" },
+      el("div", { class: "control-head" }, label, output),
+      input,
+      el("div", { class: "scale" }, el("span", { text: spec.ends[0] }), el("span", { text: spec.ends[1] })),
+    );
+  }
+
+  function formatTuning(spec, value) {
+    let text;
+    if (spec.unit === "%") text = `${Math.round(value * 100)} %`;
+    else if (spec.unit === "cm") text = `${value > 0 ? "+" : ""}${Math.round(value * 100)} cm`;
+    else text = `${value > 0 ? "+" : ""}${formatNumber(value, 1)}°`;
+    return Math.abs(value - spec.def) < spec.step / 2 ? `${text} (normal)` : text;
+  }
+
+  function renderTuningLabel(input) {
+    setText(input.output, formatTuning(input.spec, Number(input.value)));
+  }
+
+  function renderTuning(status) {
+    const tuning = status.tuning && typeof status.tuning === "object" ? status.tuning : {};
+    for (const input of ui.tuningInputs) {
+      const group = tuning[input.dataset.tuneGroup];
+      const value = group && isNumber(group[input.dataset.tuneKey]) ? group[input.dataset.tuneKey] : null;
+      if (value !== null && !isLocked(input) && Number(input.value) !== value) input.value = String(value);
+      renderTuningLabel(input);
+    }
+  }
+
+  /** Mientras se arrastra, manda el valor como mucho cada TUNING_SEND_MS para verlo en directo. */
+  function queueTuning(input) {
+    if (input.sendTimer) return;
+    const wait = Math.max(0, TUNING_SEND_MS - (Date.now() - (input.sentAt || 0)));
+    input.sendTimer = setTimeout(() => sendTuning(input), wait);
+  }
+
+  /** Un envío a la vez por deslizador: así el último valor siempre llega el último. */
+  async function sendTuning(input) {
+    clearTimeout(input.sendTimer);
+    input.sendTimer = null;
+    if (input.inFlight) return;
+    const value = Number(input.value);
+    input.inFlight = true;
+    input.sentAt = Date.now();
+    lockControl(input);
+    try {
+      await sendAction("set_tuning", { [input.dataset.tuneGroup]: { [input.dataset.tuneKey]: value } }, { quiet: true });
+    } finally {
+      input.inFlight = false;
+      lockControl(input);
+    }
+    if (Number(input.value) !== value) sendTuning(input);
+  }
+
+  async function onResetTuning(button) {
+    const part = button.dataset.resetTuning;
+    const result = await sendAction("reset_tuning", { part }, { button });
+    if (!result.ok) return;
+    for (const input of ui.tuningInputs) {
+      if (input.dataset.tuneGroup !== part) continue;
+      input.lockUntil = 0;
+      input.value = String(input.spec.def);
+      renderTuningLabel(input);
+    }
+  }
+
+  function renderAvatar() {
+    const avatar = avatarInfo();
+    let text = avatar.custom ? "Personaje propio, guardado en la nube." : "Personaje de la app.";
+    if (avatar.editor_open) text = "Editando el personaje en la pantalla de Sonia…";
+    setText(ui.avatarState, text);
+    const state = avatar.editor_open ? "editing" : "idle";
+    if (ui.avatarState.dataset.state !== state) ui.avatarState.dataset.state = state;
+  }
+
+  async function onResetAvatar() {
+    const ok = await confirmAction({
+      title: "¿Volver al personaje de la app?",
+      text: "Sonia dejará el aspecto guardado en el editor, en todas las Sonias.",
+      confirmLabel: "Sí, volver",
+    });
+    if (ok) await sendAction("reset_avatar", {}, { button: ui.avatarResetBtn });
+  }
+
+  // ------------------------------------------------------------ ajustes en la nube
+
+  /** Frase sobre dónde quedan guardados los ajustes (`settings_sync` del estado). */
+  function syncNote(sync) {
+    if (!sync || typeof sync !== "object") return null;
+    const pending = Array.isArray(sync.pending) ? sync.pending.length : 0;
+    if (sync.cloud === "off") {
+      return {
+        state: "info",
+        text: "Esta Sonia no está conectada a la nube (le falta PANEL_CLOUD_TOKEN): los ajustes se guardan solo en su equipo.",
+      };
+    }
+    if (sync.cloud === "offline") {
+      const what = pending === 1 ? "1 ajuste guardado" : `${pending} ajustes guardados`;
+      return {
+        state: "warn",
+        text: pending
+          ? `Sin conexión con la nube: ${what} en el equipo de Sonia, se subirán al volver.`
+          : "Sin conexión con la nube: lo que cambies se guarda en el equipo de Sonia y se sube al volver.",
+      };
+    }
+    if (pending) return { state: "info", text: "Guardando en la nube…" };
+    if (!sync.synced) return { state: "info", text: "Conectando con la nube…" };
+    return { state: "ok", text: "Ajustes guardados en la nube: valen para todas las Sonias." };
+  }
+
+  function renderSyncNotes(status) {
+    const note = app.caps.has("cloud_settings") ? syncNote(status.settings_sync) : null;
+    for (const node of ui.syncNotes) {
+      setHidden(node, !note);
+      if (!note) continue;
+      setText(node, note.text);
+      if (node.dataset.state !== note.state) node.dataset.state = note.state;
+    }
+  }
+
   async function onVoiceChange() {
     const voice = ui.voiceSelect.value;
     if (!voice) return;
@@ -2115,6 +2301,22 @@
     for (const button of ui.gestureButtons) {
       button.addEventListener("click", () => sendAction("gesture", { category: button.dataset.gesture }, { button }));
     }
+    for (const input of ui.tuningInputs) {
+      trackDragging(input);
+      input.addEventListener("input", () => {
+        lockControl(input);
+        renderTuningLabel(input);
+        queueTuning(input);
+      });
+      input.addEventListener("change", () => {
+        lockControl(input);
+        sendTuning(input);
+      });
+    }
+    for (const button of ui.resetTuningButtons) button.addEventListener("click", () => onResetTuning(button));
+    ui.avatarEditBtn.addEventListener("click", () => sendAction("open_avatar_editor", {}, { button: ui.avatarEditBtn }));
+    ui.avatarCloseBtn.addEventListener("click", () => sendAction("close_avatar_editor", {}, { button: ui.avatarCloseBtn }));
+    ui.avatarResetBtn.addEventListener("click", onResetAvatar);
     ui.askForm.addEventListener("submit", onAskSubmit);
     ui.restartBtn.addEventListener("click", onRestart);
     ui.cacheBtn.addEventListener("click", () => sendAction("prepare_voices", {}, { button: ui.cacheBtn }));
@@ -2130,6 +2332,7 @@
 
   async function init() {
     collectElements();
+    buildTuning();
     bindEvents();
     renderVolumeLabel();
     renderGateControl();

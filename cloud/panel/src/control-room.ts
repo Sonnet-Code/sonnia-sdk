@@ -3,8 +3,12 @@
  * que conoce a todas las Sonias conectadas y a todos los navegadores del panel.
  *
  * - Cada Sonia (agente) mantiene un WebSocket saliente hacia `/agent`. Manda
- *   `hello`, `status`, `message`, `log` y `result`; recibe `action`, `viewers`
- *   y `sync` (ver `docs/panel.md`).
+ *   `hello`, `status`, `message`, `log`, `result` y `settings`; recibe
+ *   `action`, `viewers`, `sync` y `settings` (ver `docs/panel.md`).
+ * - Guarda los ajustes compartidos de todas las Sonias (letrero, avisos,
+ *   volumen, voz, Developer...): los cambia cualquier Sonia (desde el panel de
+ *   aquí o desde su panel local) y se reparten a las demás. El modo de cada una
+ *   no está ahí: con dos Sonias a la vez, cada una sigue en el suyo.
  * - Cada navegador abre `/api/events` y recibe `instances`, `history`,
  *   `status`, `message` y `log` de la Sonia que mira; puede mandar `select`.
  * - La API HTTP del navegador llega por RPC desde el Worker (`getInstances`,
@@ -47,6 +51,10 @@ const PERSIST_IDLE_MS = 60_000;
 const HISTORY_TYPES = new Set(["transcript", "show_image", "hide_image", "presence", "error"]);
 /** Prefijo de las claves de los resúmenes en el almacenamiento. */
 const KV_PREFIX = "instance:";
+/** Clave de los ajustes compartidos en el almacenamiento. */
+const SETTINGS_KEY = "settings";
+/** Tope de los ajustes compartidos en JSON (la definición del avatar cabe de sobra). */
+const MAX_SETTINGS_BYTES = 256 * 1024;
 /** Etiqueta de los WebSocket de navegadores. */
 const BROWSER_TAG = "browser";
 /** Etiqueta común de los WebSocket de agentes. */
@@ -109,6 +117,16 @@ interface StoredInstance {
   last_seen: number;
 }
 
+/** Ajustes compartidos por todas las Sonias (sobreviven a la hibernación). */
+interface StoredSettings {
+  values: Json;
+  /** Sube con cada cambio. */
+  rev: number;
+  updated_at: number;
+  /** Id de la Sonia que hizo el último cambio. */
+  updated_by: string;
+}
+
 /** Lo que solo vive en memoria (se pierde al hibernar). */
 interface LiveState {
   status: Json | null;
@@ -128,6 +146,11 @@ interface AgentAttachment {
   lastSeen: number;
   /** Último `viewers` mandado (-1: ninguno todavía). */
   viewersSent: number;
+  /**
+   * Número del último cambio de ajustes de esta Sonia que ya está guardado
+   * (`ack` de `settings`). Falta en conexiones anteriores a los ajustes.
+   */
+  settingsSeq?: number;
 }
 
 interface BrowserAttachment {
@@ -210,6 +233,8 @@ export class ControlRoom extends DurableObject<Env> {
   private readonly pending = new Map<string, PendingAction>();
   /** Última lista de instancias repartida a los navegadores (para no repetirla). */
   private lastInstancesSignature = "";
+  /** Ajustes compartidos (null hasta que la primera Sonia los siembra). */
+  private settings: StoredSettings | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -218,6 +243,10 @@ export class ControlRoom extends DurableObject<Env> {
       if (!isObject(value) || typeof value.id !== "string") continue;
       this.known.set(value.id, value);
       this.persisted.set(value.id, { at: now, signature: persistSignature(value) });
+    }
+    const settings = ctx.storage.kv.get<StoredSettings>(SETTINGS_KEY);
+    if (isObject(settings) && isObject(settings.values) && typeof settings.rev === "number") {
+      this.settings = settings;
     }
     // Latido opcional sin despertar al objeto: `{"type":"ping"}` → `{"type":"pong"}`.
     ctx.setWebSocketAutoResponse(
@@ -267,6 +296,7 @@ export class ControlRoom extends DurableObject<Env> {
       connectedAt: now,
       lastSeen: now,
       viewersSent: -1,
+      settingsSeq: 0,
     };
     server.serializeAttachment(attachment);
 
@@ -366,6 +396,10 @@ export class ControlRoom extends DurableObject<Env> {
     switch (message.type) {
       case "hello":
         this.onHello(id, record, live, message);
+        this.onHelloSettings(ws, attachment, message);
+        break;
+      case "settings":
+        this.onSettingsChanges(ws, attachment, message);
         break;
       case "status":
         if (isObject(message.status)) this.onStatus(id, record, live, message.status);
@@ -574,6 +608,81 @@ export class ControlRoom extends DurableObject<Env> {
   private failPending(id: string, status: number, message: string): void {
     for (const pending of [...this.pending.values()]) {
       if (pending.instance === id) pending.finish({ status, body: { ok: false, message } });
+    }
+  }
+
+  // ================================================================ ajustes compartidos
+
+  /**
+   * `settings` del `hello`: `values` (todos los ajustes de esa Sonia),
+   * `pending` (los que cambió sin conexión) y `seq` (su último cambio). Si la
+   * nube aún no tiene ajustes, esa Sonia los siembra; si no, solo mandan sus
+   * pendientes. Siempre se le contesta con los ajustes de la nube.
+   */
+  private onHelloSettings(ws: WebSocket, attachment: AgentAttachment, message: Json): void {
+    const incoming = message.settings;
+    if (!isObject(incoming)) return; // Sonia anterior a los ajustes en la nube
+    const values = isObject(incoming.values) ? incoming.values : {};
+    const pending = Array.isArray(incoming.pending)
+      ? incoming.pending.filter((key): key is string => typeof key === "string")
+      : [];
+    const changed = this.mergeSettings(values, this.settings ? pending : Object.keys(values), attachment.id);
+    this.ackSettings(ws, attachment, incoming.seq);
+    this.sendSettings(ws, attachment);
+    if (changed) this.broadcastSettings(ws);
+  }
+
+  /** `settings` de una Sonia: `changes` (ajustes cambiados en ella) y `seq`. */
+  private onSettingsChanges(ws: WebSocket, attachment: AgentAttachment, message: Json): void {
+    const changes = isObject(message.changes) ? message.changes : {};
+    const changed = this.mergeSettings(changes, Object.keys(changes), attachment.id);
+    this.ackSettings(ws, attachment, message.seq);
+    this.sendSettings(ws, attachment);
+    if (changed) this.broadcastSettings(ws);
+  }
+
+  private ackSettings(ws: WebSocket, attachment: AgentAttachment, seq: unknown): void {
+    if (typeof seq !== "number" || !Number.isInteger(seq) || seq < 0) return;
+    attachment.settingsSeq = Math.max(attachment.settingsSeq ?? 0, seq);
+    ws.serializeAttachment(attachment);
+  }
+
+  /** Mezcla `keys` de `values` en los ajustes y los guarda si cambió algo. */
+  private mergeSettings(values: Json, keys: string[], from: string): boolean {
+    const current = this.settings;
+    const next: Json = current ? { ...current.values } : {};
+    let changed = current === null && keys.length > 0;
+    for (const key of keys) {
+      if (!(key in values)) continue;
+      if (JSON.stringify(next[key]) === JSON.stringify(values[key])) continue;
+      next[key] = values[key];
+      changed = true;
+    }
+    if (!changed || JSON.stringify(next).length > MAX_SETTINGS_BYTES) return false;
+    this.settings = { values: next, rev: (current?.rev ?? 0) + 1, updated_at: Date.now(), updated_by: from };
+    this.ctx.storage.kv.put(SETTINGS_KEY, this.settings);
+    return true;
+  }
+
+  /** Los ajustes de la nube a una Sonia, con el último cambio suyo que ya incluyen. */
+  private sendSettings(ws: WebSocket, attachment: AgentAttachment): void {
+    if (!this.settings) return;
+    this.send(
+      ws,
+      JSON.stringify({
+        type: "settings",
+        settings: this.settings.values,
+        rev: this.settings.rev,
+        ack: attachment.settingsSeq ?? 0,
+      }),
+    );
+  }
+
+  /** Ajustes nuevos a las demás Sonias conectadas. */
+  private broadcastSettings(origin: WebSocket): void {
+    for (const ws of this.ctx.getWebSockets(AGENT_TAG)) {
+      if (ws === origin || ws.readyState !== WS_OPEN) continue;
+      this.sendSettings(ws, ws.deserializeAttachment() as AgentAttachment);
     }
   }
 

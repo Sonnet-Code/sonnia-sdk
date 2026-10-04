@@ -160,6 +160,35 @@ Modo debug del panel. Fijo: se repite tras `hello`. Activo, el coreógrafo se qu
 {"type": "set_debug", "enabled": true}
 ```
 
+### `set_tuning`
+
+Ajustes de la sección «Developer» del panel. Fijo: se repite tras `hello` y cada vez que cambian (también desde otra Sonia, porque se guardan en la nube). Siempre llegan completos.
+
+```json
+{"type": "set_tuning",
+ "mouth": {"open": 1.2, "jaw": 1.0, "closure": 1.0, "speed": 1.0},
+ "camera": {"height": 0.05, "distance": 0.1, "side": 0.0, "zoom": 1.1, "tilt": 2.0}}
+```
+
+- `mouth` multiplica lo que trae la escena en `LipSyncController` (1 = tal cual): `open` la apertura de vocales y mandíbula, `jaw` la mandíbula extra de las sílabas fuertes (`jawBoost`), `closure` el cierre de labios en p, b y m (`closureWeight`) y `speed` la rapidez de la boca (`mouthSpeed` y `closureSpeed`).
+- `camera` mueve el plano base de `CameraFramingController`: `height`, `distance` (positivo se aleja) y `side` (positivo, a la derecha de la pantalla) en metros; `zoom` divide la tangente del campo de visión (más de 1 acerca) y `tilt` inclina en grados (positivo mira más abajo). El plano de panel se mueve con el base; los de cuerpo entero (bailes y modo Fuera) no.
+
+### `set_avatar`
+
+Aspecto de Sonia. Fijo: se repite tras `hello` y cada vez que cambia (se guarda en la nube y vale para todas las Sonias). `definition` es la definición del avatar de Genies en texto JSON (la que guarda el editor de personaje) o `null` para el personaje que trae la app (`Assets/Sonia/Avatar/SoniaGeniesAvatar.json`). Si no es el que ya tiene puesto, Unity carga el nuevo con el SDK y lo engancha.
+
+```json
+{"type": "set_avatar", "definition": "{\"JsonVersion\": \"2-0-0\", \"equippedAssetIds\": [...], ...}"}
+```
+
+### `open_avatar_editor` y `close_avatar_editor`
+
+Botones de «Developer» en el panel. `open_avatar_editor` pasa la pantalla de Sonia a la escena de editar personaje y `close_avatar_editor` sale de ella sin guardar. Unity contesta con `avatar_editor`.
+
+```json
+{"type": "open_avatar_editor"}
+```
+
 ### `error`
 
 ```json
@@ -235,6 +264,22 @@ Qué clip de una sola vez suena ahora en el avatar (capa de cuerpo, luego torso 
 
 ```json
 {"type": "animation_playing", "clip": "Dance_Jazz"}
+```
+
+### `avatar_editor`
+
+La escena de editar personaje se abrió (`open: true`) o se cerró (`open: false`, se guardara o no). Mientras está abierta el orquestador no abre GPT-Live; al cerrarse, Sonia vuelve a su modo.
+
+```json
+{"type": "avatar_editor", "open": true}
+```
+
+### `avatar_saved`
+
+Se pulsó Guardar en el editor de personaje. `definition` es la definición del avatar de Genies en texto JSON (un objeto, hasta 64 KB). El orquestador la guarda en la nube como ajuste compartido y la reparte con `set_avatar`.
+
+```json
+{"type": "avatar_saved", "definition": "{\"JsonVersion\": \"2-0-0\", ...}"}
 ```
 
 ### `request_frame` (orquestador → Unity)

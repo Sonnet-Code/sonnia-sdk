@@ -20,6 +20,7 @@ import pytest
 import sonia.panel.cloud as cloud_module
 from sonia.config import PanelSettings
 from sonia.panel.cloud import CloudLink
+from sonia.panel.control import PanelState
 from sonia.panel.events import PanelEvents
 from sonia.panel.identity import load_identity
 from sonia.panel.logs import LogBuffer
@@ -186,6 +187,101 @@ async def test_sin_token_no_se_conecta(tmp_path: Path) -> None:
     async with linked(tmp_path, room, cloud_token="") as (_, link):
         await asyncio.sleep(0.2)
         assert not link.enabled and room.connections == 0
+
+
+async def test_los_ajustes_cambiados_suben_a_la_nube_y_se_confirman(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cloud_module, "SETTINGS_DEBOUNCE_S", 0.05)
+    room = FakeRoom()
+    async with linked(tmp_path, room) as (rig, _):
+        await room.wait_for(lambda: bool(room.of_type("hello")))
+        hello = room.of_type("hello")[0]["settings"]
+        assert hello["pending"] == [] and hello["seq"] == 0
+        assert hello["values"]["volume"] == 1.0
+        assert hello["values"]["tuning"]["mouth"]["open"] == 1.0
+        assert "mode" not in hello["values"] and "debug" not in hello["values"]
+        await room.send({"type": "settings", "settings": hello["values"], "rev": 1, "ack": 0})
+        await wait_until(lambda: rig.control.status()["settings_sync"]["synced"])
+        # Da igual que el cambio venga del panel local o del de Cloudflare: sube.
+        await rig.control.act("set_volume", {"value": 0.6})
+        await rig.control.act("set_tuning", {"mouth": {"open": 1.3}})
+        await room.wait_for(lambda: any("tuning" in m["changes"] for m in room.of_type("settings")))
+        up = room.of_type("settings")[-1]
+        assert up["changes"]["volume"] == 0.6
+        assert up["changes"]["tuning"]["mouth"]["open"] == 1.3
+        assert up["seq"] == 2
+        sync = rig.control.status()["settings_sync"]
+        assert sync["cloud"] == "online" and sync["pending"] == ["tuning", "volume"]
+        values = {**hello["values"], **up["changes"]}
+        await room.send({"type": "settings", "settings": values, "rev": 2, "ack": 2})
+        await wait_until(lambda: rig.control.status()["settings_sync"]["pending"] == [])
+        assert rig.control.status()["settings_sync"]["rev"] == 2
+    assert PanelState.load(tmp_path / "cache" / "panel_state.json").pending_settings == []
+
+
+async def test_los_ajustes_de_la_nube_se_aplican_sin_pisar_lo_cambiado_aqui(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cloud_module, "SETTINGS_DEBOUNCE_S", 30.0)  # que no suba aún
+    room = FakeRoom()
+    async with linked(tmp_path, room) as (rig, _):
+        await room.wait_for(lambda: bool(room.of_type("hello")))
+        values = room.of_type("hello")[0]["settings"]["values"]
+        # Cambiado aquí y todavía en camino hacia la nube (cambio número 1).
+        await rig.control.act("set_subtitles", {"enabled": False})
+        cloud = {
+            **values,
+            "volume": 0.4,
+            "subtitles": True,
+            "notes": "La charla de IA es en la sala B.",
+            "tuning": {"camera": {"zoom": 1.5}},
+            "desconocido": 1,
+        }
+        await room.send({"type": "settings", "settings": cloud, "rev": 7, "ack": 0})
+        await wait_until(lambda: rig.control.status()["volume"] == 0.4)
+        status = rig.control.status()
+        assert status["subtitles"] is False  # lo de aquí es más nuevo
+        assert status["notes"] == "La charla de IA es en la sala B."
+        assert status["tuning"]["camera"]["zoom"] == 1.5
+        assert status["tuning"]["mouth"]["open"] == 1.0
+        assert status["settings_sync"]["pending"] == ["subtitles"]
+        assert status["settings_sync"]["rev"] == 7
+        await rig.rec.wait_for(
+            lambda msgs: any(m.get("value") == 0.4 for m in rig.rec.of_type("set_volume", msgs))
+        )
+        await rig.rec.wait_for(
+            lambda msgs: any(
+                m["camera"]["zoom"] == 1.5 for m in rig.rec.of_type("set_tuning", msgs)
+            )
+        )
+        # Un ajuste mal formado de la nube no rompe nada ni se aplica.
+        await room.send({"type": "settings", "settings": {"volume": "alto"}, "rev": 8, "ack": 0})
+        await wait_until(lambda: rig.control.status()["settings_sync"]["rev"] == 8)
+        assert rig.control.status()["volume"] == 0.4
+
+
+async def test_lo_cambiado_sin_conexion_sube_al_volver(tmp_path: Path) -> None:
+    from tests.test_panel import make_panel_rig as rig_without_cloud
+
+    # Sin nube: el cambio se guarda en el equipo como pendiente.
+    async with rig_without_cloud(tmp_path) as rig:
+        await rig.control.act("set_away_message", {"text": "Vuelvo en 5 minutos"})
+        assert rig.control.status()["settings_sync"]["cloud"] == "off"
+    saved = PanelState.load(tmp_path / "cache" / "panel_state.json")
+    assert saved.pending_settings == ["away_message"]
+    # Al conectar, el hello lo lleva como pendiente para que mande sobre la nube.
+    room = FakeRoom()
+    async with linked(tmp_path, room) as (rig, _):
+        await room.wait_for(lambda: bool(room.of_type("hello")))
+        settings = room.of_type("hello")[0]["settings"]
+        assert settings["pending"] == ["away_message"] and settings["seq"] == 1
+        assert settings["values"]["away_message"] == "Vuelvo en 5 minutos"
+        values = {**settings["values"], "volume": 0.8}
+        await room.send({"type": "settings", "settings": values, "rev": 3, "ack": 1})
+        await wait_until(lambda: rig.control.status()["settings_sync"]["pending"] == [])
+        assert rig.control.status()["away_message"] == "Vuelvo en 5 minutos"
+        assert rig.control.status()["volume"] == 0.8
 
 
 def test_la_identidad_es_estable_y_cambia_si_cambia_el_equipo(tmp_path: Path) -> None:

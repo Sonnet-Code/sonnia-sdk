@@ -1131,6 +1131,53 @@ input[type="range"]:disabled {
   font-size: 16px;
 }
 
+/* ---------- Ajustes en la nube y Developer ---------- */
+
+.sync-note {
+  margin: 0 16px 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--na-bg);
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
+.sync-note[data-state="ok"] {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.sync-note[data-state="warn"] {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.developer .dev-cap-note {
+  margin: 0 16px 16px;
+}
+
+.tune-list .control + .control {
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
+.tune-list .control-label {
+  font-size: 16px;
+}
+
+.tune-reset {
+  margin-top: 14px;
+}
+
+.avatar-state {
+  margin: 0 0 12px;
+  font-weight: 700;
+}
+
+.avatar-state[data-state="editing"] {
+  color: var(--warn);
+}
+
 /* Animaciones: un grupo por familia, botones que se reparten el ancho */
 .anim-groups {
   display: grid;

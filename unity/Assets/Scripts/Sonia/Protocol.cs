@@ -36,6 +36,10 @@ namespace Sonia
         public const string SetSubtitles = "set_subtitles";
         public const string SetDisabledAnimations = "set_disabled_animations";
         public const string SetDebug = "set_debug";
+        public const string SetTuning = "set_tuning";
+        public const string SetAvatar = "set_avatar";
+        public const string OpenAvatarEditor = "open_avatar_editor";
+        public const string CloseAvatarEditor = "close_avatar_editor";
 
         // De Unity hacia el orquestador.
         public const string ClientHello = "client_hello";
@@ -45,6 +49,8 @@ namespace Sonia
         public const string CameraFrame = "camera_frame";
         public const string Animations = "animations";
         public const string AnimationPlaying = "animation_playing";
+        public const string AvatarEditor = "avatar_editor";
+        public const string AvatarSaved = "avatar_saved";
     }
 
     /// <summary>Valores posibles del campo <c>state</c> del mensaje <c>state</c>.</summary>
@@ -174,6 +180,78 @@ namespace Sonia
     public class SetDebugMessage
     {
         [JsonProperty("enabled")] public bool Enabled;
+    }
+
+    /// <summary>
+    /// Ajustes de la sección «Developer» del panel (mensaje fijo; se guardan en
+    /// la nube y valen para todas las Sonias): la boca en multiplicadores de lo
+    /// que trae la escena y la cámara sobre su plano base.
+    /// </summary>
+    [Serializable]
+    public class SetTuningMessage
+    {
+        [JsonProperty("mouth")] public MouthTuning Mouth = new MouthTuning();
+        [JsonProperty("camera")] public CameraTuning Camera = new CameraTuning();
+    }
+
+    /// <summary>
+    /// Aspecto de Sonia (mensaje fijo; se guarda en la nube y vale para todas
+    /// las Sonias): definición del avatar de Genies en texto JSON, o null para
+    /// el personaje que trae la app.
+    /// </summary>
+    [Serializable]
+    public class SetAvatarMessage
+    {
+        [JsonProperty("definition")] public string Definition;
+    }
+
+    /// <summary>El panel pide pasar a la escena de editar personaje.</summary>
+    [Serializable]
+    public class OpenAvatarEditorMessage
+    {
+    }
+
+    /// <summary>El panel pide salir del editor de personaje sin guardar.</summary>
+    [Serializable]
+    public class CloseAvatarEditorMessage
+    {
+    }
+
+    /// <summary>Boca de «Developer»: multiplicadores de LipSyncController (1 = tal cual).</summary>
+    [Serializable]
+    public class MouthTuning
+    {
+        /// <summary>Apertura de vocales y mandíbula.</summary>
+        [JsonProperty("open")] public float Open = 1f;
+
+        /// <summary>Mandíbula extra en las sílabas fuertes (jawBoost).</summary>
+        [JsonProperty("jaw")] public float Jaw = 1f;
+
+        /// <summary>Cierre de labios en p, b y m (closureWeight).</summary>
+        [JsonProperty("closure")] public float Closure = 1f;
+
+        /// <summary>Rapidez de la boca (mouthSpeed y closureSpeed).</summary>
+        [JsonProperty("speed")] public float Speed = 1f;
+    }
+
+    /// <summary>Cámara de «Developer»: desplazamientos sobre el plano base, zoom e inclinación.</summary>
+    [Serializable]
+    public class CameraTuning
+    {
+        /// <summary>Metros hacia arriba.</summary>
+        [JsonProperty("height")] public float Height;
+
+        /// <summary>Metros alejándose de Sonia (negativo, más cerca).</summary>
+        [JsonProperty("distance")] public float Distance;
+
+        /// <summary>Metros hacia la derecha de la pantalla.</summary>
+        [JsonProperty("side")] public float Side;
+
+        /// <summary>Más de 1 acerca (campo de visión más estrecho).</summary>
+        [JsonProperty("zoom")] public float Zoom = 1f;
+
+        /// <summary>Grados; positivo mira más abajo.</summary>
+        [JsonProperty("tilt")] public float Tilt;
     }
 
     /// <summary>
@@ -510,6 +588,28 @@ namespace Sonia
             {
                 ["type"] = MessageTypes.AnimationPlaying,
                 ["clip"] = string.IsNullOrEmpty(clip) ? JValue.CreateNull() : new JValue(clip)
+            };
+            return message.ToString(Formatting.None);
+        }
+
+        /// <summary>La escena de editar personaje se abrió o se cerró.</summary>
+        public static string AvatarEditorMessage(bool open)
+        {
+            JObject message = new JObject
+            {
+                ["type"] = MessageTypes.AvatarEditor,
+                ["open"] = open
+            };
+            return message.ToString(Formatting.None);
+        }
+
+        /// <summary>Se guardó un personaje en el editor: su definición de Genies en texto JSON.</summary>
+        public static string AvatarSavedMessage(string definition)
+        {
+            JObject message = new JObject
+            {
+                ["type"] = MessageTypes.AvatarSaved,
+                ["definition"] = definition ?? string.Empty
             };
             return message.ToString(Formatting.None);
         }
