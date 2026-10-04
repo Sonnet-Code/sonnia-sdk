@@ -17,7 +17,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
 namespace Sonia
@@ -73,14 +75,32 @@ namespace Sonia
         [Tooltip("Conexión con el orquestador. Si está vacío se busca en este objeto.")]
         private SoniaClient client;
 
+        [SerializeField]
+        [Tooltip("Sin tocar ratón ni teclado durante estos segundos, el editor se cierra sin guardar y vuelve Sonia. 0: nunca.")]
+        private float idleCloseSeconds = 300f;
+
+        [NonSerialized]
         private readonly List<GameObject> _hiddenRoots = new List<GameObject>();
+
+        [NonSerialized]
         private readonly List<Renderer> _hiddenRenderers = new List<Renderer>();
+
+        [NonSerialized]
         private readonly List<Canvas> _hiddenCanvases = new List<Canvas>();
+
+        [NonSerialized]
         private bool _busy;
+
+        [NonSerialized]
         private Scene _editorScene;
 
         // Definición guardada que el orquestador aún no ha confirmado con set_avatar.
+        [NonSerialized]
         private string _pendingDefinition;
+
+        // Última vez que alguien tocó el ratón o el teclado con el editor abierto.
+        [NonSerialized]
+        private float _lastInputTime;
 
         private void Awake()
         {
@@ -167,6 +187,7 @@ namespace Sonia
             }
 
             AvatarEditorSession.IsOpen = true;
+            _lastInputTime = Time.realtimeSinceStartup;
             _busy = false;
             Debug.Log("[Sonia] Editor de personaje abierto.", this);
             if (client != null)
@@ -198,10 +219,78 @@ namespace Sonia
             }
         }
 
+        private void Update()
+        {
+            if (!AvatarEditorSession.IsOpen || _busy)
+            {
+                return;
+            }
+
+            if (AnyInput())
+            {
+                _lastInputTime = Time.realtimeSinceStartup;
+            }
+            else if (idleCloseSeconds > 0f && Time.realtimeSinceStartup - _lastInputTime > idleCloseSeconds)
+            {
+                // Que el stand no se quede sin Sonia si alguien deja el editor abierto.
+                Debug.Log("[Sonia] Editor de personaje sin usar " + idleCloseSeconds.ToString("F0") + " s: se cierra sin guardar.", this);
+                Close();
+            }
+        }
+
+        private static bool AnyInput()
+        {
+            Mouse mouse = Mouse.current;
+            if (mouse != null && (mouse.delta.ReadValue().sqrMagnitude > 0f || mouse.leftButton.isPressed
+                                  || mouse.rightButton.isPressed || mouse.scroll.ReadValue().sqrMagnitude > 0f))
+            {
+                return true;
+            }
+
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard != null && keyboard.anyKey.isPressed)
+            {
+                return true;
+            }
+
+            Touchscreen touch = Touchscreen.current;
+            return touch != null && touch.primaryTouch.press.isPressed;
+        }
+
+        /// <summary>¿Es una definición de Genies con piezas? Una vacía dejaría sin cuerpo ni ropa a todas las Sonias.</summary>
+        private static bool IsValidDefinition(string definition)
+        {
+            try
+            {
+                JObject parsed = JObject.Parse(definition);
+                JArray pieces = parsed["equippedAssetIds"] as JArray;
+                return parsed["JsonVersion"] != null && pieces != null && pieces.Count > 0;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         private void HandleSave(string definition)
         {
             if (string.IsNullOrEmpty(definition))
             {
+                return;
+            }
+
+            if (!IsValidDefinition(definition))
+            {
+                Debug.LogWarning("[Sonia] El editor devolvió una definición sin piezas: no se guarda.", this);
+                return;
+            }
+
+            string current = AvatarEditorSession.CurrentDefinition;
+            if (!string.IsNullOrEmpty(current)
+                && GeniesAvatarSnapshot.HashDefinition(current) == GeniesAvatarSnapshot.HashDefinition(definition))
+            {
+                Debug.Log("[Sonia] Personaje sin cambios: no se guarda nada.", this);
+                Close();
                 return;
             }
 
@@ -218,7 +307,7 @@ namespace Sonia
         private void HandleSetAvatar(SetAvatarMessage message)
         {
             // El orquestador ya tiene la definición guardada: no hace falta repetirla.
-            if (message != null && _pendingDefinition != null && message.Definition == _pendingDefinition)
+            if (message != null && !string.IsNullOrEmpty(_pendingDefinition) && message.Definition == _pendingDefinition)
             {
                 _pendingDefinition = null;
             }
@@ -226,7 +315,7 @@ namespace Sonia
 
         private void HandleConnected()
         {
-            if (_pendingDefinition != null && client != null)
+            if (!string.IsNullOrEmpty(_pendingDefinition) && client != null)
             {
                 client.SendAvatarSaved(_pendingDefinition);
             }
