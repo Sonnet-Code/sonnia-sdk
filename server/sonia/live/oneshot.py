@@ -22,14 +22,21 @@ __all__ = ["ProbeResult", "probe_session", "speak_text"]
 
 #: Instrucciones de la sesión de lectura de ``sonia say``.
 SAY_INSTRUCTIONS = (
-    "Eres una voz de lectura en español. Cuando se te indique un texto, dilo en voz alta "
-    "exactamente como está escrito, sin añadir ni quitar nada, y después quédate en silencio."
+    "Eres una voz de lectura en español. Cada texto que te llegue para decir en voz alta, "
+    "dilo exactamente como está escrito, sin añadir, quitar ni comentar nada, y después "
+    "quédate en silencio. No saludes ni hables por tu cuenta."
 )
 
-SAY_REQUEST = "Di en voz alta exactamente este texto, sin añadir nada: «{text}»"
+SAY_REQUEST = "{text}"
 
 #: Silencio tras la última voz con el que se da la lectura por terminada.
 SAY_END_GAP_S = 1.5
+
+#: Nivel RMS (0..1) a partir del cual un trozo es voz (GPT-Live manda silencio digital, 0).
+VOICE_RMS = 0.003
+
+#: Silencio que se deja al final de la grabación para que no suene cortada.
+_TAIL_S = 0.15
 
 #: Bloques de silencio que mantienen viva la línea de tiempo de la sesión.
 _SILENCE_BLOCK_MS = 40
@@ -82,52 +89,81 @@ async def speak_text(
     connect: WsConnect | None = None,
     timeout_s: float = 30.0,
 ) -> bytes:
-    """Hace que GPT-Live lea ``text`` y devuelve el PCM s16le mono de su voz."""
+    """Hace que GPT-Live lea ``text`` y devuelve el PCM s16le mono de su voz.
+
+    GPT-Live manda audio sin parar (también silencio), así que la lectura
+    empieza con el primer trozo con voz y termina tras ``SAY_END_GAP_S`` sin
+    voz. El silencio de antes y de después se recorta.
+    """
     client = LiveClient(settings, connect=connect)
     await client.start(_session(settings, SAY_INSTRUCTIONS))
-    pcm = bytearray()
+    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
     async def feed_silence() -> None:
         with contextlib.suppress(Exception):
             async for block in silence_blocks(settings.sample_rate, _SILENCE_BLOCK_MS):
                 await client.append_audio(bytes(len(block) * 2))
 
-    feeder = asyncio.create_task(feed_silence(), name="sonia-say-silence")
-    events = client.events()
+    async def read() -> None:
+        # Un lector aparte: cancelar una espera nunca cierra el flujo de eventos.
+        with contextlib.suppress(Exception):
+            async for event in client.events():
+                await queue.put(event)
+        await queue.put(None)
+
+    tasks = [
+        asyncio.create_task(feed_silence(), name="sonia-say-silence"),
+        asyncio.create_task(read(), name="sonia-say-read"),
+    ]
+    chunks: list[bytes] = []
+    last_voice_index = -1
     try:
-        await client.append_instructions(SAY_REQUEST.format(text=text))
+        # ``commentary`` es lo que la hace hablar (``instructions`` no).
+        await client.append_commentary(SAY_REQUEST.format(text=text))
         deadline = time.monotonic() + timeout_s
-        last_audio: float | None = None
+        last_voice: float | None = None
         while True:
             now = time.monotonic()
-            if now >= deadline:
+            if now >= deadline or (last_voice is not None and now - last_voice >= SAY_END_GAP_S):
                 break
-            wait = deadline - now
-            if last_audio is not None:
-                wait = min(wait, last_audio + SAY_END_GAP_S - now)
-                if wait <= 0:
-                    break
             try:
-                event = await asyncio.wait_for(anext(events), timeout=wait)
+                event = await asyncio.wait_for(queue.get(), timeout=0.2)
             except TimeoutError:
                 continue
-            except StopAsyncIteration:
+            if event is None:
                 break
             kind = event.get("type")
             if kind == "session.output_audio.delta":
                 data = event.get("delta")
-                if isinstance(data, str) and data:
-                    with contextlib.suppress(binascii.Error, ValueError):
-                        pcm += base64.b64decode(data)
-                        last_audio = time.monotonic()
+                if not isinstance(data, str) or not data:
+                    continue
+                with contextlib.suppress(binascii.Error, ValueError):
+                    pcm = base64.b64decode(data)
+                    if len(pcm) % 2:
+                        pcm = pcm[:-1]
+                    if _rms(pcm) >= VOICE_RMS:
+                        if last_voice is None:
+                            chunks.clear()  # fuera el silencio de antes
+                        last_voice = time.monotonic()
+                        chunks.append(pcm)
+                        last_voice_index = len(chunks) - 1
+                    elif last_voice is not None:
+                        chunks.append(pcm)
             elif kind == "error":
                 raise LiveError(describe_error(event))
     finally:
-        feeder.cancel()
-        await asyncio.gather(feeder, return_exceptions=True)
-        with contextlib.suppress(Exception):
-            await events.aclose()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         await client.close()
-    if len(pcm) % 2:
-        del pcm[-1]
-    return bytes(pcm)
+    # Fuera el silencio de después, salvo una cola corta para que no suene cortado.
+    kept = chunks[: last_voice_index + 1] if last_voice_index >= 0 else []
+    tail = b"".join(chunks[last_voice_index + 1 :])[: int(settings.sample_rate * _TAIL_S) * 2]
+    return b"".join(kept) + tail
+
+
+def _rms(pcm: bytes) -> float:
+    import numpy as np
+
+    samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
+    return float(np.sqrt(np.mean(samples * samples))) if len(samples) else 0.0

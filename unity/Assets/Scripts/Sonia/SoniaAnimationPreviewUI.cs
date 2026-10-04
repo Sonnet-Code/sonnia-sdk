@@ -44,6 +44,11 @@ namespace Sonia
 
         private void Update()
         {
+            if (!SoniaDevMode.Enabled)
+            {
+                return;
+            }
+
             if (_toggleCanvas == null)
             {
                 DestroyStale("SoniaAnimToggle");

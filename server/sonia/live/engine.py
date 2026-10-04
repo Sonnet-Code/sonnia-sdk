@@ -31,6 +31,7 @@ import binascii
 import contextlib
 import json
 import logging
+import re
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
@@ -119,6 +120,11 @@ NOTES_TEMPLATE = (
 )
 NOTES_CLEARED_TEXT = "El equipo del stand ha retirado los avisos de hoy: ya no aplican."
 
+#: Nivel RMS (0..1) a partir del cual un trozo de la voz de GPT-Live es voz.
+#: GPT-Live manda audio sin parar, también cuando calla (silencio digital, 0):
+#: las frases hacia Unity se cortan por nivel, no por huecos en el envío.
+OUTPUT_VOICE_RMS = 0.003
+
 #: Decaimiento por bloque del medidor de nivel del micrófono.
 MIC_LEVEL_DECAY = 0.85
 
@@ -145,6 +151,9 @@ class _Segment:
     ambient: bool
     parts: list[str] = field(default_factory=list)
     seconds: float = 0.0
+    #: Silencio recibido tras la última voz: se manda solo si vuelve la voz
+    #: (pausa dentro de la frase); si la frase termina, se tira.
+    held_silence: list[bytes] = field(default_factory=list)
 
     @property
     def text(self) -> str:
@@ -218,6 +227,7 @@ class LiveEngine:
         self._segment: _Segment | None = None
         self._pending_assistant: list[str] = []
         self._last_audio_at = 0.0
+        self._last_voice_at = 0.0
         self._playback_end_at = 0.0
         self._last_closed_uid = 0
         self._last_closed_deadline = 0.0
@@ -360,7 +370,8 @@ class LiveEngine:
             await self._hub.broadcast_json(p.msg_error("GPT-Live no está conectado"))
             return
         try:
-            await client.append_instructions(TEXT_INPUT_TEMPLATE.format(text=text))
+            # ``instructions.append`` no la hace hablar; ``commentary`` sí.
+            await client.append_commentary(TEXT_INPUT_TEMPLATE.format(text=text))
         except Exception as exc:  # noqa: BLE001
             _log_stage_failure("No se pudo pasar el texto a GPT-Live: %s", exc)
             return
@@ -563,13 +574,25 @@ class LiveEngine:
             return
         now = time.monotonic()
         self._last_audio_at = now
+        voiced = _pcm16_rms(pcm) >= OUTPUT_VOICE_RMS
+        if voiced:
+            self._last_voice_at = now
         if self._discard_audio:
             return
-        segment = self._segment or await self._open_segment(now)
-        seconds = len(pcm) / 2 / self._rate
-        segment.seconds += seconds
-        self._playback_end_at = max(self._playback_end_at, now) + seconds
-        await self._hub.send_audio(segment.uid, AudioChunk(pcm=pcm, sample_rate=self._rate))
+        segment = self._segment
+        if segment is None:
+            if not voiced:
+                return  # GPT-Live calla: nada que mandar a Unity
+            segment = await self._open_segment(now)
+        if not voiced:
+            segment.held_silence.append(pcm)
+            return
+        for chunk in [*segment.held_silence, pcm]:
+            seconds = len(chunk) / 2 / self._rate
+            segment.seconds += seconds
+            self._playback_end_at = max(self._playback_end_at, now) + seconds
+            await self._hub.send_audio(segment.uid, AudioChunk(pcm=chunk, sample_rate=self._rate))
+        segment.held_silence.clear()
         lead = self._playback_end_at - now
         if lead > LEAD_WARN_S and not self._lead_warned:
             self._lead_warned = True
@@ -655,7 +678,7 @@ class LiveEngine:
 
     @property
     def _user_text(self) -> str:
-        return " ".join("".join(self._user_parts).split())
+        return clean_transcript("".join(self._user_parts))
 
     async def _finish_user_turn(self, now: float) -> None:
         self._user_turn_open = False
@@ -934,9 +957,9 @@ class LiveEngine:
 
     async def _tick_once(self, now: float) -> None:
         gap = self._live.segment_gap_ms / 1000.0
-        if self._segment is not None and now - self._last_audio_at >= gap:
+        if self._segment is not None and now - self._last_voice_at >= gap:
             await self._close_segment(now)
-        if self._discard_audio and now - self._last_audio_at >= gap:
+        if self._discard_audio and now - self._last_voice_at >= gap:
             self._discard_audio = False
 
         audible = self._segment is not None or (
@@ -1309,6 +1332,32 @@ class LiveEngine:
         self._tasks.discard(task)
         if not task.cancelled() and task.exception() is not None:
             logger.error("La tarea %s falló: %r", task.get_name(), task.exception())
+
+
+#: Marcas de sonido que GPT-Live mete en la transcripción ("[laugh]", "[sigh]").
+#: Pueden llegar partidas entre dos turnos ("[sigh" en uno y "]" en el siguiente).
+_TAG = re.compile(r"\[[^\[\]]*\]")
+_TAG_TAIL = re.compile(r"\[[^\[\]]*$")
+_TAG_HEAD = re.compile(r"^[^\[\]]*\]")
+
+
+def clean_transcript(text: str) -> str:
+    """Texto legible de una transcripción: sin marcas de sonido ni espacios de más."""
+    text = _TAG.sub(" ", text)
+    text = _TAG_TAIL.sub(" ", text)
+    if "[" not in text:
+        # Un "]" suelto al principio es la cola de una marca del turno anterior.
+        head = _TAG_HEAD.match(text)
+        if head is not None and len(head.group(0).strip()) <= 12:
+            text = text[head.end() :]
+    return " ".join(text.split())
+
+
+def _pcm16_rms(pcm: bytes) -> float:
+    import numpy as np
+
+    samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
+    return float(np.sqrt(np.mean(samples * samples))) if len(samples) else 0.0
 
 
 def _forward_camera_frame(on_frame: Callable[..., Any], msg: dict[str, Any]) -> None:

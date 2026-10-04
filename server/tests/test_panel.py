@@ -387,8 +387,8 @@ async def test_la_cache_graba_con_gpt_live_y_separa_por_voz(
     server = FakeLiveServer()
 
     async def react(conn: FakeConn, message: dict[str, Any]) -> None:
-        if message["type"] == "session.instructions.append":
-            await conn.audio(pcm(12_000, 9))
+        if message["type"] == "session.commentary.append":
+            await conn.audio(pcm(12_000, 900))
 
     server.on_message = react
     settings = panel_settings(tmp_path)
@@ -396,7 +396,7 @@ async def test_la_cache_graba_con_gpt_live_y_separa_por_voz(
         cache = VoiceCache(settings.panel.voice_cache_dir, settings.live, connect=connect)
         done = await cache.prepare([GREETING, GREETING, "  ", SONG])
     assert done == 2
-    assert cache.get(GREETING) == pcm(12_000, 9)
+    assert cache.get(GREETING) == pcm(12_000, 900)
     assert cache.count_ready([GREETING, SONG]) == 2
     settings.live.voice = "cedar"
     assert cache.get(GREETING) is None  # otra voz, otra grabación

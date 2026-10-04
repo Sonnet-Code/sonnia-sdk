@@ -520,6 +520,34 @@ async def test_un_silencio_largo_parte_la_voz_en_dos_frases(tmp_path: Path) -> N
         assert [m["utterance_id"] for m in rig.rec.of_type("speech_start")] == [1, 2]
 
 
+async def test_el_silencio_continuo_de_gpt_live_no_abre_frases(tmp_path: Path) -> None:
+    # La API real manda audio sin parar, también callada (silencio digital).
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        for _ in range(5):
+            await conn.audio(pcm(2_400, 0))
+        await asyncio.sleep(0.3)
+        assert not rig.rec.of_type("speech_start")
+        assert rig.engine.state == "idle"
+
+
+async def test_la_frase_se_cierra_aunque_siga_llegando_silencio(tmp_path: Path) -> None:
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        voz, silencio = pcm(2_400, 900), pcm(2_400, 0)
+        await conn.audio(silencio)
+        await conn.audio(voz)
+        await conn.audio(silencio)  # pausa corta dentro de la frase
+        await conn.audio(voz)
+        for _ in range(4):  # silencio que sigue llegando a ritmo real
+            await conn.audio(silencio)
+            await asyncio.sleep(0.05)
+        await rig.rec.wait_type("speech_end")
+        sent = b"".join(f[3] for f in rig.rec.audio(1))
+        assert sent == voz + silencio + voz  # sin el silencio de delante ni el de detrás
+        assert len(rig.rec.of_type("speech_start")) == 1
+
+
 # ---------------------------------------------------------------------------
 # Voz del visitante
 # ---------------------------------------------------------------------------
@@ -547,12 +575,13 @@ async def test_lo_que_dice_el_visitante_pone_listening_y_cierra_el_turno(
         await rig.rec.wait_state("idle", count=2)
 
 
-async def test_text_input_de_unity_llega_como_instrucciones(tmp_path: Path) -> None:
+async def test_text_input_llega_como_commentary(tmp_path: Path) -> None:
+    # ``instructions.append`` no la hace hablar (probado con la API real); ``commentary`` sí.
     async with make_rig(tmp_path) as rig:
         conn = await rig.conn()
         await rig.unity({"type": "text_input", "text": "¿Dónde es el DevFest?"})
-        await conn.wait_type("session.instructions.append")
-        append = conn.of_type("session.instructions.append")[0]
+        await conn.wait_type("session.commentary.append")
+        append = conn.of_type("session.commentary.append")[0]
         assert "¿Dónde es el DevFest?" in append["content"]
         assert append["delegation_id"] is None
         await rig.rec.wait_state("thinking")
@@ -563,6 +592,26 @@ async def test_text_input_de_unity_llega_como_instrucciones(tmp_path: Path) -> N
 # ---------------------------------------------------------------------------
 # Micrófono
 # ---------------------------------------------------------------------------
+
+
+def test_las_marcas_de_sonido_no_salen_en_la_transcripcion() -> None:
+    from sonia.live.engine import clean_transcript
+
+    assert clean_transcript("[laugh] Hola Sonia [sigh] ¿me oyes?") == "Hola Sonia ¿me oyes?"
+    assert clean_transcript("[sigh") == ""
+    assert clean_transcript("] Audita todo") == "Audita todo"
+    assert clean_transcript("laugh] Y qué opinas") == "Y qué opinas"
+    assert clean_transcript("Hola   mundo ") == "Hola mundo"
+
+
+async def test_un_turno_que_solo_es_una_risa_no_se_muestra(tmp_path: Path) -> None:
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.hear("[laugh")
+        await conn.hear("]")
+        await asyncio.sleep(0.4)
+        finals = [m for m in rig.rec.of_type("transcript") if m["role"] == "user" and m["final"]]
+        assert finals == []
 
 
 def test_pcm16_y_rms() -> None:
@@ -875,16 +924,22 @@ async def test_speak_text_devuelve_la_voz_de_gpt_live(
     server = FakeLiveServer()
 
     async def react(conn: FakeConn, message: dict[str, Any]) -> None:
-        if message["type"] == "session.instructions.append":
-            await conn.audio(pcm(2_400, 7))
-            await conn.audio(pcm(2_400, 7))
+        if message["type"] == "session.commentary.append":
+            # Como la API real: silencio antes y después de la voz.
+            await conn.audio(pcm(2_400, 0))
+            await conn.audio(pcm(2_400, 700))
+            await conn.audio(pcm(2_400, 700))
+            for _ in range(3):
+                await conn.audio(pcm(2_400, 0))
 
     server.on_message = react
     async with running(server) as connect:
         audio = await speak_text(make_settings(tmp_path).live, "Hola", connect=connect)
-    assert audio == pcm(4_800, 7)
-    request = server.conns[0].of_type("session.instructions.append")[0]["content"]
-    assert "«Hola»" in request
+    # Sin el silencio de delante y con solo una cola corta detrás.
+    assert audio.startswith(pcm(4_800, 700))
+    assert len(audio) - len(pcm(4_800, 700)) <= int(RATE * 0.15) * 2
+    request = server.conns[0].of_type("session.commentary.append")[0]["content"]
+    assert request == "Hola"
     assert server.conns[0].of_type("session.input_audio.append")  # silencio de fondo
 
 

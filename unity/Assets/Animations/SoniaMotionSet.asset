@@ -41,6 +41,7 @@ MonoBehaviour:
   - {fileID: -9082343680283697876, guid: 24b0ccef56088476ab79cb51605deae6, type: 3}
   greeting: {fileID: -203655887218126122, guid: 0f264f1e588e942ddb6bac3334eeab69, type: 3}
   present: {fileID: -203655887218126122, guid: afd5535ef3b1d4fe493bee0896aa2115, type: 3}
+  walk: {fileID: 5602445662028732664, guid: b1955db4b62934ab28ab9b46468f9ee0, type: 3}
   attention:
   - clip: {fileID: -8361514005957197599, guid: 5af4a64779c284155b7bedae99bda585, type: 3}
     category: 0

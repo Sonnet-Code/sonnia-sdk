@@ -6020,6 +6020,8 @@ MonoBehaviour:
   imagePanel: {fileID: 509738639}
   webcam: {fileID: 1767658854}
   debugUI: {fileID: 1767658853}
+  presence: {fileID: 0}
+  presenceInstantWindowSeconds: 2
   runInBackground: 1
   preventScreenSleep: 1
   showCursor: 1
@@ -6350,6 +6352,11 @@ MonoBehaviour:
   panelShotOffset: {x: 0, y: 0.13, z: -0.45}
   panelShotPosition: {x: 0, y: 1.9255277, z: -1.5690992}
   panelShotFieldOfView: 0
+  presence: {fileID: 0}
+  presenceShotEnabled: 1
+  presenceShotPosition: {x: 0, y: 0, z: 0}
+  presenceShotFieldOfView: 0
+  presenceSmoothTime: 0.75
   smoothing: 2.5
 --- !u!114 &1767658864
 MonoBehaviour:

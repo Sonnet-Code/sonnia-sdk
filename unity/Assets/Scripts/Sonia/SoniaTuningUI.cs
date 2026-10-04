@@ -117,6 +117,13 @@ namespace Sonia
                 Load();
             }
 
+            // En el estado final del stand no hay botones en pantalla: los
+            // valores guardados se aplican igual, pero el panel no se ofrece.
+            if (!SoniaDevMode.Enabled)
+            {
+                return;
+            }
+
             BuildToggleButton();
         }
 
@@ -150,6 +157,11 @@ namespace Sonia
 
         private void Update()
         {
+            if (!SoniaDevMode.Enabled)
+            {
+                return;
+            }
+
             // Tras una recompilación en Play los objetos creados por código
             // sobreviven pero este componente pierde sus referencias y los botones
             // sus listeners: se reconstruye todo.

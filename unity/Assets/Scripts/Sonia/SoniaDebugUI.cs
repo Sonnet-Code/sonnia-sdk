@@ -161,13 +161,45 @@ namespace Sonia
 
         private void Start()
         {
-            SetVisible(visibleOnStart);
             connectionLabel.Set(client != null && client.IsConnected ? "Conectado" : "Sin conexión");
             stateLabel.Set("idle");
+            if (!SoniaDevMode.Enabled)
+            {
+                // Estado final del stand: en pantalla solo quedan los subtítulos.
+                // La conexión, el estado y los mandos están en el panel web.
+                HideLabel(connectionLabel);
+                HideLabel(stateLabel);
+                SoniaDevMode.HideUnlessEnabled(inputField);
+                SoniaDevMode.HideUnlessEnabled(interruptButton);
+                SetVisible(true);
+                return;
+            }
+
+            SetVisible(visibleOnStart);
+        }
+
+        private static void HideLabel(UiLabel label)
+        {
+            SoniaDevMode.HideUnlessEnabled(label.tmp);
+            SoniaDevMode.HideUnlessEnabled(label.legacy);
+            if (label.container != null)
+            {
+                label.container.SetActive(false);
+            }
+
+            // Sin referencias, Set() ya no vuelve a encender nada.
+            label.tmp = null;
+            label.legacy = null;
+            label.container = null;
         }
 
         private void Update()
         {
+            if (!SoniaDevMode.Enabled)
+            {
+                return;
+            }
+
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null)
             {
