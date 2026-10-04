@@ -103,6 +103,41 @@ namespace Sonia.EditorTools
             return report.ToString();
         }
 
+        /// <summary>
+        /// Comprueba todos los clips de las carpetas de SoniaAnimations.ClipFolders,
+        /// estén o no en el set: es como se validan los candidatos antes de usarlos.
+        /// </summary>
+        public static string CheckFolders()
+        {
+            string blocked = Precondition();
+            if (blocked != null)
+            {
+                return blocked;
+            }
+
+            AvatarChoreographer choreographer = Object.FindAnyObjectByType<AvatarChoreographer>();
+            List<AnimationClip> clips = new List<AnimationClip>();
+            foreach (string guid in AssetDatabase.FindAssets("t:AnimationClip", SoniaAnimations.ClipFolders))
+            {
+                AddClip(clips, AssetDatabase.LoadAssetAtPath<AnimationClip>(AssetDatabase.GUIDToAssetPath(guid)));
+            }
+
+            StringBuilder report = new StringBuilder();
+            int failed = 0;
+            for (int i = 0; i < clips.Count; i++)
+            {
+                bool ok;
+                report.Append(Check(choreographer, clips[i], out ok));
+                failed += ok ? 0 : 1;
+            }
+
+            report.Insert(0, "[Sonia] Comprobación de las carpetas de clips: " + clips.Count + " clips, " + failed
+                             + " con problemas. Fotogramas en " + Path.GetFullPath(OutputFolder) + ".\n");
+            Directory.CreateDirectory(OutputFolder);
+            File.WriteAllText(Path.Combine(OutputFolder, "informe-carpetas.txt"), report.ToString());
+            return report.ToString();
+        }
+
         /// <summary>Comprueba un clip del set por su nombre. Devuelve el informe.</summary>
         public static string CheckClip(string clipName)
         {
@@ -203,8 +238,8 @@ namespace Sonia.EditorTools
                     Vector3 toCamera = Camera.main != null ? Flat(Camera.main.transform.position - root.position) : facing;
 
                     float kneeL, bendL, kneeR, bendR, footL, footR;
-                    MeasureLeg(animator, HumanBodyBones.LeftUpperLeg, HumanBodyBones.LeftLowerLeg, HumanBodyBones.LeftFoot, HumanBodyBones.LeftToes, facing, out kneeL, out bendL, out footL);
-                    MeasureLeg(animator, HumanBodyBones.RightUpperLeg, HumanBodyBones.RightLowerLeg, HumanBodyBones.RightFoot, HumanBodyBones.RightToes, facing, out kneeR, out bendR, out footR);
+                    MeasureLeg(animator, HumanBodyBones.LeftUpperLeg, HumanBodyBones.LeftLowerLeg, HumanBodyBones.LeftFoot, HumanBodyBones.LeftToes, facing, root.position.y, out kneeL, out bendL, out footL);
+                    MeasureLeg(animator, HumanBodyBones.RightUpperLeg, HumanBodyBones.RightLowerLeg, HumanBodyBones.RightFoot, HumanBodyBones.RightToes, facing, root.position.y, out kneeR, out bendR, out footR);
                     Transform hips = animator.GetBoneTransform(HumanBodyBones.Hips);
                     float body = Vector3.Angle(Flat(hips.forward), toCamera);
 
@@ -256,9 +291,14 @@ namespace Sonia.EditorTools
             return report.ToString();
         }
 
+        /// <summary>
+        /// Rodilla respecto a la línea cadera-tobillo y giro del pie. El giro solo
+        /// cuenta con el pie en el suelo: levantado (una patadita hacia atrás) mira
+        /// adonde quiera sin que sea un error.
+        /// </summary>
         private static void MeasureLeg(
             Animator animator, HumanBodyBones upper, HumanBodyBones lower, HumanBodyBones foot, HumanBodyBones toes,
-            Vector3 facing, out float kneeAheadCm, out float bendDegrees, out float footTurnDegrees)
+            Vector3 facing, float groundY, out float kneeAheadCm, out float bendDegrees, out float footTurnDegrees)
         {
             Vector3 hip = animator.GetBoneTransform(upper).position;
             Vector3 knee = animator.GetBoneTransform(lower).position;
@@ -267,7 +307,8 @@ namespace Sonia.EditorTools
             kneeAheadCm = Vector3.Dot(knee - onLine, facing) * 100f;
             bendDegrees = Vector3.Angle(knee - hip, ankle - knee);
             Transform toe = animator.GetBoneTransform(toes);
-            footTurnDegrees = toe != null ? Vector3.Angle(Flat(toe.position - ankle), facing) : 0f;
+            bool grounded = toe != null && toe.position.y - groundY < 0.08f;
+            footTurnDegrees = grounded ? Vector3.Angle(Flat(toe.position - ankle), facing) : 0f;
         }
 
         private static void CheckKnee(List<string> problems, string side, float t, float aheadCm, float bend)

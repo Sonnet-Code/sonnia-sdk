@@ -7,13 +7,13 @@
 // solo aquí y volver a ejecutar "Sonia > Crear set de animaciones".
 //
 // Solo hay clips oficiales de Genies, hechos para su esqueleto (ver
-// Assets/Animations/Genies/LICENSE.md): el reposo, la pose quieta, la caminata
-// y los saludos del Genies Avatar SDK y del Starter Pack. Genies no publica
-// clips para hablar, escuchar, pensar ni señalar: esos huecos quedan vacíos y
-// el coreógrafo se queda en el reposo (la cabeza, la cara y los ojos siguen
-// moviéndose por código). Lo que se añada para cubrirlos tiene que nacer del
-// esqueleto de Genies, tomando sus clips como referencia, y pasar la
-// validación antes de entrar aquí.
+// Assets/Animations/Genies/LICENSE.md): los del Genies Avatar SDK, los del
+// Starter Pack y los de sus repos públicos GeniesIRL y GeniesCamera
+// (Apache-2.0). Todos han pasado Sonia > Comprobar animaciones (en Play); se
+// quedaron fuera los que dan la espalda a la cámara (IdleZoneOut3, vogue) y los
+// que solo tienen sentido encadenados en inicio, bucle y final. Genies no
+// publica clips para hablar ni escuchar: el coreógrafo se queda en el reposo y
+// la cabeza, la cara y los ojos siguen moviéndose por código.
 
 using UnityEngine;
 
@@ -82,23 +82,25 @@ namespace Sonia
         /// <summary>Bucle de pensar: la pose quieta (la mirada y la cara hacen el resto).</summary>
         public const string ThinkingLoopClip = "StillPose";
 
-        /// <summary>Variaciones de pensar. Genies no publica ninguna.</summary>
-        public static readonly string[] ThinkingVariationClips = new string[0];
+        /// <summary>Variaciones de pensar: mirarse la mano como examinando algo (GeniesIRL).</summary>
+        public static readonly string[] ThinkingVariationClips = { "actions-0224-lookAtObject_Trimmed" };
 
         /// <summary>Gesticulación al hablar. Genies no publica ninguna: se habla desde el reposo.</summary>
         public static readonly string[] TalkingClips = new string[0];
 
-        /// <summary>Saludo con la mano (SDK de Genies, de una sola vez).</summary>
-        public const string GreetingClip = "WaveGeneric";
+        /// <summary>Saludo con la mano a quien se acerca (Starter Pack, el más amplio).</summary>
+        public const string GreetingClip = "Wave";
 
         /// <summary>
-        /// Gesto de presentar una imagen (señalar arriba). Genies no publica
-        /// ninguno: vacío, la imagen sale sin gesto.
+        /// Gesto de presentar una imagen: extiende el brazo hacia el visitante con
+        /// la palma arriba (GeniesIRL, presentItem_intro). Va en la capa del brazo
+        /// derecho y se congela en <see cref="PresentHoldTime"/> mientras la imagen
+        /// está puesta.
         /// </summary>
-        public const string PresentClip = "";
+        public const string PresentClip = "actions-presentItem_intro";
 
-        /// <summary>Segundo del clip de presentar en el que la mano está arriba señalando.</summary>
-        public const float PresentHoldTime = 0.45f;
+        /// <summary>Segundo del clip de presentar en el que el brazo ya está extendido.</summary>
+        public const float PresentHoldTime = 1.0f;
 
         /// <summary>
         /// Ciclo de caminar para salir y entrar en el modo "Fuera" (SDK de Genies).
@@ -114,8 +116,11 @@ namespace Sonia
         /// </summary>
         public static readonly AttentionClip[] AttentionClips =
         {
-            new AttentionClip("Wave", AttentionCategory.FourthWall),
-            new AttentionClip("Peace", AttentionCategory.FourthWall)
+            new AttentionClip("QuickAction_vibe", AttentionCategory.Dance),
+            new AttentionClip("WaveGeneric", AttentionCategory.FourthWall),
+            new AttentionClip("Peace", AttentionCategory.FourthWall),
+            new AttentionClip("QuickAction_salute", AttentionCategory.FourthWall),
+            new AttentionClip("QuickAction_twoThumbsUp", AttentionCategory.FourthWall)
         };
 
         /// <summary>
