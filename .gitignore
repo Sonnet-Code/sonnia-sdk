@@ -39,3 +39,11 @@ unity/.vscode/
 
 logs/
 aistudio.txt
+
+# Genies Avatar SDK
+# Credenciales (Client ID y Secret, solo ofuscados): las escribe su Bootstrap Wizard
+unity/Assets/Resources/GeniesAuthSettings.bytes*
+# El SDK se importa del Asset Store (462 MB) y sus samples se regeneran desde el paquete
+unity/Packages/com.genies.avatar-sdk.client/
+unity/Assets/Samples/
+unity/Assets/Samples.meta
