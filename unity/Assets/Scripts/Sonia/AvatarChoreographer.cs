@@ -217,7 +217,8 @@ namespace Sonia
             EnterState(_state, stateFade, true);
         }
 
-        private bool Ready
+        /// <summary>Cierto cuando hay reproductor con grafo y set de clips: ya puede mover al avatar.</summary>
+        public bool Ready
         {
             get { return motionPlayer != null && motionPlayer.IsReady && motionSet != null; }
         }

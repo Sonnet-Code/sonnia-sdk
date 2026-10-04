@@ -1,11 +1,12 @@
 // Genera el set de animaciones del avatar desde el catálogo.
 //
 // "Sonia > Crear set de animaciones" hace tres cosas, en orden:
-//   1. Deja cada FBX de Assets/Animations/RPM y Assets/Animations/Mixamo
-//      importado como Humanoid, con un clip que se llama como el archivo, en
-//      bucle solo si es un bucle base, sin compresión de fotogramas (la
-//      compresión aplana dedos y muñecas, que es donde se lee la gesticulación)
-//      y con el root motion centrado.
+//   1. Configura cada clip de las carpetas de SoniaAnimations.ClipFolders: en
+//      bucle solo si es un bucle base, con la rotación y la altura de la raíz
+//      dentro de la pose y el avance XZ fuera (centro de masas). Los .anim (los
+//      oficiales de Genies) se ajustan en sus propios ajustes de clip; los FBX,
+//      en el importador (Humanoid, sin compresión de fotogramas, que aplana
+//      dedos y muñecas).
 //   2. Rellena el asset SoniaMotionSet con los clips que nombra SoniaAnimations.
 //   3. Genera la máscara de torso y deja MotionPlayer y AvatarChoreographer de
 //      la escena apuntando a todo ello.
@@ -64,8 +65,96 @@ namespace Sonia.EditorTools
                 }
             }
 
-            Debug.Log("[Sonia] Clips configurados: " + changed + " de " + total + " FBX reimportados.");
+            for (int f = 0; f < SoniaAnimations.ClipFolders.Length; f++)
+            {
+                string folder = SoniaAnimations.ClipFolders[f];
+                if (!AssetDatabase.IsValidFolder(folder))
+                {
+                    continue;
+                }
+
+                string[] guids = AssetDatabase.FindAssets("t:AnimationClip", new[] { folder });
+                for (int i = 0; i < guids.Length; i++)
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                    if (!path.EndsWith(".anim"))
+                    {
+                        continue;
+                    }
+
+                    total++;
+                    if (ConfigureAnimAsset(path))
+                    {
+                        changed++;
+                    }
+                }
+            }
+
+            Debug.Log("[Sonia] Clips configurados: " + changed + " de " + total + " cambiados.");
             return changed;
+        }
+
+        /// <summary>
+        /// Configura un clip .anim con los mismos criterios que los FBX: bucle
+        /// solo en los bucles base, rotación y altura de la raíz dentro de la pose
+        /// y avance XZ fuera de ella. Devuelve verdadero si hubo que cambiarlo.
+        /// </summary>
+        public static bool ConfigureAnimAsset(string path)
+        {
+            AnimationClip clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);
+            if (clip == null)
+            {
+                return false;
+            }
+
+            bool loop = SoniaAnimations.IsLoopingClip(clip.name);
+            AnimationClipSettings settings = AnimationUtility.GetAnimationClipSettings(clip);
+            bool touched = false;
+            if (settings.loopTime != loop)
+            {
+                settings.loopTime = loop;
+                touched = true;
+            }
+
+            if (!settings.loopBlendOrientation || !settings.keepOriginalOrientation)
+            {
+                settings.loopBlendOrientation = true;
+                settings.keepOriginalOrientation = true;
+                touched = true;
+            }
+
+            if (!settings.loopBlendPositionY || !settings.keepOriginalPositionY)
+            {
+                settings.loopBlendPositionY = true;
+                settings.keepOriginalPositionY = true;
+                touched = true;
+            }
+
+            if (settings.loopBlendPositionXZ || settings.keepOriginalPositionXZ)
+            {
+                settings.loopBlendPositionXZ = false;
+                settings.keepOriginalPositionXZ = false;
+                touched = true;
+            }
+
+            // Los clips de Genies traen eventos para su controlador de tercera
+            // persona (OnFootstep en la caminata). Aquí nadie los recibe y cada
+            // uno sería un error en la consola: fuera.
+            if (AnimationUtility.GetAnimationEvents(clip).Length > 0)
+            {
+                AnimationUtility.SetAnimationEvents(clip, new AnimationEvent[0]);
+                touched = true;
+            }
+
+            if (!touched)
+            {
+                return false;
+            }
+
+            AnimationUtility.SetAnimationClipSettings(clip, settings);
+            EditorUtility.SetDirty(clip);
+            AssetDatabase.SaveAssetIfDirty(clip);
+            return true;
         }
 
         /// <summary>Configura un FBX. Devuelve verdadero si hubo que reimportarlo.</summary>
@@ -237,8 +326,20 @@ namespace Sonia.EditorTools
 
         private static AnimationClip LoadClip(string name, List<string> missing)
         {
+            // Un nombre vacío es un hueco a propósito (Genies no publica ese clip).
+            if (string.IsNullOrEmpty(name))
+            {
+                return null;
+            }
+
             for (int f = 0; f < SoniaAnimations.ClipFolders.Length; f++)
             {
+                AnimationClip anim = AssetDatabase.LoadAssetAtPath<AnimationClip>(SoniaAnimations.ClipFolders[f] + "/" + name + ".anim");
+                if (anim != null)
+                {
+                    return anim;
+                }
+
                 string path = SoniaAnimations.ClipFolders[f] + "/" + name + ".fbx";
                 Object[] assets = AssetDatabase.LoadAllAssetRepresentationsAtPath(path);
                 AnimationClip fallback = null;

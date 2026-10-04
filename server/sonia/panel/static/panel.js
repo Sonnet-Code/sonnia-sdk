@@ -1588,42 +1588,20 @@
     ["present", "Señalar una imagen"],
   ];
 
-  /** Nombres legibles de los clips conocidos; el resto se deriva del nombre del clip. */
+  /** Nombres legibles de los clips conocidos (oficiales de Genies); el resto se deriva del nombre. */
   const ANIMATION_NAMES = {
-    Greeting: "Saludar con la mano",
-    F_Dances_006: "Baile 6",
-    Dance_HipHop: "Hip hop",
-    Dance_Jazz: "Jazz",
-    Dance_RunningMan: "Running man",
-    Dance_Gangnam: "Gangnam style",
-    Touch_Screen: "Tocar la pantalla",
-    Point_ThisGuy: "Señalar",
-    Blow_Kiss: "Lanzar un beso",
-    Salute: "Saludo militar",
-    Thumbs_Up: "Pulgar arriba",
-    Shrug: "Encogerse de hombros",
-    LookAround: "Mirar alrededor",
-    Idle_Leaning: "Apoyarse",
-    Excited: "Emocionada",
-    Cheering: "Celebrar",
-    Bow: "Reverencia",
-    Thankful: "Agradecer",
-    Dismissive: "Restar importancia",
-    IdleLooking2: "Mirar a los lados",
-    ListeningNod: "Asentir",
-    HeadGesture: "Gesto con la cabeza",
-    ThoughtfulHeadShake: "Negar pensativa",
+    WaveGeneric: "Saludar con la mano",
+    Wave: "Saludar con la mano (largo)",
+    Peace: "Signo de la paz",
+    DefaultIdle: "Reposo",
+    StillPose: "Quieta",
+    Walk: "Caminar",
   };
 
-  /** "F_Talking_Variations_005" -> "Hablando 5 (F)". */
+  /** "Some_Clip_Name" -> "Some clip name". */
   function prettyClipName(clip) {
     if (ANIMATION_NAMES[clip]) return ANIMATION_NAMES[clip];
-    const numbered = /^([FM])_(Talking|Standing_Idle)_Variations_0*(\d+)$/.exec(clip);
-    if (numbered) {
-      const what = numbered[2] === "Talking" ? "Hablando" : "Reposo";
-      return numbered[1] === "M" ? `${what} ${numbered[3]} (M)` : `${what} ${numbered[3]}`;
-    }
-    return capitalize(clip.replace(/^Dance_/, "").replace(/_+/g, " ").trim());
+    return capitalize(clip.replace(/_+/g, " ").trim());
   }
 
   /** Fichas pintadas: clip → {item, button, toggle}, para actualizarlas sin rehacerlas. */

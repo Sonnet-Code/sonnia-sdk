@@ -258,12 +258,7 @@ namespace Sonia
 
         private static string Shorten(string name)
         {
-            return name.Replace("F_Standing_Idle_Variations_", "Idle var ")
-                .Replace("F_Standing_Idle_", "Idle ")
-                .Replace("F_Talking_Variations_", "Habla ")
-                .Replace("F_Dances_", "Baile RPM ")
-                .Replace("Dance_", "Baile ")
-                .Replace("_", " ");
+            return name.Replace("_", " ");
         }
 
         private void ForceState(AvatarState state)

@@ -124,8 +124,8 @@ namespace Sonia.EditorTools
 
         /// <summary>
         /// Envergadura que tiene que caber a lo ancho. En 9:16 el ancho es el que
-        /// manda, no el alto: medido sobre Dance_HipHop y Blow_Kiss con Yae, los
-        /// brazos llegan a 1,49 m de punta a punta, así que con 1,55 sobra un poco.
+        /// manda, no el alto: con los gestos más abiertos los brazos llegaron a
+        /// 1,49 m de punta a punta, así que con 1,55 sobra un poco.
         /// </summary>
         private const float WideArmSpan = 1.55f;
 

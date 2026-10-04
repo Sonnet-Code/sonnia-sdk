@@ -7,7 +7,7 @@
 // y el coreógrafo recupera el cuerpo.
 //
 // Cómo se evita que los pies patinen: el ciclo de caminar trae root motion
-// hacia delante (F_Walk_002, 1,40 m/s). Mientras camina se enciende
+// hacia delante (la Walk oficial de Genies). Mientras camina se enciende
 // applyRootMotion, se lee Animator.deltaPosition cada frame y Sonia se desplaza
 // exactamente lo que ese avance recorre a lo ancho de la pantalla (su
 // proyección sobre el eje lateral de la cámara). Lo que el clip avanza hacia o
