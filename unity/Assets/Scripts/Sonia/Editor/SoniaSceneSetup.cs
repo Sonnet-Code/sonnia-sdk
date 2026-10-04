@@ -325,13 +325,13 @@ namespace Sonia.EditorTools
             }
         }
 
-        /// <summary>Deja en el objeto raíz el controlador de cejas, párpados y sonrisa, con la malla del lip-sync.</summary>
+        /// <summary>Deja en el objeto raíz el controlador de cejas, párpados y sonrisa, escribiendo en la cara (FaceRig).</summary>
         public static void EnsureFacialExpressions(GameObject root, AvatarStateController avatarState)
         {
             FacialExpressionController expressions = EnsureComponent<FacialExpressionController>(root);
             LipSyncController lipSync = root.GetComponent<LipSyncController>();
             SerializedObject expressionObject = new SerializedObject(expressions);
-            SetReference(expressionObject, "faceRenderer", lipSync != null ? lipSync.FaceRenderer : null);
+            SetReference(expressionObject, "faceRig", root.GetComponent<FaceRig>());
             SetReference(expressionObject, "stateController", avatarState);
             SetReference(expressionObject, "lipSync", lipSync);
             expressionObject.ApplyModifiedPropertiesWithoutUndo();

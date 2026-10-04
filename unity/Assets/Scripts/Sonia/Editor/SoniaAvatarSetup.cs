@@ -1,25 +1,25 @@
-// Coloca un avatar VRM en la escena, lo cablea y ajusta el encuadre del stand.
+// Coloca en la escena el doble del avatar, lo cablea y ajusta el encuadre del stand.
 //
-// El menú vale para cualquier VRM o GLB: la ruta se elige con "Sonia/Elegir avatar (VRM o GLB)"
-// y la convención de blendshapes de la cara se detecta sola (VRM estándar,
-// VRoid, Seed-san u Oculus / Ready Player Me).
+// Sonia usa avatares de Genies: en Play el de verdad lo carga el SDK
+// (GeniesAvatarLoader) y ocupa el sitio de este. El doble es Sticker, del
+// Genies Avatar Starter Pack: mismo esqueleto y misma cara FACS que los del SDK,
+// pero es un FBX normal, así que existe en modo edición (encuadre, luz, panel y
+// capturas) y sirve de respaldo si el SDK no carga.
 //
 // Un par de cosas que no son obvias:
 //
-//  * Los VRM miran hacia +Z, y la cámara del stand está en Z negativo mirando
-//    hacia +Z, así que el avatar se gira 180 grados en Y para quedar de frente.
-//  * Vrm10Instance aplica cada frame los pesos de sus expresiones (todas a cero)
-//    sobre los mismos blendshapes que usa el lip-sync, y la mirada sobre los
-//    huesos de los ojos. Los ojos están mapeados en el Humanoid, así que el
-//    Animator los reinicia en cada pasada de animación: la mirada solo se ve si
-//    se aplica DESPUÉS, en LateUpdate. Por eso Vrm10Instance queda en LateUpdate
-//    (orden 11000) y LipSyncController y AvatarStateController llevan
-//    [DefaultExecutionOrder(12000)] para escribir boca y parpadeo después.
+//  * Los avatares de Genies miran hacia +Z, y la cámara del stand está en Z
+//    negativo mirando hacia +Z, así que el avatar se gira 180 grados en Y.
+//  * El Humanoid de Sticker se alinea con el de los avatares del SDK: cabeza en
+//    el hueso Head (Genies lo mapeó a Face) y ojos fuera del Humanoid, porque
+//    la mirada mueve los globos (LeftEye, RightEye) y no las cuencas, que
+//    arrastran las pestañas.
+//  * La cara la escribe FaceRig (en el objeto Sonia): traduce los canales del
+//    lip-sync, el parpadeo y las expresiones a las formas FACS de Genies.
 //  * El encuadre del stand es un plano medio en vertical 9:16: de un poco por
 //    debajo de las caderas a justo por encima de la cabeza, con muy poco aire.
 //    Se calcula con los huesos reales del avatar, no con los bounds de los
-//    renderers, porque los accesorios (mochilas, brazos robóticos, armas)
-//    ensanchan los bounds muchísimo y estropean el cálculo.
+//    renderers, porque los accesorios los ensanchan y estropean el cálculo.
 
 #if UNITY_EDITOR
 
@@ -34,11 +34,11 @@ namespace Sonia.EditorTools
     /// <summary>Menús que montan el avatar y dejan la cámara y el panel en su sitio.</summary>
     public static class SoniaAvatarSetup
     {
-        /// <summary>Avatar por defecto si nadie ha elegido otro.</summary>
-        private const string DefaultAvatarPath = "Assets/Avatar/Babe.glb";
+        /// <summary>Doble del avatar del SDK en modo edición y respaldo sin red.</summary>
+        public const string StandInAvatarPath = "Assets/Avatar/Genies/Sticker/Sticker.fbx";
 
-        /// <summary>Clave de EditorPrefs donde se recuerda el avatar elegido.</summary>
-        private const string AvatarPathKey = "Sonia.AvatarPath";
+        /// <summary>Definición (JSON del SDK de Genies) del avatar que se carga en Play.</summary>
+        public const string GeniesDefinitionPath = "Assets/Sonia/Avatar/SoniaGeniesAvatar.json";
 
         private const string AvatarObjectName = "Avatar";
         private const string RootName = "Sonia";
@@ -175,156 +175,6 @@ namespace Sonia.EditorTools
         /// </summary>
         private static readonly Vector3 KeyLightRotation = new Vector3(25f, 340f, 0f);
 
-        // ------------------------------------------------------------------
-        // Convenciones de blendshapes
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        /// Una forma de nombrar los blendshapes de la cara. Se elige la primera
-        /// cuyo blendshape de prueba exista en la malla.
-        /// </summary>
-        private sealed class BlendShapeConvention
-        {
-            public string Name;
-            public string Probe;
-            public string BlinkLeft;
-            public string BlinkRight;
-            public string BlinkBoth;
-            public string MouthOpen;
-            public string[,] Visemes;
-        }
-
-        /// <summary>
-        /// Convenciones conocidas, en orden de prueba. El mapa de visemas usa los
-        /// identificadores del protocolo; una cadena vacía significa "este visema
-        /// no mueve ningún blendshape" y la boca se cierra sola.
-        /// </summary>
-        private static readonly BlendShapeConvention[] Conventions =
-        {
-            // VRM estándar (Yae, Snb y la mayoría de modelos exportados a VRM).
-            new BlendShapeConvention
-            {
-                Name = "VRM (Aa/Ih/Ou/Ee/Oh)",
-                Probe = "Aa",
-                BlinkLeft = "Blink_L",
-                BlinkRight = "Blink_R",
-                BlinkBoth = "Blink",
-                MouthOpen = "Aa",
-                Visemes = new[,]
-                {
-                    { VisemeIds.Sil, string.Empty },
-                    { VisemeIds.PP, string.Empty },
-                    { VisemeIds.FF, "Ih" },
-                    { VisemeIds.TH, "Ih" },
-                    { VisemeIds.DD, "Ih" },
-                    { VisemeIds.KK, "Ee" },
-                    { VisemeIds.CH, "Ih" },
-                    { VisemeIds.SS, "Ih" },
-                    { VisemeIds.NN, "Ee" },
-                    { VisemeIds.RR, "Ee" },
-                    { VisemeIds.AA, "Aa" },
-                    { VisemeIds.E, "Ee" },
-                    { VisemeIds.IH, "Ih" },
-                    { VisemeIds.OH, "Oh" },
-                    { VisemeIds.OU, "Ou" }
-                }
-            },
-
-            // VRoid Studio.
-            new BlendShapeConvention
-            {
-                Name = "VRoid (Fcl_MTH_*)",
-                Probe = "Fcl_MTH_A",
-                BlinkLeft = "Fcl_EYE_Close_L",
-                BlinkRight = "Fcl_EYE_Close_R",
-                BlinkBoth = "Fcl_EYE_Close",
-                MouthOpen = "Fcl_MTH_A",
-                Visemes = new[,]
-                {
-                    { VisemeIds.Sil, string.Empty },
-                    { VisemeIds.PP, string.Empty },
-                    { VisemeIds.FF, "Fcl_MTH_I" },
-                    { VisemeIds.TH, "Fcl_MTH_I" },
-                    { VisemeIds.DD, "Fcl_MTH_I" },
-                    { VisemeIds.KK, "Fcl_MTH_E" },
-                    { VisemeIds.CH, "Fcl_MTH_I" },
-                    { VisemeIds.SS, "Fcl_MTH_I" },
-                    { VisemeIds.NN, "Fcl_MTH_E" },
-                    { VisemeIds.RR, "Fcl_MTH_E" },
-                    { VisemeIds.AA, "Fcl_MTH_A" },
-                    { VisemeIds.E, "Fcl_MTH_E" },
-                    { VisemeIds.IH, "Fcl_MTH_I" },
-                    { VisemeIds.OH, "Fcl_MTH_O" },
-                    { VisemeIds.OU, "Fcl_MTH_U" }
-                }
-            },
-
-            // Seed-san y modelos de la misma familia.
-            new BlendShapeConvention
-            {
-                Name = "Seed-san (lip_*)",
-                Probe = "lip_a",
-                BlinkLeft = "blink_L",
-                BlinkRight = "blink_R",
-                BlinkBoth = "eye_close",
-                MouthOpen = "mouse_open",
-                Visemes = new[,]
-                {
-                    { VisemeIds.Sil, string.Empty },
-                    { VisemeIds.PP, string.Empty },
-                    { VisemeIds.FF, "lip_u" },
-                    { VisemeIds.TH, "lip_i" },
-                    { VisemeIds.DD, "lip_i" },
-                    { VisemeIds.KK, "lip_e" },
-                    { VisemeIds.CH, "lip_i" },
-                    { VisemeIds.SS, "lip_i" },
-                    { VisemeIds.NN, "lip_e" },
-                    { VisemeIds.RR, "lip_e" },
-                    { VisemeIds.AA, "lip_a" },
-                    { VisemeIds.E, "lip_e" },
-                    { VisemeIds.IH, "lip_i" },
-                    { VisemeIds.OH, "lip_o" },
-                    { VisemeIds.OU, "lip_u" }
-                }
-            },
-
-            // Oculus / Ready Player Me.
-            new BlendShapeConvention
-            {
-                Name = "Oculus (viseme_*)",
-                Probe = "viseme_aa",
-                BlinkLeft = "eyeBlinkLeft",
-                BlinkRight = "eyeBlinkRight",
-                BlinkBoth = "eyesClosed",
-                MouthOpen = "jawOpen",
-                Visemes = new[,]
-                {
-                    { VisemeIds.Sil, "viseme_sil" },
-                    { VisemeIds.PP, "viseme_PP" },
-                    { VisemeIds.FF, "viseme_FF" },
-                    { VisemeIds.TH, "viseme_TH" },
-                    { VisemeIds.DD, "viseme_DD" },
-                    { VisemeIds.KK, "viseme_kk" },
-                    { VisemeIds.CH, "viseme_CH" },
-                    { VisemeIds.SS, "viseme_SS" },
-                    { VisemeIds.NN, "viseme_nn" },
-                    { VisemeIds.RR, "viseme_RR" },
-                    { VisemeIds.AA, "viseme_aa" },
-                    { VisemeIds.E, "viseme_E" },
-                    { VisemeIds.IH, "viseme_I" },
-                    { VisemeIds.OH, "viseme_O" },
-                    { VisemeIds.OU, "viseme_U" }
-                }
-            }
-        };
-
-        /// <summary>Ruta del VRM que se va a colocar.</summary>
-        public static string AvatarPath
-        {
-            get { return EditorPrefs.GetString(AvatarPathKey, DefaultAvatarPath); }
-            set { EditorPrefs.SetString(AvatarPathKey, value); }
-        }
-
         /// <summary>Metros de aire por encima de la cabeza en el encuadre.</summary>
         public static float TopMargin
         {
@@ -336,38 +186,15 @@ namespace Sonia.EditorTools
         // Menús
         // ------------------------------------------------------------------
 
-        [MenuItem("Sonia/Elegir avatar (VRM o GLB)")]
-        public static void ChooseAvatar()
-        {
-            string absolute = EditorUtility.OpenFilePanelWithFilters(
-                "Elegir avatar", Application.dataPath + "/Avatar",
-                new[] { "Avatares", "vrm,glb,gltf,fbx", "Todos", "*" });
-            if (string.IsNullOrEmpty(absolute))
-            {
-                return;
-            }
-
-            string projectRoot = System.IO.Path.GetDirectoryName(Application.dataPath);
-            if (!absolute.StartsWith(projectRoot))
-            {
-                EditorUtility.DisplayDialog(
-                    "Sonia", "El avatar tiene que estar dentro del proyecto, en Assets/.", "Vale");
-                return;
-            }
-
-            AvatarPath = absolute.Substring(projectRoot.Length + 1).Replace('\\', '/');
-            Debug.Log("[Sonia] Avatar elegido: " + AvatarPath + ". Ejecuta Sonia > Colocar avatar.");
-        }
-
         [MenuItem("Sonia/Colocar avatar")]
         public static void PlaceAvatarMenu()
         {
-            PlaceAvatar(AvatarPath);
+            PlaceAvatar(StandInAvatarPath);
         }
 
         /// <summary>
-        /// Instancia el VRM bajo el objeto "Sonia", lo cablea con los componentes
-        /// de la escena y deja la cámara y el panel de imágenes en su sitio.
+        /// Instancia el doble del avatar bajo el objeto "Sonia", lo cablea con los
+        /// componentes de la escena y deja la cámara y el panel de imágenes en su sitio.
         /// </summary>
         public static GameObject PlaceAvatar(string assetPath)
         {
@@ -378,13 +205,14 @@ namespace Sonia.EditorTools
                 return null;
             }
 
+            AlignGeniesHumanoid(assetPath);
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
             if (prefab == null)
             {
                 EditorUtility.DisplayDialog(
                     "Sonia",
-                    "No se encontró " + assetPath + ". Importa el VRM o elige otro con "
-                    + "Sonia > Elegir avatar (VRM o GLB).",
+                    "No se encontró " + assetPath + ". Es el avatar Sticker del Genies Avatar Starter Pack "
+                    + "(ver Assets/Avatar/Genies/LICENSE.md).",
                     "Vale");
                 return null;
             }
@@ -422,29 +250,20 @@ namespace Sonia.EditorTools
             avatar.transform.SetParent(root, false);
             avatar.transform.localPosition = Vector3.zero;
 
-            // Los VRM miran hacia +Z; la cámara también, así que hay que darle
-            // media vuelta para que quede de frente.
+            // Los avatares de Genies miran hacia +Z; la cámara también, así que hay
+            // que darle media vuelta para que quede de frente.
             avatar.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             avatar.transform.localScale = Vector3.one;
 
-            // Los VRM y los FBX Humanoid ya traen Animator con Avatar; a los GLB
-            // (Ready Player Me y similares) se les construye uno a partir del
-            // esqueleto de Mixamo.
-            Animator animator = SoniaHumanoidRig.EnsureHumanoidAnimator(avatar, assetPath);
-            if (animator == null)
-            {
-                animator = avatar.GetComponentInChildren<Animator>(true);
-            }
-
+            Animator animator = avatar.GetComponentInChildren<Animator>(true);
             ConfigureAnimator(animator);
-            ConfigureVrm10Instance(avatar);
 
-            BlendShapeConvention convention;
-            SkinnedMeshRenderer face = FindFaceRenderer(avatar, out convention);
-            Transform head = animator != null ? animator.GetBoneTransform(HumanBodyBones.Head) : null;
+            FaceRig faceRig = WireFaceRig(root, avatar);
+            Transform head = animator != null && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.Head) : null;
 
-            WireAvatarState(root, animator, head, face, convention);
-            WireLipSync(root, face, convention);
+            WireAvatarState(root, head, faceRig);
+            WireLipSync(root, faceRig);
+            WireAvatarLoading(root, avatar);
             WireChoreography(root, animator);
             SoniaSceneSetup.EnsurePhonemeLipSync(root.gameObject, root.GetComponentInChildren<AvatarStateController>(true));
             SoniaSceneSetup.EnsureEyeGaze(
@@ -482,8 +301,8 @@ namespace Sonia.EditorTools
 
             Debug.Log(
                 "[Sonia] Avatar " + System.IO.Path.GetFileName(assetPath) + " colocado. "
-                + "Convención de blendshapes: " + (convention != null ? convention.Name : "ninguna reconocida")
-                + ". Cara: " + (face != null ? face.name : "sin malla")
+                + "Cara: " + (faceRig.PrimaryRenderer != null ? faceRig.PrimaryRenderer.name : "sin malla")
+                + (faceRig.IsGenies ? " (FACS de Genies)" : " (sin FACS de Genies)")
                 + ". Cabeza: " + (head != null ? head.name : "sin hueso")
                 + ". Caderas y=" + hipsY.ToString("F2")
                 + ", hombros y=" + shouldersY.ToString("F2")
@@ -519,101 +338,6 @@ namespace Sonia.EditorTools
             // frame fuera de pantalla congela la pose y el lip-sync.
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             EditorUtility.SetDirty(animator);
-        }
-
-        /// <summary>
-        /// Ajusta el componente de UniVRM sin depender de su ensamblado: se busca
-        /// por nombre de tipo y se escriben sus campos con SerializedObject. Si el
-        /// avatar no fuera un VRM 1.0, simplemente no hace nada.
-        /// </summary>
-        private static void ConfigureVrm10Instance(GameObject avatar)
-        {
-            MonoBehaviour instance = null;
-            MonoBehaviour[] components = avatar.GetComponents<MonoBehaviour>();
-            for (int i = 0; i < components.Length; i++)
-            {
-                if (components[i] != null && components[i].GetType().Name == "Vrm10Instance")
-                {
-                    instance = components[i];
-                    break;
-                }
-            }
-
-            if (instance == null)
-            {
-                return;
-            }
-
-            SerializedObject serialized = new SerializedObject(instance);
-
-            // UniVRM se queda en LateUpdate para que su LookAt corra después del
-            // Animator y los ojos giren de verdad. Quien se aparta es lo nuestro:
-            // LipSyncController y AvatarStateController llevan orden de ejecución
-            // 12000, así que escriben la boca y la cabeza después de UniVRM.
-            SetEnumByName(serialized, "UpdateType", "LateUpdate");
-
-            Camera main = Camera.main;
-            if (main != null)
-            {
-                SetEnumByName(serialized, "LookAtTargetType", "SpecifiedTransform");
-                SerializedProperty target = serialized.FindProperty("LookAtTarget");
-                if (target != null)
-                {
-                    target.objectReferenceValue = main.transform;
-                }
-            }
-
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        /// <summary>
-        /// Busca la malla de la cara probando las convenciones conocidas. Devuelve
-        /// también cuál encajó, que es la que da el mapa de visemas y el parpadeo.
-        /// </summary>
-        private static SkinnedMeshRenderer FindFaceRenderer(
-            GameObject avatar,
-            out BlendShapeConvention convention)
-        {
-            SkinnedMeshRenderer[] renderers = avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true);
-            SkinnedMeshRenderer withShapes = null;
-
-            for (int i = 0; i < renderers.Length; i++)
-            {
-                Mesh mesh = renderers[i].sharedMesh;
-                if (mesh == null || mesh.blendShapeCount == 0)
-                {
-                    continue;
-                }
-
-                if (withShapes == null)
-                {
-                    withShapes = renderers[i];
-                }
-
-                for (int c = 0; c < Conventions.Length; c++)
-                {
-                    if (HasBlendShape(mesh, Conventions[c].Probe))
-                    {
-                        convention = Conventions[c];
-                        return renderers[i];
-                    }
-                }
-            }
-
-            convention = null;
-            if (withShapes == null)
-            {
-                Debug.LogWarning(
-                    "[Sonia] El avatar no tiene ninguna malla con blendshapes; no habrá lip-sync ni parpadeo.");
-            }
-            else
-            {
-                Debug.LogWarning(
-                    "[Sonia] La malla \"" + withShapes.name + "\" no usa ninguna convención conocida de "
-                    + "blendshapes; hay que rellenar los visemas a mano en LipSyncController.");
-            }
-
-            return withShapes;
         }
 
         /// <summary>
@@ -1257,12 +981,57 @@ namespace Sonia.EditorTools
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void WireAvatarState(
-            Transform root,
-            Animator animator,
-            Transform head,
-            SkinnedMeshRenderer face,
-            BlendShapeConvention convention)
+        /// <summary>Deja FaceRig en el objeto Sonia apuntando al avatar.</summary>
+        private static FaceRig WireFaceRig(Transform root, GameObject avatar)
+        {
+            FaceRig rig = root.GetComponent<FaceRig>();
+            if (rig == null)
+            {
+                rig = Undo.AddComponent<FaceRig>(root.gameObject);
+            }
+
+            SerializedObject serialized = new SerializedObject(rig);
+            SetReference(serialized, "avatarRoot", avatar.transform);
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            rig.Rebuild();
+            return rig;
+        }
+
+        /// <summary>
+        /// Deja en el objeto Sonia el AvatarBinder (con el doble como avatar
+        /// actual) y el cargador del SDK de Genies con la definición del repo.
+        /// </summary>
+        private static void WireAvatarLoading(Transform root, GameObject avatar)
+        {
+            AvatarBinder binder = root.GetComponent<AvatarBinder>();
+            if (binder == null)
+            {
+                binder = Undo.AddComponent<AvatarBinder>(root.gameObject);
+            }
+
+            SerializedObject binderObject = new SerializedObject(binder);
+            SetReference(binderObject, "current", avatar.transform);
+            binderObject.ApplyModifiedPropertiesWithoutUndo();
+
+            GeniesAvatarLoader loader = root.GetComponent<GeniesAvatarLoader>();
+            if (loader == null)
+            {
+                loader = Undo.AddComponent<GeniesAvatarLoader>(root.gameObject);
+            }
+
+            TextAsset definition = AssetDatabase.LoadAssetAtPath<TextAsset>(GeniesDefinitionPath);
+            if (definition == null)
+            {
+                Debug.LogWarning("[Sonia] No se encontró " + GeniesDefinitionPath + "; en Play seguirá el doble.");
+            }
+
+            SerializedObject loaderObject = new SerializedObject(loader);
+            SetReference(loaderObject, "definition", definition);
+            SetReference(loaderObject, "binder", binder);
+            loaderObject.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void WireAvatarState(Transform root, Transform head, FaceRig faceRig)
         {
             AvatarStateController state = root.GetComponentInChildren<AvatarStateController>(true);
             if (state == null)
@@ -1273,24 +1042,7 @@ namespace Sonia.EditorTools
 
             SerializedObject serialized = new SerializedObject(state);
             SetReference(serialized, "headBone", head);
-            SetReference(serialized, "faceRenderer", face);
-
-            if (convention != null)
-            {
-                Mesh mesh = face != null ? face.sharedMesh : null;
-                string left = convention.BlinkLeft;
-                string right = convention.BlinkRight;
-
-                // Algunos modelos solo traen un blendshape para los dos ojos.
-                if (mesh != null && !HasBlendShape(mesh, left) && HasBlendShape(mesh, convention.BlinkBoth))
-                {
-                    left = convention.BlinkBoth;
-                    right = convention.BlinkBoth;
-                }
-
-                SetString(serialized, "blinkLeftBlendShape", left);
-                SetString(serialized, "blinkRightBlendShape", right);
-            }
+            SetReference(serialized, "faceRig", faceRig);
 
             Camera main = Camera.main;
             if (main != null)
@@ -1301,10 +1053,7 @@ namespace Sonia.EditorTools
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void WireLipSync(
-            Transform root,
-            SkinnedMeshRenderer face,
-            BlendShapeConvention convention)
+        private static void WireLipSync(Transform root, FaceRig faceRig)
         {
             LipSyncController lipSync = root.GetComponentInChildren<LipSyncController>(true);
             if (lipSync == null)
@@ -1314,43 +1063,59 @@ namespace Sonia.EditorTools
             }
 
             SerializedObject serialized = new SerializedObject(lipSync);
-            SetReference(serialized, "faceRenderer", face);
+            SetReference(serialized, "faceRig", faceRig);
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
 
-            if (convention != null)
+        /// <summary>
+        /// Deja el Humanoid de un FBX de Genies como el de los avatares del SDK:
+        /// cabeza en el hueso Head y sin ojos ni mandíbula. Solo reimporta si hace falta.
+        /// </summary>
+        private static void AlignGeniesHumanoid(string assetPath)
+        {
+            ModelImporter importer = AssetImporter.GetAtPath(assetPath) as ModelImporter;
+            if (importer == null || importer.animationType != ModelImporterAnimationType.Human)
             {
-                SetString(serialized, "jawOpenBlendShape", convention.MouthOpen);
-                SetString(serialized, "mouthOpenBlendShape", convention.MouthOpen);
-
-                SerializedProperty bindings = serialized.FindProperty("visemeBindings");
-                if (bindings == null || !bindings.isArray)
-                {
-                    Debug.LogWarning(
-                        "[Sonia] No se encontró el array \"visemeBindings\" en LipSyncController; "
-                        + "hay que rellenarlo a mano.");
-                }
-                else
-                {
-                    int count = convention.Visemes.GetLength(0);
-                    bindings.arraySize = count;
-                    for (int i = 0; i < count; i++)
-                    {
-                        SerializedProperty element = bindings.GetArrayElementAtIndex(i);
-                        SerializedProperty viseme = element.FindPropertyRelative("viseme");
-                        SerializedProperty shape = element.FindPropertyRelative("blendShape");
-                        if (viseme != null)
-                        {
-                            viseme.stringValue = convention.Visemes[i, 0];
-                        }
-
-                        if (shape != null)
-                        {
-                            shape.stringValue = convention.Visemes[i, 1];
-                        }
-                    }
-                }
+                return;
             }
 
-            serialized.ApplyModifiedPropertiesWithoutUndo();
+            HumanDescription description = importer.humanDescription;
+            HumanBone[] bones = description.human;
+            if (bones == null || bones.Length == 0)
+            {
+                return;
+            }
+
+            bool changed = false;
+            System.Collections.Generic.List<HumanBone> kept = new System.Collections.Generic.List<HumanBone>(bones.Length);
+            for (int i = 0; i < bones.Length; i++)
+            {
+                HumanBone bone = bones[i];
+                if (bone.humanName == "LeftEye" || bone.humanName == "RightEye" || bone.humanName == "Jaw")
+                {
+                    changed = true;
+                    continue;
+                }
+
+                if (bone.humanName == "Head" && bone.boneName != "Head")
+                {
+                    bone.boneName = "Head";
+                    changed = true;
+                }
+
+                kept.Add(bone);
+            }
+
+            if (!changed)
+            {
+                return;
+            }
+
+            description.human = kept.ToArray();
+            importer.humanDescription = description;
+            importer.SaveAndReimport();
+            Debug.Log("[Sonia] Humanoid de " + System.IO.Path.GetFileName(assetPath)
+                      + " alineado con el de los avatares del SDK (cabeza en Head, sin ojos ni mandíbula).");
         }
 
         private static void WireChoreography(Transform root, Animator animator)
@@ -1363,45 +1128,6 @@ namespace Sonia.EditorTools
         // ------------------------------------------------------------------
         // Utilidades
         // ------------------------------------------------------------------
-
-        /// <summary>Busca un blendshape aceptando diferencias de mayúsculas.</summary>
-        private static bool HasBlendShape(Mesh mesh, string name)
-        {
-            if (mesh == null || string.IsNullOrEmpty(name))
-            {
-                return false;
-            }
-
-            if (mesh.GetBlendShapeIndex(name) >= 0)
-            {
-                return true;
-            }
-
-            int total = mesh.blendShapeCount;
-            for (int i = 0; i < total; i++)
-            {
-                string candidate = mesh.GetBlendShapeName(i);
-                if (string.IsNullOrEmpty(candidate))
-                {
-                    continue;
-                }
-
-                if (string.Equals(candidate, name, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-
-                int dot = candidate.LastIndexOf('.');
-                if (dot >= 0 && dot + 1 < candidate.Length
-                    && string.Equals(
-                        candidate.Substring(dot + 1), name, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
 
         private static void SetReference(SerializedObject target, string path, Object value)
         {

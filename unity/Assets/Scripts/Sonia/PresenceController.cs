@@ -446,6 +446,39 @@ namespace Sonia
         }
 
         /// <summary>
+        /// Primer paso de un cambio de avatar: el actual vuelve a su pose de
+        /// reposo (para que el nuevo la copie) sin olvidar si Sonia debe estar
+        /// fuera. Después hay que llamar a <see cref="Rebind"/>.
+        /// </summary>
+        public void ReleaseAvatar()
+        {
+            if (_initialized && _avatar != null && _phase != Phase.Present)
+            {
+                bool target = _targetPresent;
+                Settle("cambio de avatar");
+                _targetPresent = target;
+            }
+        }
+
+        /// <summary>
+        /// Segundo paso de un cambio de avatar: toma el reposo del nuevo y, si
+        /// Sonia estaba fuera, lo saca al instante (sin animación, con letrero).
+        /// </summary>
+        public void Rebind(Animator newAnimator)
+        {
+            bool away = !_targetPresent;
+            animator = newAnimator;
+            _initialized = false;
+            Initialize();
+            if (away)
+            {
+                // SetPresent solo actúa si cambia el deseo: se marca presente y se pide salir.
+                _targetPresent = true;
+                SetPresent(false, null, true);
+            }
+        }
+
+        /// <summary>
         /// Toma la pose de reposo del avatar y la geometría de la salida. Se
         /// llama sola en Start (con Sonia en su sitio); antes, si llega un
         /// <c>presence</c> muy pronto.

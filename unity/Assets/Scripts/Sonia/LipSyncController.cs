@@ -13,9 +13,11 @@
 //  3. Las consonantes que se ven: cierre de labios en los valles hondos entre
 //     sílabas (p, b, m y el resto de oclusivas) y dientes juntos en la "s".
 //
-// Los visemas de Ready Player Me se usan casi enteros (con 0,2 la boca apenas
-// se entreabría) y la mandíbula (jawOpen) se suma en las sílabas fuertes. Todo
-// pasa por muelles críticamente amortiguados.
+// La boca se escribe en los canales de FaceRig (viseme_aa, viseme_PP...,
+// jawOpen), que los traduce a las formas del avatar: en los de Genies, a las
+// recetas FACS. Los visemas se usan casi enteros (con 0,2 la boca apenas se
+// entreabría) y la mandíbula se suma en las sílabas fuertes. Todo pasa por
+// muelles críticamente amortiguados.
 //
 // También reparte la prosodia: los eventos de sílaba y de frase del analizador
 // salen por OnSpeechEvent cuando les llega su momento, para que cabeza, cejas y
@@ -31,56 +33,18 @@ using UnityEngine;
 namespace Sonia
 {
     /// <summary>Mueve la boca con la voz que suena y reparte los eventos de prosodia.</summary>
-    // Corre después del LateUpdate de Vrm10Instance (orden 11000), que aplica sus
-    // expresiones (a cero); así los blendshapes de boca que escribimos aquí prevalecen.
     [DefaultExecutionOrder(12000)]
     [DisallowMultipleComponent]
     public class LipSyncController : MonoBehaviour
     {
-        /// <summary>Relación entre un identificador de visema y un blendshape de la malla.</summary>
-        [Serializable]
-        public class VisemeBinding
-        {
-            [Tooltip("Identificador del protocolo: sil, PP, FF, TH, DD, kk, CH, SS, nn, RR, aa, E, ih, oh, ou.")]
-            public string viseme = VisemeIds.Sil;
-
-            [Tooltip("Nombre del blendshape en la malla del avatar.")]
-            public string blendShape = "viseme_sil";
-        }
-
         [Header("Referencias")]
         [SerializeField]
-        [Tooltip("Malla con los blendshapes de la cara.")]
-        private SkinnedMeshRenderer faceRenderer;
+        [Tooltip("Cara del avatar: la boca se escribe en sus canales de visemas y jawOpen.")]
+        private FaceRig faceRig;
 
         [SerializeField]
         [Tooltip("Reproductor del audio en streaming: de él sale la voz que se analiza.")]
         private AudioStreamPlayer audioPlayer;
-
-        [Header("Visemas")]
-        [SerializeField]
-        [Tooltip("Mapa visema del protocolo a blendshape (convención Ready Player Me / Oculus por defecto).")]
-        private VisemeBinding[] visemeBindings = CreateDefaultBindings();
-
-        [SerializeField]
-        [Tooltip("Blendshape de apertura de mandíbula (convención ARKit).")]
-        private string jawOpenBlendShape = "jawOpen";
-
-        [SerializeField]
-        [Tooltip("Blendshape alternativo de apertura de boca si no existe el anterior.")]
-        private string mouthOpenBlendShape = "mouthOpen";
-
-        [SerializeField]
-        [Tooltip("Hueso de la mandíbula, por si el avatar no tiene blendshapes de boca.")]
-        private Transform jawBone;
-
-        [SerializeField]
-        [Tooltip("Eje local del hueso alrededor del que se abre la mandíbula.")]
-        private Vector3 jawOpenAxis = new Vector3(1f, 0f, 0f);
-
-        [SerializeField]
-        [Tooltip("Grados que baja la mandíbula con la boca del todo abierta.")]
-        private float jawBoneMaxAngle = 14f;
 
         [Header("Sincronía")]
         [SerializeField]
@@ -152,9 +116,9 @@ namespace Sonia
         /// <summary>Evento de prosodia cuando le llega su momento (ver gestureLeadMs). Hilo principal.</summary>
         public event Action<SpeechAnalyzer.SpeechEvent> OnSpeechEvent;
 
-        // Vocales en el orden de los visemas de la boca.
+        // Vocales en el orden de los canales de la boca.
         private const int VA = 0, VE = 1, VI = 2, VO = 3, VU = 4;
-        private static readonly string[] VowelVisemes = { VisemeIds.AA, VisemeIds.E, VisemeIds.IH, VisemeIds.OH, VisemeIds.OU };
+        private static readonly string[] VowelChannels = { "viseme_aa", "viseme_E", "viseme_I", "viseme_O", "viseme_U" };
 
         // Forma neutra de una sílaba cuando no se sabe la vocal: abierta y relajada.
         private static readonly float[] NeutralMix = { 0.6f, 0.3f, 0.1f, 0f, 0f };
@@ -173,15 +137,11 @@ namespace Sonia
         private long _writtenLastFrame;
         private bool _subscribed;
 
-        private int[] _shapeIndices = new int[0];
         private bool _hasVisemeShapes;
-        private int _jawShapeIndex = -1;
-        private int[] _vowelSlots = { -1, -1, -1, -1, -1 };
-        private int _ppSlot = -1;
-        private int _ssSlot = -1;
-        private float _shapeScale = 1f;
-        private Quaternion _jawInitialRotation = Quaternion.identity;
-        private bool _hasJawBone;
+        private readonly int[] _vowelChannels = { -1, -1, -1, -1, -1 };
+        private int _ppChannel = -1;
+        private int _ssChannel = -1;
+        private int _jawChannel = -1;
 
         private double _clock;
         private bool _clockReady;
@@ -193,11 +153,8 @@ namespace Sonia
         private readonly Spring[] _vowelSprings = new Spring[5];
         private float _roundness;
         private bool _active;
-        private float[] _accum = new float[0];
-        private int[] _touched = new int[0];
-        private int _touchedCount;
 
-        /// <summary>Cierto si la malla tiene blendshapes de visemas utilizables.</summary>
+        /// <summary>Cierto si la cara tiene canales de visemas utilizables.</summary>
         public bool HasVisemeShapes
         {
             get { return _hasVisemeShapes; }
@@ -245,13 +202,23 @@ namespace Sonia
             get { return LatencySamples(); }
         }
 
-        /// <summary>Malla de la cara. Al cambiarla se vuelven a resolver los blendshapes.</summary>
-        public SkinnedMeshRenderer FaceRenderer
+        /// <summary>Cara del avatar. Al cambiarla se vuelven a resolver los canales.</summary>
+        public FaceRig FaceRig
         {
-            get { return faceRenderer; }
+            get { return faceRig; }
             set
             {
-                faceRenderer = value;
+                if (faceRig != null)
+                {
+                    faceRig.Rebuilt -= RebindBlendShapes;
+                }
+
+                faceRig = value;
+                if (faceRig != null && isActiveAndEnabled)
+                {
+                    faceRig.Rebuilt += RebindBlendShapes;
+                }
+
                 RebindBlendShapes();
             }
         }
@@ -261,12 +228,6 @@ namespace Sonia
             if (audioPlayer == null)
             {
                 audioPlayer = GetComponentInParent<AudioStreamPlayer>();
-            }
-
-            if (jawBone != null)
-            {
-                _jawInitialRotation = jawBone.localRotation;
-                _hasJawBone = true;
             }
 
             if (audioPlayer != null)
@@ -288,6 +249,12 @@ namespace Sonia
                 audioPlayer.OnAudioFrame += _analyzer.Push;
                 _subscribed = true;
             }
+
+            if (faceRig != null)
+            {
+                faceRig.Rebuilt -= RebindBlendShapes;
+                faceRig.Rebuilt += RebindBlendShapes;
+            }
         }
 
         private void OnDisable()
@@ -297,81 +264,29 @@ namespace Sonia
                 audioPlayer.OnAudioFrame -= _analyzer.Push;
                 _subscribed = false;
             }
-        }
 
-        /// <summary>Mapa por defecto: identificadores del protocolo a nombres Ready Player Me / Oculus.</summary>
-        public static VisemeBinding[] CreateDefaultBindings()
-        {
-            return new[]
+            if (faceRig != null)
             {
-                new VisemeBinding { viseme = VisemeIds.Sil, blendShape = "viseme_sil" },
-                new VisemeBinding { viseme = VisemeIds.PP, blendShape = "viseme_PP" },
-                new VisemeBinding { viseme = VisemeIds.FF, blendShape = "viseme_FF" },
-                new VisemeBinding { viseme = VisemeIds.TH, blendShape = "viseme_TH" },
-                new VisemeBinding { viseme = VisemeIds.DD, blendShape = "viseme_DD" },
-                new VisemeBinding { viseme = VisemeIds.KK, blendShape = "viseme_kk" },
-                new VisemeBinding { viseme = VisemeIds.CH, blendShape = "viseme_CH" },
-                new VisemeBinding { viseme = VisemeIds.SS, blendShape = "viseme_SS" },
-                new VisemeBinding { viseme = VisemeIds.NN, blendShape = "viseme_nn" },
-                new VisemeBinding { viseme = VisemeIds.RR, blendShape = "viseme_RR" },
-                new VisemeBinding { viseme = VisemeIds.AA, blendShape = "viseme_aa" },
-                new VisemeBinding { viseme = VisemeIds.E, blendShape = "viseme_E" },
-                new VisemeBinding { viseme = VisemeIds.IH, blendShape = "viseme_I" },
-                new VisemeBinding { viseme = VisemeIds.OH, blendShape = "viseme_O" },
-                new VisemeBinding { viseme = VisemeIds.OU, blendShape = "viseme_U" }
-            };
+                faceRig.Rebuilt -= RebindBlendShapes;
+            }
         }
 
-        /// <summary>Busca en la malla los blendshapes del mapa. Se puede llamar si el avatar cambia en marcha.</summary>
+        /// <summary>Resuelve los canales de la boca en la cara. Se llama sola y al cambiar de avatar.</summary>
         public void RebindBlendShapes()
         {
-            if (visemeBindings == null || visemeBindings.Length == 0)
-            {
-                visemeBindings = CreateDefaultBindings();
-            }
-
-            int count = visemeBindings.Length;
-            _shapeIndices = new int[count];
             _hasVisemeShapes = false;
-            _jawShapeIndex = -1;
-
-            Mesh mesh = faceRenderer != null ? faceRenderer.sharedMesh : null;
-            for (int i = 0; i < count; i++)
+            for (int v = 0; v < VowelChannels.Length; v++)
             {
-                VisemeBinding binding = visemeBindings[i];
-                int index = mesh == null || binding == null ? -1 : FindBlendShape(mesh, binding.blendShape);
-                _shapeIndices[i] = index;
-                _hasVisemeShapes |= index >= 0;
+                _vowelChannels[v] = faceRig != null ? faceRig.Channel(VowelChannels[v]) : -1;
+                _hasVisemeShapes |= _vowelChannels[v] >= 0;
             }
 
-            for (int v = 0; v < VowelVisemes.Length; v++)
+            _ppChannel = faceRig != null ? faceRig.Channel("viseme_PP") : -1;
+            _ssChannel = faceRig != null ? faceRig.Channel("viseme_SS") : -1;
+            _jawChannel = faceRig != null ? faceRig.Channel("jawOpen") : -1;
+            if (_jawChannel < 0 && faceRig != null)
             {
-                _vowelSlots[v] = FindBindingSlot(VowelVisemes[v]);
-            }
-
-            _ppSlot = FindBindingSlot(VisemeIds.PP);
-            _ssSlot = FindBindingSlot(VisemeIds.SS);
-            if (mesh != null)
-            {
-                _jawShapeIndex = FindBlendShape(mesh, jawOpenBlendShape);
-                if (_jawShapeIndex < 0)
-                {
-                    _jawShapeIndex = FindBlendShape(mesh, mouthOpenBlendShape);
-                }
-            }
-
-            _shapeScale = BlendShapeScale(mesh);
-
-            // Lo que no se anima (sil, FF, TH, DD...) se deja a cero una vez.
-            if (faceRenderer != null)
-            {
-                for (int i = 0; i < count; i++)
-                {
-                    if (_shapeIndices[i] >= 0)
-                    {
-                        faceRenderer.SetBlendShapeWeight(_shapeIndices[i], 0f);
-                    }
-                }
+                _jawChannel = faceRig.Channel("mouthOpen");
             }
         }
 
@@ -422,26 +337,6 @@ namespace Sonia
                 int dot = candidate.LastIndexOf('.');
                 if (dot >= 0 && dot + 1 < candidate.Length
                     && string.Equals(candidate.Substring(dot + 1), name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        private int FindBindingSlot(string viseme)
-        {
-            if (visemeBindings == null)
-            {
-                return -1;
-            }
-
-            for (int i = 0; i < visemeBindings.Length && i < _shapeIndices.Length; i++)
-            {
-                VisemeBinding binding = visemeBindings[i];
-                if (binding != null && _shapeIndices[i] >= 0
-                    && string.Equals(binding.viseme, viseme, StringComparison.OrdinalIgnoreCase))
                 {
                     return i;
                 }
@@ -524,7 +419,7 @@ namespace Sonia
         /// <summary>Estado interno en texto, para depurar desde el editor o el HUD.</summary>
         public string DebugInfo()
         {
-            return "face=" + (faceRenderer != null ? faceRenderer.name : "null")
+            return "face=" + (faceRig != null && faceRig.PrimaryRenderer != null ? faceRig.PrimaryRenderer.name : "null")
                    + " visemas=" + _hasVisemeShapes
                    + " reloj=" + _clock.ToString("F0")
                    + " abre=" + _open.Value.ToString("F2")
@@ -710,85 +605,25 @@ namespace Sonia
 
         private void Apply(float open)
         {
-            if (faceRenderer == null)
+            if (faceRig == null)
             {
                 return;
             }
 
-            // Se acumula por blendshape antes de escribir: en los VRM varios
-            // visemas comparten el mismo (la s y la i son "Ih").
-            BeginAccumulate();
+            // FaceRig suma lo de todos y escribe una vez: varios canales comparten
+            // formas (en Genies casi todas las vocales llevan JAW_DROP).
             float keep = 1f - Mathf.Clamp01(_closure.Value);
-            for (int v = 0; v < _vowelSlots.Length; v++)
+            for (int v = 0; v < _vowelChannels.Length; v++)
             {
-                Accumulate(_vowelSlots[v], _vowelSprings[v].Value * keep);
+                faceRig.Add(_vowelChannels[v], _vowelSprings[v].Value * keep);
             }
 
-            Accumulate(_ppSlot, _closure.Value);
-            Accumulate(_ssSlot, _sibilant.Value);
+            faceRig.Add(_ppChannel, _closure.Value);
+            faceRig.Add(_ssChannel, _sibilant.Value);
 
-            float scale = 100f * _shapeScale;
-            for (int n = 0; n < _touchedCount; n++)
-            {
-                int index = _touched[n];
-                faceRenderer.SetBlendShapeWeight(index, Mathf.Clamp01(_accum[index]) * scale);
-                _accum[index] = 0f;
-            }
-
-            if (_jawShapeIndex >= 0)
-            {
-                // Sin visemas (avatares con solo jawOpen), la mandíbula hace todo el trabajo.
-                float jaw = _hasVisemeShapes ? _jaw.Value * keep : open * 0.5f * keep;
-                faceRenderer.SetBlendShapeWeight(_jawShapeIndex, Mathf.Clamp01(jaw) * scale);
-            }
-            else if (_hasJawBone && jawBone != null)
-            {
-                Vector3 axis = jawOpenAxis.sqrMagnitude > 0.0001f ? jawOpenAxis.normalized : Vector3.right;
-                jawBone.localRotation = _jawInitialRotation * Quaternion.AngleAxis(open * keep * jawBoneMaxAngle, axis);
-            }
-        }
-
-        private void BeginAccumulate()
-        {
-            int count = faceRenderer.sharedMesh != null ? faceRenderer.sharedMesh.blendShapeCount : 0;
-            if (_accum.Length != count)
-            {
-                _accum = new float[count];
-                _touched = new int[Mathf.Max(1, visemeBindings != null ? visemeBindings.Length : 1)];
-            }
-
-            _touchedCount = 0;
-        }
-
-        private void Accumulate(int slot, float weight01)
-        {
-            if (slot < 0 || slot >= _shapeIndices.Length)
-            {
-                return;
-            }
-
-            int index = _shapeIndices[slot];
-            if (index < 0 || index >= _accum.Length)
-            {
-                return;
-            }
-
-            bool seen = false;
-            for (int n = 0; n < _touchedCount; n++)
-            {
-                if (_touched[n] == index)
-                {
-                    seen = true;
-                    break;
-                }
-            }
-
-            if (!seen && _touchedCount < _touched.Length)
-            {
-                _touched[_touchedCount++] = index;
-            }
-
-            _accum[index] += weight01;
+            // Sin visemas (avatares con solo jawOpen), la mandíbula hace todo el trabajo.
+            float jaw = _hasVisemeShapes ? _jaw.Value * keep : open * 0.5f * keep;
+            faceRig.Add(_jawChannel, Mathf.Clamp01(jaw));
         }
     }
 }

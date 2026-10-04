@@ -90,8 +90,8 @@ namespace Sonia
 
         [Header("Referencias")]
         [SerializeField]
-        [Tooltip("Malla con los blendshapes ARKit de la cara.")]
-        private SkinnedMeshRenderer faceRenderer;
+        [Tooltip("Cara del avatar: las expresiones se escriben en sus canales ARKit.")]
+        private FaceRig faceRig;
 
         [SerializeField]
         [Tooltip("Estado del avatar (para saber si escucha, piensa o habla).")]
@@ -160,7 +160,6 @@ namespace Sonia
         private readonly float[] _target = new float[(int)Ch.Count];
         private readonly Spring[] _springs = new Spring[(int)Ch.Count];
         private readonly List<Gesture> _gestures = new List<Gesture>();
-        private float _scale = 1f;
         private bool _ready;
         private bool _subscribed;
         private float _seed;
@@ -170,13 +169,23 @@ namespace Sonia
         private float _stateSince;
         private int _thinkSide = 1;
 
-        /// <summary>Malla de la cara.</summary>
-        public SkinnedMeshRenderer FaceRenderer
+        /// <summary>Cara del avatar. Al cambiarla se vuelven a resolver los canales.</summary>
+        public FaceRig FaceRig
         {
-            get { return faceRenderer; }
+            get { return faceRig; }
             set
             {
-                faceRenderer = value;
+                if (faceRig != null)
+                {
+                    faceRig.Rebuilt -= Bind;
+                }
+
+                faceRig = value;
+                if (faceRig != null && isActiveAndEnabled)
+                {
+                    faceRig.Rebuilt += Bind;
+                }
+
                 Bind();
             }
         }
@@ -205,6 +214,12 @@ namespace Sonia
                 lipSync.OnSpeechEvent += HandleSpeechEvent;
                 _subscribed = true;
             }
+
+            if (faceRig != null)
+            {
+                faceRig.Rebuilt -= Bind;
+                faceRig.Rebuilt += Bind;
+            }
         }
 
         private void OnDisable()
@@ -214,23 +229,26 @@ namespace Sonia
                 lipSync.OnSpeechEvent -= HandleSpeechEvent;
                 _subscribed = false;
             }
+
+            if (faceRig != null)
+            {
+                faceRig.Rebuilt -= Bind;
+            }
         }
 
-        /// <summary>Resuelve los blendshapes. Se llama sola; repetir si cambia la malla.</summary>
+        /// <summary>Resuelve los canales en la cara. Se llama sola y al cambiar de avatar.</summary>
         public void Bind()
         {
             _ready = false;
-            Mesh mesh = faceRenderer != null ? faceRenderer.sharedMesh : null;
-            if (mesh == null)
+            if (faceRig == null)
             {
                 return;
             }
 
-            _scale = LipSyncController.BlendShapeScale(mesh);
             bool any = false;
             for (int i = 0; i < _index.Length; i++)
             {
-                _index[i] = LipSyncController.FindBlendShape(mesh, ChannelNames[i]);
+                _index[i] = faceRig.Channel(ChannelNames[i]);
                 any |= _index[i] >= 0;
             }
 
@@ -283,7 +301,7 @@ namespace Sonia
 
         private void LateUpdate()
         {
-            if (!_ready || faceRenderer == null)
+            if (!_ready || faceRig == null)
             {
                 return;
             }
@@ -312,10 +330,7 @@ namespace Sonia
                 bool brow = i <= (int)Ch.BrowDownR || i == (int)Ch.EyeWideL || i == (int)Ch.EyeWideR;
                 float speed = brow ? browSpeed : expressionSpeed;
                 _springs[i].Step(Mathf.Clamp01(_target[i]), speed, speed * 0.8f, dt);
-                if (_index[i] >= 0)
-                {
-                    faceRenderer.SetBlendShapeWeight(_index[i], Mathf.Clamp01(_springs[i].Value) * 100f * _scale);
-                }
+                faceRig.Add(_index[i], Mathf.Clamp01(_springs[i].Value));
             }
         }
 

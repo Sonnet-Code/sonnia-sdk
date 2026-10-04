@@ -152,10 +152,23 @@ namespace Sonia
         private int _serial;
         private bool _ready;
 
-        /// <summary>Animator que recibe el resultado.</summary>
+        /// <summary>Animator que recibe el resultado. Al cambiarlo (otro avatar) se reconstruye el grafo.</summary>
         public Animator Animator
         {
             get { return animator; }
+            set
+            {
+                if (animator == value)
+                {
+                    return;
+                }
+
+                animator = value;
+                if (isActiveAndEnabled)
+                {
+                    Build();
+                }
+            }
         }
 
         /// <summary>Cierto cuando el grafo está construido y sonando.</summary>

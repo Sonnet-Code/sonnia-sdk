@@ -161,6 +161,15 @@ namespace Sonia
             Bind();
         }
 
+        /// <summary>Pasa a otro avatar: cabeza nueva y ojos buscados de nuevo bajo ella.</summary>
+        public void Bind(Transform head)
+        {
+            headBone = head;
+            leftEye = null;
+            rightEye = null;
+            Bind();
+        }
+
         /// <summary>Busca los huesos y guarda su pose de reposo. Se llama sola al arrancar.</summary>
         public void Bind()
         {

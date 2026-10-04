@@ -104,7 +104,9 @@ namespace Sonia
         private PhonemeLipSyncBridge _bridge;
         private AvatarStateController _state;
         private AvatarChoreographer _choreographer;
+        private FaceRig _faceRig;
         private SkinnedMeshRenderer _face;
+        private readonly List<KeyValuePair<int, float>> _posed = new List<KeyValuePair<int, float>>();
         private Transform _head;
         private Transform _leftEye;
         private Transform _rightEye;
@@ -153,7 +155,8 @@ namespace Sonia
             _bridge = FindAnyObjectByType<PhonemeLipSyncBridge>();
             _state = FindAnyObjectByType<AvatarStateController>();
             _choreographer = FindAnyObjectByType<AvatarChoreographer>();
-            _face = _lipSync != null ? _lipSync.FaceRenderer : null;
+            _faceRig = _lipSync != null && _lipSync.FaceRig != null ? _lipSync.FaceRig : FindAnyObjectByType<FaceRig>();
+            _face = _faceRig != null ? _faceRig.PrimaryRenderer : null;
 
             Type bootstrapType = typeof(SoniaBootstrap);
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
@@ -236,6 +239,13 @@ namespace Sonia
 
         private void Update()
         {
+            // La pose fija se vuelve a sumar cada fotograma: FaceRig escribe y
+            // vacía sus sumas al final del LateUpdate.
+            for (int i = 0; i < _posed.Count; i++)
+            {
+                _faceRig.Add(_posed[i].Key, _posed[i].Value);
+            }
+
             if (_done)
             {
                 return;
@@ -310,19 +320,17 @@ namespace Sonia
             }
         }
 
-        /// <summary>Pone a cero todos los blendshapes de la cara y aplica los pedidos ("nombre:peso,...").</summary>
+        /// <summary>
+        /// Pose fija de la cara ("canal:peso,..."): visemas, nombres ARKit o formas
+        /// FACS. Sustituye a la anterior y se suma en FaceRig cada fotograma; con
+        /// la cara congelada, lo demás queda a cero.
+        /// </summary>
         private void SetShapes(string spec)
         {
-            if (_face == null)
+            _posed.Clear();
+            if (_faceRig == null)
             {
                 return;
-            }
-
-            Mesh mesh = _face.sharedMesh;
-            float scale = LipSyncController.BlendShapeScale(mesh);
-            for (int i = 0; i < mesh.blendShapeCount; i++)
-            {
-                _face.SetBlendShapeWeight(i, 0f);
             }
 
             foreach (string part in (spec ?? string.Empty).Split(','))
@@ -333,11 +341,15 @@ namespace Sonia
                     continue;
                 }
 
-                int index = mesh.GetBlendShapeIndex(kv[0].Trim());
+                int channel = _faceRig.Channel(kv[0].Trim());
                 float weight;
-                if (index >= 0 && float.TryParse(kv[1], NumberStyles.Float, CultureInfo.InvariantCulture, out weight))
+                if (channel >= 0 && float.TryParse(kv[1], NumberStyles.Float, CultureInfo.InvariantCulture, out weight))
                 {
-                    _face.SetBlendShapeWeight(index, weight * 100f * scale);
+                    _posed.Add(new KeyValuePair<int, float>(channel, weight));
+                }
+                else
+                {
+                    Debug.LogWarning("[FaceLab] canal desconocido en la pose: " + part);
                 }
             }
         }

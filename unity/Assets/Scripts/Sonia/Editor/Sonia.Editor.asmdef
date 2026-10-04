@@ -3,6 +3,7 @@
     "rootNamespace": "Sonia.EditorTools",
     "references": [
         "Sonia",
+        "Sonia.Genies",
         "Unity.InputSystem",
         "Unity.TextMeshPro",
         "UnityEngine.UI",

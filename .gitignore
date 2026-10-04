@@ -50,3 +50,8 @@ unity/Assets/Resources/GeniesAuthSettings.bytes*
 unity/Packages/com.genies.avatar-sdk.client/
 unity/Assets/Samples/
 unity/Assets/Samples.meta
+
+# Restos de Unity tras un cierre inesperado (copias de escenas y volcados de memoria)
+unity/Assets/_Recovery/
+unity/Assets/_Recovery.meta
+unity/mono_crash.*

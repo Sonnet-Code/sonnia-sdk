@@ -155,16 +155,8 @@ namespace Sonia
 
         [Header("Parpadeo")]
         [SerializeField]
-        [Tooltip("Malla con los blendshapes de los ojos.")]
-        private SkinnedMeshRenderer faceRenderer;
-
-        [SerializeField]
-        [Tooltip("Blendshape del párpado izquierdo (convención ARKit / Ready Player Me).")]
-        private string blinkLeftBlendShape = "eyeBlinkLeft";
-
-        [SerializeField]
-        [Tooltip("Blendshape del párpado derecho.")]
-        private string blinkRightBlendShape = "eyeBlinkRight";
+        [Tooltip("Cara del avatar: el parpadeo se escribe en sus canales eyeBlinkLeft y eyeBlinkRight.")]
+        private FaceRig faceRig;
 
         [SerializeField]
         [Tooltip("Segundos mínimo y máximo entre parpadeos espontáneos.")]
@@ -221,9 +213,8 @@ namespace Sonia
         private bool _subscribed;
 
         // Parpadeo.
-        private int _blinkLeftIndex = -1;
-        private int _blinkRightIndex = -1;
-        private float _blinkScale = 1f;
+        private int _blinkLeftChannel = -1;
+        private int _blinkRightChannel = -1;
         private float _timeToNextBlink;
         private float _blinkElapsed = -1f;
         private float _blinkDepth = 1f;
@@ -260,6 +251,13 @@ namespace Sonia
             _lookOverride = true;
             _lookOverridePosition = worldPosition;
             _lookOverrideWeight = weight;
+        }
+
+        /// <summary>Hueso de la cabeza que se gira. Cambia con el avatar (el del SDK sustituye al doble).</summary>
+        public Transform HeadBone
+        {
+            get { return headBone; }
+            set { headBone = value; }
         }
 
         /// <summary>Vuelve a mirar a quien toque según el estado (visitante, panel, pensar).</summary>
@@ -303,6 +301,12 @@ namespace Sonia
                 lipSync.OnSpeechEvent += HandleSpeechEvent;
                 _subscribed = true;
             }
+
+            if (faceRig != null)
+            {
+                faceRig.Rebuilt -= RefreshBlendShapes;
+                faceRig.Rebuilt += RefreshBlendShapes;
+            }
         }
 
         private void OnDisable()
@@ -312,23 +316,39 @@ namespace Sonia
                 lipSync.OnSpeechEvent -= HandleSpeechEvent;
                 _subscribed = false;
             }
+
+            if (faceRig != null)
+            {
+                faceRig.Rebuilt -= RefreshBlendShapes;
+            }
         }
 
-        /// <summary>Vuelve a resolver los blendshapes de parpadeo (útil si el avatar se asigna tarde).</summary>
+        /// <summary>Cara del avatar. Al cambiarla se vuelven a resolver los canales de parpadeo.</summary>
+        public FaceRig FaceRig
+        {
+            get { return faceRig; }
+            set
+            {
+                if (faceRig != null)
+                {
+                    faceRig.Rebuilt -= RefreshBlendShapes;
+                }
+
+                faceRig = value;
+                if (faceRig != null && isActiveAndEnabled)
+                {
+                    faceRig.Rebuilt += RefreshBlendShapes;
+                }
+
+                RefreshBlendShapes();
+            }
+        }
+
+        /// <summary>Vuelve a resolver los canales de parpadeo (al cambiar de avatar).</summary>
         public void RefreshBlendShapes()
         {
-            _blinkLeftIndex = -1;
-            _blinkRightIndex = -1;
-
-            Mesh mesh = faceRenderer != null ? faceRenderer.sharedMesh : null;
-            if (mesh == null)
-            {
-                return;
-            }
-
-            _blinkLeftIndex = mesh.GetBlendShapeIndex(blinkLeftBlendShape);
-            _blinkRightIndex = mesh.GetBlendShapeIndex(blinkRightBlendShape);
-            _blinkScale = LipSyncController.BlendShapeScale(mesh);
+            _blinkLeftChannel = faceRig != null ? faceRig.Channel("eyeBlinkLeft") : -1;
+            _blinkRightChannel = faceRig != null ? faceRig.Channel("eyeBlinkRight") : -1;
         }
 
         // ------------------------------------------------------------------
@@ -659,7 +679,7 @@ namespace Sonia
 
         private void UpdateBlink(float deltaTime)
         {
-            if (faceRenderer == null || (_blinkLeftIndex < 0 && _blinkRightIndex < 0))
+            if (faceRig == null || (_blinkLeftChannel < 0 && _blinkRightChannel < 0))
             {
                 return;
             }
@@ -750,15 +770,9 @@ namespace Sonia
 
         private void ApplyBlink(float weight)
         {
-            if (_blinkLeftIndex >= 0)
-            {
-                faceRenderer.SetBlendShapeWeight(_blinkLeftIndex, weight * _blinkScale);
-            }
-
-            if (_blinkRightIndex >= 0)
-            {
-                faceRenderer.SetBlendShapeWeight(_blinkRightIndex, weight * _blinkScale);
-            }
+            // weight llega en 0..100; FaceRig suma en 0..1.
+            faceRig.Add(_blinkLeftChannel, weight / 100f);
+            faceRig.Add(_blinkRightChannel, weight / 100f);
         }
     }
 }
