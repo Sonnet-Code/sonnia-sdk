@@ -946,6 +946,71 @@ async def test_speak_text_devuelve_la_voz_de_gpt_live(
     assert server.conns[0].of_type("session.input_audio.append")  # silencio de fondo
 
 
+async def test_speak_text_corta_lo_que_gpt_live_anade_tras_el_texto(tmp_path: Path) -> None:
+    # Pasó de verdad: tras un saludo grabado se puso a anunciar una charla inventada.
+    server = FakeLiveServer()
+
+    async def react(conn: FakeConn, message: dict[str, Any]) -> None:
+        if message["type"] == "session.commentary.append":
+            await conn.say("Hoy se habla de tecnología.")
+            for _ in range(4):
+                await conn.audio(pcm(2_400, 700))
+            for _ in range(6):  # pausa de 0,6 s: menos que SAY_END_GAP_S
+                await conn.audio(pcm(2_400, 0))
+            await conn.say(" Tenemos una charla sobre inteligencia artificial.")
+            for _ in range(10):
+                await conn.audio(pcm(2_400, 900))
+            for _ in range(20):
+                await conn.audio(pcm(2_400, 0))
+
+    server.on_message = react
+    async with running(server) as connect:
+        audio = await speak_text(
+            make_settings(tmp_path).live, "Hoy se habla de tecnología.", connect=connect
+        )
+    assert audio.startswith(pcm(9_600, 700))
+    assert pcm(2_400, 900) not in audio  # nada de la charla inventada
+
+
+async def test_speak_text_rechaza_una_lectura_demasiado_larga(tmp_path: Path) -> None:
+    # Sin transcripción no se sabe dónde acaba el texto: manda el tope de duración.
+    server = FakeLiveServer()
+
+    async def react(conn: FakeConn, message: dict[str, Any]) -> None:
+        if message["type"] == "session.commentary.append":
+            for _ in range(40):  # 4 s de voz para un "Hola"
+                await conn.audio(pcm(2_400, 700))
+            for _ in range(20):
+                await conn.audio(pcm(2_400, 0))
+
+    server.on_message = react
+    async with running(server) as connect:
+        with pytest.raises(LiveError, match="no se limitó a leer"):
+            await speak_text(make_settings(tmp_path).live, "Hola", connect=connect)
+
+
+def test_la_cache_descarta_una_frase_grabada_demasiado_larga(tmp_path: Path) -> None:
+    import wave
+
+    from sonia.live.voicecache import VoiceCache
+
+    settings = make_settings(tmp_path)
+    cache = VoiceCache(tmp_path / "voice", settings.live)
+    good, bad = "¡Hola!", "¡Bienvenido a la Biblioteca Nacional!"
+    for text, seconds in ((good, 1.0), (bad, 13.85)):
+        path = cache.path_for(text)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(path), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(RATE)
+            wav.writeframes(pcm(int(RATE * seconds), 700))
+    assert cache.get(good) is not None
+    assert cache.missing([good, bad]) == [bad]
+    assert cache.get(bad) is None
+    assert not cache.path_for(bad).exists()  # se borra para volver a grabarla
+
+
 def test_narrador_recorta_y_normaliza(monkeypatch: pytest.MonkeyPatch) -> None:
     llm = FakeVisionLLM("  Dos   personas\n con gorras. ")
     text = asyncio.run(VisionNarrator(llm).describe(Frame(data=b"x")))

@@ -10,7 +10,9 @@ import asyncio
 import base64
 import binascii
 import contextlib
+import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,7 +20,7 @@ from sonia.config import LiveSettings
 from sonia.live.audio import silence_blocks
 from sonia.live.client import LiveClient, LiveError, WsConnect, describe_error
 
-__all__ = ["ProbeResult", "probe_session", "speak_text"]
+__all__ = ["ProbeResult", "max_reading_seconds", "probe_session", "speak_text"]
 
 #: Instrucciones de la sesión de lectura de ``sonia say``.
 SAY_INSTRUCTIONS = (
@@ -32,6 +34,16 @@ SAY_REQUEST = "{text}"
 #: Silencio tras la última voz con el que se da la lectura por terminada.
 SAY_END_GAP_S = 1.5
 
+#: Lo mismo cuando su transcripción ya llegó al final del texto: GPT-Live a
+#: veces sigue hablando por su cuenta tras una pausa breve (inventó una charla
+#: tras un saludo), y eso no puede quedar grabado.
+SAY_COVERED_GAP_S = 0.4
+
+#: Duración máxima razonable de una lectura: margen fijo más segundos por
+#: carácter (el habla normal va por 0,06-0,08 s por carácter; cantando, algo más).
+_MAX_BASE_S = 1.5
+_MAX_PER_CHAR_S = 0.11
+
 #: Nivel RMS (0..1) a partir del cual un trozo es voz (GPT-Live manda silencio digital, 0).
 VOICE_RMS = 0.003
 
@@ -40,6 +52,11 @@ _TAIL_S = 0.15
 
 #: Bloques de silencio que mantienen viva la línea de tiempo de la sesión.
 _SILENCE_BLOCK_MS = 40
+
+
+def max_reading_seconds(text: str) -> float:
+    """Lo más que puede durar la lectura de ``text`` sin que haya añadido nada."""
+    return _MAX_BASE_S + _MAX_PER_CHAR_S * len(text.strip())
 
 
 @dataclass(slots=True)
@@ -92,8 +109,11 @@ async def speak_text(
     """Hace que GPT-Live lea ``text`` y devuelve el PCM s16le mono de su voz.
 
     GPT-Live manda audio sin parar (también silencio), así que la lectura
-    empieza con el primer trozo con voz y termina tras ``SAY_END_GAP_S`` sin
-    voz. El silencio de antes y de después se recorta.
+    empieza con el primer trozo con voz y termina tras ``SAY_END_GAP_S`` de
+    audio sin voz, o ``SAY_COVERED_GAP_S`` si su transcripción ya llegó al
+    final del texto. El silencio de antes y de después se recorta. Si la voz
+    dura más que :func:`max_reading_seconds`, GPT-Live añadió algo de su
+    cosecha y se lanza :class:`LiveError` en vez de devolverlo.
     """
     client = LiveClient(settings, connect=connect)
     await client.start(_session(settings, SAY_INSTRUCTIONS))
@@ -117,14 +137,24 @@ async def speak_text(
     ]
     chunks: list[bytes] = []
     last_voice_index = -1
+    rate = int(settings.sample_rate)
+    limit_s = max_reading_seconds(text)
+    tail_words = _words(text)[-2:]
+    transcript: list[str] = []
+    covered = False
     try:
         # ``commentary`` es lo que la hace hablar (``instructions`` no).
         await client.append_commentary(SAY_REQUEST.format(text=text))
         deadline = time.monotonic() + timeout_s
         last_voice: float | None = None
+        voiced_s = 0.0  # audio desde la primera voz
+        silent_run_s = 0.0  # audio sin voz desde la última voz
         while True:
             now = time.monotonic()
+            gap = SAY_COVERED_GAP_S if covered else SAY_END_GAP_S
             if now >= deadline or (last_voice is not None and now - last_voice >= SAY_END_GAP_S):
+                break
+            if last_voice is not None and (silent_run_s >= gap or voiced_s > limit_s + 1.0):
                 break
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=0.2)
@@ -141,14 +171,24 @@ async def speak_text(
                     pcm = base64.b64decode(data)
                     if len(pcm) % 2:
                         pcm = pcm[:-1]
+                    seconds = len(pcm) / 2 / rate
                     if _rms(pcm) >= VOICE_RMS:
                         if last_voice is None:
                             chunks.clear()  # fuera el silencio de antes
                         last_voice = time.monotonic()
                         chunks.append(pcm)
                         last_voice_index = len(chunks) - 1
+                        voiced_s += seconds
+                        silent_run_s = 0.0
                     elif last_voice is not None:
                         chunks.append(pcm)
+                        voiced_s += seconds
+                        silent_run_s += seconds
+            elif kind == "session.output_transcript.delta":
+                delta = event.get("delta")
+                if isinstance(delta, str) and delta and not covered and tail_words:
+                    transcript.append(delta)
+                    covered = _contains(_words("".join(transcript)), tail_words)
             elif kind == "error":
                 raise LiveError(describe_error(event))
     finally:
@@ -157,9 +197,28 @@ async def speak_text(
         await asyncio.gather(*tasks, return_exceptions=True)
         await client.close()
     # Fuera el silencio de después, salvo una cola corta para que no suene cortado.
-    kept = chunks[: last_voice_index + 1] if last_voice_index >= 0 else []
-    tail = b"".join(chunks[last_voice_index + 1 :])[: int(settings.sample_rate * _TAIL_S) * 2]
-    return b"".join(kept) + tail
+    kept = b"".join(chunks[: last_voice_index + 1] if last_voice_index >= 0 else [])
+    if len(kept) / 2 / rate > limit_s:
+        raise LiveError(
+            f"GPT-Live no se limitó a leer el texto: {len(kept) / 2 / rate:.1f} s de voz "
+            f"para {len(text.strip())} caracteres (máximo {limit_s:.1f} s)"
+        )
+    tail = b"".join(chunks[last_voice_index + 1 :])[: int(rate * _TAIL_S) * 2]
+    return kept + tail
+
+
+def _words(text: str) -> list[str]:
+    """Palabras en minúsculas, sin tildes, signos ni marcas como "[laugh]"."""
+    text = re.sub(r"\[[^\[\]]*\]?", " ", text)
+    plain = unicodedata.normalize("NFKD", text.lower())
+    plain = "".join(c for c in plain if not unicodedata.combining(c))
+    return re.findall(r"[a-z0-9ñ]+", plain)
+
+
+def _contains(words: list[str], needle: list[str]) -> bool:
+    """¿Aparece ``needle`` seguida dentro de ``words``?"""
+    n = len(needle)
+    return any(words[i : i + n] == needle for i in range(len(words) - n + 1))
 
 
 def _rms(pcm: bytes) -> float:

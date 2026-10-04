@@ -22,7 +22,7 @@ from pathlib import Path
 
 from sonia.config import LiveSettings
 from sonia.live.client import WsConnect
-from sonia.live.oneshot import speak_text
+from sonia.live.oneshot import max_reading_seconds, speak_text
 
 __all__ = ["VoiceCache"]
 
@@ -33,6 +33,9 @@ _MIN_SECONDS = 0.3
 
 #: Fallos seguidos tras los que se deja de grabar.
 _MAX_FAILURES = 2
+
+#: Margen por la cola de silencio que se deja al final de cada grabación.
+_TAIL_SLACK_S = 0.3
 
 
 class VoiceCache:
@@ -59,13 +62,30 @@ class VoiceCache:
         return self._dir / settings.voice / f"{digest}.wav"
 
     def has(self, text: str) -> bool:
-        return self.path_for(text).is_file()
+        return self._usable(text)
 
     def get(self, text: str) -> bytes | None:
         """PCM s16le mono de la frase, o ``None`` si no está grabada (o no sirve)."""
+        if not self._usable(text):
+            return None
+        path = self.path_for(text)
+        try:
+            with wave.open(str(path), "rb") as wav:
+                return wav.readframes(wav.getnframes())
+        except (OSError, wave.Error, EOFError):
+            logger.warning("Frase grabada ilegible: %s", path)
+            return None
+
+    def _usable(self, text: str) -> bool:
+        """¿Hay una grabación de la frase con el formato y la duración esperados?
+
+        Una grabación más larga de lo que puede durar el texto es que GPT-Live
+        añadió algo de su cosecha (pasó: inventó una charla tras un saludo). Se
+        borra para que "Preparar voces" la vuelva a grabar.
+        """
         path = self.path_for(text)
         if not path.is_file():
-            return None
+            return False
         try:
             with wave.open(str(path), "rb") as wav:
                 if (
@@ -73,11 +93,21 @@ class VoiceCache:
                     or wav.getsampwidth() != 2
                     or wav.getframerate() != self._settings.sample_rate
                 ):
-                    return None
-                return wav.readframes(wav.getnframes())
+                    return False
+                seconds = wav.getnframes() / wav.getframerate()
         except (OSError, wave.Error, EOFError):
             logger.warning("Frase grabada ilegible: %s", path)
-            return None
+            return False
+        if seconds > max_reading_seconds(text) + _TAIL_SLACK_S:
+            logger.warning(
+                "Frase grabada demasiado larga (%.1f s) para %r: se descarta y se volverá a grabar",
+                seconds,
+                text[:60],
+            )
+            with contextlib.suppress(OSError):
+                path.unlink()
+            return False
+        return True
 
     def count_ready(self, texts: Iterable[str]) -> int:
         return sum(1 for text in texts if self.has(text))
