@@ -430,9 +430,11 @@ async def _live_mic_loop(settings: Settings, engine: LiveEngine) -> None:
 
     Igual que el bucle del otro motor, reintenta indefinidamente; mientras el
     micrófono está caído se manda silencio para que la sesión siga viva y
-    ``text_input`` siga funcionando.
+    ``text_input`` siga funcionando. Antes de reabrir se vuelven a leer los
+    dispositivos, para que aparezca el micro USB si se desenchufó y se volvió a
+    enchufar (aquí no hay más streams de audio abiertos).
     """
-    from sonia.audio.capture import MicCapture
+    from sonia.audio.capture import MicCapture, refresh_devices
 
     while True:
         try:
@@ -451,6 +453,7 @@ async def _live_mic_loop(settings: Settings, engine: LiveEngine) -> None:
                 exc_info=logger.isEnabledFor(logging.DEBUG),
             )
         await _feed_silence(engine, settings, MIC_RETRY_DELAY_S)
+        await asyncio.to_thread(refresh_devices)
 
 
 @dataclass(slots=True)

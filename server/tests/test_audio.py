@@ -18,6 +18,7 @@ from sonia.audio.capture import (
     MicCapture,
     MicStalled,
     list_input_devices,
+    refresh_devices,
     resolve_input_device,
 )
 from sonia.config import AudioSettings
@@ -95,9 +96,16 @@ class _FakeSounddevice:
 
     def __init__(self) -> None:
         self.streams: list[_FakeStream] = []
+        self.restarts: list[str] = []
 
     def query_devices(self) -> list[dict[str, Any]]:
         return list(self.DEVICES)
+
+    def _terminate(self) -> None:
+        self.restarts.append("terminate")
+
+    def _initialize(self) -> None:
+        self.restarts.append("initialize")
 
     def InputStream(self, **kwargs: Any) -> _FakeStream:  # noqa: N802 - API de sounddevice
         stream = _FakeStream(**kwargs)
@@ -223,3 +231,52 @@ async def test_mic_capture_el_cierre_no_se_confunde_con_un_cuelgue(
         task = asyncio.create_task(_drain(mic.blocks()))
         await asyncio.sleep(0)
     assert await asyncio.wait_for(task, timeout=1.0) == []
+
+
+async def test_mic_capture_reabre_si_tras_oir_algo_solo_llegan_ceros(
+    fake_sd: _FakeSounddevice,
+) -> None:
+    """Micro USB desenchufado y vuelto a enchufar: siguen llegando bloques, pero a cero."""
+    async with MicCapture(make_settings(), silence_timeout=0.05) as mic:
+        callback = fake_sd.streams[0].callback
+        blocks = mic.blocks()
+        callback(np.full((BLOCK_SAMPLES, 1), 0.01, dtype=np.float32), BLOCK_SAMPLES, None, None)
+        await anext(blocks)
+        callback(np.zeros((BLOCK_SAMPLES, 1), dtype=np.float32), BLOCK_SAMPLES, None, None)
+        await anext(blocks)
+        await asyncio.sleep(0.06)
+        callback(np.zeros((BLOCK_SAMPLES, 1), dtype=np.float32), BLOCK_SAMPLES, None, None)
+        with pytest.raises(MicStalled):
+            await anext(blocks)
+
+
+async def test_mic_capture_no_reabre_un_micro_mudo_desde_el_principio(
+    fake_sd: _FakeSounddevice,
+) -> None:
+    """Silenciado con su botón desde que se abrió: reabrirlo no arregla nada."""
+    async with MicCapture(make_settings(), silence_timeout=0.05) as mic:
+        callback = fake_sd.streams[0].callback
+        blocks = mic.blocks()
+        for _ in range(3):
+            callback(np.zeros((BLOCK_SAMPLES, 1), dtype=np.float32), BLOCK_SAMPLES, None, None)
+            assert not (await anext(blocks)).any()
+            await asyncio.sleep(0.03)
+
+
+def test_refresh_devices_reinicia_portaudio(fake_sd: _FakeSounddevice) -> None:
+    refresh_devices()
+
+    assert fake_sd.restarts == ["terminate", "initialize"]
+
+
+def test_refresh_devices_no_lanza_si_portaudio_falla(
+    fake_sd: _FakeSounddevice, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom() -> None:
+        raise RuntimeError("PortAudio no responde")
+
+    monkeypatch.setattr(fake_sd, "_initialize", boom)
+
+    refresh_devices()
+
+    assert fake_sd.restarts == ["terminate"]

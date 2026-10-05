@@ -35,9 +35,33 @@ _WARN_INTERVAL_S = 5.0
 #: el dispositivo desaparece o el stream se aborta sin avisar.
 DEFAULT_STALL_TIMEOUT_S = 3.0
 
+#: Si, después de haber llegado sonido, solo llega silencio digital (todas las
+#: muestras a cero exacto) durante este tiempo, el stream se da por atascado:
+#: un micrófono de verdad siempre trae algo de ruido. Pasa al desenchufar y
+#: volver a enchufar el micro USB: PortAudio sigue entregando bloques, pero
+#: vacíos, del dispositivo que ya no existe.
+DEFAULT_SILENCE_TIMEOUT_S = 5.0
+
 
 class MicStalled(RuntimeError):
-    """El micrófono dejó de entregar audio sin cerrar el stream."""
+    """El micrófono dejó de entregar audio (o solo entrega ceros) sin cerrar el stream."""
+
+
+def refresh_devices() -> None:
+    """Vuelve a leer los dispositivos de audio del sistema.
+
+    PortAudio solo los lee al iniciarse, así que un micrófono USB que se
+    desenchufa y se vuelve a enchufar no aparece (o sigue apuntando al que ya no
+    existe) hasta reiniciar el proceso. Solo se puede llamar sin ningún stream
+    abierto. Si falla, se avisa y se sigue con la lista que había.
+    """
+    try:
+        import sounddevice as sd
+
+        sd._terminate()
+        sd._initialize()
+    except Exception as exc:  # noqa: BLE001 - depende del hardware y de PortAudio
+        _log.warning("No se pudo volver a leer la lista de dispositivos de audio: %s", exc)
 
 
 def list_input_devices() -> list[dict[str, Any]]:
@@ -141,10 +165,12 @@ class MicCapture:
         settings: AudioSettings,
         *,
         stall_timeout: float = DEFAULT_STALL_TIMEOUT_S,
+        silence_timeout: float = DEFAULT_SILENCE_TIMEOUT_S,
         sample_rate: int = INPUT_SAMPLE_RATE,
     ) -> None:
         self._settings = settings
         self._stall_timeout = stall_timeout
+        self._silence_timeout = silence_timeout
         self._sample_rate = sample_rate
         self._block_samples = max(1, settings.block_ms * sample_rate // 1000)
         self._queue: asyncio.Queue[AudioArray | None] = asyncio.Queue(maxsize=QUEUE_MAXSIZE)
@@ -235,10 +261,15 @@ class MicCapture:
         de dispositivo por defecto, stream abortado) no llega ninguna excepción
         por su cuenta: la corrutina se quedaría esperando para siempre y Sonia
         se volvería sorda en silencio. Por eso se vigila el hueco entre bloques
-        y se lanza :class:`MicStalled`, que quien llama usa para reabrir.
+        y se lanza :class:`MicStalled`, que quien llama usa para reabrir. Lo
+        mismo si, tras haber oído algo, solo llegan ceros exactos (el micro USB
+        se desenchufó y se volvió a enchufar); un micro que llega mudo desde el
+        principio (con su botón de silencio) no se reabre en bucle.
         """
         if self._stream is None and not self._closed:
             raise RuntimeError("MicCapture.blocks() requiere abrir el micrófono con 'async with'")
+        heard = False
+        silent_since: float | None = None
         while True:
             timeout = self._stall_timeout if self._stall_timeout > 0 else None
             try:
@@ -252,6 +283,19 @@ class MicCapture:
                 ) from None
             if block is None:
                 break
+            if self._silence_timeout > 0:
+                if block.any():
+                    heard = True
+                    silent_since = None
+                elif heard:
+                    now = time.monotonic()
+                    if silent_since is None:
+                        silent_since = now
+                    elif now - silent_since >= self._silence_timeout:
+                        raise MicStalled(
+                            "el micrófono solo entrega silencio digital desde hace "
+                            f"{self._silence_timeout:g} s (¿se desenchufó?)"
+                        )
             yield block
 
     @property
