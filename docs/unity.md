@@ -183,8 +183,11 @@ arranca sola: un doble clic y ya está Sonia entera.
    sistema: en macOS sale para macOS y en Windows para Windows.
 2. La build lo copia dentro de la app con el `.env` del repo al lado del
    ejecutable (Jean: «los envs deben inyectarse en el build»). Se copia como
-   archivo, sin leerlo; las builds están en `.gitignore`, así que la clave no
-   llega a git. Sin orquestador congelado la build avisa y la app espera uno
+   archivo; las builds están en `.gitignore`, así que la clave no llega a git.
+   Todas las apps salen en el panel de Cloudflare (Jean: «necesito que todas
+   las builds la tengan»): si ese `.env` no da valor a `PANEL_CLOUD_TOKEN`, la
+   build no empieza (solo se mira si tiene valor; el valor no se escribe en
+   ningún sitio). Sin orquestador congelado la build avisa y la app espera uno
    externo, como antes.
    - macOS: `Sonia.app/Contents/Resources/orquestador/sonia-orquestador/`
    - Windows: `Sonia_Data/orquestador/sonia-orquestador/`

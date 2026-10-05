@@ -20,14 +20,18 @@
 //
 // macOS y Windows:
 //   5. El orquestador congelado (scripts/build_orquestador.sh) entra en la app con el
-//      .env del repo a su lado, copiado como archivo (nunca se lee). Jean: «los envs
-//      deben inyectarse en el build». Las builds están en .gitignore, así que la
-//      clave no llega a git. Si falta el orquestador congelado, la app sale sin él
-//      (avisa) y espera uno externo, como antes.
+//      .env del repo a su lado, copiado como archivo. Jean: «los envs deben
+//      inyectarse en el build». Las builds están en .gitignore, así que la clave no
+//      llega a git. Si falta el orquestador congelado, la app sale sin él (avisa) y
+//      espera uno externo, como antes.
+//   6. Todas las apps salen en el panel de Cloudflare (Jean: «necesito que todas
+//      las builds la tengan»): sin PANEL_CLOUD_TOKEN en ese .env la build no
+//      empieza. Solo se mira si la variable tiene valor; nunca se escribe el valor.
 
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
@@ -37,6 +41,9 @@ namespace Sonia.EditorTools
 {
     public class SoniaPlayerBuildFixes : IPreprocessBuildWithReport, IPostprocessBuildWithReport
     {
+        /// <summary>Variable del .env con la que cada Sonia entra en el panel de Cloudflare.</summary>
+        private const string PanelTokenVariable = "PANEL_CLOUD_TOKEN";
+
         /// <summary>Carpeta de las librerías NAF de macOS dentro del SDK de Genies.</summary>
         private const string NafMacPlugins = "/NAF Plugin/Runtime/Plugins/macOS/";
 
@@ -62,10 +69,70 @@ namespace Sonia.EditorTools
 
         public void OnPreprocessBuild(BuildReport report)
         {
-            if (report.summary.platform == BuildTarget.StandaloneOSX)
+            BuildTarget platform = report.summary.platform;
+            if (platform == BuildTarget.StandaloneOSX || platform == BuildTarget.StandaloneWindows64)
+            {
+                RequirePanelToken();
+            }
+
+            if (platform == BuildTarget.StandaloneOSX)
             {
                 WithoutNafPreload();
             }
+        }
+
+        /// <summary>Sin PANEL_CLOUD_TOKEN en el .env del repo, la build no empieza (ver la cabecera).</summary>
+        private static void RequirePanelToken()
+        {
+            string env = Path.Combine(RepoRoot, ".env");
+            if (File.Exists(env) && HasValue(env, PanelTokenVariable))
+            {
+                return;
+            }
+
+            throw new BuildFailedException("Falta " + PanelTokenVariable + " en " + env
+                                           + ": todas las apps tienen que salir en el panel de Cloudflare."
+                                           + " Ponlo (es el AGENT_TOKEN del Worker sonia-panel, ver docs/panel.md)"
+                                           + " y vuelve a lanzar la build.");
+        }
+
+        /// <summary>
+        /// Si un .env da valor a <paramref name="name"/>, leyéndolo como python-dotenv:
+        /// manda la última línea, vale «export », las comillas encierran el valor y,
+        /// sin comillas, lo que va tras « #» es comentario.
+        /// </summary>
+        private static bool HasValue(string envFile, string name)
+        {
+            string value = null;
+            foreach (string raw in File.ReadAllLines(envFile))
+            {
+                string line = raw.Trim();
+                if (line.StartsWith("export ", StringComparison.Ordinal))
+                {
+                    line = line.Substring("export ".Length).TrimStart();
+                }
+
+                int equals = line.IndexOf('=');
+                if (line.StartsWith("#", StringComparison.Ordinal) || equals <= 0
+                    || line.Substring(0, equals).Trim() != name)
+                {
+                    continue;
+                }
+
+                string rest = line.Substring(equals + 1).Trim();
+                if (rest.Length > 0 && (rest[0] == '"' || rest[0] == '\''))
+                {
+                    int close = rest.IndexOf(rest[0], 1);
+                    value = close > 0 ? rest.Substring(1, close - 1) : rest.Substring(1);
+                }
+                else
+                {
+                    Match comment = Regex.Match(rest, @"(^|\s)#");
+                    value = (comment.Success ? rest.Substring(0, comment.Index) : rest).Trim();
+                }
+            }
+
+            return !string.IsNullOrWhiteSpace(value);
         }
 
         public void OnPostprocessBuild(BuildReport report)
@@ -226,7 +293,7 @@ namespace Sonia.EditorTools
             string env = Path.Combine(RepoRoot, ".env");
             if (File.Exists(env))
             {
-                // Se copia como archivo: nunca se lee ni se escribe en ningún registro.
+                // Se copia como archivo; su contenido no se escribe en ningún registro.
                 File.Copy(env, Path.Combine(target, ".env"), true);
                 Debug.Log("[Sonia] Orquestador empaquetado con el .env del repo (" + platform + ").");
             }
