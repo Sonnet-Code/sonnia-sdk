@@ -31,6 +31,7 @@ namespace Sonia
         public const string RequestFrame = "request_frame";
         public const string Attention = "attention";
         public const string Presence = "presence";
+        public const string StageMode = "stage_mode";
         public const string SetVolume = "set_volume";
         public const string PlayAnimation = "play_animation";
         public const string SetSubtitles = "set_subtitles";
@@ -407,6 +408,21 @@ namespace Sonia
 
         /// <summary>Texto del letrero mientras está fuera. Vacío: el de por defecto.</summary>
         [JsonProperty("message")] public string Message;
+    }
+
+    /// <summary>
+    /// Modo del stand y si Sonia puede conversar ahora (GPT-Live encendida). Es
+    /// fijo: se repite tras <c>hello</c>. La pantalla solo invita a hablar con
+    /// <see cref="Talk"/> cierto.
+    /// </summary>
+    [Serializable]
+    public class StageModeMessage
+    {
+        /// <summary><c>conversation</c>, <c>greeter</c> (solo saludos) o <c>away</c> (fuera).</summary>
+        [JsonProperty("mode")] public string Mode = "conversation";
+
+        /// <summary>Cierto si Sonia contestaría a quien le hable.</summary>
+        [JsonProperty("talk")] public bool Talk = true;
     }
 
     /// <summary>Volumen de la voz de Sonia. También fijo: se repite tras <c>hello</c>.</summary>

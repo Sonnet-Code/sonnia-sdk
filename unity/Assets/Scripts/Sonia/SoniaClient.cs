@@ -149,6 +149,9 @@ namespace Sonia
         /// <summary>Sonia se va de la pantalla (modo "Fuera") o vuelve.</summary>
         public event Action<PresenceMessage> OnPresence;
 
+        /// <summary>Modo del stand y si Sonia puede conversar (la invitación a hablar).</summary>
+        public event Action<StageModeMessage> OnStageMode;
+
         /// <summary>Volumen de la voz.</summary>
         public event Action<SetVolumeMessage> OnSetVolume;
 
@@ -677,6 +680,8 @@ namespace Sonia
                     return Protocol.Deserialize<CloseAvatarEditorMessage>(payload);
                 case MessageTypes.Presence:
                     return Protocol.Deserialize<PresenceMessage>(payload);
+                case MessageTypes.StageMode:
+                    return Protocol.Deserialize<StageModeMessage>(payload);
                 case MessageTypes.SetVolume:
                     return Protocol.Deserialize<SetVolumeMessage>(payload);
                 case MessageTypes.Error:
@@ -937,6 +942,13 @@ namespace Sonia
             if (presence != null)
             {
                 Raise(OnPresence, presence);
+                return;
+            }
+
+            StageModeMessage stageMode = message as StageModeMessage;
+            if (stageMode != null)
+            {
+                Raise(OnStageMode, stageMode);
                 return;
             }
 

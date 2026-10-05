@@ -460,10 +460,9 @@ class StandControl:
         await self._apply_mode(mode, announce=True)
 
     async def _apply_mode(self, mode: Mode, *, announce: bool) -> None:
-        engine = self._engine
         hub = self._hub
         if mode == "away":
-            await engine.set_active(False)
+            await self._set_live(False)
             await hub.hide_image()
             await hub.set_sticky("presence", p.msg_presence(False, self._away_message))
             return
@@ -471,12 +470,17 @@ class StandControl:
         if mode == "conversation":
             # En modo debug, con el editor de personaje en pantalla o con el invitado
             # del Modo Jean no se abre GPT-Live.
-            await engine.set_active(
+            await self._set_live(
                 not self.state.debug and not self._avatar_editor_open and not self._guest_active
             )
         else:
-            await engine.set_active(False)
+            await self._set_live(False)
             self._next_greet_at = time.monotonic() + GREETER_FIRST_DELAY_S
+
+    async def _set_live(self, active: bool) -> None:
+        """Enciende o apaga GPT-Live y se lo cuenta a la pantalla (la invitación a hablar)."""
+        await self._engine.set_active(active)
+        await self._hub.set_sticky("stage_mode", p.msg_stage_mode(self.state.mode, active))
 
     @property
     def _away_message(self) -> str:
@@ -887,7 +891,7 @@ class StandControl:
         await self._hub.set_sticky("debug", p.msg_set_debug(enabled))
         if enabled:
             logger.info("Panel: modo debug activado; GPT-Live apagada y Sonia quieta")
-            await self._engine.set_active(False)
+            await self._set_live(False)
             return True, (
                 "Modo debug: Sonia se queda quieta y desconectada de OpenAI. "
                 "Los botones del panel siguen funcionando."
@@ -1123,7 +1127,7 @@ class StandControl:
         self._avatar_editor_open = open_
         logger.info("Editor de personaje %s", "abierto" if open_ else "cerrado")
         if open_:
-            await self._engine.set_active(False)
+            await self._set_live(False)
         else:
             await self._apply_mode(self.state.mode, announce=False)
 

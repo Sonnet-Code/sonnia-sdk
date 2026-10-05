@@ -128,6 +128,14 @@ Sonia está en pantalla (`present: true`) o se ha ido (`false`): sale caminando 
 {"type": "presence", "present": false, "message": "Me fui a ver una charla, regreso en un momento"}
 ```
 
+### `stage_mode`
+
+Modo del stand (`conversation`, `greeter` o `away`) y si Sonia puede conversar ahora (`talk`, GPT-Live encendida). Fijo: se repite tras `hello` y cada vez que GPT-Live se enciende o se apaga (cambio de modo, modo debug, editor de personaje, Modo Jean). La pantalla solo enseña la invitación a hablar («Acércate y pregúntame lo que quieras») con `talk: true`: en «Solo saludos», «Fuera» o en modo debug Sonia no contestaría. Una Unity que no lo conoce lo ignora; sin él, la pantalla da por hecho que sí puede conversar.
+
+```json
+{"type": "stage_mode", "mode": "greeter", "talk": false}
+```
+
 ### `set_volume`
 
 Volumen de la voz de Sonia, de 0 a 1,5 (1 es el normal). También fijo: se repite tras `hello`.

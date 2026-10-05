@@ -60,6 +60,7 @@ MSG_HIDE_IMAGE = "hide_image"
 MSG_ERROR = "error"
 MSG_REQUEST_FRAME = "request_frame"
 MSG_PRESENCE = "presence"
+MSG_STAGE_MODE = "stage_mode"
 MSG_SET_VOLUME = "set_volume"
 MSG_PLAY_ANIMATION = "play_animation"
 MSG_SET_SUBTITLES = "set_subtitles"
@@ -229,6 +230,16 @@ def msg_error(message: str) -> dict[str, Any]:
 def msg_presence(present: bool, message: str = "") -> dict[str, Any]:
     """Sonia está en pantalla o se ha ido (y deja un letrero con ``message``)."""
     return {"type": MSG_PRESENCE, "present": bool(present), "message": str(message)}
+
+
+def msg_stage_mode(mode: str, talk: bool) -> dict[str, Any]:
+    """Modo del stand para la pantalla: ``talk`` dice si Sonia puede conversar ahora.
+
+    Unity solo enseña la invitación a hablar cuando ``talk`` es cierto: en «Solo
+    saludos», «Fuera», el modo debug, el editor de personaje o el Modo Jean,
+    GPT-Live está apagada y Sonia no contestaría.
+    """
+    return {"type": MSG_STAGE_MODE, "mode": str(mode), "talk": bool(talk)}
 
 
 def msg_set_volume(value: float) -> dict[str, Any]:

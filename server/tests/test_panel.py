@@ -396,6 +396,32 @@ async def test_modo_debug_apaga_gpt_live_y_los_saludos(tmp_path: Path) -> None:
         assert rig.rec.of_type("set_debug")[-1]["enabled"] is False
 
 
+async def test_la_pantalla_sabe_si_sonia_puede_conversar(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        await rig.conn()
+
+        def last() -> dict[str, object]:
+            return rig.rec.of_type("stage_mode")[-1]
+
+        await rig.rec.wait_type("stage_mode")
+        assert last() == {"type": "stage_mode", "mode": "conversation", "talk": True}
+        await rig.control.act("set_mode", {"mode": "greeter"})
+        await rig.rec.wait_type("stage_mode", count=2)
+        assert last() == {"type": "stage_mode", "mode": "greeter", "talk": False}
+        await rig.control.act("set_mode", {"mode": "away"})
+        await rig.rec.wait_type("stage_mode", count=3)
+        assert last() == {"type": "stage_mode", "mode": "away", "talk": False}
+        await rig.control.act("set_mode", {"mode": "conversation"})
+        await rig.rec.wait_type("stage_mode", count=4)
+        assert last() == {"type": "stage_mode", "mode": "conversation", "talk": True}
+        # Con el modo debug GPT-Live se apaga: la pantalla deja de invitar a hablar.
+        await rig.control.act("set_debug", {"enabled": True})
+        await rig.rec.wait_type("stage_mode", count=5)
+        assert last() == {"type": "stage_mode", "mode": "conversation", "talk": False}
+        # Y es un mensaje fijo: una Unity que se conecta ahora lo recibe tras hello.
+        assert rig.hub.sticky("stage_mode") == last()
+
+
 async def test_el_estado_dice_que_animacion_suena(tmp_path: Path) -> None:
     async with make_panel_rig(tmp_path) as rig:
         assert rig.control.status()["current_animation"] is None
