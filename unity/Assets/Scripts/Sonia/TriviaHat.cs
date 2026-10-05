@@ -11,10 +11,15 @@
 //    (NAF) junta cuerpo, pelo, ropa y gorro en un solo renderer con una submalla
 //    por material, así que se apaga solo la submalla del gorro (FindHatParts),
 //    con un material sin pasadas de render;
-//  - el pelo ya viene aplastado por Genies bajo esa gorra (NAF lo hornea en la
-//    malla) y el gorro Noogler va justo donde iba ella. Si el avatar trae los
-//    blendshapes de pelo bajo gorro («hair_geo_blendShape...hat», como el doble
-//    del editor), se activan mientras lo lleva;
+//  - el pelo se aplasta bajo el gorro como bajo una gorra de Genies, con el
+//    pelo que lleve. NAF solo lo aplasta con una gorra oficial puesta (y lo
+//    hornea en la malla), así que GeniesHatHair saca esa forma de una gemela
+//    del avatar con la gorra oficial con la que se encajó este gorro (HatHair),
+//    y aquí el pelo pasa a ella según encaja el gorro y vuelve al quitárselo.
+//    Si Sonia ya lleva una gorra oficial, su pelo ya va aplastado y el gorro
+//    Noogler va justo donde iba ella. Si el avatar trae los blendshapes de pelo
+//    bajo gorro («hair_geo_blendShape...hat», como el doble del editor), se
+//    activan mientras lo lleva;
 //  - ya puesto no se bambolea (las prendas de Genies van rígidas con la cabeza);
 //  - la hélice gira, y más deprisa al acertar o ganar.
 // Sin el prefab queda el gorro de fiesta procedural de antes (cono de franjas).
@@ -23,15 +28,19 @@
 //   0,00-0,45  las manos bajan a por el gorro, que espera fuera de cuadro (por
 //              debajo de lo que ve la cámara: no se ve de dónde sale);
 //   0,45-0,60  lo cogen por los costados de la copa;
-//   0,60-1,30  lo suben en arco, separado del pecho, hasta su sitio en la cabeza;
-//   1,30-1,45  un apretón (el gorro se aplasta un poco al encajar);
+//   0,60-1,30  lo suben en arco, separado del pecho, hasta su sitio en la cabeza
+//              (si hay que aplastar el pelo, hasta unos centímetros por encima);
+//   1,30-1,45  lo encajan: baja recto hasta su sitio mientras el pelo se aplasta
+//              debajo (la copa tapa la coronilla antes de que el pelo se recoja
+//              y no lo atraviesa), con un apretón al final;
 //   1,45-2,00  las manos sueltan y vuelven a lo que hacía la animación.
-// Al quitárselo (la línea de tiempo hacia atrás) lo levanta de la cabeza y al
-// final lo lanza hacia un lado (derecha o izquierda, a suertes), fuera de
-// cuadro, dando vueltas: así no desaparece a la vista aunque la cámara vuelva a
-// un plano más abierto. Si se
-// pide lo contrario a medias, la línea de tiempo da la vuelta desde donde está. Las palmas se apoyan por fuera de la copa (puntos de agarre
-// de TriviaCapRig) con los dedos a lo largo de la tela, sin atravesarla.
+// Al quitárselo (la línea de tiempo hacia atrás) lo levanta recto, lo aparta de
+// la cabeza y al final lo lanza hacia un lado (derecha o izquierda, a suertes),
+// fuera de cuadro, dando vueltas: así no desaparece a la vista aunque la cámara
+// vuelva a un plano más abierto. Si se pide lo contrario a medias, la línea de
+// tiempo da la vuelta desde donde está. Las palmas se apoyan por fuera de la
+// copa (puntos de agarre de TriviaCapRig) con los dedos a lo largo de la tela,
+// sin atravesarla.
 //
 // Genies no trae ninguna animación de ponerse un gorro, así que los brazos van
 // con IK de dos huesos (hombro, codo, muñeca) encima de lo que suene, como el
@@ -143,6 +152,11 @@ namespace Sonia
         private float carryForward = 0.1f;
 
         [SerializeField]
+        [Range(0f, 0.12f)]
+        [Tooltip("Si el pelo se aplasta bajo el gorro (HatHair), el gorro llega esto por encima de su sitio y baja recto mientras el pelo se aplasta debajo, en metros.")]
+        private float hoverHeight = 0.05f;
+
+        [SerializeField]
         [Range(0f, 0.06f)]
         [Tooltip("Separación de la muñeca de la tela al cogerlo, en metros (el grosor de la mano).")]
         private float gripGap = 0.02f;
@@ -193,6 +207,8 @@ namespace Sonia
         private bool _officialHidden;
         private readonly System.Collections.Generic.List<HairShape> _hairShapes = new System.Collections.Generic.List<HairShape>();
         private float _hairWeight = -1f;
+        private HatHair.Flat _flatHair;
+        private float _flatWeight = -1f;
         private Renderer[] _renderers = new Renderer[0];
         private Material _coneMaterial;
         private Material _trimMaterial;
@@ -269,6 +285,8 @@ namespace Sonia
             {
                 _binder.AvatarChanged += HandleAvatarChanged;
             }
+
+            HatHair.Published += HandleHatHairPublished;
         }
 
         private void OnDisable()
@@ -277,6 +295,8 @@ namespace Sonia
             {
                 _binder.AvatarChanged -= HandleAvatarChanged;
             }
+
+            HatHair.Published -= HandleHatHairPublished;
         }
 
         private void OnDestroy()
@@ -333,6 +353,20 @@ namespace Sonia
             }
         }
 
+        private void HandleHatHairPublished(Transform avatar)
+        {
+            // Llegó el pelo aplastado de este avatar (tarda unos segundos en salir
+            // tras ponerse el avatar): se usa desde ya, aunque el gorro esté puesto.
+            if (avatar == null || avatar != _avatar || _head == null || _officialHat.Count > 0)
+            {
+                return;
+            }
+
+            SetFlatHair(0f);
+            _flatHair = HatHair.Find(avatar);
+            _flatWeight = -1f;
+        }
+
         // ------------------------------------------------------------------
         // Cada frame
         // ------------------------------------------------------------------
@@ -358,7 +392,7 @@ namespace Sonia
 
             if (!visible)
             {
-                ApplyAvatarIntegration(0f);
+                ApplyAvatarIntegration(0f, 0f);
                 return;
             }
 
@@ -377,12 +411,21 @@ namespace Sonia
                 UpdatePickup();
             }
 
+            // Si hay que aplastar el pelo, el gorro llega por encima de su sitio y
+            // baja recto, a lo largo de su eje, mientras el pelo se aplasta debajo.
+            float lower = Smooth(Mathf.InverseLerp(CarryEnd, PressEnd, t));
+            Vector3 hover = headPosition;
+            if (_flatHair != null)
+            {
+                hover += headRotation * Vector3.up * hoverHeight;
+            }
+
             Vector3 position;
             Quaternion rotation;
             bool tossing = !_wanted && useHands && t < CarryEnd;
             if (tossing)
             {
-                TossPose(t, headPosition, headRotation, out position, out rotation);
+                TossPose(t, hover, headPosition, headRotation, out position, out rotation);
             }
             else
             {
@@ -390,9 +433,10 @@ namespace Sonia
                 Quaternion holdRotation = Quaternion.LookRotation(_avatar.forward, _avatar.up) * Quaternion.Euler(-12f, 0f, 0f);
                 float carry = Smooth(Mathf.InverseLerp(GrabEnd, CarryEnd, t));
                 float bulge = Mathf.Sin(carry * Mathf.PI);
-                position = Vector3.Lerp(pickup, headPosition, carry)
+                position = Vector3.Lerp(pickup, hover, carry)
                            + (_avatar.up * (bulge * carryArc))
-                           + (_avatar.forward * (bulge * carryForward));
+                           + (_avatar.forward * (bulge * carryForward))
+                           + ((headPosition - hover) * lower);
                 rotation = Quaternion.Slerp(holdRotation, headRotation, carry);
             }
 
@@ -422,8 +466,9 @@ namespace Sonia
                 _rig.propeller.localRotation = _propellerRest * Quaternion.AngleAxis(_spin, _rig.propellerAxis);
             }
 
-            // Ya en la cabeza: fuera la gorra oficial y el pelo con la forma de bajo el gorro.
-            ApplyAvatarIntegration(Mathf.InverseLerp(CarryEnd - 0.05f, CarryEnd, t));
+            // Ya en la cabeza: fuera la gorra oficial y el pelo con la forma de bajo
+            // el gorro, que se aplasta según baja el gorro y se ahueca al levantarlo.
+            ApplyAvatarIntegration(Mathf.InverseLerp(CarryEnd - 0.05f, CarryEnd, t), lower);
 
             if (!useHands)
             {
@@ -450,11 +495,12 @@ namespace Sonia
 
         /// <summary>
         /// Quitárselo, con la línea de tiempo hacia atrás: de CarryEnd a GrabEnd lo
-        /// levanta de la cabeza hacia delante y algo hacia el lado del tiro; de
+        /// aparta de la cabeza (desde <paramref name="start"/>, donde quedó al
+        /// levantarlo) hacia arriba, delante y algo hacia el lado del tiro; de
         /// GrabEnd a 0 vuela en arco hacia ese lado y abajo, dando vueltas, hasta
         /// fuera de cuadro.
         /// </summary>
-        private void TossPose(float t, Vector3 headPosition, Quaternion headRotation, out Vector3 position, out Quaternion rotation)
+        private void TossPose(float t, Vector3 start, Vector3 headPosition, Quaternion headRotation, out Vector3 position, out Quaternion rotation)
         {
             Vector3 side = _avatar.right * _tossSide;
             Vector3 lift = headPosition + (_avatar.up * 0.14f) + (_avatar.forward * 0.18f) + (side * 0.08f);
@@ -462,7 +508,7 @@ namespace Sonia
             if (t >= GrabEnd)
             {
                 float s = Smooth(Mathf.InverseLerp(CarryEnd, GrabEnd, t));
-                position = Vector3.Lerp(headPosition, lift, s);
+                position = Vector3.Lerp(start, lift, s);
                 rotation = Quaternion.Slerp(headRotation, liftRotation, s);
                 return;
             }
@@ -680,7 +726,7 @@ namespace Sonia
             }
         }
 
-        /// <summary>La gorra oficial (para esconderla) y los blendshapes de pelo bajo gorro del avatar.</summary>
+        /// <summary>La gorra oficial (para esconderla), el pelo aplastado de Genies y los blendshapes de pelo bajo gorro del avatar.</summary>
         private void FindAvatarParts()
         {
             RestoreAvatar();
@@ -692,6 +738,17 @@ namespace Sonia
                 {
                     _officialHat.Add(new HiddenPart { Renderer = part.Renderer, SubMesh = part.SubMesh });
                     Debug.Log("[Sonia] Gorro de la trivia: mientras lo lleve se esconde la gorra oficial (" + part.Renderer.name + ", submalla " + part.SubMesh + ").");
+                }
+            }
+
+            // Con gorra oficial el pelo ya va aplastado; si no, el de la gemela con
+            // gorra (y, si aún no está, que se saque).
+            if (_officialHat.Count == 0)
+            {
+                _flatHair = HatHair.Find(_avatar);
+                if (_flatHair == null)
+                {
+                    HatHair.Request(_avatar);
                 }
             }
 
@@ -725,10 +782,12 @@ namespace Sonia
         /// <summary>
         /// Con el gorro en la cabeza (<paramref name="onHead"/> de 0 a 1): la gorra
         /// oficial se esconde y el pelo toma la forma de bajo el gorro, como hace
-        /// Genies con sus gorros. Con 0 todo vuelve a como estaba.
+        /// Genies con sus gorros (el de Genies, según <paramref name="flatten"/>).
+        /// Con 0 todo vuelve a como estaba.
         /// </summary>
-        private void ApplyAvatarIntegration(float onHead)
+        private void ApplyAvatarIntegration(float onHead, float flatten)
         {
+            SetFlatHair(flatten);
             bool hide = onHead > 0.5f;
             // Con el gorro puesto se mira cada frame: Genies puede cambiar los materiales.
             if (hide || hide != _officialHidden)
@@ -752,6 +811,43 @@ namespace Sonia
                 {
                     shape.Renderer.SetBlendShapeWeight(shape.Index, Mathf.Lerp(shape.Original, Mathf.Max(shape.Original, shape.Full), onHead));
                 }
+            }
+        }
+
+        /// <summary>
+        /// Pelo aplastado de Genies (HatHair) con este peso, de 0 a 1. Con algo de
+        /// peso el avatar lleva la copia de su malla con el blendshape del pelo; con
+        /// 0, su malla de siempre.
+        /// </summary>
+        private void SetFlatHair(float weight)
+        {
+            if (_flatHair == null || _flatHair.Renderer == null || _flatHair.Mesh == null
+                || Mathf.Approximately(weight, _flatWeight))
+            {
+                return;
+            }
+
+            _flatWeight = weight;
+            SkinnedMeshRenderer renderer = _flatHair.Renderer;
+            if (weight <= 0f)
+            {
+                if (renderer.sharedMesh == _flatHair.Mesh)
+                {
+                    renderer.sharedMesh = _flatHair.Source;
+                }
+
+                return;
+            }
+
+            // Si Genies ha cambiado la malla entretanto, la copia ya no vale: se deja.
+            if (renderer.sharedMesh == _flatHair.Source)
+            {
+                renderer.sharedMesh = _flatHair.Mesh;
+            }
+
+            if (renderer.sharedMesh == _flatHair.Mesh)
+            {
+                renderer.SetBlendShapeWeight(_flatHair.Shape, weight * 100f);
             }
         }
 
@@ -827,8 +923,12 @@ namespace Sonia
                 }
             }
 
+            _flatWeight = -1f;
+            SetFlatHair(0f);
             _officialHidden = false;
             _hairWeight = -1f;
+            _flatHair = null;
+            _flatWeight = -1f;
             _officialHat.Clear();
             _hairShapes.Clear();
         }

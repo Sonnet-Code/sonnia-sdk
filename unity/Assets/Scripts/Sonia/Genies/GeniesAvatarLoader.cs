@@ -181,6 +181,18 @@ namespace Sonia
             get { return _shownHash; }
         }
 
+        /// <summary>Avatar del SDK en pantalla (null si aún no hay ninguno).</summary>
+        public ManagedAvatar LiveAvatar
+        {
+            get { return IsLoaded ? _avatar : null; }
+        }
+
+        /// <summary>Resolución de las texturas con que se cargan los avatares.</summary>
+        public AvatarLods Quality
+        {
+            get { return quality; }
+        }
+
         private string AppDefinition
         {
             get { return definition != null ? definition.text : null; }
