@@ -245,6 +245,10 @@ class ConsoleTap:
             print(f"Sonia: {msg['text']}", flush=True)
         elif kind == p.MSG_ERROR:
             print(f"  [error] {msg['message']}", flush=True)
+        elif kind == p.MSG_TRIVIA_ANSWER:
+            print(f"  [trivia: {'acierto' if msg['is_correct'] else 'fallo'}]", flush=True)
+        elif kind == p.MSG_TRIVIA_END:
+            print(f"  [trivia: {msg['score']} de {msg['total']}, {msg['reason']}]", flush=True)
         elif kind == p.MSG_STOP_SPEAKING:
             print("  [interrumpida]", flush=True)
             if self._player is not None:
@@ -261,6 +265,16 @@ class ConsoleTap:
         if self._player is not None:
             self._player.enqueue(utterance_id, chunk)
         await self._inner.send_audio(utterance_id, chunk)
+
+    async def set_sticky(self, key: str, msg: dict[str, Any]) -> None:
+        if msg.get("type") == p.MSG_TRIVIA_QUESTION:
+            letters = ("A", "B", "C")
+            options = "  ".join(f"{letters[i]}) {o}" for i, o in enumerate(msg["options"][:3]))
+            print(f"  [trivia {msg['number']}/{msg['total']}] {msg['question']}  {options}")
+        await self._inner.set_sticky(key, msg)
+
+    def clear_sticky(self, key: str) -> None:
+        self._inner.clear_sticky(key)
 
     async def show_image(
         self,
@@ -319,7 +333,9 @@ def build_components(settings: Settings, *, with_camera: bool = True) -> Compone
         vision = vision.model_copy(update={"source": "none"})
     camera = build_camera(vision, request_frame, has_clients=lambda: hub.client_count > 0)
     policy = VisionPolicy(vision, _vision_model_ready(settings))
-    registry = build_default_registry(include_look=policy.enabled)
+    registry = build_default_registry(
+        include_look=policy.enabled, include_trivia=_trivia_ready(settings)
+    )
     llm = LLMClient(settings.llm) if policy.enabled else None
     return Components(
         settings=settings,
@@ -330,6 +346,24 @@ def build_components(settings: Settings, *, with_camera: bool = True) -> Compone
         llm=llm,
         narrator=VisionNarrator(llm) if llm is not None else None,
     )
+
+
+def _trivia_ready(settings: Settings) -> bool:
+    """¿Hay banco de preguntas para la trivia? Sin él no se anuncian sus acciones."""
+    if not settings.trivia.enabled:
+        return False
+    from sonia.trivia import TriviaBank
+
+    count = len(TriviaBank.from_file(settings.trivia_file))
+    if count < settings.trivia.questions:
+        logger.warning(
+            "Trivia apagada: %s tiene %d preguntas válidas y hacen falta %d",
+            settings.trivia_file,
+            count,
+            settings.trivia.questions,
+        )
+        return False
+    return True
 
 
 def _vision_model_ready(settings: Settings, *, warn: bool = True) -> bool:

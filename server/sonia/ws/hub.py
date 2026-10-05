@@ -156,6 +156,10 @@ class Hub:
     def sticky(self, key: str) -> dict[str, Any] | None:
         return self._sticky.get(key)
 
+    def clear_sticky(self, key: str) -> None:
+        """Deja de repetir un mensaje fijo a los clientes nuevos (no manda nada)."""
+        self._sticky.pop(key, None)
+
     # -- envío --------------------------------------------------------------
 
     async def broadcast_json(self, msg: dict[str, Any]) -> None:

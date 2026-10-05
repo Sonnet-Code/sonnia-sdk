@@ -226,6 +226,42 @@ Un clip de una sola vez en el avatar del invitado (los mismos del catálogo de `
 {"type": "guest_animation", "clip": "WaveGeneric"}
 ```
 
+### Trivia: `trivia_start`, `trivia_question`, `trivia_answer` y `trivia_end`
+
+Modo trivia (`docs/trivia.md`). Lo conduce GPT-Live y el orquestador guarda la clave: la pantalla manda. Mientras dura la partida, `trivia_start` y la pregunta en curso son fijos y se repiten tras `hello`, así que una Unity que se reconecta vuelve a pintar la partida. Al terminar dejan de repetirse.
+
+`trivia_start` abre la partida: Sonia se pone el gorro de fiesta, la escena pasa al tema de la trivia y sale el marcador a cero. `threshold` son los aciertos que hacen falta para ganar.
+
+```json
+{"type": "trivia_start", "total": 5, "threshold": 3}
+```
+
+`trivia_question` muestra una pregunta (`number` empieza en 1) con sus tres opciones, A, B y C en ese orden, y los aciertos que lleva. La tarjeta va en la mitad de la pantalla, sin tapar los subtítulos de abajo.
+
+```json
+{"type": "trivia_question", "number": 2, "total": 5, "question": "¿Qué significan las siglas GDG?", "options": ["Global Digital Generation", "Google Design Guild", "Google Developer Groups"], "score": 1}
+```
+
+`trivia_answer` es el resultado de esa pregunta, en cuanto se registra la respuesta. `chosen` es el índice elegido (0 a 2), o -1 si el visitante no la sabía; `correct` es el índice de la buena.
+- Acierto: la opción se pone en verde, sale confeti y Sonia lo celebra.
+- Fallo: la opción elegida se pone en roja, la buena en verde, y Sonia reacciona con pena.
+
+La siguiente `trivia_question` llega `TRIVIA_REVEAL_SECONDS` después.
+
+```json
+{"type": "trivia_answer", "number": 2, "chosen": 0, "correct": 2, "is_correct": false, "score": 1}
+```
+
+`trivia_end` cierra la partida.
+- `reason: "finished"`: pantalla final. Con `won` hay victoria con confeti grande y baile; sin él, una tarjeta de ánimo.
+- `reason: "cancelled"`: el personal la terminó, el visitante se fue o se cayó la sesión. Todo se retira sin fanfarria.
+
+En los dos casos Unity quita el gorro y el tema al acabar.
+
+```json
+{"type": "trivia_end", "score": 4, "total": 5, "won": true, "reason": "finished"}
+```
+
 ### `error`
 
 ```json

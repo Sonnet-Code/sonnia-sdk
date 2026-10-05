@@ -158,6 +158,30 @@
         <p class="cap-note" data-cap-note="camera_watch" hidden>«Ver cámara» necesita que esta Sonia esté conectada a la nube y tenga cámara.</p>
       </section>
 
+      <!-- ===== Trivia ===== -->
+      <section class="card" id="trivia" aria-labelledby="trivia-title">
+        <h2 id="trivia-title">Trivia</h2>
+        <p class="help">Preguntas del DevFest con tres opciones en la pantalla de Sonia. También se la pueden pedir a ella: «¿jugamos a la trivia?».</p>
+        <p class="trivia-state" id="trivia-state" aria-live="polite">No hay ninguna trivia en marcha.</p>
+        <div class="trivia-question" id="trivia-question" hidden>
+          <p class="trivia-q" id="trivia-q"></p>
+          <div class="trivia-options">
+            <button type="button" class="btn trivia-opt" data-trivia-answer="A" data-cap="trivia" data-extra="trivia_asking"><b>A</b><span id="trivia-opt-a"></span></button>
+            <button type="button" class="btn trivia-opt" data-trivia-answer="B" data-cap="trivia" data-extra="trivia_asking"><b>B</b><span id="trivia-opt-b"></span></button>
+            <button type="button" class="btn trivia-opt" data-trivia-answer="C" data-cap="trivia" data-extra="trivia_asking"><b>C</b><span id="trivia-opt-c"></span></button>
+            <button type="button" class="btn btn-small" data-trivia-answer="pass" data-cap="trivia" data-extra="trivia_asking">No lo sabe</button>
+          </div>
+          <p class="help">Sonia entiende la respuesta sola. Si con el ruido no la oye, contesta tú por el visitante.</p>
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn-primary" id="trivia-start-btn" data-cap="trivia" data-off-modes="away greeter" data-extra="trivia_idle">Empezar trivia</button>
+          <button type="button" class="btn" id="trivia-restart-btn" data-cap="trivia" data-off-modes="away greeter" data-extra="trivia_active">Reiniciar</button>
+          <button type="button" class="btn" id="trivia-stop-btn" data-cap="trivia" data-extra="trivia_active">Terminar trivia</button>
+        </div>
+        <p class="note" id="trivia-note" hidden>La trivia necesita a Sonia en «Conversando».</p>
+        <p class="cap-note" data-cap-note="trivia" hidden>Esta Sonia no tiene trivia: actualiza su orquestador o revisa assets/trivia/preguntas.md.</p>
+      </section>
+
       <!-- ===== Imágenes de la galería ===== -->
       <section class="card" id="imagenes" aria-labelledby="imagenes-title">
         <h2 id="imagenes-title">Mostrar una imagen</h2>

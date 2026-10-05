@@ -39,7 +39,9 @@ namespace Sonia
             Base,
             Variation,
             Attention,
-            Greeting
+            Greeting,
+            // Reacción de la trivia: suena entera aunque cambie el estado.
+            Reaction
         }
 
         [Header("Referencias")]
@@ -299,6 +301,13 @@ namespace Sonia
                 return;
             }
 
+            // Una reacción (acierto, fallo o final de la trivia) no se corta: el
+            // estado nuevo se aplica al terminar (EndOneShot).
+            if (_phase == Phase.Reaction)
+            {
+                return;
+            }
+
             float fade = state == AvatarState.Speaking ? speakFade : stateFade;
             bool cutting = _phase == Phase.Attention || _phase == Phase.Greeting;
             EnterState(state, cutting ? Mathf.Max(fade, gestureFade * 0.6f) : fade, false);
@@ -327,7 +336,7 @@ namespace Sonia
                 return;
             }
 
-            if (IsPresenting)
+            if (IsPresenting || _phase == Phase.Reaction)
             {
                 return;
             }
@@ -387,7 +396,7 @@ namespace Sonia
         /// </summary>
         public bool PlayGreeting()
         {
-            if (!CanGreet())
+            if (GreetingSuppressed || !CanGreet())
             {
                 return false;
             }
@@ -425,8 +434,15 @@ namespace Sonia
             return Ready
                    && !_suspended
                    && motionSet.greeting != null
+                   && _phase != Phase.Reaction
                    && (_state == AvatarState.Idle || _state == AvatarState.Listening);
         }
+
+        /// <summary>
+        /// Sin saludo automático al acercarse alguien (lo apaga la trivia: con la
+        /// partida en marcha, cada respuesta del visitante lo dispararía).
+        /// </summary>
+        public bool GreetingSuppressed { get; set; }
 
         private void StartGreeting(string why)
         {
@@ -655,6 +671,24 @@ namespace Sonia
                 _present.SetSpeed(0f);
                 _presentHolding = true;
             }
+        }
+
+        /// <summary>
+        /// Gesto de reacción (trivia: celebrar un acierto, lamentar un fallo,
+        /// bailar al ganar). Como <see cref="Preview"/>, pero suena entero aunque
+        /// Sonia pase a pensar o a hablar mientras tanto; al terminar, vuelve al
+        /// estado que toque.
+        /// </summary>
+        public void PlayReaction(AnimationClip clip)
+        {
+            if (!Ready || _suspended || clip == null || clip.isLooping)
+            {
+                return;
+            }
+
+            _phase = Phase.Reaction;
+            _body = motionPlayer.Play(clip, MotionPlayer.BodyLayer, gestureFade);
+            Log("reacción: " + clip.name);
         }
 
         /// <summary>

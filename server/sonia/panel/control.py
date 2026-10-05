@@ -379,6 +379,8 @@ class StandControl:
             caps.append("guest_mode")
         if self._room is not None and self._room.can_watch:
             caps.append("camera_watch")
+        if self._engine.trivia is not None:
+            caps.append("trivia")
         return caps
 
     def attach_guest(self, guest: GuestMode) -> None:
@@ -808,6 +810,61 @@ class StandControl:
         await self._set_shared("avatar", None)
         return True, "Sonia vuelve al personaje que trae la app (en todas las Sonias)."
 
+    async def _act_trivia_start(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Empezar trivia»: la misma partida que pide un visitante por voz."""
+        trivia = self._engine.trivia
+        if trivia is None:
+            raise _BadRequest("La trivia está desactivada en esta Sonia (TRIVIA_ENABLED).")
+        self._need_sonia_on_stage()
+        if self.state.mode != "conversation":
+            raise _BadRequest("La trivia necesita a Sonia conversando: pásala a «Conversando».")
+        if self.state.debug:
+            raise _BadRequest("En modo debug Sonia no conversa: desactívalo antes.")
+        if self._avatar_editor_open:
+            raise _BadRequest("Cierra antes el editor de personaje.")
+        if self._hub.client_count == 0:
+            raise _BadRequest("La pantalla de Sonia no está conectada.")
+        ok, message = await trivia.start("panel")
+        if not ok:
+            raise _BadRequest(message)
+        return True, message
+
+    async def _act_trivia_restart(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Reiniciar trivia»: una partida nueva desde la primera pregunta."""
+        trivia = self._engine.trivia
+        if trivia is None:
+            raise _BadRequest("La trivia está desactivada en esta Sonia (TRIVIA_ENABLED).")
+        self._need_sonia_on_stage()
+        if self.state.mode != "conversation":
+            raise _BadRequest("La trivia necesita a Sonia conversando: pásala a «Conversando».")
+        if self._hub.client_count == 0:
+            raise _BadRequest("La pantalla de Sonia no está conectada.")
+        ok, message = await trivia.restart("panel")
+        if not ok:
+            raise _BadRequest(message)
+        return True, "Trivia reiniciada desde la primera pregunta."
+
+    async def _act_trivia_stop(self, params: dict[str, Any]) -> tuple[bool, str]:
+        trivia = self._engine.trivia
+        if trivia is None or not trivia.active:
+            return True, "No hay ninguna trivia en marcha."
+        await trivia.stop("panel")
+        return True, "Trivia terminada."
+
+    async def _act_trivia_answer(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """Botones A, B y C (y «No lo sabe»): el personal contesta por el visitante."""
+        trivia = self._engine.trivia
+        if trivia is None or not trivia.active:
+            raise _BadRequest("No hay ninguna trivia en marcha.")
+        option = params.get("option")
+        choices = {"A": 0, "B": 1, "C": 2, "pass": -1}
+        if option not in choices:
+            raise _BadRequest("Respuesta no válida: A, B, C o pass.")
+        ok, message = await trivia.answer(choices[str(option)], "panel")
+        if not ok:
+            raise _BadRequest(message)
+        return True, message
+
     async def _act_greet(self, params: dict[str, Any]) -> tuple[bool, str]:
         self._need_sonia_on_stage()
         return await self.greet("greeting")
@@ -1140,6 +1197,7 @@ class StandControl:
                 if self._room is not None
                 else {"available": False, "active": False, "live": False, "viewers": 0}
             ),
+            "trivia": snap.get("trivia") or {"available": False, "active": False},
             "settings_sync": self._settings_sync(),
             "last_error": snap.get("last_error") or None,
             "capabilities": self.capabilities,

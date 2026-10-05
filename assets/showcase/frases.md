@@ -14,3 +14,4 @@ Si me hablas en español caribeño, mejor: es mi acento favorito.
 ¿Quieres ver el logo de Sonnet Code en grande? Pídemelo.
 Soy un avatar en tiempo real: te oigo, te veo y te contesto al momento, con voz y con gestos.
 Hoy es DevFest. Si no sabes por dónde empezar, yo te oriento.
+¿Te atreves con la trivia del DevFest? Son cinco preguntas y con tres aciertos ganas. Solo tienes que pedírmela.

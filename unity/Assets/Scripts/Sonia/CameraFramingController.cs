@@ -171,6 +171,19 @@ namespace Sonia
             get { return _panel; }
         }
 
+        /// <summary>
+        /// Pide el encuadre de panel sin imagen puesta (la tarjeta de la trivia
+        /// ocupa la misma franja alta de la pantalla).
+        /// </summary>
+        public bool PanelRequested { get; set; }
+
+        /// <summary>
+        /// Desplazamiento extra (metros) sobre el plano de panel mientras se pide
+        /// con <see cref="PanelRequested"/>: la tarjeta de la trivia es más alta
+        /// que una imagen y Sonia tiene que caber debajo con el gorro.
+        /// </summary>
+        public Vector3 PanelRequestOffset { get; set; }
+
         /// <summary>Cierto mientras manda el plano de salida y entrada caminando.</summary>
         public bool IsPresenceShot
         {
@@ -389,8 +402,8 @@ namespace Sonia
 
             _presenceShot = !_hasOverride && presenceShotEnabled && presence != null && presence.WantsWideShot;
             _wide = !_hasOverride && !_presenceShot && NeedsWideShot();
-            _panel = panelShotEnabled && !_hasOverride && !_presenceShot && !_wide && imagePanel != null
-                     && imagePanel.IsVisible;
+            _panel = panelShotEnabled && !_hasOverride && !_presenceShot && !_wide
+                     && ((imagePanel != null && imagePanel.IsVisible) || PanelRequested);
 
             Vector3 targetPosition = _basePosition;
             Quaternion targetRotation = _baseRotation;
@@ -418,7 +431,7 @@ namespace Sonia
             }
             else if (_panel)
             {
-                targetPosition = PanelPosition();
+                targetPosition = PanelPosition() + (PanelRequested ? PanelRequestOffset : Vector3.zero);
                 targetFieldOfView = PanelFieldOfView();
             }
 

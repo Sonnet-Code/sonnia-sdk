@@ -58,6 +58,10 @@ namespace Sonia
         [Tooltip("Ciclo de caminar en bucle, con root motion hacia delante. Lo usa la salida y la entrada del modo Fuera (PresenceController). Sin él, Sonia sale deslizándose.")]
         public AnimationClip walk;
 
+        [Header("Trivia")]
+        [Tooltip("Gestos del modo trivia (acierto, fallo, ánimo). Solo los lanza TriviaController; el coreógrafo no los usa por su cuenta.")]
+        public AnimationClip[] trivia = new AnimationClip[0];
+
         [Header("Atención en el idle")]
         [Tooltip("Bailes, gestos de cuarta pared y gestos suaves que rompen el idle.")]
         public AttentionMotion[] attention = new AttentionMotion[0];

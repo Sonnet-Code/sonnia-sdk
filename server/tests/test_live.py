@@ -316,6 +316,7 @@ async def make_rig(
     camera: FakeCamera | None = None,
     narrator: VisionNarrator | None = None,
     showcase: Showcase | None = None,
+    trivia: bool = False,
     **settings_overrides: Any,
 ) -> AsyncIterator[LiveRig]:
     from websockets.asyncio.client import connect
@@ -326,7 +327,7 @@ async def make_rig(
     knowledge.mkdir(exist_ok=True)
     (knowledge / "01-evento.md").write_text("El DevFest es el 9 y 10 de octubre.", encoding="utf-8")
     policy = VisionPolicy(settings.vision, settings.llm.supports_vision)
-    registry = build_default_registry(include_look=policy.enabled)
+    registry = build_default_registry(include_look=policy.enabled, include_trivia=trivia)
     hub = Hub(settings.ws, sample_rate=settings.live.sample_rate)
     async with running(server) as live_connect, hub:
         engine = LiveEngine(
@@ -1145,3 +1146,126 @@ async def test_un_cierre_ordenado_del_servidor_no_reconecta_sin_freno(tmp_path: 
         await server.wait_conn(1)
         await asyncio.sleep(0.8)
         assert server.attempts <= 4
+
+
+# ---------------------------------------------------------------------------
+# Trivia
+# ---------------------------------------------------------------------------
+
+TRIVIA_BANK = """\
+## ¿Primera?
+- [x] Uno bien
+- [ ] Uno mal
+- [ ] Uno peor
+
+## ¿Segunda?
+- [ ] Dos mal
+- [x] Dos bien
+- [ ] Dos peor
+"""
+
+
+async def _backend_call(conn: FakeConn, call_id: str, name: str, args: dict[str, Any]) -> str:
+    """El backend pide una acción; devuelve lo que el motor le contesta."""
+    before = len(conn.of_type("response.item.create"))
+    await conn.response_event({"type": "response.created"}, delegation_id=f"deleg_{call_id}")
+    await conn.response_event(
+        {
+            "type": "response.output_item.done",
+            "item": {
+                "type": "function_call",
+                "call_id": call_id,
+                "name": name,
+                "arguments": json.dumps(args),
+            },
+        },
+        delegation_id=f"deleg_{call_id}",
+    )
+    await conn.response_event({"type": "response.completed"}, delegation_id=f"deleg_{call_id}")
+    await conn.wait_for(lambda msgs: len(conn.of_type("response.item.create")) > before)
+    output = conn.of_type("response.item.create")[-1]["item"]
+    assert output["call_id"] == call_id
+    return str(output["output"])
+
+
+async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
+    (tmp_path / "trivia").mkdir()
+    (tmp_path / "trivia" / "preguntas.md").write_text(TRIVIA_BANK, encoding="utf-8")
+    async with make_rig(tmp_path, trivia=True) as rig:
+        rig.settings.trivia.questions = 2
+        rig.settings.trivia.win_threshold = 1
+        rig.settings.trivia.reveal_seconds = 0.05
+        conn = await rig.conn()
+        backend = conn.start["session"]["delegation"]["responses"]
+        assert [t["name"] for t in backend["tools"]] == [
+            "show_image",
+            "hide_image",
+            "start_trivia",
+            "trivia_answer",
+            "restart_trivia",
+            "stop_trivia",
+        ]
+        assert "PARA SONIA:" in backend["instructions"]
+        assert "jugar a la trivia" in conn.start["session"]["instructions"]
+
+        # «¿Jugamos a la trivia?»: GPT-Live delega y el backend llama a start_trivia.
+        script = await _backend_call(conn, "c1", "start_trivia", {})
+        assert script.startswith("PARA SONIA:")
+        await rig.rec.wait_type("trivia_question")
+        question = rig.rec.of_type("trivia_question")[0]
+        assert question["number"] == 1 and question["total"] == 2
+        assert question["question"] in script
+        # La reglas entran como instrucción, sin hacerla hablar.
+        appended = [m["content"] for m in conn.of_type("session.instructions.append")]
+        assert any("MODO TRIVIA EN MARCHA" in text for text in appended)
+        assert rig.rec.of_type("trivia_start")[0] == {
+            "type": "trivia_start",
+            "total": 2,
+            "threshold": 1,
+        }
+
+        # El visitante dice «la de...» y GPT-Live registra la letra que entendió.
+        right = question["options"].index(
+            "Uno bien" if "Primera" in question["question"] else "Dos bien"
+        )
+        script = await _backend_call(conn, "c2", "trivia_answer", {"option": "ABC"[right]})
+        assert "CORRECTA" in script and "pregunta 2 de 2" in script
+        await rig.rec.wait_type("trivia_answer")
+        assert rig.rec.of_type("trivia_answer")[0]["is_correct"] is True
+        await rig.rec.wait_type("trivia_question", count=2)
+
+        # Un visitante que se conecta ahora (Unity reiniciada) ve la pregunta en curso.
+        assert rig.hub.sticky("trivia_question") == rig.rec.of_type("trivia_question")[-1]
+
+        script = await _backend_call(conn, "c3", "trivia_answer", {"option": "no_lo_sabe"})
+        assert "No lo sabe" in script and "HA GANADO" in script
+        await rig.rec.wait_type("trivia_end")
+        end = rig.rec.of_type("trivia_end")[0]
+        assert end == {
+            "type": "trivia_end",
+            "score": 1,
+            "total": 2,
+            "won": True,
+            "reason": "finished",
+        }
+        assert rig.hub.sticky("trivia_question") is None
+        assert rig.engine.trivia is not None and not rig.engine.trivia.active
+        # Nada se le pidió por commentary: todo fue por los resultados de las acciones.
+        assert conn.of_type("session.commentary.append") == []
+
+
+async def test_la_trivia_se_cancela_si_se_cae_la_sesion(tmp_path: Path) -> None:
+    (tmp_path / "trivia").mkdir()
+    (tmp_path / "trivia" / "preguntas.md").write_text(TRIVIA_BANK, encoding="utf-8")
+    async with make_rig(tmp_path, trivia=True) as rig:
+        rig.settings.trivia.questions = 2
+        conn = await rig.conn()
+        trivia = rig.engine.trivia
+        assert trivia is not None
+        ok, _ = await trivia.start("panel")
+        assert ok
+        await conn.wait_type("session.commentary.append")
+        await conn.ws.close()
+        await rig.rec.wait_type("trivia_end")
+        assert rig.rec.of_type("trivia_end")[0]["reason"] == "cancelled"
+        assert not trivia.active

@@ -125,6 +125,18 @@ namespace Sonia
         /// <summary>Un gesto del avatar del invitado.</summary>
         public event Action<GuestAnimationMessage> OnGuestAnimation;
 
+        /// <summary>Empieza una trivia (gorro, tema y marcador).</summary>
+        public event Action<TriviaStartMessage> OnTriviaStart;
+
+        /// <summary>Una pregunta de la trivia con sus tres opciones.</summary>
+        public event Action<TriviaQuestionMessage> OnTriviaQuestion;
+
+        /// <summary>Resultado de una pregunta de la trivia.</summary>
+        public event Action<TriviaAnswerMessage> OnTriviaAnswer;
+
+        /// <summary>Fin de la trivia (ganada, perdida o cancelada).</summary>
+        public event Action<TriviaEndMessage> OnTriviaEnd;
+
         /// <summary>Un trozo de la voz del invitado (frames "SNGU").</summary>
         public event Action<AudioFrame> OnGuestAudioFrame;
 
@@ -651,6 +663,14 @@ namespace Sonia
                     return Protocol.Deserialize<GuestModeMessage>(payload);
                 case MessageTypes.GuestAnimation:
                     return Protocol.Deserialize<GuestAnimationMessage>(payload);
+                case MessageTypes.TriviaStart:
+                    return Protocol.Deserialize<TriviaStartMessage>(payload);
+                case MessageTypes.TriviaQuestion:
+                    return Protocol.Deserialize<TriviaQuestionMessage>(payload);
+                case MessageTypes.TriviaAnswer:
+                    return Protocol.Deserialize<TriviaAnswerMessage>(payload);
+                case MessageTypes.TriviaEnd:
+                    return Protocol.Deserialize<TriviaEndMessage>(payload);
                 case MessageTypes.OpenAvatarEditor:
                     return Protocol.Deserialize<OpenAvatarEditorMessage>(payload);
                 case MessageTypes.CloseAvatarEditor:
@@ -868,6 +888,34 @@ namespace Sonia
             if (guestAnimation != null)
             {
                 Raise(OnGuestAnimation, guestAnimation);
+                return;
+            }
+
+            TriviaStartMessage triviaStart = message as TriviaStartMessage;
+            if (triviaStart != null)
+            {
+                Raise(OnTriviaStart, triviaStart);
+                return;
+            }
+
+            TriviaQuestionMessage triviaQuestion = message as TriviaQuestionMessage;
+            if (triviaQuestion != null)
+            {
+                Raise(OnTriviaQuestion, triviaQuestion);
+                return;
+            }
+
+            TriviaAnswerMessage triviaAnswer = message as TriviaAnswerMessage;
+            if (triviaAnswer != null)
+            {
+                Raise(OnTriviaAnswer, triviaAnswer);
+                return;
+            }
+
+            TriviaEndMessage triviaEnd = message as TriviaEndMessage;
+            if (triviaEnd != null)
+            {
+                Raise(OnTriviaEnd, triviaEnd);
                 return;
             }
 

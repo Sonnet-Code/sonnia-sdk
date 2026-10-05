@@ -72,6 +72,10 @@ MSG_CLOSE_AVATAR_EDITOR = "close_avatar_editor"
 MSG_GUEST_MODE = "guest_mode"
 MSG_SET_GUEST_AVATAR = "set_guest_avatar"
 MSG_GUEST_ANIMATION = "guest_animation"
+MSG_TRIVIA_START = "trivia_start"
+MSG_TRIVIA_QUESTION = "trivia_question"
+MSG_TRIVIA_ANSWER = "trivia_answer"
+MSG_TRIVIA_END = "trivia_end"
 
 # Mensajes de Unity hacia el orquestador.
 MSG_CLIENT_HELLO = "client_hello"
@@ -310,6 +314,50 @@ def msg_guest_mode(phase: str, name: str, sample_rate: int) -> dict[str, Any]:
 def msg_guest_animation(clip: str) -> dict[str, Any]:
     """Un clip de una sola vez en el avatar del invitado."""
     return {"type": MSG_GUEST_ANIMATION, "clip": str(clip)}
+
+
+def msg_trivia_start(total: int, threshold: int) -> dict[str, Any]:
+    """Empieza una trivia: gorro de fiesta, tema de la trivia y marcador a cero."""
+    return {"type": MSG_TRIVIA_START, "total": int(total), "threshold": int(threshold)}
+
+
+def msg_trivia_question(
+    number: int, total: int, question: str, options: list[str], score: int
+) -> dict[str, Any]:
+    """Pregunta ``number`` (desde 1) de ``total`` con sus tres opciones (A, B y C)."""
+    return {
+        "type": MSG_TRIVIA_QUESTION,
+        "number": int(number),
+        "total": int(total),
+        "question": str(question),
+        "options": [str(o) for o in options],
+        "score": int(score),
+    }
+
+
+def msg_trivia_answer(
+    number: int, chosen: int, correct: int, is_correct: bool, score: int
+) -> dict[str, Any]:
+    """Resultado de la pregunta ``number``. ``chosen`` es -1 si el visitante no lo sabía."""
+    return {
+        "type": MSG_TRIVIA_ANSWER,
+        "number": int(number),
+        "chosen": int(chosen),
+        "correct": int(correct),
+        "is_correct": bool(is_correct),
+        "score": int(score),
+    }
+
+
+def msg_trivia_end(score: int, total: int, *, won: bool, reason: str) -> dict[str, Any]:
+    """Fin de la trivia: ``reason`` es ``finished`` (con ``won``) o ``cancelled``."""
+    return {
+        "type": MSG_TRIVIA_END,
+        "score": int(score),
+        "total": int(total),
+        "won": bool(won),
+        "reason": str(reason),
+    }
 
 
 def msg_request_frame() -> dict[str, Any]:

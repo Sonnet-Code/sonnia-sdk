@@ -60,6 +60,7 @@ Definidas una sola vez en `server/sonia/actions`; de ese registro salen las herr
 | `look` | Toma una captura fresca de la cámara y se la manda al backend como imagen. |
 | `show_image` | Muestra una imagen en el panel de la escena de Unity. Acepta un id de la galería local o `camera` para la última captura. Opcionalmente un pie de texto. |
 | `hide_image` | Retira el panel de imágenes. |
+| `start_trivia`, `trivia_answer`, `restart_trivia`, `stop_trivia` | Modo trivia (`docs/trivia.md`): empezar, registrar la letra que eligió el visitante, empezar otra desde cero y terminar. El orquestador guarda la clave y la pantalla; GPT-Live entiende la respuesta y lee el guion que devuelve cada acción. |
 
 Por defecto Sonia solo mira cuando GPT-Live lo decide, con la acción `look` (decisión de Jean del 5 de octubre de 2026): no hay foto automática. Se puede activar que el motor tome una captura cuando alguien empieza a hablar (`VISION_ON_TURN_START=true`) o cada cierto tiempo (`VISION_INTERVAL_SECONDS`), y el modelo de visión la describe para GPT-Live como nota `[Cámara]`; las instrucciones de GPT-Live cambian solas según el modo (`camera_mode` en `server/sonia/live/prompts.py`). Esa política vive en `server/sonia/vision` y se controla con esas dos variables y `LIVE_VISION_MIN_INTERVAL_SECONDS`. Si `LLM_SUPPORTS_VISION=false` o `VISION_SOURCE=none`, la capa de visión se desactiva entera y `look` deja de anunciarse.
 

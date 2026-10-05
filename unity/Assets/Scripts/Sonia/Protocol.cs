@@ -43,6 +43,10 @@ namespace Sonia
         public const string SetGuestAvatar = "set_guest_avatar";
         public const string GuestMode = "guest_mode";
         public const string GuestAnimation = "guest_animation";
+        public const string TriviaStart = "trivia_start";
+        public const string TriviaQuestion = "trivia_question";
+        public const string TriviaAnswer = "trivia_answer";
+        public const string TriviaEnd = "trivia_end";
 
         // De Unity hacia el orquestador.
         public const string ClientHello = "client_hello";
@@ -245,6 +249,67 @@ namespace Sonia
     public class GuestAnimationMessage
     {
         [JsonProperty("clip")] public string Clip;
+    }
+
+    /// <summary>
+    /// Empieza una trivia: gorro de fiesta, tema y marcador. Fijo mientras dura
+    /// la partida (se repite tras <c>hello</c>).
+    /// </summary>
+    [Serializable]
+    public class TriviaStartMessage
+    {
+        /// <summary>Preguntas de la partida.</summary>
+        [JsonProperty("total")] public int Total = 5;
+
+        /// <summary>Aciertos que hacen falta para ganar.</summary>
+        [JsonProperty("threshold")] public int Threshold = 3;
+    }
+
+    /// <summary>Una pregunta de la trivia con sus tres opciones (A, B y C, en este orden).</summary>
+    [Serializable]
+    public class TriviaQuestionMessage
+    {
+        /// <summary>Número de la pregunta, desde 1.</summary>
+        [JsonProperty("number")] public int Number = 1;
+
+        [JsonProperty("total")] public int Total = 5;
+
+        [JsonProperty("question")] public string Question;
+
+        [JsonProperty("options")] public string[] Options;
+
+        /// <summary>Aciertos que lleva el visitante.</summary>
+        [JsonProperty("score")] public int Score;
+    }
+
+    /// <summary>Resultado de una pregunta de la trivia.</summary>
+    [Serializable]
+    public class TriviaAnswerMessage
+    {
+        [JsonProperty("number")] public int Number = 1;
+
+        /// <summary>Opción elegida (0 a 2) o -1 si el visitante no la sabía.</summary>
+        [JsonProperty("chosen")] public int Chosen = -1;
+
+        /// <summary>Opción correcta (0 a 2).</summary>
+        [JsonProperty("correct")] public int Correct;
+
+        [JsonProperty("is_correct")] public bool IsCorrect;
+
+        [JsonProperty("score")] public int Score;
+    }
+
+    /// <summary>Fin de la trivia: <c>finished</c> (ganada o perdida) o <c>cancelled</c>.</summary>
+    [Serializable]
+    public class TriviaEndMessage
+    {
+        [JsonProperty("score")] public int Score;
+
+        [JsonProperty("total")] public int Total = 5;
+
+        [JsonProperty("won")] public bool Won;
+
+        [JsonProperty("reason")] public string Reason = "finished";
     }
 
     /// <summary>Un trozo de la voz del invitado (frame binario "SNGU"), envuelto para la cola del cliente.</summary>

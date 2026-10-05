@@ -193,6 +193,28 @@ class ShowcaseSettings(BaseSettings):
     gesture_chance: float = 0.5
 
 
+class TriviaSettings(BaseSettings):
+    """Modo trivia: preguntas de opción múltiple en la pantalla de Unity.
+
+    GPT-Live entiende lo que contesta el visitante y lo registra con la acción
+    ``trivia_answer``; el orquestador guarda la clave y lleva la pantalla.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="TRIVIA_", extra="ignore", env_ignore_empty=True)
+
+    enabled: bool = True
+    #: Preguntas por partida (salen al azar de ``assets/trivia/preguntas.md``).
+    questions: int = 5
+    #: Aciertos para ganar la partida.
+    win_threshold: int = 3
+    #: Sin respuesta durante esto, Sonia repite las opciones una vez.
+    remind_seconds: float = 25.0
+    #: Sin oír al visitante durante esto, la partida se cancela (se ha ido).
+    abandon_seconds: float = 60.0
+    #: Segundos que la pantalla enseña el acierto o el fallo antes de la siguiente.
+    reveal_seconds: float = 4.0
+
+
 class PanelSettings(BaseSettings):
     """Panel de control web para el personal del stand (``docs/panel.md``)."""
 
@@ -238,6 +260,7 @@ class Settings(BaseSettings):
     vision: VisionSettings = Field(default_factory=VisionSettings)
     ws: WSSettings = Field(default_factory=WSSettings)
     showcase: ShowcaseSettings = Field(default_factory=ShowcaseSettings)
+    trivia: TriviaSettings = Field(default_factory=TriviaSettings)
     panel: PanelSettings = Field(default_factory=PanelSettings)
 
     assets_dir: str = str(_REPO_ROOT / "assets")
@@ -255,6 +278,10 @@ class Settings(BaseSettings):
     @property
     def showcase_dir(self) -> Path:
         return Path(self.assets_dir) / "showcase"
+
+    @property
+    def trivia_file(self) -> Path:
+        return Path(self.assets_dir) / "trivia" / "preguntas.md"
 
 
 def load_settings() -> Settings:

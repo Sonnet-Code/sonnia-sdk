@@ -281,6 +281,8 @@
       "restart-btn", "cache-progress", "cache-text", "cache-btn", "session-facts", "usage-facts", "log",
       "toasts", "confirm-dialog", "confirm-title", "confirm-text", "confirm-ok", "away-dialog",
       "away-title", "away-help", "away-text", "away-ok",
+      "trivia-state", "trivia-question", "trivia-q", "trivia-opt-a", "trivia-opt-b", "trivia-opt-c",
+      "trivia-start-btn", "trivia-restart-btn", "trivia-stop-btn", "trivia-note",
     ];
     for (const id of ids) {
       // "topbar-status" -> ui.topbarStatus
@@ -288,6 +290,7 @@
     }
     ui.modeButtons = Array.from(document.querySelectorAll("[data-set-mode]"));
     ui.gestureButtons = Array.from(document.querySelectorAll("[data-gesture]"));
+    ui.triviaAnswerButtons = Array.from(document.querySelectorAll("[data-trivia-answer]"));
     ui.resetTuningButtons = Array.from(document.querySelectorAll("[data-reset-tuning]"));
     ui.syncNotes = Array.from(document.querySelectorAll("[data-sync-note]"));
     ui.tuningInputs = [];
@@ -732,6 +735,7 @@
     if (!status) return;
     renderHero(status);
     renderQuickActions(status);
+    renderTrivia(status);
     renderImageState(status);
     renderSound(status);
     renderHealth(status);
@@ -760,7 +764,16 @@
     guest_avatar_custom: () => Boolean(guestAvatarInfo().custom) && !avatarInfo().editor_open,
     // Con el Modo Jean, Sonia ha dejado su sitio al invitado: ni habla ni hace gestos.
     sonia_here: () => !guestActive(),
+    trivia_idle: () => triviaInfo().available !== false && !triviaInfo().active && !guestActive(),
+    trivia_active: () => Boolean(triviaInfo().active),
+    trivia_asking: () => triviaInfo().phase === "asking",
   };
+
+  /** Partida de trivia en curso (`trivia` del estado). */
+  function triviaInfo() {
+    const trivia = app.status && app.status.trivia;
+    return trivia && typeof trivia === "object" ? trivia : {};
+  }
 
   function avatarInfo() {
     const avatar = app.status && app.status.avatar;
@@ -1301,6 +1314,30 @@
     const pressed = String(muted);
     if (ui.muteBtn.getAttribute("aria-pressed") !== pressed) ui.muteBtn.setAttribute("aria-pressed", pressed);
     setText(ui.muteLabel, muted ? "Activar micrófono" : "Silenciar micrófono");
+  }
+
+  function renderTrivia(status) {
+    const trivia = triviaInfo();
+    const playing = Boolean(trivia.active);
+    let text = "No hay ninguna trivia en marcha.";
+    if (playing) {
+      const score = `${trivia.score} acierto${trivia.score === 1 ? "" : "s"}`;
+      const phase = trivia.phase === "asking" ? "esperando respuesta" : "mostrando el resultado";
+      text = `Pregunta ${trivia.number} de ${trivia.total} · ${score} · ${phase}`;
+    } else if (trivia.available === false) {
+      text = "No hay preguntas suficientes en assets/trivia/preguntas.md.";
+    } else if (trivia.total) {
+      text = `Lista: ${trivia.total} preguntas, gana con ${trivia.threshold} aciertos.`;
+    }
+    setText(ui.triviaState, text);
+    ui.triviaState.classList.toggle("is-playing", playing);
+    const options = Array.isArray(trivia.options) ? trivia.options : [];
+    setHidden(ui.triviaQuestion, !playing || options.length !== 3);
+    setText(ui.triviaQ, trivia.question || "");
+    setText(ui.triviaOptA, options[0] || "");
+    setText(ui.triviaOptB, options[1] || "");
+    setText(ui.triviaOptC, options[2] || "");
+    setHidden(ui.triviaNote, status.mode === "conversation" || playing);
   }
 
   function onMuteClick() {
@@ -2320,6 +2357,20 @@
 
     ui.stopBtn.addEventListener("click", () => sendAction("stop", {}, { button: ui.stopBtn }));
     ui.greetBtn.addEventListener("click", () => sendAction("greet", {}, { button: ui.greetBtn }));
+    ui.triviaStartBtn.addEventListener("click", () =>
+      sendAction("trivia_start", {}, { button: ui.triviaStartBtn }),
+    );
+    ui.triviaRestartBtn.addEventListener("click", () =>
+      sendAction("trivia_restart", {}, { button: ui.triviaRestartBtn }),
+    );
+    ui.triviaStopBtn.addEventListener("click", () =>
+      sendAction("trivia_stop", {}, { button: ui.triviaStopBtn }),
+    );
+    for (const button of ui.triviaAnswerButtons) {
+      button.addEventListener("click", () =>
+        sendAction("trivia_answer", { option: button.dataset.triviaAnswer }, { button }),
+      );
+    }
     ui.danceBtn.addEventListener("click", () => sendAction("gesture", { category: "dance" }, { button: ui.danceBtn }));
     ui.logoBtn.addEventListener("click", () =>
       sendAction("show_image", { image_id: logoImageId() || "logo-sonnet" }, { button: ui.logoBtn }),

@@ -49,7 +49,7 @@ Tu backend tiene estas capacidades:
 {capabilities}
 Delega en el backend cuando:
 - Quieras mostrar o retirar una imagen en tu pantalla. Cuando hables de Sonnet Code, enseña su logo; cuando cambies de tema, retíralo.
-{look_when}- La pregunta necesite razonar con cuidado y la respuesta no esté clara en tu base de conocimiento.
+{look_when}{trivia_when}- La pregunta necesite razonar con cuidado y la respuesta no esté clara en tu base de conocimiento.
 No delegues cuando:
 {no_delegate_chat}
 - Solo hace falta una aclaración breve.
@@ -62,7 +62,24 @@ _CAPABILITIES = {
     ),
     "hide_image": "- Retirar la imagen que estás mostrando.",
     "look": "- Mirar: tomar una foto nueva con la cámara del stand y decirte qué se ve.",
+    "start_trivia": (
+        "- Trivia: empezar en tu pantalla una trivia de preguntas sobre el DevFest y la "
+        "tecnología, con tres opciones cada una."
+    ),
+    "trivia_answer": (
+        "- Trivia: registrar la opción que elige el visitante y decirte si acierta y qué viene "
+        "después."
+    ),
+    "restart_trivia": "- Reiniciar la trivia: una partida nueva desde la primera pregunta.",
+    "stop_trivia": "- Terminar la trivia en curso.",
 }
+
+#: Cuándo delegar la trivia (solo si el backend tiene la acción).
+_TRIVIA_WHEN = (
+    "- El visitante quiera jugar a la trivia (por ejemplo «¿jugamos a la trivia?»), elija una "
+    "opción en mitad de una, quiera empezarla otra vez desde cero o quiera dejar de jugar. Si "
+    "alguien no sabe qué preguntarte, puedes proponerle la trivia.\n"
+)
 
 #: Cómo le llega a Sonia lo que ve la cámara (ver :func:`camera_mode`).
 CameraMode = Literal["notes", "look", "none"]
@@ -123,7 +140,8 @@ Reglas:
 - No saludes ni te presentes: Sonia ya está hablando con el visitante.
 - Para mostrar imágenes usa solo los ids exactos de la galería, o "camera" para la última foto de la cámara.
 - Si miras por la cámara, describe solo lo útil para conversar: cuántas personas hay, ropa y colores, gafas, gorras, gafetes, logos o textos legibles, y objetos que estén enseñando. Nunca hables del cuerpo, el peso, la edad o la piel, ni supongas origen, género o profesión.
-- Usa solo los datos de la base de conocimiento. Si algo no está, dilo; nunca inventes datos, cifras ni nombres."""
+- Usa solo los datos de la base de conocimiento. Si algo no está, dilo; nunca inventes datos, cifras ni nombres.
+- Si el resultado de una herramienta empieza por "PARA SONIA:", devuelve todo lo que sigue tal cual, entero y sin resumir: es el guion que Sonia tiene que decir (por ejemplo, la pregunta de la trivia con sus tres opciones)."""
 
 
 def _action_names(registry: ActionRegistry | None) -> list[str]:
@@ -206,6 +224,7 @@ def build_live_instructions(
         capabilities=capabilities or "- Ninguna en este momento: no delegues.",
         camera_rule=_CAMERA_RULE[mode],
         look_when=_LOOK_WHEN[mode] if "look" in names else "",
+        trivia_when=_TRIVIA_WHEN if "start_trivia" in names else "",
         no_delegate_chat=_NO_DELEGATE_CHAT[mode],
     )
     parts = [SYSTEM_PROMPT, rules]

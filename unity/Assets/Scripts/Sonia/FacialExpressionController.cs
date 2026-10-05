@@ -90,6 +90,15 @@ namespace Sonia
         private const int GSquint = 5;
         private const int GBrowKnit = 6;
 
+        /// <summary>Emociones pasajeras que se piden desde fuera (trivia).</summary>
+        public enum Emotion
+        {
+            None,
+            Joy,
+            Sad,
+            Surprise
+        }
+
         [Header("Referencias")]
         [SerializeField]
         [Tooltip("Cara del avatar: las expresiones se escriben en sus canales ARKit.")]
@@ -174,6 +183,9 @@ namespace Sonia
         private readonly float[] _target = new float[(int)Ch.Count];
         private readonly Spring[] _springs = new Spring[(int)Ch.Count];
         private readonly List<Gesture> _gestures = new List<Gesture>();
+        private Emotion _emotion;
+        private float _emotionStart;
+        private float _emotionEnd;
         private bool _ready;
         private bool _subscribed;
         private bool _emphasisLinked;
@@ -318,6 +330,67 @@ namespace Sonia
             AddGesture(GBrowEmphasis, Random.Range(0.35f, 0.55f), 0.3f, stressBrows * Mathf.Lerp(0.6f, 1f, Mathf.Clamp01(strength)));
         }
 
+        /// <summary>
+        /// Pone una emoción durante <paramref name="seconds"/> (sube en 0,25 s y se
+        /// va en 0,6 s) encima de la expresión del estado: alegría al acertar,
+        /// pena al fallar, sorpresa. La boca la sigue moviendo el lip-sync.
+        /// </summary>
+        public void ShowEmotion(Emotion emotion, float seconds)
+        {
+            _emotion = emotion;
+            _emotionStart = Time.time;
+            _emotionEnd = Time.time + Mathf.Max(0.3f, seconds);
+        }
+
+        private void ComposeEmotion(float now)
+        {
+            if (_emotion == Emotion.None)
+            {
+                return;
+            }
+
+            const float rise = 0.25f;
+            const float fall = 0.6f;
+            if (now > _emotionEnd + fall)
+            {
+                _emotion = Emotion.None;
+                return;
+            }
+
+            float w = Mathf.Clamp01((now - _emotionStart) / rise);
+            if (now > _emotionEnd)
+            {
+                w = Mathf.Min(w, 1f - ((now - _emotionEnd) / fall));
+            }
+
+            w = w * w * (3f - (2f * w));
+            switch (_emotion)
+            {
+                case Emotion.Joy:
+                    SetPair(Ch.SmileL, Ch.SmileR, 0.55f * w, 21f);
+                    SetPair(Ch.CheekSquintL, Ch.CheekSquintR, 0.45f * w, 23f);
+                    SetPair(Ch.EyeSquintL, Ch.EyeSquintR, 0.2f * w, 25f);
+                    SetPair(Ch.DimpleL, Ch.DimpleR, 0.25f * w, 27f);
+                    Set(Ch.BrowInnerUp, 0.2f * w);
+                    SetPair(Ch.BrowOuterUpL, Ch.BrowOuterUpR, 0.3f * w, 29f);
+                    break;
+                case Emotion.Sad:
+                    // Cejas en tejado, comisuras abajo y la sonrisa de base fuera.
+                    Set(Ch.BrowInnerUp, 0.7f * w);
+                    SetPair(Ch.BrowDownL, Ch.BrowDownR, 0.12f * w, 31f);
+                    SetPair(Ch.FrownL, Ch.FrownR, 0.5f * w, 33f);
+                    SetPair(Ch.PressL, Ch.PressR, 0.25f * w, 35f);
+                    SetPair(Ch.SmileL, Ch.SmileR, -0.6f * w, 37f);
+                    SetPair(Ch.CheekSquintL, Ch.CheekSquintR, -0.3f * w, 39f);
+                    break;
+                case Emotion.Surprise:
+                    SetPair(Ch.EyeWideL, Ch.EyeWideR, 0.55f * w, 41f);
+                    Set(Ch.BrowInnerUp, 0.5f * w);
+                    SetPair(Ch.BrowOuterUpL, Ch.BrowOuterUpR, 0.55f * w, 43f);
+                    break;
+            }
+        }
+
         private void AddGesture(int kind, float duration, float peak, float gain)
         {
             if (_gestures.Count > 12)
@@ -359,6 +432,7 @@ namespace Sonia
             ComposeBase(state, now, talking);
             UpdateMicro(state, now, talking);
             ComposeGestures(now);
+            ComposeEmotion(now);
             ApplyMouthCoordination();
 
             for (int i = 0; i < _target.Length; i++)

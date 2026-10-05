@@ -176,6 +176,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   - `viewers`: cuántos navegadores miran.
   - `live`: si la cámara sale ahora del stand (sala conectada y alguien mirando).
   - `video`: las estadísticas del vídeo.
+- `trivia` (modo trivia, ver `docs/trivia.md`): `available`, si hay preguntas suficientes en `assets/trivia/preguntas.md` (si la trivia está apagada con `TRIVIA_ENABLED=false`, no aparece `trivia` en `capabilities`); `active`; `phase` (`off`, `asking` esperando respuesta o `revealing` con el resultado en pantalla); `number` y `total`; `threshold`, los aciertos para ganar; `score`, y la pregunta en curso con sus tres `options`.
 - `settings_sync`: `cloud` es `off` (sin `PANEL_CLOUD_TOKEN`), `offline` u `online`; `synced`, si ya llegaron los ajustes de la nube en esta conexión; `pending`, los ajustes cambiados aquí que la nube aún no ha confirmado, y `rev`, la última revisión de la nube aplicada.
 
 ### `GET /api/gallery`
@@ -221,6 +222,10 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `watch_camera` | `active`: bool; `keepalive` opcional | «Ver cámara»: abre la sala solo con vídeo (o la renueva) y, con `false`, la deja cerrarse en cuanto no quede nadie mirando. No toca GPT-Live, Unity ni el micro. |
 | `guest_animation` | `clip` | Un gesto del avatar de Jean (con el invitado en el stand). |
 | `prepare_voices` | | Graba las frases que falten en la caché de voces. |
+| `trivia_start` | | Empieza una trivia (la misma partida que pide un visitante por voz). Solo en «Conversando», con la pantalla conectada y sin Modo Jean, editor ni modo debug. |
+| `trivia_restart` | | Reinicia la trivia: una partida nueva desde la primera pregunta (corta la que haya). |
+| `trivia_answer` | `option`: `A`, `B`, `C` o `pass` | Contesta por el visitante (si con el ruido Sonia no le entiende); `pass` es «no lo sabe». |
+| `trivia_stop` | | Termina la trivia en curso. |
 
 ### `WS /api/events`
 

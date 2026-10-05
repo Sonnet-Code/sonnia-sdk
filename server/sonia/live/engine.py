@@ -48,6 +48,7 @@ from sonia.live.prompts import CAMERA_NOTE_PREFIX, build_session_config
 from sonia.live.vision import VisionNarrator
 from sonia.live.voicecache import VoiceCache
 from sonia.showcase import Showcase
+from sonia.trivia import TriviaGame
 from sonia.types import (
     ActionContext,
     ActionResult,
@@ -150,6 +151,8 @@ class HubLike(AvatarLink, Protocol):
     def on(self, type: str, callback: MessageCallback) -> None: ...
     async def broadcast_json(self, msg: dict[str, Any]) -> None: ...
     async def send_audio(self, utterance_id: int, chunk: AudioChunk) -> None: ...
+    async def set_sticky(self, key: str, msg: dict[str, Any]) -> None: ...
+    def clear_sticky(self, key: str) -> None: ...
 
 
 def _log_stage_failure(msg: str, *args: Any) -> None:
@@ -309,6 +312,13 @@ class LiveEngine:
         self._next_showcase_at = time.monotonic() + max(0.0, show.first_delay_seconds)
         self._ambient_expected_until = 0.0
 
+        # Modo trivia (``sonia.trivia``): GPT-Live la conduce; aquí van la clave y la pantalla.
+        self._trivia: TriviaGame | None = (
+            TriviaGame(settings.trivia, settings.trivia_file, host=self, screen=hub)
+            if settings.trivia.enabled
+            else None
+        )
+
         hub.on(p.MSG_INTERRUPT, lambda msg: self._spawn(self._on_interrupt(), "interrupt"))
         hub.on(p.MSG_PLAYBACK_DONE, self._on_ws_playback_done)
         hub.on(p.MSG_TEXT_INPUT, self._on_ws_text_input)
@@ -341,6 +351,10 @@ class LiveEngine:
     @property
     def showcase(self) -> Showcase | None:
         return self._showcase
+
+    @property
+    def trivia(self) -> TriviaGame | None:
+        return self._trivia
 
     # -- entrada ------------------------------------------------------------
 
@@ -555,6 +569,9 @@ class LiveEngine:
         self._user_turn_open = False
         self._user_parts = []
         self._expect_response_until = 0.0
+        if self._trivia is not None:
+            with contextlib.suppress(Exception):
+                await self._trivia.on_session_lost()
 
     async def _shutdown(self) -> None:
         for task in [*self._tasks, self._vision_task, self._image_hide_task]:
@@ -704,6 +721,8 @@ class LiveEngine:
         self._user_parts.append(delta)
         self._last_input_at = now
         self._touch()
+        if self._trivia is not None:
+            self._trivia.on_user_text(now)
         await self._hub.broadcast_json(p.msg_transcript("user", self._user_text, False))
         if not self._audible:
             await self._set_state(AssistantState.LISTENING)
@@ -855,6 +874,7 @@ class LiveEngine:
             avatar=self._hub,
             gallery_dir=str(self._settings.gallery_dir),
             last_frame=self._last_frame,
+            extra={"trivia": self._trivia},
         )
         if self._registry is None:
             result = ActionResult(text="Error: no hay acciones disponibles.")
@@ -1016,6 +1036,9 @@ class LiveEngine:
         if not audible and now >= self._settle_after:
             await self._set_state(self._rest_state(now))
 
+        if self._trivia is not None:
+            await self._trivia.tick(now)
+
         if self._state is not AssistantState.IDLE:
             self._maybe_look(turn_start=False)
 
@@ -1048,7 +1071,13 @@ class LiveEngine:
         """Abre una sesión limpia en un momento de calma si toca."""
         reason = ""
         limit = self._settings.idle_reset_seconds
-        if limit > 0 and self._session_conversation and now - self._last_activity >= limit:
+        playing = self._trivia is not None and self._trivia.active
+        if (
+            limit > 0
+            and not playing
+            and self._session_conversation
+            and now - self._last_activity >= limit
+        ):
             reason = f"{limit:.0f} s sin actividad"
         elif self._context_full:
             reason = "contexto casi lleno"
@@ -1084,6 +1113,8 @@ class LiveEngine:
         gastar ni meter nada en la conversación); si no, se le pide a GPT-Live.
         """
         if self._showcase is None or not self._showcase_enabled or now < self._next_showcase_at:
+            return
+        if self._trivia is not None and self._trivia.active:
             return
         if now < self._ambient_expected_until:
             return
@@ -1204,6 +1235,8 @@ class LiveEngine:
             return
         logger.info("GPT-Live apagada: se cierra la sesión y deja de gastar")
         self._active_event.clear()
+        if self._trivia is not None:
+            await self._trivia.on_session_lost()
         await self.interrupt(tell_model=False)
         if self._vision_task is not None and not self._vision_task.done():
             self._vision_task.cancel()
@@ -1264,6 +1297,42 @@ class LiveEngine:
         self._expect_response_until = time.monotonic() + RESPONSE_WAIT_S
         logger.info("Aviso pedido desde el panel: %s", text)
         return True
+
+    async def speak(self, prompt: str) -> bool:
+        """Le pide a GPT-Live que diga algo ahora (``session.commentary.append``)."""
+        client = self._client
+        if client is None:
+            return False
+        try:
+            await client.append_commentary(prompt)
+        except Exception as exc:  # noqa: BLE001 - la sesión se reconecta sola
+            _log_stage_failure("No se pudo pedir a GPT-Live que hable: %s", exc)
+            return False
+        self._touch()
+        self._expect_response_until = time.monotonic() + RESPONSE_WAIT_S
+        return True
+
+    async def instruct(self, text: str) -> bool:
+        """Añade una instrucción a la sesión sin hacerla hablar."""
+        client = self._client
+        if client is None:
+            return False
+        try:
+            await client.append_instructions(text)
+        except Exception as exc:  # noqa: BLE001
+            _log_stage_failure("No se pudo pasar una instrucción a GPT-Live: %s", exc)
+            return False
+        return True
+
+    def quiet_for(self) -> float:
+        """Segundos que Sonia lleva callada según lo que Unity tiene por reproducir (0 si habla)."""
+        if self._segment is not None:
+            return 0.0
+        return max(0.0, time.monotonic() - self._playback_end_at)
+
+    def touch(self) -> None:
+        """Hay actividad: retrasa la animación de stand y la sesión nueva por inactividad."""
+        self._touch()
 
     async def set_notes(self, text: str) -> None:
         """Avisos del día: entran ya en la sesión y en las instrucciones de las siguientes."""
@@ -1341,6 +1410,7 @@ class LiveEngine:
             "camera_enabled": self._camera is not None and self._policy.enabled,
             "camera_ok": self._camera_ok,
             "last_error": self.last_error,
+            "trivia": self._trivia.snapshot() if self._trivia is not None else None,
         }
 
     # -- utilidades -----------------------------------------------------------

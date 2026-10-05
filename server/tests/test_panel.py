@@ -831,3 +831,75 @@ async def test_el_gasto_del_dia_sobrevive_al_reinicio_y_empieza_de_cero_cada_dia
     (tmp_path / "otro").mkdir()
     async with make_panel_rig(tmp_path / "otro", state=ayer) as rig:
         assert rig.control.status()["usage"]["live_seconds"] < 60.0
+
+
+# ---------------------------------------------------------------------------
+# Trivia
+# ---------------------------------------------------------------------------
+
+TRIVIA_BANK = """\
+## ¿Primera?
+- [x] Uno bien
+- [ ] Uno mal
+- [ ] Uno peor
+
+## ¿Segunda?
+- [ ] Dos mal
+- [x] Dos bien
+- [ ] Dos peor
+"""
+
+
+async def test_trivia_desde_el_panel(tmp_path: Path) -> None:
+    (tmp_path / "trivia").mkdir()
+    (tmp_path / "trivia" / "preguntas.md").write_text(TRIVIA_BANK, encoding="utf-8")
+    async with make_panel_rig(tmp_path) as rig:
+        rig.settings.trivia.questions = 2
+        rig.settings.trivia.reveal_seconds = 30.0
+        conn = await rig.conn()
+        assert "trivia" in rig.control.capabilities
+        assert rig.control.status()["trivia"]["available"] is True
+
+        ok, message = await rig.control.act("trivia_start", {})
+        assert ok, message
+        await rig.rec.wait_type("trivia_question")
+        await conn.wait_type("session.commentary.append")
+        question = rig.rec.of_type("trivia_question")[0]
+        assert question["question"] in conn.of_type("session.commentary.append")[-1]["content"]
+        status = rig.control.status()["trivia"]
+        assert (
+            status["active"] and status["number"] == 1 and status["options"] == question["options"]
+        )
+
+        ok, message = await rig.control.act("trivia_answer", {"option": "Z"})
+        assert not ok
+        ok, message = await rig.control.act("trivia_answer", {"option": "B"})
+        assert ok
+        await rig.rec.wait_type("trivia_answer")
+        assert rig.rec.of_type("trivia_answer")[0]["chosen"] == 1
+        await conn.wait_type("session.commentary.append", count=2)
+        assert "equipo del stand" in conn.of_type("session.commentary.append")[-1]["content"]
+
+        ok, message = await rig.control.act("trivia_restart", {})
+        assert ok and "primera pregunta" in message
+        await rig.rec.wait_type("trivia_end")
+        assert rig.rec.of_type("trivia_end")[0]["reason"] == "cancelled"
+        assert rig.control.status()["trivia"]["number"] == 1
+        rig.rec.messages.clear()
+
+        # Al cambiar de modo se cierra GPT-Live y la partida se cancela.
+        await rig.control.act("set_mode", {"mode": "greeter"})
+        await rig.rec.wait_type("trivia_end")
+        assert rig.rec.of_type("trivia_end")[0]["reason"] == "cancelled"
+        ok, message = await rig.control.act("trivia_start", {})
+        assert not ok and "Conversando" in message
+        ok, message = await rig.control.act("trivia_stop", {})
+        assert ok and "No hay" in message
+
+
+async def test_sin_banco_la_trivia_no_esta_disponible(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        await rig.conn()
+        assert rig.control.status()["trivia"]["available"] is False
+        ok, message = await rig.control.act("trivia_start", {})
+        assert not ok and "preguntas" in message

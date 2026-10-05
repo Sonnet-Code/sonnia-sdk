@@ -671,6 +671,54 @@ summary:focus-visible,
   display: inline;
 }
 
+/* ---------- Trivia ---------- */
+
+.trivia-state {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.trivia-state.is-playing {
+  background: #e1ecfd;
+  color: var(--blue-strong);
+}
+
+.trivia-q {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.trivia-options {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.trivia-opt {
+  justify-content: flex-start;
+  text-align: left;
+  font-weight: 600;
+}
+
+.trivia-opt b {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+}
+
+#trivia .row {
+  margin-top: 4px;
+}
+
 /* ---------- Imágenes ---------- */
 
 .now-showing {

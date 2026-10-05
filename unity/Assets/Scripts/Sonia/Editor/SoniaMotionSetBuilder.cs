@@ -300,6 +300,7 @@ namespace Sonia.EditorTools
             }
 
             set.attention = attention.ToArray();
+            set.trivia = LoadClips(SoniaAnimations.TriviaClips, missing);
 
             EditorUtility.SetDirty(set);
             AssetDatabase.SaveAssets();
@@ -308,7 +309,7 @@ namespace Sonia.EditorTools
                 "[Sonia] Set de animaciones en " + SoniaAnimations.MotionSetPath + ": "
                 + set.idleVariations.Length + " variaciones de reposo, " + set.talking.Length
                 + " de habla, " + set.nods.Length + " asentimientos, " + set.attention.Length
-                + " de atención, caminar " + (set.walk != null ? set.walk.name : "(falta)")
+                + " de atención, " + set.trivia.Length + " de trivia, caminar " + (set.walk != null ? set.walk.name : "(falta)")
                 + (missing.Count > 0 ? ". Sin encontrar: " + string.Join(", ", missing.ToArray()) : ".") ,
                 set);
 

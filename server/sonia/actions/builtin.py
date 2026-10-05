@@ -180,15 +180,27 @@ HIDE_IMAGE = ActionSpec(
 )
 
 
-def build_default_registry(*, include_look: bool = True) -> ActionRegistry:
+def build_default_registry(
+    *, include_look: bool = True, include_trivia: bool = False
+) -> ActionRegistry:
     """Registro con las acciones integradas.
 
     ``include_look`` permite no anunciar ``look`` cuando el modelo configurado
     no soporta imágenes (``LLM_SUPPORTS_VISION=false``) o no hay cámara.
+    ``include_trivia`` anuncia ``start_trivia``, ``trivia_answer``,
+    ``restart_trivia`` y ``stop_trivia`` cuando hay banco de preguntas
+    (``assets/trivia/preguntas.md``).
     """
+    from sonia.actions.trivia import RESTART_TRIVIA, START_TRIVIA, STOP_TRIVIA, TRIVIA_ANSWER
+
     registry = ActionRegistry()
     if include_look:
         registry.register(LOOK)
     registry.register(SHOW_IMAGE)
     registry.register(HIDE_IMAGE)
+    if include_trivia:
+        registry.register(START_TRIVIA)
+        registry.register(TRIVIA_ANSWER)
+        registry.register(RESTART_TRIVIA)
+        registry.register(STOP_TRIVIA)
     return registry

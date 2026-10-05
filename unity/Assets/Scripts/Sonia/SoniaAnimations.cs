@@ -143,6 +143,18 @@ namespace Sonia
         /// se reproduce una vez y termina: así el coreógrafo sabe cuándo encadenar
         /// el siguiente clip en lugar de cortar un gesto a mitad.
         /// </summary>
+        /// <summary>
+        /// Gestos del modo trivia, de los repos públicos de Genies (GeniesIRL,
+        /// Apache-2.0): celebrar un acierto, lamentar un fallo y animar a quien
+        /// pierde. Solo los lanza TriviaController (TriviaController.*Clip).
+        /// </summary>
+        public static readonly string[] TriviaClips =
+        {
+            "actions-highFive_actionSuccess",
+            "actions-highFive_actionFail",
+            "emotions-0049-traitsKind"
+        };
+
         public static bool IsLoopingClip(string clipName)
         {
             return clipName == IdleLoopClip

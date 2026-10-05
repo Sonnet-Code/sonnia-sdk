@@ -264,6 +264,13 @@ namespace Sonia
                 cameraFraming.Presence = presence;
             }
 
+            if (GetComponent<TriviaController>() == null)
+            {
+                // También por código: pinta la trivia en el HUD (tarjeta, confeti,
+                // gorro de fiesta) cuando la manda el orquestador.
+                gameObject.AddComponent<TriviaController>();
+            }
+
             if (GetComponent<AvatarEditorLauncher>() == null)
             {
                 // También por código: abre la escena del editor de personaje cuando

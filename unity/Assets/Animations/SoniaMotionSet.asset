@@ -23,6 +23,10 @@ MonoBehaviour:
   greeting: {fileID: 7400000, guid: 2b031281c1a5d4156a8b944b188fcbc6, type: 2}
   present: {fileID: 7400000, guid: 18c685f97bda4472cae188a4d5857634, type: 2}
   walk: {fileID: 7400000, guid: 8e72b1bbd37664c00af270298360aeaa, type: 2}
+  trivia:
+  - {fileID: 7400000, guid: 35170e8cf231449aebac6c65cea99897, type: 2}
+  - {fileID: 7400000, guid: d8400a3a487bb41b9b13a2a25d969393, type: 2}
+  - {fileID: 7400000, guid: d6b22b0ae1a754c9eaf8bf545044519e, type: 2}
   attention:
   - clip: {fileID: 7400000, guid: c5143ec9398b243d2822e0e903e135c3, type: 2}
     category: 0

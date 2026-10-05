@@ -19,7 +19,7 @@ namespace Sonia
         /// <summary>Un clip del catálogo.</summary>
         public struct Entry
         {
-            /// <summary>Grupo para el panel: dance, fourth_wall, soft, greeting, talking, idle_variation, thinking, nod o present.</summary>
+            /// <summary>Grupo para el panel: dance, fourth_wall, soft, greeting, talking, idle_variation, thinking, nod, present o trivia.</summary>
             public string Group;
 
             /// <summary>Clip del set.</summary>
@@ -53,6 +53,7 @@ namespace Sonia
             AddAll(entries, seen, "thinking", set.thinkingVariations);
             AddAll(entries, seen, "nod", set.nods);
             Add(entries, seen, "present", set.present);
+            AddAll(entries, seen, "trivia", set.trivia);
             return entries;
         }
 
