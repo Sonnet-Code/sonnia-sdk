@@ -204,33 +204,67 @@ arranca sola: un doble clic y ya está Sonia entera.
 ### Build de macOS con Genies
 
 Genies solo da soporte oficial a Android, iOS y Windows. En macOS la build se
-hace igual, con dos diferencias que aplica el propio pipeline:
+hace igual; `SoniaPlayerBuildFixes` y `SoniaBuild` aplican estas diferencias:
 
 - **Mono en vez de IL2CPP**, solo durante la build de macOS (este Mac no tiene
   el módulo IL2CPP de macOS; con Mono funciona como en el editor). Windows
   sigue con IL2CPP, que Genies exige.
-- **Puente de NAF.** El preproceso de Genies (`XcodePostProcess`) marca sus
-  librerías NAF como «Load on Startup» en macOS, y Unity las precarga antes de
-  crear el dispositivo Metal. El `UnityPluginLoad` de `libgnUnityPlugin` crea
-  ahí una cola de Metal y, sin dispositivo, tumba la app («Failed to create
-  Metal command queue»). `SoniaPlayerBuildFixes` renombra la librería a
-  `libgnUnityPluginReal.dylib` y pone en su lugar el puente
-  (`unity/NativeSource/SoniaNafShim`): reexporta todos sus símbolos (las
-  llamadas de Genies llegan a ella sin cambios) y la inicializa cuando ya hay
-  `MTLDevice`. El puente compilado está en el repo; solo hay que recompilarlo
-  (`unity/NativeSource/SoniaNafShim/build.sh`) si cambia su código o el SDK de
-  Genies.
+- **NAF sin precarga.** El preproceso de Genies (`XcodePostProcess`) marca sus
+  siete librerías NAF como «Load on Startup» en macOS. Precargadas, el
+  `UnityPluginLoad` de `libgnUnityPlugin` corre antes de que Unity cree el
+  dispositivo Metal y tumba la app («Failed to create Metal command queue»), y
+  además se cargan en el orden de esa lista y no en el de sus dependencias: NAF
+  devolvía vacías las piezas con malla (cuerpo, ropa, pelo), la composición
+  salía sin mallas ni esqueleto humanoide y Sonia no aparecía. El preproceso de
+  `SoniaPlayerBuildFixes` va después del de Genies y les quita la precarga; se
+  cargan al primer uso, como en el editor. Se encontró el 5 de octubre con
+  trazas en la build de desarrollo: con la precarga, el cuerpo y la ropa salían
+  nulos aunque tuvieran los mismos archivos que en el editor. (Antes había un
+  puente nativo, `SoniaNafShim`, que retrasaba el arranque de NAF; arreglaba el
+  cierre pero no las piezas vacías y se quitó.)
 - **Rutas de Genies.** `libGeniesAuthAPI` y `libGeniesTelemetryBridge` buscan
   `libCommonDeps` en una ruta absoluta del equipo de un desarrollador de
-  Genies: el post-proceso les añade la ruta de la app y vuelve a firmar la app
-  (firma ad hoc).
+  Genies: el post-proceso les añade la ruta de la app.
+- **Cero llavero.** Esas dos librerías guardan los tokens de Genies en el
+  llavero de macOS y, con la firma ad hoc, macOS pedía la contraseña una y otra
+  vez. El post-proceso cambia su dependencia de `Security.framework` por el
+  puente del llavero (`unity/NativeSource/SoniaKeychainShim`): implementa
+  `SecItemAdd`, `SecItemCopyMatching`, `SecItemUpdate` y `SecItemDelete` en
+  memoria y reexporta el resto de Security. La app no guarda nada en el equipo
+  y cada arranque hace un registro anónimo nuevo en Genies (los avisos «Failed
+  to retrieve token … -25300» del registro son normales). El puente compilado
+  está en el repo; solo hay que recompilarlo (`build.sh` de esa carpeta) si
+  cambia su código.
+- **Firma ad hoc** de toda la app al final, porque `install_name_tool`
+  invalida las firmas.
+
+El registro anónimo solo se ve en la app: con dos cargadores de avatar (Sonia y
+el invitado) pidiendo sesión a la vez, el segundo
+`AvatarSdk.StartLoginAnonymousAsync` desechaba el flujo del primero y este
+acababa en `NullReferenceException`. `GeniesSession` hace que todos (los
+cargadores y el editor de personaje) esperen al mismo intento.
+
+NAF guarda su caché de piezas en `cache/`, junto a `Sonia.app` (la carpeta de
+trabajo de la app): la carpeta de la app tiene que poder escribirse. La primera
+vez descarga las piezas de Sonia, del invitado y de la gorra de referencia de la
+trivia (unos 90 MB con las texturas de alta resolución); después arranca sin
+descargar.
+
+El post-procesado (Volume con ACES y bloom) se ve también en la app: en
+`UniversalRenderPipelineGlobalSettings` está desactivado «Strip Unused Post
+Processing Variants», que recortaba el shader `PaniniProjection` y con él todos
+los pases de post-procesado.
 
 **Sonia > Build macOS (desarrollo, registro de Genies)** hace una build de
 desarrollo en `unity/Build/macOS-dev/` con `FORCE_LOGS`, el símbolo que activa
-el registro interno de Genies (sin él no escribe nada fuera del editor).
-Pendiente: el log del build avisa de que el shader de post-procesado
-(`PaniniProjection`) se recorta y URP desactiva entonces todos los pases de
-post-procesado en la app, así que el Volume (ACES, bloom) solo se ve en el editor.
+el registro interno de Genies (sin él no escribe nada fuera del editor). El
+registro nativo de NAF va aparte: en `Assets/Genies/NAF/Resources/NafSettings_Project`
+(fuera de git) se puede poner Logging en «Editor Or Dev Build Only» y File
+Logging, que escribe `cache/logs/naf.log`.
+
+Si el avatar no llega a montarse, el cargador escribe en el registro qué había
+construido el SDK cuando se agotó el tiempo («Genies no termina de montar el
+avatar. En el aparcamiento: …», con objetos, mallas y texturas).
 
 ### Probar en el editor
 
@@ -1303,6 +1337,7 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `Editor/SoniaAvatarSetup.cs` | Menús **Sonia > Colocar avatar** (ancla vacía, doble desactivado y cableado sin avatar) y **Recalcular encuadre (con el doble)** (mide el doble y ajusta cámara, panel, telón y luz) |
 | `Editor/SoniaGeniesDefinitionSync.cs` | En el editor, escribe en `SoniaGeniesAvatar.json` el último avatar del SDK que lleva Sonia en Play |
 | `GeniesDefinition.cs` | Huella de una definición de avatar de Genies, para comparar definiciones sin depender del formato |
+| `Genies/GeniesSession.cs` | Un solo inicio de sesión en Genies a la vez para los cargadores de avatar y el editor de personaje (dos registros anónimos a la vez se pisaban) |
 | `Editor/SoniaHumanoidRig.cs` | Construye y guarda un Avatar Humanoid para modelos con esqueleto de Mixamo que llegan sin él (GLB de Ready Player Me) |
 | `Editor/SoniaCapture.cs` | Menú **Sonia > Captura vertical 9:16**: PNG 1080x1920 de la cámara principal |
 | `Editor/SoniaBrandAssets.cs` | Rutas y ajustes de importación de los assets de marca de Sonnet Code |

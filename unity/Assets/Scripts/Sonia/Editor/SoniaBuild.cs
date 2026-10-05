@@ -6,10 +6,10 @@
 //         -executeMethod Sonia.EditorTools.SoniaBuild.BuildMac -logFile build.log
 //
 // El resultado va a unity/Build/<plataforma>/Sonia.app, carpeta ignorada por git.
-// SoniaPlayerBuildFixes la retoca después (puente de NAF en macOS, orquestador
-// empaquetado con su .env). En macOS se compila con Mono: Genies pide IL2CPP,
-// pero este Mac no tiene el módulo IL2CPP de macOS y con Mono funciona igual
-// que en el editor. Windows sigue con IL2CPP.
+// SoniaPlayerBuildFixes la retoca (en macOS: NAF sin precarga y sin llavero; en
+// las dos: el orquestador empaquetado con su .env). En macOS se compila con
+// Mono: Genies pide IL2CPP, pero este Mac no tiene el módulo IL2CPP de macOS y
+// con Mono funciona igual que en el editor. Windows sigue con IL2CPP.
 // El resumen del BuildReport se escribe en unity/Build/<plataforma>/build-report.txt
 // para poder leerlo sin rebuscar en el log de Unity.
 
