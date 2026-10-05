@@ -53,6 +53,8 @@ namespace Sonia.EditorTools
             public float opening_width = 0f;
             public float opening_depth = 0f;
             public float[] propeller_axis = new float[0];
+            public float[] grip_points = new float[0];
+            public float[] grip_normals = new float[0];
         }
 
         /// <summary>Lo que escribe encajar.py: el gorro en el espacio del hueso de la cabeza (ejes de Unity).</summary>
@@ -212,6 +214,12 @@ namespace Sonia.EditorTools
                     rig.apex = FromBlender(meta.apex);
                     rig.openingWidth = meta.opening_width;
                     rig.openingDepth = meta.opening_depth;
+                    if (meta.grip_points != null && meta.grip_points.Length == 6 && meta.grip_normals != null && meta.grip_normals.Length == 6)
+                    {
+                        rig.gripPoints = new[] { FromBlender(meta.grip_points, 0), FromBlender(meta.grip_points, 3) };
+                        rig.gripNormals = new[] { FromBlender(meta.grip_normals, 0).normalized, FromBlender(meta.grip_normals, 3).normalized };
+                    }
+
                     if (rig.propeller != null && meta.propeller_axis != null && meta.propeller_axis.Length == 3)
                     {
                         // Del espacio del gorro al de la hélice: así da igual cómo
@@ -244,6 +252,7 @@ namespace Sonia.EditorTools
 
                 Debug.Log("[Sonia] Gorro Noogler en " + PrefabPath + ": hélice " + (rig.propeller != null ? rig.propeller.name + " (eje local " + rig.propellerAxis.ToString("F3") + ")" : "(no encontrada)")
                           + ", boca " + rig.openingWidth.ToString("0.000") + " x " + rig.openingDepth.ToString("0.000")
+                          + " m, agarre " + (rig.gripPoints.Length == 2 ? rig.gripPoints[0].ToString("F3") + " y " + rig.gripPoints[1].ToString("F3") : "(sin puntos)")
                           + " m, límites " + bounds.min.ToString("F3") + " .. " + bounds.max.ToString("F3")
                           + (rig.fitted ? ", encajado en la cabeza (escala " + rig.headScale.ToString("0.000") + ", error " + fit.error_mm.ToString("0.0") + " mm)" : ", sin encaje medido"));
             }
@@ -357,9 +366,9 @@ namespace Sonia.EditorTools
             return text != null ? JsonUtility.FromJson<T>(text.text) : null;
         }
 
-        private static Vector3 FromBlender(float[] v)
+        private static Vector3 FromBlender(float[] v, int start = 0)
         {
-            return v != null && v.Length == 3 ? new Vector3(-v[0], v[2], -v[1]) : Vector3.zero;
+            return v != null && v.Length >= start + 3 ? new Vector3(-v[start], v[start + 2], -v[start + 1]) : Vector3.zero;
         }
 
         private static Transform FindDeep(Transform parent, string name)

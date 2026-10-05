@@ -1,7 +1,7 @@
 // Datos del gorro de la trivia que monta "Sonia > Crear gorro Noogler" en su
-// prefab: la hélice que gira, las medidas de la boca (para que las manos lo
-// cojan por el ala) y su sitio en la cabeza, medido encajándolo con la gorra
-// oficial de Genies (scripts/gorro_noogler/encajar.py: NooglerCap_fit.json).
+// prefab: la hélice que gira, las medidas de la boca, dónde lo cogen las manos
+// (los costados de la copa) y su sitio en la cabeza, medido encajándolo con la
+// gorra oficial de Genies (scripts/gorro_noogler/encajar.py: NooglerCap_fit.json).
 //
 // El origen del prefab es el centro de la boca (el borde de abajo de la copa),
 // la visera mira a +Z y la copa sube por +Y.
@@ -28,6 +28,12 @@ namespace Sonia
 
         [Tooltip("Punto más alto de la copa, en el espacio del gorro.")]
         public Vector3 apex = new Vector3(0f, 0.1f, 0.03f);
+
+        [Tooltip("Dónde apoyan las palmas para cogerlo: un punto en cada costado de la copa, por fuera.")]
+        public Vector3[] gripPoints = new Vector3[0];
+
+        [Tooltip("Normal de la tela (hacia fuera) en cada punto de agarre.")]
+        public Vector3[] gripNormals = new Vector3[0];
 
         [Header("Encaje en la cabeza (medido con la gorra oficial de Genies)")]
         [Tooltip("Cierto si los tres valores de abajo están medidos. Si no, TriviaHat usa su colocación aproximada.")]

@@ -19,14 +19,19 @@
 //  - la hélice gira, y más deprisa al acertar o ganar.
 // Sin el prefab queda el gorro de fiesta procedural de antes (cono de franjas).
 //
-// Ponérselo (una línea de tiempo de 1,7 s; quitárselo es la misma al revés):
-//   0,00-0,45  las manos suben delante del pecho y el gorro aparece entre ellas;
-//   0,45-1,00  lo llevan en arco por encima de la cabeza hasta su sitio;
-//   1,00-1,15  un apretón (el gorro se aplasta un poco al encajar);
-//   1,15-1,70  las manos sueltan y vuelven a lo que hacía la animación.
-// Al quitárselo: las manos suben al gorro, lo levantan, lo bajan delante del
-// pecho, el gorro se encoge hasta desaparecer y las manos bajan. Si se pide lo
-// contrario a medias, la línea de tiempo da la vuelta desde donde está.
+// Ponérselo (una línea de tiempo de 2 s; quitárselo es la misma al revés):
+//   0,00-0,45  las manos bajan a por el gorro, que espera fuera de cuadro (por
+//              debajo de lo que ve la cámara: no se ve de dónde sale);
+//   0,45-0,60  lo cogen por los costados de la copa;
+//   0,60-1,30  lo suben en arco, separado del pecho, hasta su sitio en la cabeza;
+//   1,30-1,45  un apretón (el gorro se aplasta un poco al encajar);
+//   1,45-2,00  las manos sueltan y vuelven a lo que hacía la animación.
+// Al quitárselo (la línea de tiempo hacia atrás) lo levanta de la cabeza y al
+// final lo lanza hacia un lado (derecha o izquierda, a suertes), fuera de
+// cuadro, dando vueltas: así no desaparece a la vista aunque la cámara vuelva a
+// un plano más abierto. Si se
+// pide lo contrario a medias, la línea de tiempo da la vuelta desde donde está. Las palmas se apoyan por fuera de la copa (puntos de agarre
+// de TriviaCapRig) con los dedos a lo largo de la tela, sin atravesarla.
 //
 // Genies no trae ninguna animación de ponerse un gorro, así que los brazos van
 // con IK de dos huesos (hombro, codo, muñeca) encima de lo que suene, como el
@@ -34,10 +39,8 @@
 // de todo (12600: después de la cabeza, los ojos y la cara), así que el gorro
 // sigue a la cabeza ya girada y los brazos no se pelean con nadie.
 //
-// El pelo de Sonia es voluminoso: el gorro va algo por encima de la coronilla
-// y ladeado; la altura, el tamaño y la inclinación se ajustan en el inspector
-// mirando capturas 9:16 en Play. Solo se pone en Sonia (nunca en el invitado
-// del Modo Jean) y se esconde si Sonia sale de cuadro.
+// Solo se pone en Sonia (nunca en el invitado del Modo Jean) y se esconde si
+// Sonia sale de cuadro.
 
 using UnityEngine;
 
@@ -122,12 +125,12 @@ namespace Sonia
 
         [SerializeField]
         [Range(0.5f, 2f)]
-        [Tooltip("Velocidad de la secuencia (1 = 1,7 s).")]
+        [Tooltip("Velocidad de la secuencia (1 = 2 s).")]
         private float speed = 1f;
 
         [SerializeField]
-        [Tooltip("Dónde aparece el gorro entre las manos, respecto a la cabeza: delante (z) y abajo (y), en metros.")]
-        private Vector2 holdOffset = new Vector2(0.22f, -0.3f);
+        [Tooltip("Dónde coge el gorro, fuera de cuadro: delante (x) y por debajo (y) de la cabeza, en metros. Si la cámara lo vería ahí, lo baja más.")]
+        private Vector2 pickupOffset = new Vector2(0.26f, 0.58f);
 
         [SerializeField]
         [Range(0f, 0.3f)]
@@ -135,14 +138,19 @@ namespace Sonia
         private float carryArc = 0.08f;
 
         [SerializeField]
+        [Range(0f, 0.3f)]
+        [Tooltip("Cuánto se separa del cuerpo al subirlo, en metros (para que no roce el pecho).")]
+        private float carryForward = 0.1f;
+
+        [SerializeField]
         [Range(0f, 0.06f)]
-        [Tooltip("Separación de cada mano del borde del gorro, en metros.")]
-        private float gripGap = 0.012f;
+        [Tooltip("Separación de la muñeca de la tela al cogerlo, en metros (el grosor de la mano).")]
+        private float gripGap = 0.02f;
 
         [SerializeField]
         [Range(0f, 60f)]
-        [Tooltip("Dedos algo cerrados sobre el ala del gorro, en grados.")]
-        private float fingerCurl = 18f;
+        [Tooltip("Dedos algo cerrados, siguiendo la copa, en grados.")]
+        private float fingerCurl = 12f;
 
         [Header("Animación")]
         [SerializeField]
@@ -151,11 +159,11 @@ namespace Sonia
         private float wobble = 4f;
 
         // Línea de tiempo (segundos con speed = 1).
-        private const float RiseEnd = 0.45f;
-        private const float PopStart = 0.15f;
-        private const float CarryEnd = 1.0f;
-        private const float PressEnd = 1.15f;
-        private const float Total = 1.7f;
+        private const float ReachEnd = 0.45f;
+        private const float GrabEnd = 0.6f;
+        private const float CarryEnd = 1.3f;
+        private const float PressEnd = 1.45f;
+        private const float Total = 2f;
 
         private static readonly Color Blue = new Color(0.259f, 0.522f, 0.957f);
         private static readonly Color Red = new Color(0.918f, 0.263f, 0.208f);
@@ -168,6 +176,9 @@ namespace Sonia
         private Transform _avatar;
         private Vector3 _headLocalPosition;
         private Quaternion _headLocalRotation = Quaternion.identity;
+        private Vector3 _pickupLocal;
+        private bool _pickupSet;
+        private float _tossSide = 1f;
         private readonly HandArm _right = new HandArm(false);
         private readonly HandArm _left = new HandArm(true);
         private Transform _root;
@@ -286,6 +297,12 @@ namespace Sonia
         /// <summary>Se pone el gorro con las manos o se lo quita (<paramref name="instant"/>: de golpe).</summary>
         public void SetOn(bool on, bool instant = false)
         {
+            if (!on && _wanted)
+            {
+                // Hacia qué lado lo lanzará al quitárselo: +1 su derecha, -1 su izquierda.
+                _tossSide = Random.value < 0.5f ? -1f : 1f;
+            }
+
             _wanted = on;
             if (on)
             {
@@ -351,24 +368,41 @@ namespace Sonia
             float target = Mathf.Clamp(-_avatar.InverseTransformDirection(velocity).x * 60f, -wobble, wobble);
             _sway = Mathf.SmoothDamp(_sway, target, ref _swayVelocity, 0.12f);
 
-            // Pose del gorro: en la cabeza, entre las manos o de camino.
+            // Pose del gorro: fuera de cuadro, entre las manos de camino o en la cabeza.
             Vector3 headPosition = _head.TransformPoint(_headLocalPosition);
             Quaternion headRotation = _head.rotation * _headLocalRotation;
             float t = useHands ? _time : Total;
-            Vector3 holdPosition = _head.position + (_avatar.forward * holdOffset.x) + (_avatar.up * holdOffset.y);
-            Quaternion holdRotation = Quaternion.LookRotation(_avatar.forward, _avatar.up) * Quaternion.Euler(-12f, 0f, 0f);
-            float carry = Smooth(Mathf.InverseLerp(RiseEnd, CarryEnd, t));
-            Vector3 position = Vector3.Lerp(holdPosition, headPosition, carry)
-                               + (_avatar.up * (Mathf.Sin(carry * Mathf.PI) * carryArc));
-            Quaternion rotation = Quaternion.Slerp(holdRotation, headRotation, carry);
+            if (t < GrabEnd || !_pickupSet)
+            {
+                UpdatePickup();
+            }
 
-            // Tamaño: aparece (o se va) entre las manos con un rebote, y se aplasta al encajar.
-            float pop = useHands ? Mathf.InverseLerp(PopStart, RiseEnd, t) : t / Total;
-            float scale = _wanted ? EaseOutBack(pop) : pop * pop;
+            Vector3 position;
+            Quaternion rotation;
+            bool tossing = !_wanted && useHands && t < CarryEnd;
+            if (tossing)
+            {
+                TossPose(t, headPosition, headRotation, out position, out rotation);
+            }
+            else
+            {
+                Vector3 pickup = _avatar.TransformPoint(_pickupLocal);
+                Quaternion holdRotation = Quaternion.LookRotation(_avatar.forward, _avatar.up) * Quaternion.Euler(-12f, 0f, 0f);
+                float carry = Smooth(Mathf.InverseLerp(GrabEnd, CarryEnd, t));
+                float bulge = Mathf.Sin(carry * Mathf.PI);
+                position = Vector3.Lerp(pickup, headPosition, carry)
+                           + (_avatar.up * (bulge * carryArc))
+                           + (_avatar.forward * (bulge * carryForward));
+                rotation = Quaternion.Slerp(holdRotation, headRotation, carry);
+            }
+
+            // Con las manos el gorro está siempre a su tamaño (sale de fuera de
+            // cuadro); sin ellas aparece en su sitio creciendo. Se aplasta al encajar.
+            float scale = useHands ? 1f : Smooth(_time / Total);
             float press = Mathf.InverseLerp(CarryEnd, PressEnd, t);
             float squash = press > 0f && press < 1f ? 1f - (0.12f * Mathf.Sin(press * Mathf.PI)) : 1f;
             float parent = transform.lossyScale.y > 0.0001f ? transform.lossyScale.y : 1f;
-            _root.SetPositionAndRotation(position, rotation);
+            _root.SetPositionAndRotation(useHands ? position : headPosition, useHands ? rotation : headRotation);
             float size = ModelSize();
             _root.localScale = new Vector3(scale / squash, scale * squash, scale / squash) * (size / parent);
             Transform swayed = _rig != null ? _model : _cone;
@@ -396,22 +430,96 @@ namespace Sonia
                 return;
             }
 
-            // Manos: suben, sujetan el gorro por el ala mientras viaja y sueltan.
-            float rise = Smooth(Mathf.InverseLerp(0f, RiseEnd, t));
+            // Manos: bajan a por el gorro, lo sujetan por los costados mientras viaja y sueltan.
+            float reach = Smooth(Mathf.InverseLerp(0f, ReachEnd, t));
             float release = Smooth(Mathf.InverseLerp(PressEnd, Total, t));
-            float weight = rise * (1f - release);
+            float weight = reach * (1f - release);
             if (weight <= 0.001f)
             {
                 return;
             }
 
             Vector3 up = rotation * Vector3.up;
+            Grip(true, position, rotation, size, out Vector3 rightPoint, out Vector3 rightNormal);
+            Grip(false, position, rotation, size, out Vector3 leftPoint, out Vector3 leftNormal);
+            // Al lanzarlo, la mano del lado del tiro lo acompaña y la otra suelta enseguida.
+            float letGo = tossing ? Smooth(Mathf.InverseLerp(GrabEnd - 0.08f, GrabEnd, t)) : 1f;
+            _right.Hold(rightPoint, rightNormal, up, _avatar, _tossSide > 0f ? weight : weight * letGo, fingerCurl, gripGap);
+            _left.Hold(leftPoint, leftNormal, up, _avatar, _tossSide > 0f ? weight * letGo : weight, fingerCurl, gripGap);
+        }
+
+        /// <summary>
+        /// Quitárselo, con la línea de tiempo hacia atrás: de CarryEnd a GrabEnd lo
+        /// levanta de la cabeza hacia delante y algo hacia el lado del tiro; de
+        /// GrabEnd a 0 vuela en arco hacia ese lado y abajo, dando vueltas, hasta
+        /// fuera de cuadro.
+        /// </summary>
+        private void TossPose(float t, Vector3 headPosition, Quaternion headRotation, out Vector3 position, out Quaternion rotation)
+        {
+            Vector3 side = _avatar.right * _tossSide;
+            Vector3 lift = headPosition + (_avatar.up * 0.14f) + (_avatar.forward * 0.18f) + (side * 0.08f);
+            Quaternion liftRotation = headRotation * Quaternion.Euler(-20f, 0f, 0f);
+            if (t >= GrabEnd)
+            {
+                float s = Smooth(Mathf.InverseLerp(CarryEnd, GrabEnd, t));
+                position = Vector3.Lerp(headPosition, lift, s);
+                rotation = Quaternion.Slerp(headRotation, liftRotation, s);
+                return;
+            }
+
+            float f = 1f - (t / GrabEnd);
+            Vector3 far = lift + (side * 1.4f) - (_avatar.up * 0.7f) + (_avatar.forward * 0.25f);
+            position = Vector3.Lerp(lift, far, f) + (_avatar.up * (Mathf.Sin(f * Mathf.PI) * 0.3f));
+            rotation = Quaternion.AngleAxis(-f * 600f * _tossSide, _avatar.forward) * liftRotation;
+        }
+
+        /// <summary>
+        /// Dónde coge el gorro: delante de la cadera, por debajo de lo que ve la
+        /// cámara (se baja de 3 en 3 cm hasta 18 cm más si haría falta), en el
+        /// espacio del avatar. Se recalcula hasta que las manos lo cogen: la
+        /// cámara puede estar yendo al plano de la trivia.
+        /// </summary>
+        private void UpdatePickup()
+        {
+            Vector3 point = _head.position + (_avatar.forward * pickupOffset.x) - (_avatar.up * pickupOffset.y);
+            Camera cam = Camera.main;
+            for (int i = 0; cam != null && i < 6 && SeenByCamera(cam, point); i++)
+            {
+                point -= _avatar.up * 0.03f;
+            }
+
+            _pickupLocal = _avatar.InverseTransformPoint(point);
+            _pickupSet = true;
+        }
+
+        /// <summary>Cierto si la cámara vería el gorro con la boca en <paramref name="point"/> (mira lo alto de la copa).</summary>
+        private bool SeenByCamera(Camera cam, Vector3 point)
+        {
+            Vector3 top = cam.WorldToViewportPoint(point + (_avatar.up * (0.17f * ModelSize())));
+            return top.z > 0f && top.y > -0.02f && top.x > -0.2f && top.x < 1.2f;
+        }
+
+        /// <summary>
+        /// Punto de agarre de una mano en el mundo y la normal de la tela ahí
+        /// (hacia fuera): los del prefab (TriviaCapRig) o, en el gorro procedural,
+        /// los costados del borde.
+        /// </summary>
+        private void Grip(bool right, Vector3 position, Quaternion rotation, float size, out Vector3 point, out Vector3 normal)
+        {
+            if (_rig != null && _model != null && _rig.gripPoints != null && _rig.gripPoints.Length >= 2
+                && _rig.gripNormals != null && _rig.gripNormals.Length >= 2)
+            {
+                // La mano derecha coge el costado derecho del gorro (+X del prefab).
+                int index = (_rig.gripPoints[0].x > 0f) == right ? 0 : 1;
+                point = _model.TransformPoint(_rig.gripPoints[index]);
+                normal = _model.TransformDirection(_rig.gripNormals[index]).normalized;
+                return;
+            }
+
             Vector3 across = rotation * Vector3.right;
             float halfWidth = _rig != null ? _rig.openingWidth * 0.5f * size : radius * size;
-            float rim = (halfWidth * scale) + gripGap;
-            Vector3 brim = position + (up * 0.015f);
-            _right.Hold(brim + (across * rim), -across, up, _avatar, weight, fingerCurl);
-            _left.Hold(brim - (across * rim), across, up, _avatar, weight, fingerCurl);
+            normal = right ? across : -across;
+            point = position + (rotation * Vector3.up * 0.015f) + (normal * halfWidth);
         }
 
         // ------------------------------------------------------------------
@@ -897,21 +1005,23 @@ namespace Sonia
             }
 
             /// <summary>
-            /// Lleva la mano al punto <paramref name="grip"/> del ala, con los dedos
-            /// hacia arriba y hacia el gorro (<paramref name="inward"/>) y la palma
-            /// mirándolo. Con <paramref name="weight"/> 0 deja el brazo como está.
+            /// Apoya la palma en la tela por fuera: el nudillo del medio en
+            /// <paramref name="surface"/>, la muñeca separada <paramref name="gap"/>
+            /// hacia <paramref name="outward"/> (la normal de la tela) y los dedos a lo
+            /// largo de la copa, hacia arriba, sin atravesarla. Con
+            /// <paramref name="weight"/> 0 deja el brazo como está.
             /// </summary>
-            public void Hold(Vector3 grip, Vector3 inward, Vector3 up, Transform avatar, float weight, float curl)
+            public void Hold(Vector3 surface, Vector3 outward, Vector3 up, Transform avatar, float weight, float curl, float gap)
             {
                 if (_shoulder == null || _elbow == null || _wrist == null)
                 {
                     return;
                 }
 
-                Vector3 fingers = ((up * 0.75f) + (inward * 0.65f)).normalized;
-                Vector3 wristTarget = grip - (fingers * _palm);
+                Vector3 fingers = Vector3.ProjectOnPlane(up, outward);
+                fingers = fingers.sqrMagnitude > 1e-6f ? fingers.normalized : up;
+                Vector3 wristTarget = surface + (outward * gap) - (fingers * _palm);
                 // Codo hacia fuera y algo atrás, como al levantar los brazos sobre la cabeza.
-                Vector3 outward = -inward;
                 Vector3 pole = _shoulder.position + (outward * 0.3f) - (avatar.forward * 0.12f) - (avatar.up * 0.1f);
                 SolveArm(wristTarget, pole, weight);
 
@@ -932,7 +1042,7 @@ namespace Sonia
                     return;
                 }
 
-                // Dedos algo cerrados sobre el ala (el eje cruza la palma).
+                // Dedos algo cerrados, siguiendo la curva de la copa (el eje cruza la palma).
                 Vector3 axis = _wrist.rotation * _thumbLocal;
                 Quaternion bend = Quaternion.AngleAxis((_isLeft ? curl : -curl) * weight, axis);
                 for (int i = 0; i < _fingers.Length; i++)
@@ -1181,14 +1291,6 @@ namespace Sonia
         {
             t = Mathf.Clamp01(t);
             return t * t * (3f - (2f * t));
-        }
-
-        private static float EaseOutBack(float t)
-        {
-            const float c1 = 1.70158f;
-            const float c3 = c1 + 1f;
-            float p = Mathf.Clamp01(t) - 1f;
-            return 1f + (c3 * p * p * p) + (c1 * p * p);
         }
 
         private static void DestroyAsset(Object asset)

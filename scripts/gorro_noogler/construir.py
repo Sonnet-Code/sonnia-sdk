@@ -6,14 +6,17 @@ Uso, desde la raíz del repo (antes, texto.py):
 1. Une las mallas, pasa a metros y deja el origen en el centro de la boca (el
    borde de abajo de la copa), con la copa hacia +Z y la visera hacia -Y.
 2. Texturas: recolorea los gajos como la gorra Noogler (gajo amarillo delante,
-   azul a la izquierda de quien mira, rojo a la derecha), borra la costura del
-   centro delantero y proyecta de frente el texto «Noogler» con un relieve de
-   bordado en el normal map. Pasa las texturas a URP (normal OpenGL y
-   metálico/suavidad).
+   azul a la izquierda de quien mira, rojo a la derecha), cuña a cuña del disco
+   UV para que cada color acabe en su costura, también los parches que tapan
+   huecos de la copa; borra la costura del centro delantero y proyecta de frente
+   el texto «Noogler» con un relieve de bordado en el normal map. Pasa las
+   texturas a URP (normal OpenGL y metálico/suavidad).
 3. Separa la hélice (palas y buje) en un objeto aparte con el eje en su +Z local.
-4. Exporta a SALIDA el FBX, las texturas y NooglerCap.json (medidas de la boca y
-   eje de la hélice), y a TRABAJO las vistas previas y las nubes de puntos con
-   las que encajar.py coloca el gorro sobre la gorra oficial de Genies.
+4. Si encajar.py ya midió la gorra oficial (trabajo/gorra_oficial_borde.json),
+   estira la parte baja de la copa hasta su borde.
+5. Exporta a SALIDA el FBX, las texturas y NooglerCap.json (medidas de la boca,
+   puntos de agarre y eje de la hélice), y a TRABAJO las vistas previas y las
+   nubes de puntos con las que encajar.py coloca el gorro sobre la gorra oficial.
 """
 
 import json
@@ -27,7 +30,7 @@ import bmesh  # noqa: E402
 import bpy  # noqa: E402
 import numpy as np  # noqa: E402
 from mathutils import Matrix, Vector  # noqa: E402
-from rutas import GLTF, IMAGENES, SALIDA, TRABAJO, write_json  # noqa: E402
+from rutas import GLTF, IMAGENES, SALIDA, TRABAJO, read_json, write_json  # noqa: E402
 
 os.makedirs(SALIDA, exist_ok=True)
 
@@ -84,19 +87,60 @@ def islands(obj):
 
 # Colores de la gorra Noogler (sRGB 0..1).
 YELLOW = np.array([248, 205, 28]) / 255.0
+GRIP_HEIGHT = 0.025  # metros sobre la boca a los que las manos cogen la copa
 TEXT_WIDTH = 0.096  # metros, ancho del texto en el gajo delantero
 TEXT_HEIGHT_FRACTION = 0.30  # altura del centro del texto en el gajo delantero (0 abajo, 1 arriba)
-SEAM_HALF_DEG = 2.6  # media anchura de la costura central que se borra
+SEAM_HALF_PX = 7  # media anchura, en píxeles de la textura, de la costura central que se borra
 BUMP_STRENGTH = 2.2  # relieve del bordado en el normal map
+
+
+def crown_patches(obj):
+    """Caras sueltas que tapan huecos de la copa (parches del modelo original).
+
+    Son islas de una o dos caras cuyo UV cae en huecos del disco de la copa: si no
+    se recolorean con ella salen como triangulitos del color viejo del gajo, y si
+    se quitan, la copa queda con agujeros. El disco tiene el centro en el UV del
+    botón (el vértice de la copa más cercano a lo más bajo de la hélice).
+    """
+    mesh = obj.data
+    parts = islands(obj)
+    uv_data = mesh.uv_layers.active.data
+    co = np.array([v.co[:] for v in mesh.vertices])
+    centers = [np.mean([mesh.polygons[f].center[:] for f in faces], axis=0) for faces in parts]
+    prop_faces = [f for faces, c in zip(parts, centers, strict=True) if c[2] > 0.01 for f in faces]
+    stem_base = co[np.unique([v for f in prop_faces for v in mesh.polygons[f].vertices])][
+        :, 2
+    ].argmin()
+    stem_base = co[np.unique([v for f in prop_faces for v in mesh.polygons[f].vertices])][stem_base]
+    crown_loops = [li for f in parts[0] for li in mesh.polygons[f].loop_indices]
+    button = min(
+        crown_loops, key=lambda li: np.linalg.norm(co[mesh.loops[li].vertex_index] - stem_base)
+    )
+    center = np.array(uv_data[button].uv[:])
+    radius = max(np.linalg.norm(np.array(uv_data[li].uv[:]) - center) for li in crown_loops)
+    patches = []
+    for faces, c in zip(parts[1:], centers[1:], strict=True):
+        if len(faces) > 2 or c[2] > 0.01:
+            continue
+        uv = np.mean(
+            [uv_data[li].uv[:] for f in faces for li in mesh.polygons[f].loop_indices], axis=0
+        )
+        if np.linalg.norm(uv - center) < 0.97 * radius:
+            patches.extend(faces)
+    return patches
+
 
 hat = load_hat()
 me = hat.data
 isl = islands(hat)
+patches = crown_patches(hat)
+print("PARCHES de la copa", len(patches))
 verts = np.array([v.co[:] for v in me.vertices])
 
 # --- Clasificación de piezas ------------------------------------------------
 face_center = np.array([p.center[:] for p in me.polygons])
-crown = isl[0]
+# La copa exterior, con los parches que tapan sus huecos.
+crown = isl[0] + patches
 part_of = np.zeros(len(me.polygons), dtype=int)  # 0 cuerpo, 1 hélice
 propeller_islands = []
 for faces in isl:
@@ -187,6 +231,23 @@ def sample_surface(face_ids, count, seed):
 
 
 samples, sample_normals = sample_surface(crown_set, 2500, 7)
+
+# Agarre: un punto en cada costado de la copa, a GRIP_HEIGHT sobre la boca y por
+# fuera, con la normal de la tela. Las manos apoyan ahí la palma (TriviaHat).
+grip_points = []
+grip_normals = []
+for sign in (1.0, -1.0):
+    side = (np.abs(samples[:, 2] - GRIP_HEIGHT) < 0.006) & (samples[:, 0] * sign > 0)
+    point = samples[side][np.argmax(samples[side, 0] * sign)]
+    close = side & (np.linalg.norm(samples - point, axis=1) < 0.015)
+    normal_mean = sample_normals[close].mean(axis=0)
+    grip_points.append(point)
+    grip_normals.append(normal_mean / np.linalg.norm(normal_mean))
+print(
+    "AGARRE",
+    [p.round(4).tolist() for p in grip_points],
+    [n.round(3).tolist() for n in grip_normals],
+)
 # Visera: la isla grande de delante que mira hacia arriba (con el canto del ala, la media es baja).
 brim_top = None
 for faces in isl[1:]:
@@ -273,7 +334,11 @@ pz = pos_map[..., 2]
 az = np.degrees(np.arctan2(px, -py))  # 0 delante, + hacia +X (derecha de quien mira)
 
 
-# --- Gajos originales por azimut (color mayoritario cada 2°) -----------------
+# --- Gajos: cuñas del disco UV de la copa ------------------------------------------
+# En el UV la copa exterior es un disco con el botón en el centro, y las costuras
+# son radios rectos: cada gajo es una cuña. Se recolorea cuña a cuña para que cada
+# color acabe justo en su costura (por azimut 3D no: el botón va adelantado y las
+# costuras no siguen el azimut, así que quedaban picos del color de al lado).
 def hsv(rgb):
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
     mx = np.maximum(np.maximum(r, g), b)
@@ -299,105 +364,144 @@ def color_class(c):
 
 cls = color_class(rgb)
 names = ["amarillo", "azul", "rojo", "verde"]
-bins = {}
-mask_band = fabric & (pz > 0.02)
-for a, c in zip(az[mask_band].ravel(), cls[mask_band].ravel(), strict=True):
-    if c < 0:
-        continue
-    k = int(math.floor((a + 180) / 2))
-    bins.setdefault(k, np.zeros(4))
-    bins[k][c] += 1
-majority = {k: int(v.argmax()) for k, v in bins.items()}
-runs = []
-for k in sorted(majority):
-    if runs and runs[-1][2] == majority[k] and runs[-1][1] == k - 1:
-        runs[-1][1] = k
-    else:
-        runs.append([k, k, majority[k]])
-for a, b, c in runs:
-    print("GAJO", names[c], a * 2 - 180, "..", b * 2 - 178)
 
-# Nuevo color de cada gajo original según su azimut central, como la gorra
-# Noogler: amarillo delante, azul a la izquierda de quien mira, rojo a la derecha
-# y detrás rojo y verde.
+# Centro del disco: el botón, donde se apoya la hélice (el vértice de la copa más
+# cercano a lo más bajo de la hélice; el más alto de la copa no lo es).
+prop_pts = verts[
+    np.unique(
+        np.concatenate(
+            [list(me.polygons[f].vertices) for faces in propeller_islands for f in faces]
+        )
+    )
+]
+stem_base = prop_pts[prop_pts[:, 2].argmin()]
+crown_loops = [li for f in crown for li in me.polygons[f].loop_indices]
+button_loop = min(
+    crown_loops,
+    key=lambda li: np.linalg.norm(
+        np.array(me.vertices[me.loops[li].vertex_index].co[:]) - stem_base
+    ),
+)
+uv_center = np.array(uv_layer[button_loop].uv[:]) * [W, H]
+print("BOTÓN en el UV", (uv_center / [W, H]).round(4).tolist())
+grid_y, grid_x = np.mgrid[0:H, 0:W]
+du = grid_x + 0.5 - uv_center[0]
+dv = grid_y + 0.5 - uv_center[1]
+uv_radius = np.hypot(du, dv)
+uv_angle = np.degrees(np.arctan2(dv, du))  # -180..180
+
+# Color mayoritario cada medio grado, lejos del botón y del borde del disco.
+STEP = 0.5
+NBINS = int(360 / STEP)
+disc = float(np.percentile(uv_radius[covered], 98))
+band = fabric & (cls >= 0) & (uv_radius > 0.2 * disc) & (uv_radius < 0.92 * disc)
+counts = np.zeros((NBINS, 4))
+np.add.at(counts, (((uv_angle[band] + 180) / STEP).astype(int) % NBINS, cls[band]), 1)
+# Moda en una ventana de 2,5° para que las puntadas de las costuras no partan gajos.
+smooth = sum(np.roll(counts, k, axis=0) for k in range(-2, 3))
+majority = smooth.argmax(axis=1)
+runs = []
+for i in range(NBINS):
+    if runs and runs[-1][2] == majority[i]:
+        runs[-1][1] = i + 1
+    else:
+        runs.append([i, i + 1, int(majority[i])])
+if len(runs) > 1 and runs[0][2] == runs[-1][2]:
+    runs[0][0] = runs[-1][0] - NBINS
+    runs.pop()
+# Tramos de menos de 10° son ruido: al vecino.
+runs = [r for r in runs if (r[1] - r[0]) * STEP >= 10]
+# Cada borde, a mitad entre el final de un gajo y el principio del siguiente
+# (en bins, módulo la vuelta entera).
+bounds = []
+for i, (_a, b, _c) in enumerate(runs):
+    nxt = runs[(i + 1) % len(runs)][0]
+    if nxt < b - NBINS / 2:
+        nxt += NBINS
+    bounds.append(((b + nxt) / 2) % NBINS)
+wedges = [[bounds[i - 1], bounds[i], c] for i, (a, b, c) in enumerate(runs)]
+print(
+    "GAJOS",
+    len(wedges),
+    [(round(a * STEP - 180, 1), round(b * STEP - 180, 1), names[c]) for a, b, c in wedges],
+)
+
+
+def wedge_mask(a, b):
+    """Píxeles de la copa entre dos bordes (en bins; si a > b, la cuña cruza los ±180°)."""
+    k = (uv_angle + 180) / STEP
+    inside = (k >= a) & (k < b) if a < b else (k >= a) | (k < b)
+    return covered & inside
+
+
+# Color nuevo de cada gajo según dónde cae en 3D (azimut: 0 delante, + hacia +X,
+# la derecha de quien mira): los dos de delante amarillos, el de la izquierda de
+# quien mira azul, el de la derecha rojo, y detrás verde (derecha) y rojo (izquierda).
+plan = []
+for a, b, c in wedges:
+    m = wedge_mask(a, b) & (pz > 0.02) & np.isfinite(az)
+    rad = np.radians(az[m])
+    center = math.degrees(math.atan2(np.sin(rad).mean(), np.cos(rad).mean()))
+    plan.append([a, b, c, center])
+order = sorted(range(len(plan)), key=lambda i: abs(plan[i][3]))
+for rank, i in enumerate(order):
+    center = plan[i][3]
+    if rank < 2:
+        plan[i].append("amarillo")
+    elif rank < 4:
+        plan[i].append("rojo" if center > 0 else "azul")
+    else:
+        plan[i].append("verde" if center > 0 else "rojo")
+for _a, _b, c, center, name in plan:
+    print("GAJO", names[c], "azimut", round(center, 1), "->", name)
+
 panel_mean = {}
 for c in range(4):
     sel = fabric & (cls == c)
     panel_mean[c] = rgb[sel].mean(axis=0)
-print("MEDIAS", {names[c]: (panel_mean[c] * 255).round() for c in range(4)})
 TARGETS = {
     "amarillo": YELLOW,
     "azul": panel_mean[1],
     "rojo": panel_mean[2],
     "verde": panel_mean[3],
 }
-# Tramos continuos (el último puede seguir por el principio, -180).
-spans = [[a * 2 - 180, b * 2 - 178, c] for a, b, c in runs]
-if len(spans) > 1 and spans[0][2] == spans[-1][2] and spans[0][0] <= -178 and spans[-1][1] >= 178:
-    first = spans.pop(0)
-    spans[-1][1] = first[1] + 360
-plan = []
-for a, b, c in spans:
-    mid = ((a + b) / 2 + 180) % 360 - 180
-    if abs(mid) <= 60:
-        name = "amarillo"
-    elif 60 < mid <= 132:
-        name = "rojo"
-    elif -132 <= mid < -60:
-        name = "azul"
-    elif mid > 132:
-        name = "verde"
-    else:
-        name = "rojo"
-    plan.append((a, b, name))
-    print("NUEVO", names[c], a, "..", b, "->", name)
 
 
 def luma(c):
     return c[..., 0] * 0.299 + c[..., 1] * 0.587 + c[..., 2] * 0.114
 
 
+# Cada gajo entero (también las puntadas) al color nuevo, conservando la luz de
+# la tela respecto al color medio que tenía ese gajo.
 new_rgb = rgb.copy()
-orig_mean = np.zeros_like(rgb)
-for c in range(4):
-    orig_mean[cls == c] = panel_mean[c]
-for a, b, name in plan:
-    az_wrapped = np.where(az < a, az + 360, az)
-    sel = fabric & (cls >= 0) & (az_wrapped >= a) & (az_wrapped < b)
-    factor = np.clip(luma(rgb[sel]) / np.maximum(luma(orig_mean[sel]), 1e-3), 0.0, 1.6)
+for a, b, c, _center, name in plan:
+    m = wedge_mask(a, b)
+    own = m & fabric & (cls == c)
+    base = luma(rgb[own].mean(axis=0)) if own.any() else luma(panel_mean[c])
+    factor = np.clip(luma(rgb[m]) / max(base, 1e-3), 0.0, 1.6)
     # Se suaviza la variación: al pasar un gajo oscuro a amarillo la tela salía moteada.
     factor = 1.0 + (factor - 1.0) * (0.45 if name == "amarillo" else 0.8)
-    new_rgb[sel] = np.clip(TARGETS[name][None, :] * factor[:, None], 0, 1)
-
-# Costura del centro delantero: el borde entre los dos gajos de delante.
-front_edges = [b for a, b, name in plan if name == "amarillo" and -40 < b < 40]
-SEAM_AZ = front_edges[0] if front_edges else 0.0
-print("COSTURA delantera en", SEAM_AZ)
+    new_rgb[m] = np.clip(TARGETS[name][None, :] * factor[:, None], 0, 1)
 
 # --- Borrar la costura del centro delantero -----------------------------------
-# Disco UV de la copa: centro en el UV del vértice más alto de la copa (el botón).
-crown_loops = [li for f in crown for li in me.polygons[f].loop_indices]
-top_loop = max(crown_loops, key=lambda li: me.vertices[me.loops[li].vertex_index].co.z)
-uv_center = np.array(uv_layer[top_loop].uv[:]) * [W, H]
-rows, cols = np.nonzero(covered & (np.abs(az - SEAM_AZ) < SEAM_HALF_DEG))
-for r, c in zip(rows, cols, strict=True):
-    v = np.array([c + 0.5, r + 0.5]) - uv_center
-    radius = np.linalg.norm(v)
-    if radius < 4:
-        continue
-    t = np.array([-v[1], v[0]]) / radius
-    step = radius * math.radians(SEAM_HALF_DEG * 2.2)
-    for sign in (1, -1):
-        sx, sy = (np.array([c + 0.5, r + 0.5]) + sign * t * step).astype(int)
-        if (
-            0 <= sx < W
-            and 0 <= sy < H
-            and covered[sy, sx]
-            and abs(az[sy, sx] - SEAM_AZ) >= SEAM_HALF_DEG
-        ):
-            new_rgb[r, c] = new_rgb[sy, sx]
-            normal[r, c] = normal[sy, sx]
-            break
+# Es el radio entre los dos gajos amarillos: se tapa copiando la tela de al lado,
+# en perpendicular a la costura.
+front = [p for p in plan if p[4] == "amarillo"]
+seam_bins = front[0][1] if abs(front[0][1] - front[1][0]) < 1e-6 else front[1][1]
+seam_angle = math.radians(seam_bins * STEP - 180)
+print("COSTURA delantera en el UV a", round(math.degrees(seam_angle), 1), "grados")
+ux, uy = math.cos(seam_angle), math.sin(seam_angle)
+along = du * ux + dv * uy
+across = -du * uy + dv * ux
+seam = covered & (along > 6) & (np.abs(across) < SEAM_HALF_PX)
+rows, cols = np.nonzero(seam)
+side = np.where(across[rows, cols] >= 0, 1.0, -1.0)
+shift = 2 * SEAM_HALF_PX + 2
+src_x = np.clip((cols + 0.5 - uy * side * shift).astype(int), 0, W - 1)
+src_y = np.clip((rows + 0.5 + ux * side * shift).astype(int), 0, H - 1)
+ok = covered[src_y, src_x] & ~seam[src_y, src_x]
+new_rgb[rows[ok], cols[ok]] = new_rgb[src_y[ok], src_x[ok]]
+normal[rows[ok], cols[ok]] = normal[src_y[ok], src_x[ok]]
 
 # --- Texto «Noogler» proyectado de frente --------------------------------------
 text_img = bpy.data.images.load(os.path.join(TRABAJO, "noogler_text.png"))
@@ -530,6 +634,43 @@ prop.matrix_world = pivot
 prop.parent = hat
 prop.matrix_parent_inverse = hat.matrix_world.inverted()
 
+# --- Borde bajado como la gorra oficial ---------------------------------------------
+# encajar.py deja en trabajo/gorra_oficial_borde.json cuánto baja la gorra oficial
+# por debajo de esta copa en cada dirección (lados y nuca): ahí Genies deja el pelo
+# aplastado. Se estira hacia abajo la parte baja de la copa (y lo que cuelga de
+# ella: forro, tira y visera), sin tocar nada por encima de RIM_TOP. Las muestras
+# para encajar.py ya salieron antes, de la copa sin estirar.
+RIM_FILE = os.path.join(TRABAJO, "gorra_oficial_borde.json")
+RIM_TOP = 0.055  # metros sobre la boca a partir de los que la copa no se toca
+
+
+def rim_shift(points):
+    """Cuánto baja cada punto (0 si no hay medida de la gorra oficial)."""
+    points = np.asarray(points, dtype=float).reshape(-1, 3)
+    if not os.path.exists(RIM_FILE):
+        return np.zeros(len(points))
+    rim = read_json(RIM_FILE)
+    a = np.degrees(np.arctan2(points[:, 0], -points[:, 1]))
+    extend = np.interp(a, rim["azimuth"], rim["extend"], period=360)
+    u = np.clip((RIM_TOP - points[:, 2]) / RIM_TOP, 0, 1)
+    return extend * u * u * (3 - 2 * u)
+
+
+co = np.zeros(len(me.vertices) * 3)
+me.vertices.foreach_get("co", co)
+co = co.reshape(-1, 3)
+drop = rim_shift(co)
+co[:, 2] -= drop
+me.vertices.foreach_set("co", co.ravel())
+me.update()
+grip_points = [p - np.array([0.0, 0.0, rim_shift(p)[0]]) for p in grip_points]
+print(
+    "BORDE",
+    "sin medida de la gorra oficial"
+    if not drop.any()
+    else f"bajado hasta {drop.max() * 1000:.1f} mm",
+)
+
 # --- Material para las vistas previas ---------------------------------------------
 mat = bpy.data.materials.new("NooglerCap")
 mat.use_nodes = True
@@ -595,6 +736,9 @@ meta = {
     "crown_depth": float(body[:, 1].max() - body[:, 1].min()),
     "propeller_axis_center": axis_center.tolist(),
     "propeller_axis": axis.tolist(),
+    # Listas planas (x, y, z de cada mano): JsonUtility de Unity no lee listas de listas.
+    "grip_points": np.concatenate(grip_points).tolist(),
+    "grip_normals": np.concatenate(grip_normals).tolist(),
 }
 write_json(os.path.join(SALIDA, "NooglerCap.json"), meta, indent=2)
 # Nubes de puntos para el ICP en ejes de Unity: (x, y, z) = (-x, z, -y) de Blender.

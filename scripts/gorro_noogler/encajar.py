@@ -20,9 +20,11 @@ gorro Noogler en el espacio del prefab (x derecha, y arriba, z delante; origen e
 3. Afina copa contra copa, punto a punto y luego punto a plano: la copa es lo que
    tiene que coincidir con la cabeza (y con el pelo deformado bajo la gorra).
 Escribe NooglerCap_fit.json junto al FBX (posición, giro y escala del prefab en el
-espacio de la cabeza; lo lee "Sonia > Crear gorro Noogler") y
-trabajo/gorra_oficial_encaje.png (las dos gorras superpuestas de lado, de frente
-y desde arriba) para revisarlo.
+espacio de la cabeza; lo lee "Sonia > Crear gorro Noogler"), trabajo/
+gorra_oficial_borde.json (cuánto alargar la copa hacia abajo en cada dirección
+para cubrir lo que cubría la oficial; lo aplica construir.py, que hay que volver
+a ejecutar) y trabajo/gorra_oficial_encaje.png (las dos gorras superpuestas de
+lado, de frente y desde arriba) para revisarlo.
 """
 
 import math
@@ -278,6 +280,44 @@ if len(tgt_brim) > 20:
     print(
         f"  visera: distancia media a la oficial {db.mean() * 1000:.1f} mm (mediana {np.median(db) * 1000:.1f})"
     )
+
+# --- Borde: hasta dónde baja la gorra oficial ---------------------------------------
+# Por los lados y por detrás la gorra oficial baja más que la copa Noogler, y ahí
+# Genies deja el pelo aplastado: construir.py alarga la copa hacia abajo lo que
+# falte en cada dirección (más un margen), sin tocar la parte de arriba.
+RIM_MARGIN = 0.003  # metros del modelo
+NOTCH_DEG = 160  # detrás, la copa Noogler tiene la abertura del ajuste: se rellena con los vecinos
+off_model = ((tgt - t) @ r) / s  # copa oficial (sin visera) en el espacio del prefab
+
+
+def azimuth(p):
+    """Azimut como en construir.py: 0 delante, + hacia la derecha de quien mira (-x del prefab)."""
+    return np.degrees(np.arctan2(-p[:, 0], p[:, 2]))
+
+
+edges = np.arange(-180, 181, 10)
+rim_az = (edges[:-1] + edges[1:]) / 2
+rim_ext = np.full(len(rim_az), np.nan)
+for k, (a0, a1) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
+    mo = (azimuth(off_model) >= a0) & (azimuth(off_model) < a1)
+    mn = (azimuth(crown_src) >= a0) & (azimuth(crown_src) < a1)
+    if mo.sum() >= 5 and mn.sum() >= 5 and abs(rim_az[k]) < NOTCH_DEG:
+        lack = np.percentile(crown_src[mn, 1], 3) - np.percentile(off_model[mo, 1], 3)
+        rim_ext[k] = max(0.0, lack + RIM_MARGIN)
+known = ~np.isnan(rim_ext)
+rim_ext = np.interp(rim_az, rim_az[known], rim_ext[known], period=360)
+rim_ext = 0.25 * np.roll(rim_ext, 1) + 0.5 * rim_ext + 0.25 * np.roll(rim_ext, -1)
+rim_ext = np.minimum(rim_ext, 0.045)
+rim_file = os.path.join(TRABAJO, os.path.splitext(os.path.basename(OFFICIAL))[0] + "_borde.json")
+write_json(
+    rim_file,
+    {"azimuth": rim_az.tolist(), "extend": rim_ext.tolist(), "margin": RIM_MARGIN},
+    indent=2,
+)
+print(
+    f"  borde: la copa baja hasta {rim_ext.max() * s * 1000:.0f} mm más (en la cabeza) para cubrir lo que "
+    f"cubría la oficial; {os.path.basename(rim_file)}"
+)
 
 write_json(
     OUT_JSON,
