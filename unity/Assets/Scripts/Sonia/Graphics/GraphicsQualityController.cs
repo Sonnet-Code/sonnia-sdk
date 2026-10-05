@@ -126,6 +126,7 @@ namespace Sonia
             DontDestroyOnLoad(go);
             go.AddComponent<GraphicsQualityController>();
             go.AddComponent<GraphicsQualityMenu>();
+            go.AddComponent<SoniaOptionsMenu>();
         }
 
         private void Awake()

@@ -1,4 +1,5 @@
-// Menú de calidad gráfica: Esc en la ventana de Sonia lo abre y lo cierra.
+// Menú de calidad gráfica: se abre desde el menú de opciones (Esc,
+// SoniaOptionsMenu) y Esc o «Volver» regresan a él.
 //
 // Arriba los niveles (Alta, Media, Baja, Personalizada) y los fotogramas por
 // segundo medidos; debajo cada opción con ◄ ►. Tocar una opción pasa a
@@ -17,7 +18,7 @@ using UnityEngine.UI;
 
 namespace Sonia
 {
-    /// <summary>Menú de calidad gráfica que se abre con Esc.</summary>
+    /// <summary>Menú de calidad gráfica, dentro del menú de opciones de Esc.</summary>
     [DisallowMultipleComponent]
     public class GraphicsQualityMenu : MonoBehaviour
     {
@@ -44,6 +45,10 @@ namespace Sonia
         private int _selected;
         private bool _cursorWasVisible;
         private float _nextFpsRefresh;
+        private int _openedFrame = -1;
+
+        /// <summary>Lo que hace «Volver»: lo pone el menú de opciones para regresar a él.</summary>
+        public Action BackRequested;
 
         /// <summary>Cierto mientras el menú está abierto.</summary>
         public bool IsOpen
@@ -76,12 +81,9 @@ namespace Sonia
                 return;
             }
 
-            if (keyboard.escapeKey.wasPressedThisFrame)
-            {
-                SetOpen(!IsOpen);
-            }
-
-            if (!IsOpen)
+            // Esc lo lleva SoniaOptionsMenu: cierra este menú y vuelve al de opciones.
+            // La tecla que lo abrió desde el menú de opciones (1 o Intro) no cuenta aquí.
+            if (!IsOpen || Time.frameCount == _openedFrame)
             {
                 return;
             }
@@ -146,6 +148,7 @@ namespace Sonia
                 _cursorWasVisible = Cursor.visible;
                 Cursor.visible = true;
                 _canvas.SetActive(true);
+                _openedFrame = Time.frameCount;
                 Refresh();
             }
             else
@@ -230,13 +233,17 @@ namespace Sonia
                 dir => Edit(o => o.targetFrameRate = Cycle(GraphicsOptions.FrameRateSteps, o.targetFrameRate, dir)));
 
             Text keys = SoniaUiKit.MakeText(panel.transform, "Teclas",
-                "Esc cierra · ↑↓ elige · ←→ cambia · 1-4 niveles. Se guarda en este equipo; al arrancar se puede forzar con -quality alta|media|baja.",
+                "Esc vuelve · ↑↓ elige · ←→ cambia · 1-4 niveles. Se guarda en este equipo; al arrancar se puede forzar con -quality alta|media|baja.",
                 22, TextAnchor.MiddleLeft);
             keys.color = MutedText;
             keys.GetComponent<LayoutElement>().preferredHeight = 64f;
 
-            GameObject closeRow = MakeRow(panel.transform, "Cerrar", 80f);
-            MakeButton(closeRow.transform, "Cerrar", () => SetOpen(false));
+            GameObject backRow = MakeRow(panel.transform, "Volver", 80f);
+            MakeButton(backRow.transform, "Volver", () =>
+            {
+                SetOpen(false);
+                BackRequested?.Invoke();
+            });
 
             _canvas.SetActive(false);
             Select(0);
@@ -303,7 +310,8 @@ namespace Sonia
             _rows.Add(new Row { Value = value, Step = step, Background = row.GetComponent<Image>(), ValueText = valueText });
         }
 
-        private static void EnsureEventSystem()
+        /// <summary>Crea un EventSystem si la escena no tiene, para que los menús respondan al ratón.</summary>
+        internal static void EnsureEventSystem()
         {
             if (EventSystem.current != null || FindAnyObjectByType<EventSystem>() != null)
             {

@@ -15,7 +15,7 @@ namespace Sonia
     /// <summary>
     /// Interfaz mínima para probar a Sonia sin micrófono y ver qué está pasando.
     /// F1 la muestra y la esconde; el botón Interrumpir corta a Sonia (Esc abre el
-    /// menú de calidad gráfica, GraphicsQualityMenu).
+    /// menú de opciones, SoniaOptionsMenu).
     /// </summary>
     [DisallowMultipleComponent]
     public class SoniaDebugUI : MonoBehaviour

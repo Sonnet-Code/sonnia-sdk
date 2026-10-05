@@ -1054,7 +1054,7 @@ En **Edit > Project Settings > Audio**:
    | Tecla | Qué hace |
    |---|---|
    | F1 | Muestra y esconde el HUD |
-   | Escape | Abre el menú de calidad gráfica (siempre, también sin `-dev-ui`); para callar a Sonia, el botón **Interrumpir** |
+   | Escape | Abre el menú de opciones (siempre, también sin `-dev-ui`): **Calidad gráfica** y **Editar a Sonia**. Dentro de la calidad gráfica, Esc vuelve a las opciones. Con el editor de personaje abierto no hace nada. Para callar a Sonia, el botón **Interrumpir** |
    | Enter | Envía el texto escrito |
 
 6. Para ver el detalle de cada mensaje, marcar **Verbose Log** en `SoniaClient`
@@ -1087,7 +1087,12 @@ cuando el orquestador lo pida con `request_frame`.
    Si el escritorio está en horizontal, la ventana en pantalla completa saldrá
    apaisada y con bandas negras.
 6. Construir fuera del repositorio: las builds no se suben (ver `.gitignore`).
-7. **Calidad gráfica**: Esc en la ventana de Sonia abre un menú con Alta, Media,
+7. **Menú de opciones (Esc)**: lleva a **Calidad gráfica** y a **Editar a Sonia**
+   (el editor de personaje de Sonia; el de Jean solo se abre desde el panel). Al
+   guardar en el editor, el personaje va al orquestador, que lo guarda como
+   ajuste compartido y lo devuelve con `set_avatar`: sin orquestador conectado no
+   cambia hasta que se conecte. ↑↓ elige, Intro abre, 1 y 2 son atajos.
+   **Calidad gráfica** abre un menú con Alta, Media,
    Baja y Personalizada, los FPS medidos y cada opción (resolución con
    reescalado FSR, suavizado, sombras, oclusión ambiental, desenfoque del fondo,
    bloom, partículas y 60 o 30 FPS). Ratón o teclado: ↑↓ fila, ←→ valor, 1-4
@@ -1151,7 +1156,8 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `ImagePanelController.cs` | Decodifica el base64 de `show_image` y lo muestra con animación de escala |
 | `WebcamFrameSender.cs` | Captura de `WebCamTexture` y envío en JPEG cuando llega `request_frame` |
 | `SoniaDebugUI.cs` | HUD de conexión, subtítulos, entrada de texto y botón de interrumpir |
-| `Graphics/GraphicsQuality*.cs` | Calidad gráfica: niveles y opciones, el controlador que los aplica sobre lo montado y el menú de Esc |
+| `Graphics/GraphicsQuality*.cs` | Calidad gráfica: niveles y opciones, el controlador que los aplica sobre lo montado y su menú |
+| `Graphics/SoniaOptionsMenu.cs` | Menú de opciones de Esc: calidad gráfica y editor de personaje de Sonia |
 | `SoniaBootstrap.cs` | Enlaza todo y aplica los ajustes de kiosco |
 | `Editor/SoniaSceneSetup.cs` | Menús **Sonia > Crear escena base**, **Configurar build 9:16** y **Actualizar componentes** |
 | `Editor/SoniaMotionSetBuilder.cs` | Menú **Sonia > Crear set de animaciones**: importa los FBX, rellena el set, genera la máscara y cablea la escena |
