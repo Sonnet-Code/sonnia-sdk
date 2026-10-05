@@ -1,5 +1,11 @@
 # Editor de personaje de Genies dentro de la app de Sonia: investigación
 
+> Nota del 5 de octubre de 2026: la copia local del avatar ya no existe. En modo
+> edición no hay avatar y Sonia se carga viva del SDK al entrar en Play (ver «El
+> avatar de Genies en Play» en `docs/unity.md`). Lo que aquí se dice de la copia,
+> de `GeniesAvatarSnapshot` y del menú **Sonia > Actualizar copia del avatar del
+> SDK** es historia.
+
 Investigación del 4 de octubre de 2026, cinco días antes del DevFest. Solo se ha
 leído código y documentación: no se ha tocado Unity ni se ha llamado a los
 servidores de Genies. SDK: `com.genies.avatar-sdk.client` 3.8.6, embebido en

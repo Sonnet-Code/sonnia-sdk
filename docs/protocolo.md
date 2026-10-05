@@ -183,7 +183,7 @@ Aspecto de Sonia. Fijo: se repite tras `hello` y cada vez que cambia (se guarda 
 
 ### `set_guest_avatar`
 
-Aspecto del invitado del Modo Jean, igual que `set_avatar` pero para su avatar: fijo, se repite tras `hello` y cada vez que cambia (ajuste compartido `guest_avatar` en la nube). `null` es el avatar de prueba que trae la app (`Assets/Sonia/Avatar/JeanGeniesAvatar.json`). Unity guarda una copia local aparte de la de Sonia y la rehace cuando cambia.
+Aspecto del invitado del Modo Jean, igual que `set_avatar` pero para su avatar: fijo, se repite tras `hello` y cada vez que cambia (ajuste compartido `guest_avatar` en la nube). `null` es el avatar de prueba que trae la app (`Assets/Sonia/Avatar/JeanGeniesAvatar.json`). Unity lo carga con el SDK en su propio cargador y recuerda el último aparte del de Sonia.
 
 ```json
 {"type": "set_guest_avatar", "definition": "{\"JsonVersion\": \"2-0-0\", \"equippedAssetIds\": [...], ...}"}

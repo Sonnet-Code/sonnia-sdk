@@ -376,7 +376,7 @@ namespace Sonia
             AvatarRole role = AvatarEditorSession.Target;
             string current = AvatarEditorSession.StartingDefinition;
             if (!string.IsNullOrEmpty(current)
-                && GeniesAvatarSnapshot.HashDefinition(current) == GeniesAvatarSnapshot.HashDefinition(definition))
+                && GeniesDefinition.Same(current, definition))
             {
                 Debug.Log("[Sonia] Personaje sin cambios: no se guarda nada.", this);
                 Close();

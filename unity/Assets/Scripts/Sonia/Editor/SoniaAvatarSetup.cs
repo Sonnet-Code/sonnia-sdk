@@ -1,18 +1,21 @@
-// Coloca en la escena el avatar, lo cablea y ajusta el encuadre del stand.
+// Deja en la escena el sitio del avatar de Sonia, lo cablea y ajusta el encuadre del stand.
 //
-// Sonia usa avatares de Genies, que el SDK solo monta en Play. Por eso en la
-// escena va la copia local del avatar de la definición (Sonia > Actualizar copia
-// del avatar del SDK, ver SoniaGeniesSnapshot): es el mismo avatar guardado como
-// prefab, se ve en modo edición y, mientras la definición no cambie,
-// GeniesAvatarLoader no lo vuelve a cargar. Si aún no hay copia, va Sticker, del
-// Genies Avatar Starter Pack (mismo esqueleto y misma cara FACS), y en Play el
-// SDK carga el de verdad y ocupa su sitio. En los dos casos el avatar queda en el
-// primer fotograma del reposo, no en T.
+// Sonia usa avatares de Genies, que el SDK solo monta en Play, así que en modo
+// edición no se ve ningún avatar. La escena guarda bajo el objeto Sonia un ancla
+// vacía («Avatar», sin malla ni Animator) que dice dónde y de cara a dónde va;
+// al entrar en Play GeniesAvatarLoader carga el avatar del SDK y AvatarBinder lo
+// pone en el sitio del ancla. Fuera de la jerarquía de Sonia queda desactivado
+// el doble Sticker, del Genies Avatar Starter Pack (mismo esqueleto y misma cara
+// FACS): solo se enseña si el SDK no entrega ningún avatar, y sirve para medir
+// el encuadre con Sonia > Recalcular encuadre (con el doble).
 //
 // Un par de cosas que no son obvias:
 //
 //  * Los avatares de Genies miran hacia +Z, y la cámara del stand está en Z
-//    negativo mirando hacia +Z, así que el avatar se gira 180 grados en Y.
+//    negativo mirando hacia +Z, así que el ancla se gira 180 grados en Y.
+//  * El doble va fuera de la jerarquía de Sonia a propósito: varios componentes
+//    buscan un Animator o mallas entre sus hijos si no tienen uno asignado, y
+//    no deben quedarse con el doble apagado.
 //  * El Humanoid de Sticker se alinea con el de los avatares del SDK: cabeza en
 //    el hueso Head (Genies lo mapeó a Face) y ojos fuera del Humanoid, porque
 //    la mirada mueve los globos (LeftEye, RightEye) y no las cuencas, que
@@ -30,8 +33,6 @@ using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.Animations;
-using UnityEngine.Playables;
 using UnityEngine.SceneManagement;
 
 namespace Sonia.EditorTools
@@ -39,7 +40,7 @@ namespace Sonia.EditorTools
     /// <summary>Menús que montan el avatar y dejan la cámara y el panel en su sitio.</summary>
     public static class SoniaAvatarSetup
     {
-        /// <summary>Doble del avatar del SDK en modo edición y respaldo sin red.</summary>
+        /// <summary>Doble del avatar del SDK: respaldo si el SDK no entrega el avatar y medida del encuadre.</summary>
         public const string StandInAvatarPath = "Assets/Avatar/Genies/Sticker/Sticker.fbx";
 
         /// <summary>Definición (JSON del SDK de Genies) del avatar que se carga en Play.</summary>
@@ -48,10 +49,11 @@ namespace Sonia.EditorTools
         /// <summary>Avatar de prueba de Jean (invitado del Modo Jean) mientras no guarde el suyo en el editor.</summary>
         public const string GuestDefinitionPath = "Assets/Sonia/Avatar/JeanGeniesAvatar.json";
 
-        /// <summary>Escena del stand, la que lleva el objeto Sonia.</summary>
-        public const string StandScenePath = "Assets/Scenes/SampleScene.unity";
-
+        /// <summary>Ancla vacía bajo Sonia: donde AvatarBinder pone el avatar del SDK.</summary>
         private const string AvatarObjectName = "Avatar";
+
+        /// <summary>Objeto raíz con el doble Sticker, desactivado.</summary>
+        public const string StandInObjectName = "Sonia (doble)";
         private const string RootName = "Sonia";
         private const string PanelName = "ImagePanel";
         private const string UndoName = "Colocar avatar de Sonia";
@@ -200,41 +202,30 @@ namespace Sonia.EditorTools
         [MenuItem("Sonia/Colocar avatar")]
         public static void PlaceAvatarMenu()
         {
-            PlaceAvatar(PreferredAvatarPath);
+            PlaceAvatar(true);
         }
 
-        /// <summary>La copia local del avatar del SDK si existe; si no, Sticker.</summary>
-        public static string PreferredAvatarPath
+        [MenuItem("Sonia/Recalcular encuadre (con el doble)")]
+        public static void ReframeMenu()
         {
-            get
-            {
-                string snapshot = SoniaGeniesSnapshot.SnapshotPrefabPath;
-                return AssetDatabase.LoadAssetAtPath<GameObject>(snapshot) != null ? snapshot : StandInAvatarPath;
-            }
+            Reframe(true);
         }
 
         /// <summary>
-        /// Instancia el avatar bajo el objeto "Sonia" de la escena activa, lo cablea
-        /// con los componentes de la escena, deja la cámara y el panel de imágenes
-        /// en su sitio y guarda la escena. Con <paramref name="interactive"/> en
-        /// falso no abre ningún diálogo: los problemas van a la consola.
+        /// Deja el sitio del avatar en la escena activa y lo cablea, sin ningún
+        /// avatar a la vista: bajo el objeto "Sonia", el ancla vacía «Avatar»
+        /// (donde AvatarBinder pondrá en Play el avatar del SDK) y, fuera de su
+        /// jerarquía, el doble Sticker desactivado (último recurso del cargador).
+        /// No toca la cámara, el panel ni la luz: eso lo hace <see cref="Reframe"/>.
+        /// Guarda la escena. Con <paramref name="interactive"/> en falso no abre
+        /// diálogos. Devuelve el ancla, o null si no se pudo.
         /// </summary>
-        public static GameObject PlaceAvatar(string assetPath, bool interactive = true)
+        public static Transform PlaceAvatar(bool interactive = true)
         {
             Scene scene = SceneManager.GetActiveScene();
             if (!scene.IsValid() || !scene.isLoaded)
             {
                 Report(interactive, "No hay ninguna escena abierta.");
-                return null;
-            }
-
-            AlignGeniesHumanoid(assetPath);
-            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
-            if (prefab == null)
-            {
-                Report(interactive, "No se encontró " + assetPath + ". Es la copia local del avatar del SDK (Sonia > "
-                                    + "Actualizar copia del avatar del SDK) o el avatar Sticker del Genies Avatar "
-                                    + "Starter Pack (ver Assets/Avatar/Genies/LICENSE.md).");
                 return null;
             }
 
@@ -257,66 +248,38 @@ namespace Sonia.EditorTools
                 Undo.DestroyObjectImmediate(previous.gameObject);
             }
 
-            GameObject avatar = (GameObject)PrefabUtility.InstantiatePrefab(prefab, root);
-            if (avatar == null)
-            {
-                Debug.LogError("[Sonia] No se pudo instanciar " + assetPath + ".");
-                return null;
-            }
-
-            Undo.RegisterCreatedObjectUndo(avatar, UndoName);
-            avatar.name = AvatarObjectName;
-            avatar.transform.SetParent(root, false);
-            avatar.transform.localPosition = Vector3.zero;
+            GameObject anchorObject = new GameObject(AvatarObjectName);
+            Undo.RegisterCreatedObjectUndo(anchorObject, UndoName);
+            Transform anchor = anchorObject.transform;
+            anchor.SetParent(root, false);
+            anchor.localPosition = Vector3.zero;
 
             // Los avatares de Genies miran hacia +Z; la cámara también, así que hay
             // que darle media vuelta para que quede de frente.
-            avatar.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
-            avatar.transform.localScale = Vector3.one;
+            anchor.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            anchor.localScale = Vector3.one;
 
-            Animator animator = avatar.GetComponentInChildren<Animator>(true);
-            ConfigureAnimator(animator);
-            PoseInIdle(animator);
-            WarnIfSnapshotIsStale(avatar);
+            Transform standIn = PlaceStandIn(scene, anchor);
 
-            FaceRig faceRig = WireFaceRig(root, avatar);
-            Transform head = animator != null && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.Head) : null;
-
-            WireAvatarState(root, head, faceRig);
+            // Sin avatar hasta Play: el Animator, la cabeza, los ojos y la cara los
+            // engancha AvatarBinder.Bind cuando llega el del SDK.
+            FaceRig faceRig = WireFaceRig(root, null);
+            WireAvatarState(root, null, faceRig);
             WireLipSync(root, faceRig);
-            WireAvatarLoading(root, avatar);
-            WireChoreography(root, animator);
+            WireAvatarLoading(root, anchor, standIn);
+            WireChoreography(root, null);
             SoniaSceneSetup.EnsurePhonemeLipSync(root.gameObject, root.GetComponentInChildren<AvatarStateController>(true));
             SoniaSceneSetup.EnsureEyeGaze(
                 root.gameObject,
                 root.GetComponentInChildren<AvatarStateController>(true),
                 root.GetComponentInChildren<AvatarChoreographer>(true),
-                animator);
+                null);
             SoniaSceneSetup.EnsureFacialExpressions(
                 root.gameObject, root.GetComponentInChildren<AvatarStateController>(true));
 
-            float headTop;
-            float hipsY;
-            float shouldersY;
-            MeasureAvatar(avatar, animator, out hipsY, out headTop, out shouldersY);
-
-            Vector3 widePosition;
-            Vector3 panelPosition;
-            Camera camera = SetUpFraming(
-                scene, hipsY, headTop, shouldersY, out widePosition, out panelPosition);
-            SetUpImagePanel(root, avatar, animator, camera, panelPosition);
-            SetUpBackdrop(root, camera, widePosition, panelPosition);
-            SetUpLighting(scene);
-            if (head != null && camera != null)
-            {
-                SoniaStageLighting.Apply(scene, head.position, camera);
-            }
-
-            WireCameraFraming(root, animator, camera, widePosition, panelPosition);
-
             if (interactive)
             {
-                Selection.activeGameObject = avatar;
+                Selection.activeGameObject = anchorObject;
             }
 
             Undo.SetCurrentGroupName(UndoName);
@@ -325,16 +288,109 @@ namespace Sonia.EditorTools
             EditorSceneManager.SaveScene(scene);
 
             Debug.Log(
-                "[Sonia] Avatar " + System.IO.Path.GetFileName(assetPath) + " colocado. "
-                + "Cara: " + (faceRig.PrimaryRenderer != null ? faceRig.PrimaryRenderer.name : "sin malla")
-                + (faceRig.IsGenies ? " (FACS de Genies)" : " (sin FACS de Genies)")
-                + ". Cabeza: " + (head != null ? head.name : "sin hueso")
-                + ". Caderas y=" + hipsY.ToString("F2")
-                + ", hombros y=" + shouldersY.ToString("F2")
-                + ", alto de cabeza y=" + headTop.ToString("F2") + ".",
-                avatar);
+                "[Sonia] Sitio del avatar listo: ancla «" + AvatarObjectName + "» (en Play se pone ahí el avatar del SDK)"
+                + (standIn != null ? " y doble «" + StandInObjectName + "» desactivado" : ", sin doble")
+                + ". La cámara, el panel y la luz no se tocan.",
+                anchorObject);
+            return anchor;
+        }
 
-            return avatar;
+        /// <summary>
+        /// Recalcula el encuadre del stand (cámara, planos abierto y de panel,
+        /// panel de imágenes, telón y luz) con las medidas del doble, que se
+        /// enciende solo mientras se mide. El encuadre guardado se ajustó con el
+        /// avatar del SDK, y el doble tiene otras medidas: el plano cambia un poco.
+        /// Guarda la escena. Devuelve si se pudo.
+        /// </summary>
+        public static bool Reframe(bool interactive = true)
+        {
+            Scene scene = SceneManager.GetActiveScene();
+            SoniaBootstrap bootstrap = scene.IsValid() ? FindInScene<SoniaBootstrap>(scene) : null;
+            Transform root = bootstrap != null ? bootstrap.transform : (scene.IsValid() ? FindRootByName(scene) : null);
+            GameObject standIn = root != null ? FindRootObject(scene, StandInObjectName) : null;
+            if (root == null || standIn == null)
+            {
+                Report(interactive, "No hay doble con el que medir. Ejecuta antes Sonia > Colocar avatar en la escena del stand.");
+                return false;
+            }
+
+            int undoGroup = Undo.GetCurrentGroup();
+            bool wasActive = standIn.activeSelf;
+            standIn.SetActive(true);
+            try
+            {
+                Animator animator = standIn.GetComponentInChildren<Animator>(true);
+                float headTop;
+                float hipsY;
+                float shouldersY;
+                MeasureAvatar(standIn, animator, out hipsY, out headTop, out shouldersY);
+
+                Vector3 widePosition;
+                Vector3 panelPosition;
+                Camera camera = SetUpFraming(
+                    scene, hipsY, headTop, shouldersY, out widePosition, out panelPosition);
+                SetUpImagePanel(root, standIn, animator, camera, panelPosition);
+                SetUpBackdrop(root, camera, widePosition, panelPosition);
+                SetUpLighting(scene);
+                Transform head = animator != null && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.Head) : null;
+                if (head != null && camera != null)
+                {
+                    SoniaStageLighting.Apply(scene, head.position, camera);
+                }
+
+                WireCameraFraming(root, animator, camera, widePosition, panelPosition);
+                Debug.Log(
+                    "[Sonia] Encuadre recalculado con el doble: caderas y=" + hipsY.ToString("F2")
+                    + ", hombros y=" + shouldersY.ToString("F2") + ", alto de cabeza y=" + headTop.ToString("F2") + ".",
+                    camera);
+            }
+            finally
+            {
+                standIn.SetActive(wasActive);
+            }
+
+            Undo.SetCurrentGroupName("Recalcular encuadre de Sonia");
+            Undo.CollapseUndoOperations(undoGroup);
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            return true;
+        }
+
+        /// <summary>
+        /// El doble Sticker, desactivado y fuera de la jerarquía de Sonia, en el
+        /// sitio del ancla. Null si falta el FBX (entonces no hay respaldo).
+        /// </summary>
+        private static Transform PlaceStandIn(Scene scene, Transform anchor)
+        {
+            GameObject old = FindRootObject(scene, StandInObjectName);
+            if (old != null)
+            {
+                Undo.DestroyObjectImmediate(old);
+            }
+
+            AlignGeniesHumanoid(StandInAvatarPath);
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(StandInAvatarPath);
+            if (prefab == null)
+            {
+                Debug.LogWarning("[Sonia] No se encontró el doble " + StandInAvatarPath + " (Genies Avatar Starter Pack, "
+                                 + "ver Assets/Avatar/Genies/LICENSE.md): si el SDK no entrega el avatar, no habrá respaldo.");
+                return null;
+            }
+
+            GameObject standIn = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
+            if (standIn == null)
+            {
+                Debug.LogError("[Sonia] No se pudo instanciar " + StandInAvatarPath + ".");
+                return null;
+            }
+
+            Undo.RegisterCreatedObjectUndo(standIn, UndoName);
+            standIn.name = StandInObjectName;
+            standIn.transform.SetPositionAndRotation(anchor.position, anchor.rotation);
+            standIn.transform.localScale = Vector3.one;
+            ConfigureAnimator(standIn.GetComponentInChildren<Animator>(true));
+            standIn.SetActive(false);
+            return standIn.transform;
         }
 
         // ------------------------------------------------------------------
@@ -363,63 +419,6 @@ namespace Sonia.EditorTools
             // frame fuera de pantalla congela la pose y el lip-sync.
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             EditorUtility.SetDirty(animator);
-        }
-
-        /// <summary>
-        /// Deja el avatar en el primer fotograma del reposo para que en modo
-        /// edición no salga en T. En Play lo mueve MotionPlayer; esta pose solo se
-        /// ve en el editor y sirve para medir el encuadre con la postura real.
-        /// </summary>
-        private static void PoseInIdle(Animator animator)
-        {
-            if (animator == null || !animator.isHuman)
-            {
-                return;
-            }
-
-            SoniaMotionSet motionSet = AssetDatabase.LoadAssetAtPath<SoniaMotionSet>(SoniaAnimations.MotionSetPath);
-            AnimationClip idle = motionSet != null ? motionSet.idleLoop : null;
-            if (idle == null)
-            {
-                Debug.LogWarning("[Sonia] No hay clip de reposo en " + SoniaAnimations.MotionSetPath + "; el avatar se queda en su pose.");
-                return;
-            }
-
-            PlayableGraph graph = PlayableGraph.Create("Sonia: pose de reposo");
-            try
-            {
-                AnimationPlayableOutput output = AnimationPlayableOutput.Create(graph, "Pose", animator);
-                AnimationClipPlayable clip = AnimationClipPlayable.Create(graph, idle);
-                clip.SetApplyFootIK(true);
-                clip.SetApplyPlayableIK(false);
-                output.SetSourcePlayable(clip);
-                graph.Evaluate(0f);
-            }
-            finally
-            {
-                graph.Destroy();
-            }
-
-            // Son cambios hechos por código sobre una instancia de prefab: hay que
-            // registrarlos o se pierden al recargar la escena.
-            foreach (Transform bone in animator.GetComponentsInChildren<Transform>(true))
-            {
-                PrefabUtility.RecordPrefabInstancePropertyModifications(bone);
-            }
-        }
-
-        /// <summary>Avisa si la copia local del avatar no es de la definición actual (en Play se cargaría del SDK).</summary>
-        private static void WarnIfSnapshotIsStale(GameObject avatar)
-        {
-            GeniesAvatarSnapshot snapshot = avatar.GetComponent<GeniesAvatarSnapshot>();
-            TextAsset definition = AssetDatabase.LoadAssetAtPath<TextAsset>(GeniesDefinitionPath);
-            if (snapshot == null || definition == null || snapshot.Matches(definition.text))
-            {
-                return;
-            }
-
-            Debug.LogWarning("[Sonia] La copia del avatar no es de la definición actual: en Play se cargará del SDK. "
-                             + "Rehazla con " + SoniaGeniesSnapshot.MenuPath + ".", avatar);
         }
 
         /// <summary>
@@ -1064,7 +1063,7 @@ namespace Sonia.EditorTools
         }
 
         /// <summary>Deja FaceRig en el objeto Sonia apuntando al avatar.</summary>
-        private static FaceRig WireFaceRig(Transform root, GameObject avatar)
+        private static FaceRig WireFaceRig(Transform root, Transform avatarRoot)
         {
             FaceRig rig = root.GetComponent<FaceRig>();
             if (rig == null)
@@ -1073,17 +1072,18 @@ namespace Sonia.EditorTools
             }
 
             SerializedObject serialized = new SerializedObject(rig);
-            SetReference(serialized, "avatarRoot", avatar.transform);
+            SetReference(serialized, "avatarRoot", avatarRoot);
             serialized.ApplyModifiedPropertiesWithoutUndo();
             rig.Rebuild();
             return rig;
         }
 
         /// <summary>
-        /// Deja en el objeto Sonia el AvatarBinder (con el doble como avatar
-        /// actual) y el cargador del SDK de Genies con la definición del repo.
+        /// Deja en el objeto Sonia el AvatarBinder (con el ancla como avatar
+        /// actual) y el cargador del SDK de Genies con la definición del repo y el
+        /// doble de último recurso.
         /// </summary>
-        private static void WireAvatarLoading(Transform root, GameObject avatar)
+        private static void WireAvatarLoading(Transform root, Transform anchor, Transform standIn)
         {
             AvatarBinder binder = root.GetComponent<AvatarBinder>();
             if (binder == null)
@@ -1092,7 +1092,7 @@ namespace Sonia.EditorTools
             }
 
             SerializedObject binderObject = new SerializedObject(binder);
-            SetReference(binderObject, "current", avatar.transform);
+            SetReference(binderObject, "current", anchor);
             binderObject.ApplyModifiedPropertiesWithoutUndo();
 
             GeniesAvatarLoader loader = root.GetComponent<GeniesAvatarLoader>();
@@ -1104,13 +1104,14 @@ namespace Sonia.EditorTools
             TextAsset definition = AssetDatabase.LoadAssetAtPath<TextAsset>(GeniesDefinitionPath);
             if (definition == null)
             {
-                Debug.LogWarning("[Sonia] No se encontró " + GeniesDefinitionPath + "; en Play seguirá el doble.");
+                Debug.LogWarning("[Sonia] No se encontró " + GeniesDefinitionPath + ": en Play no habrá avatar hasta que llegue set_avatar.");
             }
 
             SerializedObject loaderObject = new SerializedObject(loader);
             SetReference(loaderObject, "definition", definition);
             SetReference(loaderObject, "binder", binder);
             SetReference(loaderObject, "client", root.GetComponentInChildren<SoniaClient>(true));
+            SetReference(loaderObject, "standIn", standIn);
             loaderObject.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -1291,6 +1292,20 @@ namespace Sonia.EditorTools
 
             Debug.LogWarning(
                 "[Sonia] El enum \"" + path + "\" no tiene el valor \"" + valueName + "\"; se deja como estaba.");
+        }
+
+        private static GameObject FindRootObject(Scene scene, string name)
+        {
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int i = 0; i < roots.Length; i++)
+            {
+                if (roots[i].name == name)
+                {
+                    return roots[i];
+                }
+            }
+
+            return null;
         }
 
         private static Transform FindRootByName(Scene scene)

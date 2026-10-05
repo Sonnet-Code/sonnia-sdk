@@ -42,7 +42,7 @@ namespace Sonia
             /// "state", "speak", "attention", "wait", "freeze" (apaga los controladores
             /// de la cara), "shape" (pesos fijos: "nombre:peso,...") o "avatar" (espera
             /// en tiempo real, sin grabar, a que el SDK de Genies entregue su avatar;
-            /// con su copia local en la escena no espera; <see cref="seconds"/> es el tope).
+            /// <see cref="seconds"/> es el tope).
             /// </summary>
             public string kind = "wait";
 
@@ -243,10 +243,7 @@ namespace Sonia
             if (_waitingAvatar)
             {
                 Step waitStep = steps[_stepIndex];
-                // Vale el avatar que entrega el SDK y también su copia local, que ya está desde el principio.
-                bool arrived = _binder != null && _binder.Current != null
-                               && (_binder.Current.name.Contains("(Genies)")
-                                   || _binder.Current.GetComponent<GeniesAvatarSnapshot>() != null);
+                bool arrived = _binder != null && _binder.Current != null && _binder.Current.name.Contains("(Genies)");
                 if (arrived || Time.realtimeSinceStartup - _avatarWaitStart >= waitStep.seconds)
                 {
                     Debug.Log("[FaceLab] " + (arrived ? "avatar del SDK listo" : "sin avatar del SDK: sigue el doble")
