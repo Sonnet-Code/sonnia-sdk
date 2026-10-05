@@ -343,8 +343,8 @@ Solo cuando `VISION_SOURCE=unity`. Unity responde con un `camera_frame` lo antes
 Unity                                  Orquestador                       GPT-Live
   |                                        |==== micrófono continuo =======>|  (también mientras habla Sonia)
   |<--- transcript(user, parcial) ---------|<--- transcripción del visitante |
-  |<--- state: listening ------------------|   (y en paralelo: foto de la cámara → modelo de visión
-  |                                        |    → nota "[Cámara] ..." a GPT-Live)
+  |<--- state: listening ------------------|   (solo con VISION_ON_TURN_START=true, en paralelo:
+  |                                        |    foto → modelo de visión → nota "[Cámara] ...")
   |<--- transcript(user, final) -----------|   (pausa del visitante)
   |<--- state: thinking -------------------|
   |<--- speech_start(1) -------------------|<--- primer audio con voz de Sonia

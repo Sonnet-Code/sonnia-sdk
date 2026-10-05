@@ -20,7 +20,7 @@ Marcas: **[Oficial]** documentación de Moonshot u OpenAI leída el 4-oct; **[Te
 
 ## 2. Qué controla la cámara
 
-Flujo de la cámara:
+Por defecto (desde el 5 de octubre de 2026, a petición de Jean) no hay foto automática: Sonia solo mira con la acción `look` cuando GPT-Live lo decide. Con `VISION_ON_TURN_START=true`, el flujo es este:
 1. Alguien empieza a hablar.
 2. `LiveEngine._maybe_look` hace la captura con OpenCV (o Unity).
 3. `VisionNarrator.describe` la describe con el modelo `LLM_*`, con un tope de 12 s.
@@ -32,7 +32,7 @@ La acción `look` es aparte: manda la foto al backend de OpenAI (`LIVE_BACKEND_M
 |---|---|---|
 | `LLM_SUPPORTS_VISION` | `true` | `false` apaga todo (descripciones y `look`). |
 | `VISION_SOURCE` | `opencv` | `none` apaga; `unity` exige Unity conectado. |
-| `VISION_ON_TURN_START` | `true` | `false`: solo `VISION_INTERVAL_SECONDS` o `look`. |
+| `VISION_ON_TURN_START` | `false` | `false`: solo `look` (y `VISION_INTERVAL_SECONDS` si se activa). `true`: nota `[Cámara]` cuando alguien empieza a hablar. |
 | `VISION_INTERVAL_SECONDS` | `0` | 0 = nunca periódico. |
 | `LIVE_VISION_MIN_INTERVAL_SECONDS` | `10` | Mínimo entre dos descripciones (hasta 6 por minuto). |
 | `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY` | OpenAI / `gpt-6-luna` / `OPENAI_API_KEY` | Si el `.env` aún apunta al motor anterior (`localhost:8000`, `kimi-k3`, clave `local`), la capa parece activa pero cada descripción falla. |
@@ -50,7 +50,7 @@ En «Solo saludos» y «Fuera» no hay sesión, así que tampoco hay ojos. `soni
 ```
 LLM_SUPPORTS_VISION=true
 VISION_SOURCE=opencv
-VISION_ON_TURN_START=true
+VISION_ON_TURN_START=false     # solo `look`; true para la nota automática al empezar a hablar
 # Sin LLM_BASE_URL, LLM_MODEL ni LLM_API_KEY: https://api.openai.com/v1, gpt-6-luna y OPENAI_API_KEY
 LLM_REASONING_EFFORT=low        # prueba `none` si «Cámara descrita en» pasa de ~2 s
 LLM_IMAGE_DETAIL=low            # `high` lee mejor gafetes y logos por ~100 tokens más

@@ -98,8 +98,9 @@ class VisionSettings(BaseSettings):
     camera_index: int = 0
     max_width: int = 768
     jpeg_quality: int = 80
-    #: Adjuntar una captura al turno cuando el usuario empieza a hablar.
-    on_turn_start: bool = True
+    #: Describir la cámara cuando el visitante empieza a hablar (nota [Cámara]).
+    #: Por defecto no: Sonia solo mira cuando ella lo decide, con la acción ``look``.
+    on_turn_start: bool = False
     #: Adjuntar además una captura cada N segundos aunque no la pida el modelo (0 = nunca).
     interval_seconds: float = 0.0
     #: Guardar capturas en disco (solo depuración; nunca en el stand).

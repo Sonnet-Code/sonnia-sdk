@@ -236,6 +236,7 @@ def make_settings(
     tmp_path: Path,
     *,
     vision_source: str = "none",
+    on_turn_start: bool = True,
     idle_reset: float = 120.0,
     showcase_settings: ShowcaseSettings | None = None,
     image_auto_hide: float = 0.0,
@@ -264,7 +265,7 @@ def make_settings(
             reasoning_effort="",
         ),
         audio=AudioSettings(),
-        vision=VisionSettings(source=vision_source, on_turn_start=True),  # type: ignore[arg-type]
+        vision=VisionSettings(source=vision_source, on_turn_start=on_turn_start),  # type: ignore[arg-type]
         ws=WSSettings(host="127.0.0.1", port=0),
         showcase=showcase_settings or ShowcaseSettings(enabled=False),
         assets_dir=str(tmp_path),
@@ -811,6 +812,37 @@ async def test_el_narrador_no_repite_dentro_del_intervalo_minimo(tmp_path: Path)
         await conn.hear("Otra cosa")
         await asyncio.sleep(0.2)
         assert camera.captures == 1
+
+
+async def test_por_defecto_solo_mira_cuando_sonia_lo_decide(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Jean (5-oct): nada de foto automática al empezar a hablar; solo la acción look.
+    monkeypatch.delenv("VISION_ON_TURN_START", raising=False)
+    assert VisionSettings().on_turn_start is False
+    camera = FakeCamera()
+    async with make_rig(
+        tmp_path,
+        camera=camera,
+        narrator=VisionNarrator(FakeVisionLLM()),
+        vision_source="opencv",
+        on_turn_start=False,
+        user_turn_gap_ms=50,
+    ) as rig:
+        conn = await rig.conn()
+        await conn.hear("Hola")
+        await rig.rec.wait_for(
+            lambda msgs: any(m.get("type") == "transcript" and m.get("final") for m in msgs)
+        )
+        await asyncio.sleep(0.2)
+        assert camera.captures == 0
+        assert conn.of_type("session.thinking.append") == []
+        instructions = conn.start["session"]["instructions"]
+        tools = [tool["name"] for tool in conn.start["session"]["delegation"]["responses"]["tools"]]
+    assert "look" in tools
+    assert "No ves nada por tu cuenta" in instructions
+    assert "notas internas que empiezan por" not in instructions
+    assert "no miras sola" in instructions
 
 
 # ---------------------------------------------------------------------------

@@ -61,7 +61,7 @@ Cliente mínimo del modelo con visión que describe la cámara (`VisionNarrator`
 ### `sonia/vision`
 
 - `camera.py`: `OpenCVCamera(CameraSource)` abre `cv2.VideoCapture(index)` de forma perezosa y lee, redimensiona y codifica JPEG dentro del mismo `asyncio.to_thread`. Ningún fallo es definitivo: una apertura fallida se reintenta pasado un cooldown, y unas lecturas sin frame seguidas (o una lectura colgada, que se abandona por timeout) sueltan el dispositivo para abrir otro. `UnityCamera(CameraSource)` guarda el último `camera_frame` recibido por WS y, en `capture()`, envía `request_frame` y espera hasta 500 ms a que llegue uno nuevo; si no llega, devuelve el último que tenga siempre que no pase de `max_age`, y si no hay clientes conectados ni se molesta en pedirlo. `NullCamera` devuelve `None`. `build_camera(settings, ...)` elige según `VISION_SOURCE`.
-- `policy.py`: `VisionPolicy` decide si se describe la cámara al empezar un turno (`VISION_ON_TURN_START`) o cada cierto tiempo (`VISION_INTERVAL_SECONDS`), y se apaga entera si `LLM_SUPPORTS_VISION=false` o `VISION_SOURCE=none`. Entre dos descripciones pasan al menos `LIVE_VISION_MIN_INTERVAL_SECONDS`. Si `VISION_DEBUG_SAVE_FRAMES`, guarda en `debug_dir` (nunca en el stand).
+- `policy.py`: `VisionPolicy` decide si se describe la cámara al empezar un turno (`VISION_ON_TURN_START`, apagado por defecto: Sonia solo mira con `look`) o cada cierto tiempo (`VISION_INTERVAL_SECONDS`), y se apaga entera si `LLM_SUPPORTS_VISION=false` o `VISION_SOURCE=none`. Entre dos descripciones pasan al menos `LIVE_VISION_MIN_INTERVAL_SECONDS`. Si `VISION_DEBUG_SAVE_FRAMES`, guarda en `debug_dir` (nunca en el stand).
 
 ### `sonia/ws`
 

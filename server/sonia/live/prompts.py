@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import platform
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from sonia.actions.registry import ActionRegistry
 from sonia.config import Settings
@@ -27,6 +27,7 @@ __all__ = [
     "build_backend_instructions",
     "build_live_instructions",
     "build_session_config",
+    "camera_mode",
     "describe_live_stack",
 ]
 
@@ -40,7 +41,7 @@ CÓMO FUNCIONAS (voz a voz en tiempo real):
 - Estás en un evento lleno de gente. Responde solo cuando alguien te hable a ti; ignora conversaciones de fondo, toses, aplausos y música. Si oyes algo suelto que no va contigo, quédate callada.
 - Usa asentimientos breves ("ajá", "claro") con moderación y sin pisar al visitante. Si te interrumpe, para enseguida y escucha.
 - Si un nombre, una fecha o un dato importante no se entendió bien, pregunta justo esa parte.
-- A veces te llegan notas internas que empiezan por "[Cámara]" con lo que ve tu cámara en ese momento. Úsalas con naturalidad, por ejemplo para el cumplido al saludar, pero no las leas en voz alta ni digas que te llegan notas. No ves imágenes directamente: solo esas notas. Si no tienes una nota reciente, no inventes lo que ves.
+{camera_rule}
 - Si te indican que un visitante te ha escrito algo en la pantalla, respóndele en voz alta igual que si te lo hubiera dicho.
 
 Política de delegación:
@@ -50,7 +51,7 @@ Delega en el backend cuando:
 - Quieras mostrar o retirar una imagen en tu pantalla. Cuando hables de Sonnet Code, enseña su logo; cuando cambies de tema, retíralo.
 {look_when}- La pregunta necesite razonar con cuidado y la respuesta no esté clara en tu base de conocimiento.
 No delegues cuando:
-- Saludas, charlas o respondes algo que ya está en tu base de conocimiento.
+{no_delegate_chat}
 - Solo hace falta una aclaración breve.
 Mientras el backend trabaja, di algo breve y natural ("mira, te lo enseño", "déjame ver") y no inventes el resultado."""
 
@@ -63,7 +64,56 @@ _CAPABILITIES = {
     "look": "- Mirar: tomar una foto nueva con la cámara del stand y decirte qué se ve.",
 }
 
-_LOOK_WHEN = "- Te pregunten qué ves, te enseñen algo a la cámara o necesites mirar de nuevo.\n"
+#: Cómo le llega a Sonia lo que ve la cámara (ver :func:`camera_mode`).
+CameraMode = Literal["notes", "look", "none"]
+
+_CAMERA_RULE: dict[CameraMode, str] = {
+    "notes": (
+        '- A veces te llegan notas internas que empiezan por "[Cámara]" con lo que ve tu cámara '
+        "en ese momento. Úsalas con naturalidad, por ejemplo para el cumplido al saludar, pero no "
+        "las leas en voz alta ni digas que te llegan notas. No ves imágenes directamente: solo "
+        "esas notas. Si no tienes una nota reciente, no inventes lo que ves."
+    ),
+    "look": (
+        "- No ves nada por tu cuenta: tu cámara solo mira cuando pides a tu backend que mire. "
+        "Tú decides cuándo: por ejemplo si te enseñan algo, te preguntan qué ves o cuántos son, "
+        "o llega alguien nuevo y quieres saludarle con un detalle de lo que lleva. Nunca digas "
+        "que ves algo que no has mirado ni inventes lo que ves."
+    ),
+    "none": (
+        "- Ahora mismo no tienes cámara: no ves a nadie. No inventes lo que ves ni hagas "
+        "cumplidos sobre lo que lleva alguien."
+    ),
+}
+
+_LOOK_WHEN: dict[CameraMode, str] = {
+    "notes": "- Te pregunten qué ves, te enseñen algo a la cámara o necesites mirar de nuevo.\n",
+    "look": (
+        "- Quieras mirar por la cámara: te preguntan qué ves o cuántos son, te enseñan algo o "
+        "llega alguien nuevo al que quieres saludar con un detalle de lo que lleva.\n"
+    ),
+    "none": "",
+}
+
+_NO_DELEGATE_CHAT: dict[CameraMode, str] = {
+    "notes": "- Saludas, charlas o respondes algo que ya está en tu base de conocimiento.",
+    "look": (
+        "- Charlas o respondes algo que ya está en tu base de conocimiento. Al saludar, "
+        "delega solo si quieres mirar a quien llega."
+    ),
+    "none": "- Saludas, charlas o respondes algo que ya está en tu base de conocimiento.",
+}
+
+
+def camera_mode(settings: Settings, action_names: list[str]) -> CameraMode:
+    """Cómo ve Sonia: notas automáticas ``[Cámara]``, solo cuando ella mira (``look``) o nada."""
+    vision = settings.vision
+    if vision.source == "none" or not settings.llm.supports_vision:
+        return "none"
+    if vision.on_turn_start or vision.interval_seconds > 0:
+        return "notes"
+    return "look" if "look" in action_names else "none"
+
 
 BACKEND_PROMPT = """\
 Eres el backend de Sonia, la asistente virtual del stand de Sonnet Code en el DevFest Santo Domingo 2026. Sonia es otro modelo que habla en voz alta con los visitantes y te delega tareas: tú las resuelves con tus herramientas y le devuelves el resultado.
@@ -94,9 +144,17 @@ def describe_live_stack(settings: Settings, *, action_names: list[str] | None = 
     ]
 
     vision = settings.vision
-    if vision.source == "none" or not settings.llm.supports_vision:
+    mode = camera_mode(settings, action_names or [])
+    if mode == "none":
         lines.append(
             "Ojos: sin cámara en este momento; no puedes ver a nadie, no inventes lo que ves."
+        )
+    elif mode == "look":
+        origin = "Unity" if vision.source == "unity" else "una cámara USB"
+        lines.append(
+            f"Ojos: {origin}; no miras sola: cuando tú lo decides, tu backend "
+            f"({live.backend_model}, en la nube) toma una foto y te dice qué se ve. "
+            "Las fotos no se guardan."
         )
     else:
         origin = "Unity" if vision.source == "unity" else "una cámara USB"
@@ -143,9 +201,12 @@ def build_live_instructions(
     """``instructions`` de la sesión: persona, reglas de este modo, conocimiento y stack."""
     names = _action_names(registry)
     capabilities = "\n".join(_CAPABILITIES[n] for n in names if n in _CAPABILITIES)
+    mode = camera_mode(settings, names)
     rules = LIVE_RULES.format(
         capabilities=capabilities or "- Ninguna en este momento: no delegues.",
-        look_when=_LOOK_WHEN if "look" in names else "",
+        camera_rule=_CAMERA_RULE[mode],
+        look_when=_LOOK_WHEN[mode] if "look" in names else "",
+        no_delegate_chat=_NO_DELEGATE_CHAT[mode],
     )
     parts = [SYSTEM_PROMPT, rules]
     knowledge = load_knowledge(knowledge_dir)
