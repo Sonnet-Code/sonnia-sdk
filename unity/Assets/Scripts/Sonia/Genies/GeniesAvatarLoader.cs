@@ -2,7 +2,8 @@
 //
 // En modo edición no hay avatar: la escena guarda un ancla vacía («Avatar») que
 // dice dónde y de cara a dónde va. Al entrar en Play se carga del SDK el avatar
-// vivo lejos de la cámara y, cuando está completo, AvatarBinder lo pone en el
+// vivo lejos de la cámara (el SDK lo monta colgado de «Genies (cargando)», muy
+// por debajo del suelo) y, cuando está completo, AvatarBinder lo pone en el
 // sitio del ancla; hasta entonces no se ve a nadie. Al aparecer saluda con la
 // mano.
 //
@@ -19,9 +20,11 @@
 // (sin red, sin credenciales, el SDK no responde) se reintenta con espera
 // creciente sin quitar el avatar que hay. Si nunca llegó ninguno, tras unos
 // fallos (o un rato) se enseña como último recurso el doble (Sticker) que la
-// escena guarda desactivado, y se sigue reintentando. Con el editor de personaje
-// en pantalla (AvatarEditorSession.IsOpen) Sonia no se pinta, así que los cambios
-// esperan a que se cierre.
+// escena guarda desactivado, y se sigue reintentando; si una carga se abandona
+// por tiempo, el avatar que el SDK entregue tarde se suelta (si no, quedaba una
+// copia de Sonia en escena). Con el editor de personaje en pantalla
+// (AvatarEditorSession.IsOpen) Sonia no se pinta, así que los cambios ni se
+// montan hasta que se cierre: montar a la vez que el editor se atascaba.
 //
 // La cara la escribe FaceRig directamente en las formas FACS. El
 // BlendShapeAnimatorBehaviour de Genies, que haría lo mismo desde los parámetros
@@ -132,6 +135,7 @@ namespace Sonia
         [NonSerialized] private bool _started;
         [NonSerialized] private float _startTime;
         [NonSerialized] private int _failures;
+        [NonSerialized] private Transform _parking;
         [NonSerialized] private bool _standInShown;
         [NonSerialized] private bool _debugQuiet;
 
@@ -457,23 +461,39 @@ namespace Sonia
                     return Superseded;
                 }
 
+                await WaitWhileEditorOpen(token);
+                if (IsSuperseded(version, json))
+                {
+                    return Superseded;
+                }
+
                 UniTaskCompletionSource<bool> complete = new UniTaskCompletionSource<bool>();
-                pending = await AvatarSdk.LoadAvatarAsync(new LoadAvatarOptions.ByDefinition
+                UniTask<ManagedAvatar> load = AvatarSdk.LoadAvatarAsync(new LoadAvatarOptions.ByDefinition
                 {
                     DefinitionToLoad = json,
                     AvatarName = LiveAvatarName,
-                    Parent = binder.transform,
+                    Parent = ParkingLot(),
                     ShowLoadingSilhouette = false,
                     TargetLods = new[] { quality },
                     OnLoadingComplete = _ => complete.TrySetResult(true)
-                }).Timeout(limit);
+                }).Preserve();
+                try
+                {
+                    pending = await load.Timeout(limit);
+                }
+                catch (TimeoutException)
+                {
+                    // El SDK sigue montándolo: el avatar que entregue tarde se suelta.
+                    DiscardWhenLoaded(load).Forget();
+                    throw;
+                }
 
                 if (pending == null || pending.Root == null)
                 {
                     return "el SDK no devolvió avatar";
                 }
 
-                pending.Root.transform.localPosition = ParkedPosition;
+                pending.Root.transform.localPosition = Vector3.zero;
                 if (!pending.IsLoadingComplete)
                 {
                     await complete.Task.Timeout(limit);
@@ -532,6 +552,40 @@ namespace Sonia
                 {
                     pending.Dispose();
                 }
+            }
+        }
+
+        /// <summary>
+        /// Donde se monta un avatar nuevo hasta que Bind lo pone en su sitio: muy
+        /// por debajo del suelo. El SDK lo construye en su padre y, colgado de
+        /// Sonia, se veía de espaldas en su sitio mientras tanto.
+        /// </summary>
+        private Transform ParkingLot()
+        {
+            if (_parking == null)
+            {
+                _parking = new GameObject("Genies (cargando)").transform;
+                _parking.SetParent(binder.transform, false);
+                _parking.localPosition = ParkedPosition;
+            }
+
+            return _parking;
+        }
+
+        /// <summary>Suelta el avatar de una carga abandonada por tiempo cuando el SDK lo entregue.</summary>
+        private static async UniTaskVoid DiscardWhenLoaded(UniTask<ManagedAvatar> load)
+        {
+            try
+            {
+                ManagedAvatar late = await load;
+                if (late != null && !late.IsDisposed)
+                {
+                    late.Dispose();
+                }
+            }
+            catch (Exception)
+            {
+                // La carga abandonada también falló: no hay nada que soltar.
             }
         }
 
