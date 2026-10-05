@@ -157,13 +157,14 @@ namespace Sonia
         private void Start()
         {
             Time.captureDeltaTime = 1f / Mathf.Max(1, fps);
+            // Todo el de Sonia: con el invitado del Modo Jean en la escena hay dos de cada.
             _bootstrap = FindAnyObjectByType<SoniaBootstrap>();
-            _player = FindAnyObjectByType<AudioStreamPlayer>();
-            _lipSync = FindAnyObjectByType<LipSyncController>();
-            _bridge = FindAnyObjectByType<PhonemeLipSyncBridge>();
-            _state = FindAnyObjectByType<AvatarStateController>();
-            _choreographer = FindAnyObjectByType<AvatarChoreographer>();
-            _faceRig = _lipSync != null && _lipSync.FaceRig != null ? _lipSync.FaceRig : FindAnyObjectByType<FaceRig>();
+            _player = SoniaComponent<AudioStreamPlayer>();
+            _lipSync = SoniaComponent<LipSyncController>();
+            _bridge = SoniaComponent<PhonemeLipSyncBridge>();
+            _state = SoniaComponent<AvatarStateController>();
+            _choreographer = SoniaComponent<AvatarChoreographer>();
+            _faceRig = _lipSync != null && _lipSync.FaceRig != null ? _lipSync.FaceRig : SoniaComponent<FaceRig>();
             _face = _faceRig != null ? _faceRig.PrimaryRenderer : null;
 
             Type bootstrapType = typeof(SoniaBootstrap);
@@ -187,7 +188,7 @@ namespace Sonia
             _block = new float[Mathf.Max(64, dspBlock) * 2];
 
             BindAvatar();
-            _binder = FindAnyObjectByType<AvatarBinder>();
+            _binder = SoniaComponent<AvatarBinder>();
             if (_binder != null)
             {
                 _binder.AvatarChanged += OnAvatarChanged;
@@ -315,6 +316,13 @@ namespace Sonia
                     Time.captureDeltaTime = 0f;
                     break;
             }
+        }
+
+        /// <summary>Un componente de la raíz de Sonia (o, sin ella, el primero de la escena).</summary>
+        private T SoniaComponent<T>() where T : Component
+        {
+            T found = _bootstrap != null ? _bootstrap.GetComponentInChildren<T>(true) : null;
+            return found != null ? found : FindAnyObjectByType<T>();
         }
 
         /// <summary>Cara, cabeza y ojos del avatar actual (cambian cuando el SDK sustituye al doble).</summary>

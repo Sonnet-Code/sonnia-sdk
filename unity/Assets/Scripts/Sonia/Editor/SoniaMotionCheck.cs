@@ -45,6 +45,14 @@ namespace Sonia.EditorTools
         /// <summary>Cuerpo girado respecto a la cámara (dar la espalda al visitante no sirve en un stand).</summary>
         private const float BodyTurnDegrees = 80f;
 
+        /// <summary>El coreógrafo de Sonia (con el invitado del Modo Jean en la escena hay dos).</summary>
+        private static AvatarChoreographer SoniaChoreographer()
+        {
+            SoniaBootstrap sonia = Object.FindAnyObjectByType<SoniaBootstrap>();
+            AvatarChoreographer found = sonia != null ? sonia.GetComponentInChildren<AvatarChoreographer>(true) : null;
+            return found != null ? found : Object.FindAnyObjectByType<AvatarChoreographer>();
+        }
+
         [MenuItem("Sonia/Comprobar animaciones (en Play)")]
         public static void CheckAllMenu()
         {
@@ -60,7 +68,7 @@ namespace Sonia.EditorTools
                 return blocked;
             }
 
-            AvatarChoreographer choreographer = Object.FindAnyObjectByType<AvatarChoreographer>();
+            AvatarChoreographer choreographer = SoniaChoreographer();
 
             // El set del proyecto, no el del coreógrafo: con el modo debug o con
             // animaciones desactivadas en el panel, el coreógrafo lleva una copia recortada.
@@ -115,7 +123,7 @@ namespace Sonia.EditorTools
                 return blocked;
             }
 
-            AvatarChoreographer choreographer = Object.FindAnyObjectByType<AvatarChoreographer>();
+            AvatarChoreographer choreographer = SoniaChoreographer();
             List<AnimationClip> clips = new List<AnimationClip>();
             foreach (string guid in AssetDatabase.FindAssets("t:AnimationClip", SoniaAnimations.ClipFolders))
             {
@@ -147,7 +155,7 @@ namespace Sonia.EditorTools
                 return blocked;
             }
 
-            AvatarChoreographer choreographer = Object.FindAnyObjectByType<AvatarChoreographer>();
+            AvatarChoreographer choreographer = SoniaChoreographer();
             SoniaMotionSet set = AssetDatabase.LoadAssetAtPath<SoniaMotionSet>(SoniaAnimations.MotionSetPath);
             AnimationClip clip = FindInSet(set != null ? set : choreographer.MotionSet, clipName);
             if (clip == null)
@@ -172,7 +180,7 @@ namespace Sonia.EditorTools
                 return "[Sonia] Play pausado. Vuelve a lanzar la comprobación (Step no avanza en el mismo comando que pausa).";
             }
 
-            AvatarChoreographer choreographer = Object.FindAnyObjectByType<AvatarChoreographer>();
+            AvatarChoreographer choreographer = SoniaChoreographer();
             if (choreographer == null || choreographer.MotionSet == null || !choreographer.Ready)
             {
                 return "[Sonia] No hay coreógrafo listo en la escena.";

@@ -306,6 +306,584 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!1 &232277521
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 232277538}
+  - component: {fileID: 232277537}
+  - component: {fileID: 232277536}
+  - component: {fileID: 232277535}
+  - component: {fileID: 232277534}
+  - component: {fileID: 232277533}
+  - component: {fileID: 232277532}
+  - component: {fileID: 232277531}
+  - component: {fileID: 232277530}
+  - component: {fileID: 232277529}
+  - component: {fileID: 232277528}
+  - component: {fileID: 232277527}
+  - component: {fileID: 232277526}
+  - component: {fileID: 232277525}
+  - component: {fileID: 232277524}
+  - component: {fileID: 232277523}
+  - component: {fileID: 232277522}
+  m_Layer: 0
+  m_Name: Invitado
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &232277522
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f236b51669364bb08cc2abcd8b7b763, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.GuestPresenter
+  sonia: {fileID: 1767658852}
+  client: {fileID: 1767658859}
+  guestPresence: {fileID: 232277525}
+  guestPlayer: {fileID: 232277536}
+  guestLipSync: {fileID: 232277535}
+  guestState: {fileID: 232277534}
+  guestMotion: {fileID: 232277531}
+  handshake: {fileID: 232277523}
+  instantWindowSeconds: 2
+  helloGraceSeconds: 5
+  walkTimeoutSeconds: 12
+  talkReleaseSeconds: 0.35
+  waveSeconds: 1.6
+  soniaReturnDelaySeconds: 0.6
+  duoSideMargin: 0.5
+  soniaLookWeight: 0.75
+  logEvents: 1
+--- !u!114 &232277523
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80dbf1c2359d4d81a85fe02d50c5791, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.HandshakeRig
+  turnSeconds: 0.7
+  reachSeconds: 0.6
+  shakeSeconds: 1.5
+  releaseSeconds: 0.6
+  nearTurnDegrees: 20
+  farTurnDegrees: 45
+  torsoTurnDegrees: 16
+  meetForwardOfArm: 0.3
+  meetDropOfArm: 0.55
+  palmLength: 0.07
+  handThickness: 0.028
+  fingerCurlDegrees: 22
+  fingerPitchDegrees: 10
+  elbowHint: {x: 0.15, y: -0.45, z: -0.1}
+  shakeAmplitude: 0.025
+  shakeFrequency: 2.2
+--- !u!114 &232277524
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17586a29dec7f4773ba6fb2be3526ad2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.ChoreographerBody
+  choreographer: {fileID: 0}
+  stateController: {fileID: 0}
+  attentionWeight: 0.8
+  attentionHeight: 0.04
+--- !u!114 &232277525
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2af10e10f5374f48a5307f31b242b13, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.PresenceController
+  choreographer: {fileID: 232277530}
+  motionPlayer: {fileID: 232277531}
+  animator: {fileID: 0}
+  stateController: {fileID: 232277534}
+  cameraFraming: {fileID: 1767658863}
+  sign: {fileID: 0}
+  exitSide: 0
+  exitDelaySeconds: 0.5
+  turnSecondsPer90: 0.75
+  walkBlendInSeconds: 0.45
+  walkStartNormalizedTime: 0
+  arriveSeconds: 0.9
+  arriveTurnDelay: 0.3
+  entryDelaySeconds: 0.3
+  settleFadeSeconds: 0.4
+  resumeFadeSeconds: 0.4
+  bodyMargin: 0.3
+  extraOffscreenDistance: 0.2
+  maxWalkDistance: 6
+  maxWalkSeconds: 10
+  hideRenderersWhenAway: 1
+  useRootMotion: 1
+  fallbackWalkSpeed: 1.3
+  slideSpeed: 1.2
+  walkLookWeight: 0.5
+  lookAheadDistance: 4
+  lookAheadDrop: 0.3
+  lookBackDistance: 0.9
+  defaultMessage: Me fui a ver una charla, regreso en un momento
+  useSign: 0
+  logEvents: 1
+--- !u!114 &232277526
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7ca9ab1f760745819cc4de8dd09e501, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia.Genies::Sonia.GeniesAvatarLoader
+  role: 1
+  definition: {fileID: 4900000, guid: fa056c08700454d26b4c5493e2378615, type: 3}
+  binder: {fileID: 232277532}
+  client: {fileID: 1767658859}
+  quality: 2048
+  loadOnStart: 1
+  rememberLastAvatar: 1
+  retrySeconds: {x: 5, y: 120}
+  stepTimeoutSeconds: 90
+  standIn: {fileID: 0}
+  standInAfterFailures: 2
+  standInAfterSeconds: 60
+  greetOnAppear: 1
+--- !u!114 &232277527
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: af62d553821994fac9fd8046134b5d0a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.FacialExpressionController
+  faceRig: {fileID: 232277533}
+  stateController: {fileID: 232277534}
+  lipSync: {fileID: 232277535}
+  restSmile: 0.3
+  listenSmile: 0.4
+  thinkSmile: 0.08
+  talkSmile: 0.26
+  stressBrows: 0.5
+  stressBrowChance: 0.55
+  stressThreshold: 0.82
+  phraseBrows: 0.45
+  phraseEndSmile: 0.2
+  mouthShapeSmileCut: 0.75
+  microInterval: {x: 2.5, y: 6}
+  microAmount: 0.6
+  wander: 0.07
+  asymmetry: 0.12
+  expressionSpeed: 3.5
+  browSpeed: 7
+--- !u!114 &232277528
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 86222f6c4c7a941e7b3864a349366ef2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.EyeGazeController
+  leftEye: {fileID: 0}
+  rightEye: {fileID: 0}
+  headBone: {fileID: 0}
+  stateController: {fileID: 232277534}
+  choreographer: {fileID: 232277530}
+  blinkOnBigSaccade: 1
+  minFocusDistance: 2.5
+  gazeGain: 0.65
+  convergenceDegrees: -8
+  maxYaw: 10
+  maxPitch: 8
+  saccadeInterval: {x: 0.7, y: 2.6}
+  saccadeAmplitude: {x: 2.5, y: 1.5}
+  glanceInterval: {x: 4, y: 9}
+  glanceDuration: {x: 0.35, y: 0.9}
+  glanceAmplitude: {x: 5, y: 3}
+  wideShotLiveliness: 1.6
+  maxOffsetDegrees: 7
+  speed: 30
+  jitterDegrees: 0.35
+--- !u!114 &232277529
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c153d9fda200a4a9b89e078bd05c2cfe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.PhonemeLipSyncBridge
+  audioPlayer: {fileID: 232277536}
+  analyzer: {fileID: 236944735}
+  lipSync: {fileID: 232277535}
+--- !u!114 &232277530
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 510e771148e664c95ae0b0ad6075d343, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.AvatarChoreographer
+  motionPlayer: {fileID: 232277531}
+  motionSet: {fileID: 11400000, guid: a1684adf4ed7549cd93d95d4cdd08e89, type: 2}
+  stateFade: 0.55
+  speakFade: 0.35
+  talkingChainFade: 0.5
+  variationFade: 0.6
+  attentionFadeIn: 0.4
+  attentionFadeOut: 0.7
+  nodFade: 0.3
+  idleVariationInterval: {x: 7, y: 16}
+  firstAttentionDelay: 30
+  attentionInterval: {x: 30, y: 60}
+  fourthWallWeight: 0
+  danceWeight: 0
+  softWeight: 1
+  nodInterval: {x: 4, y: 8}
+  thinkingVariationInterval: {x: 4, y: 8}
+  speechChangeThreshold: 0.5
+  minIdleSecondsForGreeting: 25
+  greetingCooldownSeconds: 20
+  logEvents: 0
+--- !u!114 &232277531
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d06b5d53c77024272bed54de3ac4a4aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.MotionPlayer
+  animator: {fileID: 0}
+  upperBodyMask: {fileID: 31900000, guid: 32c5d60b0cc6d4c87ac26c2439745a43, type: 2}
+  slotsPerLayer: 4
+--- !u!114 &232277532
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8450fdaa413f8436cb0ca1dfcfbb08c5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.AvatarBinder
+  current: {fileID: 1664008877}
+--- !u!114 &232277533
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88638d1cc191d428c912535f6eff3bcf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.FaceRig
+  avatarRoot: {fileID: 0}
+--- !u!114 &232277534
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3152fe9e6bdb14b668ee6cf746f26d80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.AvatarStateController
+  headBone: {fileID: 0}
+  avatarRoot: {fileID: 0}
+  lookTarget: {fileID: 330585546}
+  thinkingLookTarget: {fileID: 0}
+  thinkingGaze: {x: 0.35, y: 0.3, z: 1.4}
+  imageLookTarget: {fileID: 0}
+  lookAtImageWhenVisible: 1
+  imageGlanceSeconds: 1.6
+  lookWeight: 0.7
+  wideShotLookWeight: 0.3
+  choreographer: {fileID: 232277530}
+  maxLookAngle: 40
+  lookSmoothing: 5
+  headRotationOffset: {x: 0, y: 0, z: 0}
+  headSwayDegrees: 1.4
+  lipSync: {fileID: 232277535}
+  stressNodDegrees: 3.5
+  stressNodChance: 0.65
+  stressThreshold: 0.8
+  phrasePoseDegrees: 4
+  listenTiltDegrees: 6
+  listenNodDegrees: 2.5
+  listenNodInterval: {x: 2.8, y: 5.5}
+  thinkTiltDegrees: 5
+  faceRig: {fileID: 232277533}
+  blinkIntervalRange: {x: 2.5, y: 6}
+  blinkDuration: 0.14
+  blinkOnSpeechChance: 0.35
+  doubleBlinkChance: 0.12
+  lidFollowsGaze: 0.25
+  eyeGaze: {fileID: 0}
+--- !u!114 &232277535
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c07bd14e0dae44a818935c99246dbbb0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.LipSyncController
+  faceRig: {fileID: 232277533}
+  audioPlayer: {fileID: 232277536}
+  voiceDelayMs: 100
+  mouthLeadMs: 35
+  gestureLeadMs: 70
+  outputLatencyMs: -1
+  vowelWeight: 0.85
+  openScale: 1
+  openCurve: 1
+  jawBoost: 0.18
+  vowelTrust: 0.75
+  closureWeight: 0.85
+  sibilantWeight: 0.5
+  mouthSpeed: 10
+  closureSpeed: 16
+  vowelSmoothing: 0.05
+--- !u!114 &232277536
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a2e88b5c67e04287a8f6a5cbbf5e619, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.AudioStreamPlayer
+  sourceSampleRate: 24000
+  initialBufferSeconds: 4
+  maxBufferSeconds: 120
+  volume: 1
+  logUnderruns: 0
+  lipSyncLeadMs: 60
+--- !u!82 &232277537
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 0}
+  m_Resource: {fileID: 0}
+  m_PlayOnAwake: 0
+  m_Volume: 1
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 0
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 1
+  MinDistance: 1
+  MaxDistance: 500
+  Pan2D: 0
+  rolloffMode: 0
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  reverbZoneMixCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!4 &232277538
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 232277521}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.45, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1664008877}
+  - {fileID: 236944736}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &236944734
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 236944736}
+  - component: {fileID: 236944735}
+  m_Layer: 0
+  m_Name: Fonemas
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &236944735
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 236944734}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87560e04aa74c7a41acb9c87051c3b02, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: uLipSync.Runtime::uLipSync.uLipSync
+  profile: {fileID: 11400000, guid: e7bee847b0146493d97aceaf14bb2903, type: 2}
+  onLipSyncUpdate:
+    m_PersistentCalls:
+      m_Calls: []
+  outputSoundGain: 1
+  audioSourceProxy: {fileID: 0}
+--- !u!4 &236944736
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 236944734}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 232277538}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -5960,6 +6538,37 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_renderer: {fileID: 1663944265}
   m_maskType: 0
+--- !u!1 &1664008876
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1664008877}
+  m_Layer: 0
+  m_Name: Avatar
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1664008877
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1664008876}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 1, z: 0, w: -0.00000004371139}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 232277538}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1767658851
 GameObject:
   m_ObjectHideFlags: 0
@@ -6981,3 +7590,4 @@ SceneRoots:
   - {fileID: 1358835317}
   - {fileID: 1215527212}
   - {fileID: 1326696896}
+  - {fileID: 232277538}

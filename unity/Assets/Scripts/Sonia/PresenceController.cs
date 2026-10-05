@@ -24,6 +24,11 @@
 // root motion, Sonia se desplaza a una velocidad estimada: desliza, pero nunca
 // se rompe ni se queda a medias.
 //
+// Modo Jean: el invitado lleva su propia presencia (sin letrero, saliendo por
+// la izquierda) y Sonia sale sin letrero para dejarle el sitio (HoldForGuest).
+// Mientras tanto, los presence del orquestador se apuntan y se aplican al
+// soltarla (ReleaseFromGuest): un hello a mitad no la trae de vuelta.
+//
 // Corre en LateUpdate con orden 10500: después de evaluar la animación y de
 // que Unity aplique el root motion (que se pisa), y antes de la mirada
 // (AvatarStateController 12000, EyeGazeController 12100) y de Vrm10Instance
@@ -275,6 +280,10 @@ namespace Sonia
         [Tooltip("Texto del letrero si el orquestador no manda ninguno.")]
         private string defaultMessage = DefaultAwayMessage;
 
+        [SerializeField]
+        [Tooltip("Poner el letrero al quedar fuera. El invitado del Modo Jean no lleva (y así no se crea otro en el HUD).")]
+        private bool useSign = true;
+
         [Header("Registro")]
         [SerializeField]
         [Tooltip("Escribir en la consola cada paso de la salida y la entrada.")]
@@ -286,6 +295,11 @@ namespace Sonia
         private bool _initialized;
         private Phase _phase = Phase.Present;
         private bool _targetPresent = true;
+
+        // Modo Jean: Sonia está fuera por el invitado. Lo que pida el orquestador
+        // entretanto se apunta aquí y se aplica al soltarla.
+        private bool _guestHold;
+        private bool _heldPresent = true;
         private float _phaseTime;
         private string _message;
 
@@ -377,10 +391,16 @@ namespace Sonia
             get { return string.IsNullOrEmpty(_message) ? defaultMessage : _message; }
         }
 
-        /// <summary>Letrero en uso (lo crea este componente si no hay ninguno).</summary>
+        /// <summary>Letrero en uso (lo crea este componente si no hay ninguno y lleva letrero).</summary>
         public AwaySignController Sign
         {
             get { return sign; }
+        }
+
+        /// <summary>Cierto mientras el Modo Jean tiene a Sonia fuera (o saliendo, o volviendo).</summary>
+        public bool HeldByGuest
+        {
+            get { return _guestHold; }
         }
 
         private AnimationClip WalkClip
@@ -427,12 +447,12 @@ namespace Sonia
                 cameraFraming = GetComponentInChildren<CameraFramingController>(true);
             }
 
-            if (sign == null)
+            if (sign == null && useSign)
             {
                 sign = GetComponentInChildren<AwaySignController>(true);
             }
 
-            if (sign == null)
+            if (sign == null && useSign)
             {
                 sign = gameObject.AddComponent<AwaySignController>();
             }
@@ -472,9 +492,9 @@ namespace Sonia
             Initialize();
             if (away)
             {
-                // SetPresent solo actúa si cambia el deseo: se marca presente y se pide salir.
-                _targetPresent = true;
-                SetPresent(false, null, true);
+                // Sigue fuera sin animación (y sin tocar el letrero ni su texto).
+                _targetPresent = false;
+                GoAway(true);
             }
         }
 
@@ -625,6 +645,13 @@ namespace Sonia
                 sign.SetMessage(Message);
             }
 
+            if (_guestHold)
+            {
+                // El Modo Jean manda: se aplica al terminar (ReleaseFromGuest).
+                _heldPresent = present;
+                return;
+            }
+
             if (present == _targetPresent)
             {
                 return;
@@ -647,16 +674,89 @@ namespace Sonia
             SetPresent(!_targetPresent, null, false);
         }
 
+        /// <summary>
+        /// Modo Jean: Sonia sale caminando (o al instante) sin letrero para
+        /// dejarle el sitio al invitado. Si ya estaba fuera (modo Fuera), se
+        /// queda y se quita el letrero. Lo que pida el orquestador mientras tanto
+        /// se aplica en <see cref="ReleaseFromGuest"/>.
+        /// </summary>
+        public void HoldForGuest(bool instant)
+        {
+            Initialize();
+            if (!_guestHold)
+            {
+                _guestHold = true;
+                _heldPresent = _targetPresent;
+            }
+
+            if (!_targetPresent)
+            {
+                if (sign != null && sign.IsShown)
+                {
+                    sign.Hide(instant);
+                }
+
+                return;
+            }
+
+            _targetPresent = false;
+            GoAway(instant);
+            Log("deja el sitio al invitado del Modo Jean");
+        }
+
+        /// <summary>
+        /// Termina el Modo Jean: Sonia vuelve caminando (o al instante). Si el
+        /// orquestador la quería fuera, se queda fuera, ahora con su letrero.
+        /// </summary>
+        public void ReleaseFromGuest(bool instant)
+        {
+            if (!_guestHold)
+            {
+                return;
+            }
+
+            _guestHold = false;
+            bool present = _heldPresent;
+            if (present == _targetPresent)
+            {
+                if (!present && _phase == Phase.Away)
+                {
+                    ShowSign(instant);
+                }
+
+                return;
+            }
+
+            _targetPresent = present;
+            if (present)
+            {
+                ComeBack(instant);
+            }
+            else
+            {
+                GoAway(instant);
+            }
+        }
+
+        private bool CanShowSign
+        {
+            get { return sign != null && !_guestHold; }
+        }
+
+        private void ShowSign(bool instant)
+        {
+            if (CanShowSign)
+            {
+                sign.Show(Message, instant);
+            }
+        }
+
         private void GoAway(bool instant)
         {
             if (_avatar == null)
             {
                 _phase = Phase.Away;
-                if (sign != null)
-                {
-                    sign.Show(Message, instant);
-                }
-
+                ShowSign(instant);
                 return;
             }
 
@@ -675,10 +775,7 @@ namespace Sonia
                     // Aún no había empezado a entrar: se queda fuera.
                     _phase = Phase.Away;
                     _phaseTime = 0f;
-                    if (sign != null)
-                    {
-                        sign.Show(Message, false);
-                    }
+                    ShowSign(false);
 
                     Log("se queda fuera");
                     break;
@@ -815,12 +912,8 @@ namespace Sonia
                 stateController.ClearLookOverride();
             }
 
-            if (sign != null)
-            {
-                sign.Show(Message, instant);
-            }
-
-            Log("fuera de cuadro (" + _offset.ToString("F2") + " m): letrero puesto");
+            ShowSign(instant);
+            Log("fuera de cuadro (" + _offset.ToString("F2") + " m)" + (CanShowSign ? ": letrero puesto" : ", sin letrero"));
         }
 
         private void GoAwayInstant()

@@ -28,6 +28,10 @@
 // zoom e inclinación sobre la pose que dejó el menú del editor. El plano de
 // panel va con él (es un desplazamiento del base); los de cuerpo entero
 // (abierto y salida) se quedan en su sitio.
+//
+// Y por encima de todo, un encuadre impuesto desde fuera (SetOverride): el Modo
+// Jean pone a los dos en plano entero mientras el invitado entra y se dan la
+// mano, y luego al invitado en el plano medio. Va con el mismo travelling.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -151,6 +155,10 @@ namespace Sonia
         private bool _snapNextFrame;
         private bool _presenceSearched;
 
+        // Encuadre impuesto desde fuera (Modo Jean): manda sobre todos.
+        private bool _hasOverride;
+        private ShotPose _override;
+
         /// <summary>Cierto mientras la cámara está abriendo o ya abierta.</summary>
         public bool IsWideShot
         {
@@ -173,6 +181,51 @@ namespace Sonia
         public Camera TargetCamera
         {
             get { return targetCamera; }
+        }
+
+        /// <summary>Cierto cuando ya tomó la pose de la escena (hay cámara).</summary>
+        public bool IsReady
+        {
+            get { return _ready; }
+        }
+
+        /// <summary>Plano base: el plano medio de Sonia, con los ajustes de «Developer».</summary>
+        public ShotPose BaseShot
+        {
+            get { return new ShotPose(_basePosition, _baseRotation, _baseFieldOfView); }
+        }
+
+        /// <summary>Plano de cuerpo entero (el de la salida y la entrada caminando).</summary>
+        public ShotPose FullBodyShot
+        {
+            get { return new ShotPose(PresencePosition(), _capturedRotation, PresenceFieldOfView()); }
+        }
+
+        /// <summary>Cierto mientras manda un encuadre impuesto desde fuera.</summary>
+        public bool HasOverride
+        {
+            get { return _hasOverride; }
+        }
+
+        /// <summary>
+        /// Impone un encuadre por encima de todos los demás (Modo Jean), con el
+        /// travelling del plano de salida, hasta <see cref="ClearOverride"/>. Se
+        /// puede volver a llamar con otra pose: la cámara va hacia ella suave.
+        /// </summary>
+        public void SetOverride(ShotPose pose)
+        {
+            _override = pose;
+            _hasOverride = true;
+        }
+
+        /// <summary>Quita el encuadre impuesto: la cámara vuelve, con travelling, al que toque.</summary>
+        public void ClearOverride()
+        {
+            if (_hasOverride)
+            {
+                _hasOverride = false;
+                _dolly = true;
+            }
         }
 
         /// <summary>Presencia de Sonia, para el plano de salida. La asigna SoniaBootstrap.</summary>
@@ -200,6 +253,11 @@ namespace Sonia
             if (presenceShotEnabled)
             {
                 poses.Add(new ShotPose(PresencePosition(), _capturedRotation, PresenceFieldOfView()));
+            }
+
+            if (_hasOverride)
+            {
+                poses.Add(_override);
             }
         }
 
@@ -329,15 +387,23 @@ namespace Sonia
                 presence = GetComponentInChildren<PresenceController>(true);
             }
 
-            _presenceShot = presenceShotEnabled && presence != null && presence.WantsWideShot;
-            _wide = !_presenceShot && NeedsWideShot();
-            _panel = panelShotEnabled && !_presenceShot && !_wide && imagePanel != null && imagePanel.IsVisible;
+            _presenceShot = !_hasOverride && presenceShotEnabled && presence != null && presence.WantsWideShot;
+            _wide = !_hasOverride && !_presenceShot && NeedsWideShot();
+            _panel = panelShotEnabled && !_hasOverride && !_presenceShot && !_wide && imagePanel != null
+                     && imagePanel.IsVisible;
 
             Vector3 targetPosition = _basePosition;
             Quaternion targetRotation = _baseRotation;
             float targetFieldOfView = _baseFieldOfView;
 
-            if (_presenceShot)
+            if (_hasOverride)
+            {
+                targetPosition = _override.Position;
+                targetRotation = _override.Rotation;
+                targetFieldOfView = _override.FieldOfView;
+                _dolly = true;
+            }
+            else if (_presenceShot)
             {
                 targetPosition = PresencePosition();
                 targetRotation = _capturedRotation;
@@ -385,7 +451,7 @@ namespace Sonia
                 bool arrived = (cameraTransform.position - targetPosition).sqrMagnitude < 0.000004f
                                && _dollyVelocity.sqrMagnitude < 0.0001f
                                && Mathf.Abs(targetCamera.fieldOfView - targetFieldOfView) < 0.01f;
-                if (!_presenceShot && arrived)
+                if (!_presenceShot && !_hasOverride && arrived)
                 {
                     _dolly = false;
                     _dollyVelocity = Vector3.zero;
