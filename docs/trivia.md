@@ -70,7 +70,7 @@ Los clips van en el set con «Sonia > Crear set de animaciones» (`SoniaAnimatio
 
 ## El gorro Noogler
 
-Sonia se pone la gorra Noogler, la de hélice que Google da a quien acaba de entrar: gajo amarillo delante con «Noogler» bordado en los colores de Google, azul a un lado, rojo al otro y una hélice arriba que gira, y más deprisa al acertar y al ganar. Sonia se la pone y se la quita con las dos manos (IK de brazos en `TriviaHat`), porque Genies no trae ninguna animación de ponerse un gorro. La coge fuera de cuadro, por debajo de lo que ve la cámara, y la sube con las palmas apoyadas por fuera de los costados de la copa (puntos de agarre del prefab), sin atravesarla. Al quitársela la lanza a un lado, a la derecha o a la izquierda al azar, dando vueltas hasta salir de cuadro.
+Sonia se pone la gorra Noogler, la de hélice que Google da a quien acaba de entrar: gajo amarillo delante con «Noogler» bordado en los colores de Google, azul a un lado, rojo al otro y una hélice arriba que gira, y más deprisa al acertar y al ganar. Sonia se la pone y se la quita con las dos manos (IK de brazos en `TriviaHat`), porque Genies no trae ninguna animación de ponerse un gorro. Para cogerla se inclina hacia delante (dobla la columna sobre la animación que suene) y la recoge abajo, delante de los muslos, donde la cámara no la ve: se inclina lo justo para eso, entre 20° y 70°. La sube con las palmas apoyadas por fuera de los costados de la copa (puntos de agarre del prefab), sin atravesarla. Quitársela es el mismo gesto al revés: la levanta recta, la baja en arco, se inclina y la deja abajo, fuera de cuadro.
 
 Va como una prenda oficial de Genies:
 
