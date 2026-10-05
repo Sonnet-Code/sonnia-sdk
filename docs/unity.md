@@ -318,6 +318,7 @@ veces que haga falta sin acumular basura:
 | **Sonia > Crear set de animaciones** | Reimporta los FBX de `RPM/` y `Mixamo/` (Humanoid, sin compresión, bucle solo en los bucles base, centrados), rellena `Assets/Animations/SoniaMotionSet.asset` desde `SoniaAnimations.cs`, genera la máscara de torso y cablea `MotionPlayer` y `AvatarChoreographer` |
 | **Sonia > Regenerar Avatar Humanoid** | Reconstruye `Assets/Avatar/Generated/<modelo>_Humanoid.asset` desde el modelo colocado (tras cambiar el mapeo o los límites de `SoniaHumanoidRig`) y lo reasigna al Animator |
 | **Sonia > Iluminación de estudio** | Monta o actualiza key, fill, rim y hair light, el halo, las motas, el Volume (ACES, bloom, viñeta, color, profundidad de campo) y SMAA |
+| **Sonia > Iluminación estilo Genies** | Opcional: la luz de la demo Mia de genies.com (key frontal cálida, ambiente SH del HDR de Mia, rims en espacio de vista, reflejos del HDR, LUT con Tonemapping None y sombra en el suelo). No es la de por defecto: con la piel de Sonia sale naranja (ver `Assets/Sonia/Lighting/LEEME.md`). Se deshace con **Iluminación de estudio** |
 | **Sonia > Actualizar componentes** | Añade al objeto `Sonia` de una escena ya creada los componentes que le falten y recablea `SoniaBootstrap` |
 | **Sonia > Colocar avatar** | Rehace el sitio del avatar de Sonia, sin ningún avatar a la vista: el ancla vacía «Avatar» (donde se pone en Play el avatar del SDK) y el doble Sticker desactivado (último recurso), y recablea el pipeline. No toca la cámara, el panel ni la luz (ver "El avatar de Genies en Play") |
 | **Sonia > Captura vertical 9:16** | Guarda un PNG 1080x1920 de la cámara principal en `unity/Temp`, con el HUD compuesto encima (`SoniaCapture.Render` renderiza aparte la cámara superpuesta del HUD, porque fuera del bucle de juego URP no dibuja la pila) |
@@ -1103,7 +1104,9 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `SoniaBootstrap.cs` | Enlaza todo y aplica los ajustes de kiosco |
 | `Editor/SoniaSceneSetup.cs` | Menús **Sonia > Crear escena base**, **Configurar build 9:16** y **Actualizar componentes** |
 | `Editor/SoniaMotionSetBuilder.cs` | Menú **Sonia > Crear set de animaciones**: importa los FBX, rellena el set, genera la máscara y cablea la escena |
-| `Editor/SoniaStageLighting.cs` | Menú **Sonia > Iluminación de estudio**: tres puntos de luz, halo, motas, Volume y SMAA |
+| `Editor/SoniaStageLighting.cs` | Menú **Sonia > Iluminación de estudio**: tres puntos de luz, halo, motas, Volume y SMAA; también deshace la iluminación estilo Genies |
+| `Editor/SoniaGeniesLighting.cs` | Menú **Sonia > Iluminación estilo Genies** (opcional) y su `Remove` |
+| `SoniaGeniesLook.cs` | Ambiente SH en modo Custom y rims que giran con la cámara de la iluminación estilo Genies |
 | `Editor/SoniaAvatarSetup.cs` | Menús **Sonia > Colocar avatar** (ancla vacía, doble desactivado y cableado sin avatar) y **Recalcular encuadre (con el doble)** (mide el doble y ajusta cámara, panel, telón y luz) |
 | `Editor/SoniaGeniesDefinitionSync.cs` | En el editor, escribe en `SoniaGeniesAvatar.json` el último avatar del SDK que lleva Sonia en Play |
 | `GeniesDefinition.cs` | Huella de una definición de avatar de Genies, para comparar definiciones sin depender del formato |

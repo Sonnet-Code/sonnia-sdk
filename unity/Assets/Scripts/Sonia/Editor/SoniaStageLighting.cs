@@ -18,6 +18,10 @@
 // Todo cuelga de un objeto "SoniaStage" para poder borrarlo de un golpe. Las
 // posiciones se calculan a partir de la cabeza del avatar y de la cámara, así
 // que vale para cualquier modelo.
+//
+// También deshace "Sonia > Iluminación estilo Genies" (SoniaGeniesLighting).
+// Sin avatar en la escena (el de Genies solo existe en Play) no puede
+// recolocar los focos: vuelve a la luz de estudio tal como quedó montada.
 
 #if UNITY_EDITOR
 
@@ -52,14 +56,27 @@ namespace Sonia.EditorTools
             Scene scene = SceneManager.GetActiveScene();
             Transform head = FindHead(scene);
             Camera camera = Camera.main;
-            if (head == null || camera == null)
+            if (camera == null)
             {
-                EditorUtility.DisplayDialog(
-                    "Sonia", "Hace falta un avatar colocado (con cabeza humanoide) y una cámara principal.", "Vale");
+                EditorUtility.DisplayDialog("Sonia", "Hace falta una cámara principal.", "Vale");
                 return;
             }
 
-            Apply(scene, head.position, camera);
+            if (head != null)
+            {
+                Apply(scene, head.position, camera);
+            }
+            else if (GameObject.Find(StageName) != null)
+            {
+                Restore(scene, camera);
+            }
+            else
+            {
+                EditorUtility.DisplayDialog(
+                    "Sonia", "Para montar el escenario la primera vez hace falta un avatar colocado (con cabeza humanoide).", "Vale");
+                return;
+            }
+
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
         }
@@ -67,6 +84,7 @@ namespace Sonia.EditorTools
         /// <summary>Monta o actualiza todo el escenario alrededor de la cabeza dada.</summary>
         public static void Apply(Scene scene, Vector3 headPosition, Camera camera)
         {
+            SoniaGeniesLighting.Remove(scene);
             GameObject stage = GameObject.Find(StageName);
             if (stage == null)
             {
@@ -104,6 +122,22 @@ namespace Sonia.EditorTools
             Debug.Log("[Sonia] Iluminación de estudio aplicada (key, fill, rim, hair, halo, motas, ACES, SMAA).", stage);
         }
 
+        /// <summary>
+        /// Vuelve a la luz de estudio sin mover los focos ni el halo: quita la
+        /// iluminación estilo Genies, enciende los focos y recupera la direccional,
+        /// el ambiente y el postprocesado. Para cuando no hay avatar en la escena.
+        /// </summary>
+        public static void Restore(Scene scene, Camera camera)
+        {
+            SoniaGeniesLighting.Remove(scene);
+            SoniaGeniesLighting.SetStageLightsEnabled(true);
+            TameDirectional(scene);
+            SetUpAmbient();
+            SetUpCamera(camera);
+            SetUpVolume(scene, camera, null);
+            Debug.Log("[Sonia] Iluminación de estudio recuperada sin avatar (focos donde estaban).");
+        }
+
         // ------------------------------------------------------------------
         // Luces
         // ------------------------------------------------------------------
@@ -128,6 +162,7 @@ namespace Sonia.EditorTools
 
             Undo.RecordObject(light, UndoName);
             Undo.RecordObject(go.transform, UndoName);
+            light.enabled = true;
             go.transform.position = position;
             go.transform.rotation = Quaternion.LookRotation((target - position).normalized, Vector3.up);
             light.type = type;
@@ -388,7 +423,7 @@ namespace Sonia.EditorTools
             EditorUtility.SetDirty(data);
         }
 
-        private static void SetUpVolume(Scene scene, Camera camera, Vector3 headPosition)
+        private static void SetUpVolume(Scene scene, Camera camera, Vector3? headPosition)
         {
             Volume volume = null;
             GameObject[] roots = scene.GetRootGameObjects();
@@ -459,11 +494,21 @@ namespace Sonia.EditorTools
             dof.mode.overrideState = true;
             dof.mode.value = DepthOfFieldMode.Bokeh;
             dof.focusDistance.overrideState = true;
-            dof.focusDistance.value = Mathf.Max(0.5f, Vector3.Distance(camera.transform.position, headPosition));
+            if (headPosition.HasValue)
+            {
+                dof.focusDistance.value = Mathf.Max(0.5f, Vector3.Distance(camera.transform.position, headPosition.Value));
+            }
             dof.aperture.overrideState = true;
             dof.aperture.value = 9f;
             dof.focalLength.overrideState = true;
             dof.focalLength.value = 45f;
+
+            // El LUT de la iluminación estilo Genies no pinta en el estudio.
+            ColorLookup lookup;
+            if (profile.TryGet(out lookup) && lookup != null)
+            {
+                lookup.active = false;
+            }
 
             EditorUtility.SetDirty(profile);
             foreach (VolumeComponent component in profile.components)
