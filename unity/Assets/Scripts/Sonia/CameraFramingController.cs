@@ -32,6 +32,14 @@
 // Y por encima de todo, un encuadre impuesto desde fuera (SetOverride): el Modo
 // Jean pone a los dos en plano entero mientras el invitado entra y se dan la
 // mano, y luego al invitado en el plano medio. Va con el mismo travelling.
+//
+// Planos del stand (diseño F de la pantalla): el plano base pasa a ser el de
+// conversación, de cintura para arriba con los ojos a la altura de los de quien
+// habla delante, y cuando nadie conversa la cámara se abre un poco, de rodillas
+// para arriba (plano de reposo). Los dos se calculan con los huesos del avatar
+// enganchado (el del SDK cuando llega), no con la pose de la escena, así que
+// valen igual si cambia el personaje. El de reposo espera unos segundos en
+// reposo antes de abrirse: entre turno y turno la cámara no respira.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -125,6 +133,45 @@ namespace Sonia
         [Tooltip("Tiempo de suavizado (SmoothDamp) del travelling al abrir y al cerrar el plano de salida. Unos 2,5 veces este valor hasta quedar quieta.")]
         private float presenceSmoothTime = 0.75f;
 
+        [Header("Planos del stand (diseño F)")]
+        [SerializeField]
+        [Tooltip("Calcular el plano de conversación (base) y el de reposo con los huesos del avatar enganchado, en lugar de usar la pose de la cámara en la escena.")]
+        private bool stageFraming = true;
+
+        [SerializeField]
+        [Range(0.5f, 2.5f)]
+        [Tooltip("Alto que se ve a la altura de la cabeza al conversar, en metros. 1,16: de cintura para arriba.")]
+        private float conversationHeight = 1.16f;
+
+        [SerializeField]
+        [Range(0.1f, 0.6f)]
+        [Tooltip("Dónde quedan los ojos al conversar, en fracción del alto de la pantalla desde arriba.")]
+        private float conversationEyeLine = 0.368f;
+
+        [SerializeField]
+        [Tooltip("Abrir a un plano de rodillas para arriba cuando nadie conversa.")]
+        private bool idleShotEnabled = true;
+
+        [SerializeField]
+        [Range(0.5f, 2.5f)]
+        [Tooltip("Alto que se ve a la altura de la cabeza en reposo, en metros. 1,32: de rodillas para arriba.")]
+        private float idleHeight = 1.32f;
+
+        [SerializeField]
+        [Range(0.1f, 0.6f)]
+        [Tooltip("Dónde quedan los ojos en reposo, en fracción del alto de la pantalla desde arriba.")]
+        private float idleEyeLine = 0.327f;
+
+        [SerializeField]
+        [Range(0f, 30f)]
+        [Tooltip("Segundos en reposo antes de abrir el plano: entre turno y turno la cámara no se mueve.")]
+        private float idleShotDelay = 8f;
+
+        [SerializeField]
+        [Range(0f, 0.3f)]
+        [Tooltip("Altura de los ojos sobre el hueso de la cabeza, en metros (unos 11 cm en los avatares de Genies).")]
+        private float eyesAboveHeadBone = 0.11f;
+
         [Header("Movimiento")]
         [SerializeField]
         [Range(0.2f, 10f)]
@@ -159,6 +206,16 @@ namespace Sonia
         private bool _hasOverride;
         private ShotPose _override;
 
+        // Planos del stand: el de reposo es el base más este desplazamiento.
+        private AvatarStateController _avatarState;
+        private AvatarBinder _binder;
+        private bool _stageReady;
+        private Vector3 _idleOffset;
+        private bool _idle;
+
+        // Desde cuándo está en reposo. Al arrancar no hay nadie: plano de reposo ya.
+        private float _idleSince = float.NegativeInfinity;
+
         /// <summary>Cierto mientras la cámara está abriendo o ya abierta.</summary>
         public bool IsWideShot
         {
@@ -169,6 +226,12 @@ namespace Sonia
         public bool IsPanelShot
         {
             get { return _panel; }
+        }
+
+        /// <summary>Cierto mientras manda el plano de reposo (nadie conversa).</summary>
+        public bool IsIdleShot
+        {
+            get { return _idle; }
         }
 
         /// <summary>
@@ -261,6 +324,11 @@ namespace Sonia
             }
 
             poses.Add(new ShotPose(_basePosition, _baseRotation, _baseFieldOfView));
+            if (_stageReady && idleShotEnabled)
+            {
+                poses.Add(new ShotPose(_basePosition + _idleOffset, _baseRotation, _baseFieldOfView));
+            }
+
             poses.Add(new ShotPose(wideShotPosition, _capturedRotation, WideFieldOfView()));
             poses.Add(new ShotPose(PanelPosition(), _baseRotation, PanelFieldOfView()));
             if (presenceShotEnabled)
@@ -301,7 +369,86 @@ namespace Sonia
                 imagePanel = GetComponentInChildren<ImagePanelController>(true);
             }
 
+            _avatarState = GetComponentInChildren<AvatarStateController>(true);
+            _binder = GetComponentInChildren<AvatarBinder>(true);
             CaptureBasePose();
+        }
+
+        private void OnEnable()
+        {
+            if (_binder != null)
+            {
+                _binder.AvatarChanged += HandleAvatarChanged;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (_binder != null)
+            {
+                _binder.AvatarChanged -= HandleAvatarChanged;
+            }
+        }
+
+        private void Start()
+        {
+            // El doble del editor ya viene enganchado; el del SDK avisa al llegar.
+            if (_binder != null && _binder.Current != null)
+            {
+                HandleAvatarChanged(_binder.Current);
+            }
+        }
+
+        private void HandleAvatarChanged(Transform avatar)
+        {
+            if (stageFraming && _ready)
+            {
+                ComputeStageShots(avatar);
+            }
+        }
+
+        /// <summary>
+        /// Planos de conversación y de reposo a partir de la cabeza del avatar: la
+        /// cámara mira de frente como en la escena, a la distancia justa para que
+        /// se vea el alto pedido a la altura de la cabeza, y a la altura que deja
+        /// los ojos en su línea de la pantalla.
+        /// </summary>
+        private void ComputeStageShots(Transform avatar)
+        {
+            Animator animator = avatar != null ? avatar.GetComponentInChildren<Animator>(true) : null;
+            Transform head = animator != null && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.Head) : null;
+            if (head == null)
+            {
+                return;
+            }
+
+            Vector3 forward = _capturedRotation * Vector3.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.000001f)
+            {
+                forward = Vector3.forward;
+            }
+
+            forward.Normalize();
+            float tangentHalf = Mathf.Tan(_capturedFieldOfView * 0.5f * Mathf.Deg2Rad);
+            Vector3 subject = head.position;
+            float eyesY = subject.y + eyesAboveHeadBone;
+            Vector3 conversation = StageShot(subject, eyesY, conversationHeight, conversationEyeLine, forward, tangentHalf);
+            Vector3 idle = StageShot(subject, eyesY, idleHeight, idleEyeLine, forward, tangentHalf);
+
+            _capturedPosition = conversation;
+            _idleOffset = idle - conversation;
+            _stageReady = true;
+            ApplyTuningToBase();
+        }
+
+        private static Vector3 StageShot(
+            Vector3 subject, float eyesY, float visibleHeight, float eyeLine, Vector3 forward, float tangentHalf)
+        {
+            float distance = visibleHeight / (2f * Mathf.Max(0.01f, tangentHalf));
+            Vector3 position = subject - forward * distance;
+            position.y = eyesY - (0.5f - eyeLine) * visibleHeight;
+            return position;
         }
 
         /// <summary>
@@ -405,6 +552,20 @@ namespace Sonia
             _panel = panelShotEnabled && !_hasOverride && !_presenceShot && !_wide
                      && ((imagePanel != null && imagePanel.IsVisible) || PanelRequested);
 
+            // Plano de reposo: nadie conversa desde hace un rato.
+            bool resting = _avatarState == null || _avatarState.State == AvatarState.Idle;
+            if (!resting)
+            {
+                _idleSince = float.PositiveInfinity;
+            }
+            else if (float.IsPositiveInfinity(_idleSince))
+            {
+                _idleSince = Time.time;
+            }
+
+            _idle = idleShotEnabled && _stageReady && !_hasOverride && !_presenceShot && !_wide && !_panel
+                    && resting && Time.time - _idleSince >= idleShotDelay;
+
             Vector3 targetPosition = _basePosition;
             Quaternion targetRotation = _baseRotation;
             float targetFieldOfView = _baseFieldOfView;
@@ -433,6 +594,10 @@ namespace Sonia
             {
                 targetPosition = PanelPosition() + (PanelRequested ? PanelRequestOffset : Vector3.zero);
                 targetFieldOfView = PanelFieldOfView();
+            }
+            else if (_idle)
+            {
+                targetPosition = _basePosition + _idleOffset;
             }
 
             Transform cameraTransform = targetCamera.transform;

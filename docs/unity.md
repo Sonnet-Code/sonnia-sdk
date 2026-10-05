@@ -385,6 +385,7 @@ solo fotograma y se libera el anterior. Las cargas van en fila: si llegan dos
 Sonia (o, antes de que llegue, la que se está poniendo), y el editor de
 personaje arranca con ella. Las definiciones se comparan por huella
 (`GeniesDefinition.Hash`, FNV-1a de 64 bits) sin contar espacios ni saltos de
+| **Sonia > Comprobar pantalla (en Play)** | Simula, sin orquestador, el reposo con la invitación, la pregunta del visitante, la respuesta de Sonia creciendo (karaoke), una frase grabada y la vuelta al reposo, y deja capturas 9:16 e informe en `Temp/stagecheck/` (la primera vez solo pausa) |
 línea fuera de las cadenas: da igual que el JSON venga sangrado, compacto o con
 CRLF.
 
@@ -494,8 +495,69 @@ textura normal con mipmaps.
 | Fondo de cámara | `#0E1B33`, a juego con el navy |
 
 Dos decisiones que no son obvias:
+### Pantalla del stand (diseño F)
+
+Lo que se ve en Play es el diseño F («Navy en vivo») del canvas de diseño
+«Pantalla de Sonia 9:16». Lo monta `StageScreen` por código al arrancar (lo
+añade `SoniaBootstrap`, como la trivia y el letrero del modo Fuera), así que la
+escena no cambia y en modo edición se sigue viendo el HUD antiguo:
+
+| Elemento | Dónde (px de la referencia 1080x1920) | Cuándo |
+|---|---|---|
+| Fondo navy de la marca: degradado, dos brillos, puntos y la S de marca de agua | Toda la pantalla, en un Canvas propio que dibuja la cámara principal a 12 m (detrás de Sonia, con el mismo postprocesado que la escena, fijo aunque la cámara se mueva) | Siempre |
+| Logo de Sonnet Code (S en degradado, texto blanco) | Arriba a la izquierda, (56, 64), 250 de ancho | Siempre |
+| Etiqueta «SONIA · EN VIVO» con un punto azul que late | Debajo del logo, (56, 196) | Salvo con imagen o trivia |
+| Tarjeta blanca con el QR a sonnetcode.com/es, «Sonnet Code» y «¡Conoce más de nosotros!» | Arriba a la derecha, margen 56, 232 x 298 | Salvo con imagen o trivia (ocupan esa franja) |
+| Invitación: pastilla blanca con el micrófono, «Acércate y pregúntame lo que quieras.» y «Solo háblame: no hay que tocar nada.» | Abajo, margen 56 a los lados y 72 abajo, 120 de alto | Si Sonia puede conversar (`stage_mode` con `talk`), está en reposo, no hay subtítulos desde hace 7,5 s y no hay imagen, trivia ni modo Fuera |
+| Subtítulos de Sonia: Manrope ExtraBold 64, blancos, centrados, sin caja, con lo que acaba de decir atenuado | Abajo, a 96 del borde, 968 de ancho, como mucho unos 110 caracteres (de una frase larga se ve el final) | Mientras habla y 6 s después |
+| Lo que dijo el visitante: pastilla translúcida «TÚ …» | Encima del texto de Sonia | Con los subtítulos |
+| Sombra navy de abajo (degradado) | Los 760 px de abajo | Siempre |
+
+Detalles que no son obvios:
+
+- **El karaoke va con la voz.** La transcripción de Sonia llega detrás de su
+  audio, así que lo nuevo se enciende a partir de que llega (de atenuado a
+  blanco en 0,45 s, sin correr más de 28 caracteres por segundo si llega un
+  trozo grande de golpe). Si la frase llega entera en `speech_start` (las frases
+  grabadas de `cache/voice`), lo que aún no ha dicho se ve atenuado y se va
+  encendiendo a 15 caracteres por segundo desde el primer audio; al acabar la
+  frase, lo que quede se enciende de golpe.
+- **La invitación depende del modo.** Con «Solo saludos», «Fuera», el modo
+  debug, el editor de personaje o el Modo Jean, GPT-Live está apagada y Sonia
+  no contestaría: el orquestador lo dice con el mensaje fijo `stage_mode`
+  (`docs/protocolo.md`) y la invitación no sale.
+- **Lo antiguo se apaga en Play**: el telón 3D (`Sonia/Backdrop`), el logo del
+  HUD (`BrandLogo`) y las burbujas de subtítulos (`Debug/Subtitles`).
+- **Fuentes**: Manrope (ExtraBold y SemiBold) y Geist Mono (Medium), las de
+  sonnetcode.com, con licencia OFL, en `Assets/Resources/Stage/Fonts`.
+  `StageScreen` crea sus fuentes dinámicas de TextMeshPro al arrancar, con la de
+  TextMeshPro de respaldo para los caracteres que falten.
+- **Recursos**: fondo, formas redondeadas (corte en 9), sombra, brillo, icono del
+  micrófono, QR y logo están en `Assets/Resources/Stage` y los genera
+  `scripts/stage_assets.py` (con `--url` para otro QR y `--brand` para la carpeta
+  de assets del repo sonnet-code). `Editor/SoniaStageAssets.cs` los importa como
+  sprites sin compresión ni mipmaps; **Sonia > Reimportar recursos de la
+  pantalla** los vuelve a importar.
+- **Pendiente de autorización de Jean**: el cartel. En el diseño, al mostrar una
+  imagen Sonia sujeta un cartel con ella; hasta entonces se queda el panel de
+  imágenes de la franja alta (sección "Panel de imágenes"), y mientras está
+  puesto el QR y la etiqueta se apartan.
+
 
 **El Canvas va en Screen Space - Camera, no en Overlay.** Un Canvas en Overlay no
+**Desde el diseño F** `CameraFramingController` calcula el plano base con los
+huesos del avatar enganchado (el doble al arrancar y el del SDK en cuanto llega)
+en lugar de usar la pose de la cámara en la escena: de cintura para arriba
+(1,16 m de alto a la altura de la cabeza) con los ojos al 36,8 % de la pantalla
+desde arriba, a la altura de los de un adulto si el borde de abajo del monitor
+está a unos 0,9 m del suelo. Cuando nadie conversa (estado `idle` durante 8 s),
+se abre al plano de reposo, de rodillas para arriba (1,32 m, ojos al 32,7 %).
+Los ojos se toman 11 cm por encima del hueso de la cabeza. Los ajustes de
+«Developer» del panel se aplican igual sobre los dos, y los planos de panel,
+abierto, de salida y del Modo Jean no cambian. Todo esto se puede apagar con
+`stageFraming` e `idleShotEnabled` en el inspector. Lo de abajo describe el
+cálculo anterior, que sigue siendo el de la pose de la escena:
+
 aparece cuando se renderiza a una RenderTexture, y todas las verificaciones se
 hacen con **Sonia > Captura vertical 9:16**, que es exactamente eso. En Overlay
 las capturas salían sin HUD y no había forma de comprobarlo.
@@ -1150,7 +1212,8 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `SoniaMotionSet.cs` | ScriptableObject con los clips ya resueltos, generado por el menú |
 | `MotionPlayer.cs` | Reproductor de clips con la Playables API: fundidos por código, capa de cuerpo y capa de torso con máscara |
 | `AvatarChoreographer.cs` | Decide qué clip suena en cada estado: idle con variaciones y atención, escuchar con asentimientos, pensar, hablar encadenando gestos, saludo |
-| `CameraFramingController.cs` | Abre el plano de la cámara durante los bailes y el saludo, y vuelve al plano medio; travelling a cuerpo entero en el modo Fuera |
+| `CameraFramingController.cs` | Planos del stand calculados con los huesos del avatar (conversación de cintura para arriba y reposo de rodillas para arriba), plano de panel, abierto para los bailes y travelling a cuerpo entero en el modo Fuera |
+| `StageScreen.cs` | Pantalla del stand (diseño F), construida por código en Play: fondo de la marca, logo, «SONIA · EN VIVO», QR, invitación a hablar y subtítulos tipo karaoke |
 | `PresenceController.cs` | Modo Fuera (`presence`): sale caminando con el root motion del ciclo de caminar, se oculta, y vuelve frenando hasta su marca (sección 6c) |
 | `AwaySignController.cs` | Letrero del modo Fuera en el Canvas del HUD, construido por código, con fundidos |
 | `ImagePanelController.cs` | Decodifica el base64 de `show_image` y lo muestra con animación de escala |
@@ -1170,3 +1233,5 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `Editor/SoniaHumanoidRig.cs` | Construye y guarda un Avatar Humanoid para modelos con esqueleto de Mixamo que llegan sin él (GLB de Ready Player Me) |
 | `Editor/SoniaCapture.cs` | Menú **Sonia > Captura vertical 9:16**: PNG 1080x1920 de la cámara principal |
 | `Editor/SoniaBrandAssets.cs` | Rutas y ajustes de importación de los assets de marca de Sonnet Code |
+| `Editor/SoniaStageAssets.cs` | Ajustes de importación de `Resources/Stage` (sprites sin compresión, cortes en 9) y menú **Sonia > Reimportar recursos de la pantalla** |
+| `Editor/SoniaStageCheck.cs` | Menú **Sonia > Comprobar pantalla (en Play)**: reposo, conversación, frase grabada y vuelta al reposo a paso fijo, con capturas 9:16 en `Temp/stagecheck/` |

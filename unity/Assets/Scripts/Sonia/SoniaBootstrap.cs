@@ -271,6 +271,13 @@ namespace Sonia
                 gameObject.AddComponent<TriviaController>();
             }
 
+            if (GetComponent<StageScreen>() == null)
+            {
+                // También por código: la pantalla del stand (fondo de la marca,
+                // logo, QR, invitación a hablar y subtítulos).
+                gameObject.AddComponent<StageScreen>();
+            }
+
             if (GetComponent<AvatarEditorLauncher>() == null)
             {
                 // También por código: abre la escena del editor de personaje cuando
