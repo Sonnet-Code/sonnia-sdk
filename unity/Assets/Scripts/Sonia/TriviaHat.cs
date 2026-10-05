@@ -1,11 +1,23 @@
-// Gorro de fiesta de la trivia: un cono con franjas en los colores de Google
-// (azul, rojo, amarillo y verde), un aro blanco en la base y un pompón. Sonia se
-// lo pone y se lo quita con las dos manos.
+// Gorro de la trivia: la gorra Noogler con hélice (gajo amarillo delante y el
+// texto «Noogler»), que Sonia se pone y se quita con las dos manos.
 //
-// Se construye por código (malla, textura y materiales), sin assets ni red. Las
-// prendas del catálogo de Genies se descartaron: equiparlas descarga y
-// reconstruye el avatar entero en mitad de la partida y no hay ninguna
-// temática (docs/trivia.md).
+// El modelo es el «HAT - Propeller Silly Hat» de Dekogon, recoloreado y con el
+// texto en Blender (scripts/gorro_noogler), y lo monta "Sonia > Crear gorro
+// Noogler" como prefab en Resources (TriviaCapRig). Va donde iría una gorra
+// oficial de Genies: su sitio en la cabeza se midió encajándolo (ICP) con la
+// gorra oficial que llevaba Sonia, en el espacio del hueso de la cabeza, como
+// va pegada esa gorra. Y se integra como una prenda oficial:
+//  - mientras lo lleva se esconde la gorra oficial, si Sonia lleva una. Genies
+//    (NAF) junta cuerpo, pelo, ropa y gorro en un solo renderer con una submalla
+//    por material, así que se apaga solo la submalla del gorro (FindHatParts),
+//    con un material sin pasadas de render;
+//  - el pelo ya viene aplastado por Genies bajo esa gorra (NAF lo hornea en la
+//    malla) y el gorro Noogler va justo donde iba ella. Si el avatar trae los
+//    blendshapes de pelo bajo gorro («hair_geo_blendShape...hat», como el doble
+//    del editor), se activan mientras lo lleva;
+//  - ya puesto no se bambolea (las prendas de Genies van rígidas con la cabeza);
+//  - la hélice gira, y más deprisa al acertar o ganar.
+// Sin el prefab queda el gorro de fiesta procedural de antes (cono de franjas).
 //
 // Ponérselo (una línea de tiempo de 1,7 s; quitárselo es la misma al revés):
 //   0,00-0,45  las manos suben delante del pecho y el gorro aparece entre ellas;
@@ -36,7 +48,38 @@ namespace Sonia
     [DisallowMultipleComponent]
     public class TriviaHat : MonoBehaviour
     {
-        [Header("Colocación (en la cabeza)")]
+        [Header("Modelo")]
+        [SerializeField]
+        [Tooltip("Prefab del gorro en Resources (lo monta Sonia > Crear gorro Noogler). Vacío o sin prefab: el gorro de fiesta procedural.")]
+        private string capResource = "Trivia/NooglerCap";
+
+        [Header("Colocación aproximada del modelo (si el prefab no trae el encaje medido)")]
+        [SerializeField]
+        [Tooltip("Centro de la boca del gorro respecto al hueso de la cabeza, en metros: derecha (x), arriba (y) y delante (z) del avatar.")]
+        private Vector3 fitOffset = new Vector3(0f, 0.12f, 0.02f);
+
+        [SerializeField]
+        [Tooltip("Giro del gorro respecto a la cabeza, en grados: cabeceo (x, positivo hacia delante), guiñada (y) y alabeo (z).")]
+        private Vector3 fitEuler = Vector3.zero;
+
+        [SerializeField]
+        [Tooltip("Escala del modelo (a tamaño real) en la cabeza de Sonia.")]
+        private float fitScale = 1.3f;
+
+        [Header("Integración con el avatar")]
+        [SerializeField]
+        [Tooltip("Esconder la gorra oficial de Genies (la submalla del gorro) mientras Sonia lleva este.")]
+        private bool hideOfficialHat = true;
+
+        [SerializeField]
+        [Tooltip("Prefijo de los blendshapes del pelo que Genies usa bajo los gorros (modo blendshape): los que siguen con «hat» se activan mientras lo lleva puesto.")]
+        private string hatHairBlendShape = "hair_geo_blendShape";
+
+        [SerializeField]
+        [Tooltip("Grados por segundo de la hélice.")]
+        private float propellerSpeed = 600f;
+
+        [Header("Colocación del gorro procedural (en la cabeza)")]
         [SerializeField]
         [Tooltip("Altura de la base del gorro sobre el hueso de la cabeza, en metros, a lo largo del 'arriba' del avatar.")]
         private float height = 0.235f;
@@ -129,6 +172,16 @@ namespace Sonia
         private readonly HandArm _left = new HandArm(true);
         private Transform _root;
         private Transform _cone;
+        private Transform _model;
+        private TriviaCapRig _rig;
+        private Quaternion _propellerRest = Quaternion.identity;
+        private float _spin;
+        private float _spinBoostUntil;
+        private readonly System.Collections.Generic.List<HiddenPart> _officialHat = new System.Collections.Generic.List<HiddenPart>();
+        private readonly System.Collections.Generic.List<Material> _slots = new System.Collections.Generic.List<Material>();
+        private bool _officialHidden;
+        private readonly System.Collections.Generic.List<HairShape> _hairShapes = new System.Collections.Generic.List<HairShape>();
+        private float _hairWeight = -1f;
         private Renderer[] _renderers = new Renderer[0];
         private Material _coneMaterial;
         private Material _trimMaterial;
@@ -141,6 +194,45 @@ namespace Sonia
         private Vector3 _lastHeadPosition;
         private float _sway;
         private float _swayVelocity;
+
+        // Pasadas de URP: un material con todas apagadas no dibuja nada, ni sombra.
+        private static readonly string[] RenderPasses =
+        {
+            "UniversalForward", "UniversalForwardOnly", "UniversalGBuffer", "ShadowCaster", "DepthOnly",
+            "DepthNormals", "DepthNormalsOnly", "MotionVectors", "Meta", "Universal2D", "SRPDefaultUnlit"
+        };
+
+        /// <summary>Una submalla de gorro del avatar.</summary>
+        public struct HatPart
+        {
+            public SkinnedMeshRenderer Renderer;
+            public int SubMesh;
+        }
+
+        /// <summary>La submalla de la gorra oficial y su material de verdad mientras está escondida.</summary>
+        private struct HiddenPart
+        {
+            public SkinnedMeshRenderer Renderer;
+            public int SubMesh;
+            public Material Original;
+            public Material Hidden;
+        }
+
+        /// <summary>Altura de una submalla respecto al hueso de la cabeza.</summary>
+        private struct SubMeshSpan
+        {
+            public HatPart Part;
+            public float Min;
+            public float Max;
+        }
+
+        private struct HairShape
+        {
+            public SkinnedMeshRenderer Renderer;
+            public int Index;
+            public float Original;
+            public float Full;
+        }
 
         /// <summary>Cierto si el gorro está puesto o poniéndose.</summary>
         public bool IsOn
@@ -178,6 +270,7 @@ namespace Sonia
 
         private void OnDestroy()
         {
+            RestoreAvatar();
             if (_root != null)
             {
                 Destroy(_root.gameObject);
@@ -205,10 +298,17 @@ namespace Sonia
             }
         }
 
+        /// <summary>La hélice gira más deprisa unos segundos (al acertar, al ganar).</summary>
+        public void SpinBoost(float seconds = 2.5f)
+        {
+            _spinBoostUntil = Time.time + Mathf.Max(0f, seconds);
+        }
+
         private void HandleAvatarChanged(Transform avatar)
         {
             // Avatar nuevo (el SDK entregó otro o se cambió el aspecto): el gorro
             // pasa a su cabeza y los brazos a sus huesos.
+            RestoreAvatar();
             _head = null;
             if (_wanted || _time > 0f)
             {
@@ -241,6 +341,7 @@ namespace Sonia
 
             if (!visible)
             {
+                ApplyAvatarIntegration(0f);
                 return;
             }
 
@@ -268,8 +369,27 @@ namespace Sonia
             float squash = press > 0f && press < 1f ? 1f - (0.12f * Mathf.Sin(press * Mathf.PI)) : 1f;
             float parent = transform.lossyScale.y > 0.0001f ? transform.lossyScale.y : 1f;
             _root.SetPositionAndRotation(position, rotation);
-            _root.localScale = new Vector3(scale / squash, scale * squash, scale / squash) * (_avatar.lossyScale.y / parent);
-            _cone.localRotation = Quaternion.Euler(0f, 0f, _sway + (Mathf.Sin(_clock * 1.7f) * 0.6f));
+            float size = ModelSize();
+            _root.localScale = new Vector3(scale / squash, scale * squash, scale / squash) * (size / parent);
+            Transform swayed = _rig != null ? _model : _cone;
+            if (swayed != null)
+            {
+                // El gorro medido va rígido con la cabeza como una prenda de Genies:
+                // solo se bambolea mientras viaja entre las manos.
+                float loose = _rig != null && _rig.fitted ? 1f - press : 1f;
+                swayed.localRotation = Quaternion.Euler(0f, 0f, (_sway + (Mathf.Sin(_clock * 1.7f) * 0.6f)) * loose);
+            }
+
+            if (_rig != null && _rig.propeller != null)
+            {
+                float boost = Time.time < _spinBoostUntil ? 2.2f : 1f;
+                _spin = Mathf.Repeat(_spin + (propellerSpeed * boost * dt), 360f);
+                // El eje está en el espacio de la propia hélice: el giro va después del reposo.
+                _rig.propeller.localRotation = _propellerRest * Quaternion.AngleAxis(_spin, _rig.propellerAxis);
+            }
+
+            // Ya en la cabeza: fuera la gorra oficial y el pelo con la forma de bajo el gorro.
+            ApplyAvatarIntegration(Mathf.InverseLerp(CarryEnd - 0.05f, CarryEnd, t));
 
             if (!useHands)
             {
@@ -287,7 +407,8 @@ namespace Sonia
 
             Vector3 up = rotation * Vector3.up;
             Vector3 across = rotation * Vector3.right;
-            float rim = (radius * scale) + gripGap;
+            float halfWidth = _rig != null ? _rig.openingWidth * 0.5f * size : radius * size;
+            float rim = (halfWidth * scale) + gripGap;
             Vector3 brim = position + (up * 0.015f);
             _right.Hold(brim + (across * rim), -across, up, _avatar, weight, fingerCurl);
             _left.Hold(brim - (across * rim), across, up, _avatar, weight, fingerCurl);
@@ -318,6 +439,7 @@ namespace Sonia
                 _lastHeadPosition = _head.position;
                 _right.Bind(animator);
                 _left.Bind(animator);
+                FindAvatarParts();
             }
 
             Build();
@@ -334,13 +456,283 @@ namespace Sonia
 
             Vector3 right = Vector3.Cross(up, fwd);
             float s = 1f / Mathf.Max(0.0001f, _head.lossyScale.y);
-            _headLocalPosition = ((up * height) + (fwd * forward) + (right * side)) * s;
-            _headLocalRotation = Quaternion.LookRotation(fwd, up) * Quaternion.Euler(pitch, 0f, -tilt);
+            Quaternion basis = Quaternion.LookRotation(fwd, up);
+            if (_rig != null && _rig.fitted)
+            {
+                // Medido con la gorra oficial, que va pegada al hueso de la cabeza.
+                _headLocalPosition = _rig.headPosition;
+                _headLocalRotation = _rig.headRotation;
+            }
+            else if (_rig != null)
+            {
+                _headLocalPosition = ((right * fitOffset.x) + (up * fitOffset.y) + (fwd * fitOffset.z)) * s;
+                _headLocalRotation = basis * Quaternion.Euler(fitEuler);
+            }
+            else
+            {
+                _headLocalPosition = ((up * height) + (fwd * forward) + (right * side)) * s;
+                _headLocalRotation = basis * Quaternion.Euler(pitch, 0f, -tilt);
+            }
+        }
+
+        /// <summary>Escala en el mundo del gorro (el modelo está a tamaño real; el procedural, en metros del avatar).</summary>
+        private float ModelSize()
+        {
+            if (_rig != null && _rig.fitted)
+            {
+                return _rig.headScale * _head.lossyScale.y;
+            }
+
+            return (_rig != null ? fitScale : 1f) * _avatar.lossyScale.y;
+        }
+
+        /// <summary>
+        /// Submallas de gorro del avatar. Genies (NAF) junta cuerpo, pelo, ropa y
+        /// gorro en un solo renderer, con una submalla por material: el gorro es la
+        /// ropa (no la piel, el pelo, los ojos ni las cejas, que llevan los shaders
+        /// «Mega» de Genies) que queda entera por encima del hueso de la cabeza y
+        /// sube más allá de la coronilla (las gafas y los pendientes no llegan). Mira
+        /// la pose de ahora (BakeMesh): se llama una vez, al enganchar el avatar.
+        /// </summary>
+        public static void FindHatParts(Transform avatar, Transform head, System.Collections.Generic.List<HatPart> parts)
+        {
+            parts.Clear();
+            if (avatar == null || head == null)
+            {
+                return;
+            }
+
+            float unit = Mathf.Max(0.0001f, head.lossyScale.y);
+            Vector3 up = avatar.up;
+            float scalp = float.NegativeInfinity;
+            var gear = new System.Collections.Generic.List<SubMeshSpan>();
+            Mesh baked = new Mesh();
+            foreach (SkinnedMeshRenderer renderer in avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                Mesh mesh = renderer.sharedMesh;
+                if (mesh == null || !mesh.isReadable)
+                {
+                    continue;
+                }
+
+                Material[] materials = renderer.sharedMaterials;
+                renderer.BakeMesh(baked, true);
+                Vector3[] vertices = baked.vertices;
+                Matrix4x4 toWorld = renderer.transform.localToWorldMatrix;
+                for (int s = 0; s < mesh.subMeshCount; s++)
+                {
+                    Material material = s < materials.Length ? materials[s] : null;
+                    string shader = material != null && material.shader != null ? material.shader.name : string.Empty;
+                    float min = float.PositiveInfinity;
+                    float max = float.NegativeInfinity;
+                    foreach (int index in mesh.GetIndices(s))
+                    {
+                        float h = Vector3.Dot(toWorld.MultiplyPoint3x4(vertices[index]) - head.position, up) / unit;
+                        min = Mathf.Min(min, h);
+                        max = Mathf.Max(max, h);
+                    }
+
+                    if (max < min)
+                    {
+                        continue;
+                    }
+
+                    if (shader.IndexOf("MegaSkin", System.StringComparison.Ordinal) >= 0)
+                    {
+                        scalp = Mathf.Max(scalp, max);
+                    }
+                    else if (!shader.StartsWith("Shader Graphs/Mega", System.StringComparison.Ordinal))
+                    {
+                        gear.Add(new SubMeshSpan { Part = new HatPart { Renderer = renderer, SubMesh = s }, Min = min, Max = max });
+                    }
+                }
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(baked);
+            }
+            else
+            {
+                DestroyImmediate(baked);
+            }
+
+            // Sin piel de Genies (el doble del editor): la coronilla, más o menos.
+            if (float.IsNegativeInfinity(scalp))
+            {
+                scalp = 0.22f;
+            }
+
+            foreach (SubMeshSpan span in gear)
+            {
+                if (span.Min > -0.01f && span.Max > scalp - 0.03f)
+                {
+                    parts.Add(span.Part);
+                }
+            }
+        }
+
+        /// <summary>La gorra oficial (para esconderla) y los blendshapes de pelo bajo gorro del avatar.</summary>
+        private void FindAvatarParts()
+        {
+            RestoreAvatar();
+            if (hideOfficialHat)
+            {
+                var parts = new System.Collections.Generic.List<HatPart>();
+                FindHatParts(_avatar, _head, parts);
+                foreach (HatPart part in parts)
+                {
+                    _officialHat.Add(new HiddenPart { Renderer = part.Renderer, SubMesh = part.SubMesh });
+                    Debug.Log("[Sonia] Gorro de la trivia: mientras lo lleve se esconde la gorra oficial (" + part.Renderer.name + ", submalla " + part.SubMesh + ").");
+                }
+            }
+
+            foreach (SkinnedMeshRenderer skinned in _avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                Mesh mesh = skinned.sharedMesh;
+                if (mesh == null || string.IsNullOrEmpty(hatHairBlendShape))
+                {
+                    continue;
+                }
+
+                for (int i = 0; i < mesh.blendShapeCount; i++)
+                {
+                    // Solo las formas de bajo el gorro (hair_geo_blendShape.clip_0001_hatA...),
+                    // no el reajuste al cuerpo (hair_geo_blendShape.refitting_female).
+                    string shapeName = mesh.GetBlendShapeName(i);
+                    int key = shapeName.IndexOf(hatHairBlendShape, System.StringComparison.Ordinal);
+                    if (key >= 0 && shapeName.IndexOf("hat", key + hatHairBlendShape.Length, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        // El peso «del todo» es el del último fotograma (100 en Unity, pero no siempre).
+                        int frames = mesh.GetBlendShapeFrameCount(i);
+                        float full = frames > 0 ? mesh.GetBlendShapeFrameWeight(i, frames - 1) : 100f;
+                        _hairShapes.Add(new HairShape { Renderer = skinned, Index = i, Original = skinned.GetBlendShapeWeight(i), Full = full });
+                    }
+                }
+            }
+
+            _hairWeight = -1f;
+        }
+
+        /// <summary>
+        /// Con el gorro en la cabeza (<paramref name="onHead"/> de 0 a 1): la gorra
+        /// oficial se esconde y el pelo toma la forma de bajo el gorro, como hace
+        /// Genies con sus gorros. Con 0 todo vuelve a como estaba.
+        /// </summary>
+        private void ApplyAvatarIntegration(float onHead)
+        {
+            bool hide = onHead > 0.5f;
+            // Con el gorro puesto se mira cada frame: Genies puede cambiar los materiales.
+            if (hide || hide != _officialHidden)
+            {
+                _officialHidden = hide;
+                for (int i = 0; i < _officialHat.Count; i++)
+                {
+                    _officialHat[i] = SetHidden(_officialHat[i], hide);
+                }
+            }
+
+            if (Mathf.Approximately(onHead, _hairWeight))
+            {
+                return;
+            }
+
+            _hairWeight = onHead;
+            foreach (HairShape shape in _hairShapes)
+            {
+                if (shape.Renderer != null)
+                {
+                    shape.Renderer.SetBlendShapeWeight(shape.Index, Mathf.Lerp(shape.Original, Mathf.Max(shape.Original, shape.Full), onHead));
+                }
+            }
+        }
+
+        /// <summary>Pone o quita el material invisible en la submalla de la gorra oficial.</summary>
+        private HiddenPart SetHidden(HiddenPart part, bool hide)
+        {
+            if (part.Renderer == null)
+            {
+                return part;
+            }
+
+            part.Renderer.GetSharedMaterials(_slots);
+            if (part.SubMesh >= _slots.Count)
+            {
+                return part;
+            }
+
+            Material current = _slots[part.SubMesh];
+            if (hide)
+            {
+                if (current == null || current == part.Hidden)
+                {
+                    return part;
+                }
+
+                // El material de la gorra (o el nuevo, si Genies lo ha cambiado).
+                part.Original = current;
+                if (part.Hidden != null)
+                {
+                    Destroy(part.Hidden);
+                }
+
+                part.Hidden = new Material(current);
+                part.Hidden.name = current.name + " (escondida por la trivia)";
+                foreach (string pass in RenderPasses)
+                {
+                    part.Hidden.SetShaderPassEnabled(pass, false);
+                }
+
+                _slots[part.SubMesh] = part.Hidden;
+            }
+            else
+            {
+                if (current != part.Hidden || part.Original == null)
+                {
+                    return part;
+                }
+
+                _slots[part.SubMesh] = part.Original;
+            }
+
+            part.Renderer.sharedMaterials = _slots.ToArray();
+            return part;
+        }
+
+        /// <summary>Deja la gorra oficial y el pelo como estaban (cambio de avatar, destrucción).</summary>
+        private void RestoreAvatar()
+        {
+            for (int i = 0; i < _officialHat.Count; i++)
+            {
+                HiddenPart part = SetHidden(_officialHat[i], false);
+                if (part.Hidden != null)
+                {
+                    Destroy(part.Hidden);
+                }
+            }
+
+            foreach (HairShape shape in _hairShapes)
+            {
+                if (shape.Renderer != null)
+                {
+                    shape.Renderer.SetBlendShapeWeight(shape.Index, shape.Original);
+                }
+            }
+
+            _officialHidden = false;
+            _hairWeight = -1f;
+            _officialHat.Clear();
+            _hairShapes.Clear();
         }
 
         private void Build()
         {
             if (_root != null)
+            {
+                return;
+            }
+
+            if (BuildModel())
             {
                 return;
             }
@@ -387,6 +779,37 @@ namespace Sonia
             }
 
             root.SetActive(false);
+        }
+
+        /// <summary>El gorro del prefab de Resources, si está. Falso: se usa el procedural.</summary>
+        private bool BuildModel()
+        {
+            GameObject prefab = string.IsNullOrEmpty(capResource) ? null : Resources.Load<GameObject>(capResource);
+            if (prefab == null)
+            {
+                return false;
+            }
+
+            GameObject root = new GameObject("TriviaHat");
+            _root = root.transform;
+            _root.SetParent(transform, false);
+            GameObject model = Instantiate(prefab, _root, false);
+            model.name = prefab.name;
+            _model = model.transform;
+            _rig = model.GetComponent<TriviaCapRig>();
+            if (_rig == null)
+            {
+                _rig = model.AddComponent<TriviaCapRig>();
+            }
+
+            if (_rig.propeller != null)
+            {
+                _propellerRest = _rig.propeller.localRotation;
+            }
+
+            _renderers = root.GetComponentsInChildren<Renderer>(true);
+            root.SetActive(false);
+            return true;
         }
 
         // ------------------------------------------------------------------

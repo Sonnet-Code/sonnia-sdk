@@ -1,6 +1,6 @@
 # Modo trivia
 
-Sonia hace una trivia de preguntas sobre el DevFest, el GDG, la biblioteca, Sonnet Code y tecnología. Por defecto son 5 preguntas de tres opciones (A, B y C), que salen en la pantalla vertical, y se gana con 3 aciertos. Sonia se pone un gorro de fiesta al empezar y se lo quita al terminar.
+Sonia hace una trivia de preguntas sobre el DevFest, el GDG, la biblioteca, Sonnet Code y tecnología. Por defecto son 5 preguntas de tres opciones (A, B y C), que salen en la pantalla vertical, y se gana con 3 aciertos. Sonia se pone la gorra Noogler al empezar y se la quita al terminar.
 
 ## Cómo se lanza
 
@@ -68,9 +68,28 @@ La tarjeta va en la franja alta, la misma del panel de imágenes, y la cámara p
 
 Los clips van en el set con «Sonia > Crear set de animaciones» (`SoniaAnimations.TriviaClips`) y suenan enteros aunque Sonia pase a pensar o a hablar (`AvatarChoreographer.PlayReaction`).
 
-El gorro (`TriviaHat`) es un cono de franjas generado por código. Sonia se lo pone y se lo quita con las dos manos, con IK de brazos. Las prendas del catálogo de Genies se descartaron: equiparlas descarga y reconstruye el avatar en mitad de la partida y ninguna es temática.
+## El gorro Noogler
+
+Sonia se pone la gorra Noogler, la de hélice que Google da a quien acaba de entrar: gajo amarillo delante con «Noogler» bordado en los colores de Google, azul a un lado, rojo al otro y una hélice arriba que gira, y más deprisa al acertar y al ganar. Sonia se la pone y se la quita con las dos manos (IK de brazos en `TriviaHat`), porque Genies no trae ninguna animación de ponerse un gorro.
+
+Va como una prenda oficial de Genies:
+
+- **Sitio y tamaño medidos.** Se encajó (ICP de semejanza) sobre la gorra oficial que llevaba Sonia, `WardrobeGear/recRecBCofFMJ5Hox`, en el espacio del hueso de la cabeza, que es donde va pegada esa gorra: escala 1,26, unos 7° hacia delante y 4,6 mm de error medio entre las dos copas. El resultado (`NooglerCap_fit.json`) lo guarda el prefab en `TriviaCapRig`. Una vez puesta no se bambolea.
+- **Gorra oficial.** Genies (NAF) junta cuerpo, pelo, ropa y gorro en un solo renderer (`Default`) con una submalla por material. Mientras Sonia lleva la Noogler, la submalla de la gorra oficial se apaga con un material sin pasadas de render. `TriviaHat.FindHatParts` la encuentra sola: es la ropa que queda entera por encima del hueso de la cabeza y pasa de la coronilla, así que vale para cualquier gorra.
+- **Pelo.** NAF hornea en la malla la forma del pelo bajo el gorro y no deja cambiarla en tiempo real. Por eso **Sonia tiene que llevar una gorra oficial**: el pelo queda aplastado como bajo ella y la Noogler va justo encima. Sin gorra oficial, el pelo voluminoso puede salirse de la copa. Con avatares que traen el blendshape (`hair_geo_blendShape...hat`, como el doble del editor), `TriviaHat` lo activa.
+
+El modelo es «HAT - Propeller Silly Hat - PBR Game Ready», de Dekogon (Sketchfab), recoloreado en Blender. Para regenerarlo con `scripts/gorro_noogler`, desde la raíz del repo:
+
+1. Descomprimir el zip de Sketchfab en `scripts/gorro_noogler/fuente/`.
+2. `uv run --no-project --with pillow python scripts/gorro_noogler/texto.py`: el texto bordado. Usa la fuente Avenir Next de macOS.
+3. `blender -b --python scripts/gorro_noogler/construir.py`: deja el FBX, las texturas y las medidas en `unity/Assets/Sonia/Trivia/NooglerCap/`, y las vistas previas en `scripts/gorro_noogler/trabajo/`.
+4. Solo si cambia la cabeza de Sonia: en Play y con una gorra oficial puesta, **Sonia > Medir gorra oficial (gorro Noogler)**; después, `uv run --no-project --with numpy --with scipy --with matplotlib python scripts/gorro_noogler/encajar.py`, y revisar `trabajo/gorra_oficial_encaje.png`. `prueba_encaje.py` comprueba el ajuste con una gorra sintética.
+5. Fuera de Play, **Sonia > Crear gorro Noogler** monta el prefab en `Assets/Sonia/Trivia/Resources/Trivia/NooglerCap.prefab`.
+
+Sin el prefab, `TriviaHat` vuelve al gorro de fiesta de franjas generado por código. Las prendas del catálogo de Genies se descartaron para la trivia: equiparlas descarga y reconstruye el avatar en mitad de la partida.
 
 ## Pendiente
 
+- El cambio de gorra al ponérsela y quitársela: durante 2 o 3 frames se ven las dos a la vez.
 - Retoques visuales: tamaños, colores, la pantalla de derrota y el encuadre fino.
 - Probarlo con la API real: cómo pasa el backend el guion `PARA SONIA:` y lo que tarda la delegación de `trivia_answer`. Las pruebas automáticas usan un GPT-Live falso.

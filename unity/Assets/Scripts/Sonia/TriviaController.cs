@@ -529,6 +529,11 @@ namespace Sonia
             if (message.IsCorrect)
             {
                 SetBanner("¡Correcto!", Green);
+                if (_hat != null)
+                {
+                    _hat.SpinBoost();
+                }
+
                 Vector2 at = EffectsPoint(_options[correct].Row);
                 Burst(at, 90, 1300f);
                 Sparkles(at, 10);
@@ -568,6 +573,11 @@ namespace Sonia
             _endAt = _clock + endScreenSeconds;
             if (message.Won)
             {
+                if (_hat != null)
+                {
+                    _hat.SpinBoost(6f);
+                }
+
                 PlayClip(winClip, null);
                 ShowEmotion(FacialExpressionController.Emotion.Joy, 5f);
                 _rainUntil = _clock + 5.5f;

@@ -57,3 +57,6 @@ unity/Assets/_Recovery.meta
 unity/mono_crash.*
 # Variables de cada equipo que escribe el backoffice (sonia/paths.py)
 overrides.env
+# Gorro Noogler de la trivia: el zip de Sketchfab descomprimido y los intermedios
+scripts/gorro_noogler/fuente/
+scripts/gorro_noogler/trabajo/

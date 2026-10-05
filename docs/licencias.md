@@ -14,6 +14,7 @@ distribuyen con el proyecto. Ver también las
 | uLipSync | hecomi | MIT | https://github.com/hecomi/uLipSync | Lip-sync por fonemas en tiempo real en Unity |
 | Modelo/avatar 3D | _pendiente_ | _pendiente_ | _pendiente_ | Personaje de Sonia en Unity |
 | Animaciones del avatar | _pendiente_ | _pendiente_ | _pendiente_ | Animaciones de escucha, pensamiento y habla |
+| Gorra con hélice «HAT - Propeller Silly Hat - PBR Game Ready» | Dekogon | _por confirmar_ (Sketchfab) | https://sketchfab.com/3d-models/hat-propeller-silly-hat-pbr-game-ready-7640ad5df75841999065a474f83b76f2 | Gorro Noogler de la trivia (recoloreado y con el texto «Noogler»; `scripts/gorro_noogler`) |
 | Imágenes de la galería (`assets/gallery`) | _pendiente_ | _pendiente_ | _pendiente_ | Panel de imágenes que Sonia muestra con `show_image` |
 
 Al añadir una fila nueva: nombre del asset, autor u organización que lo
