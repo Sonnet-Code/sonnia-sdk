@@ -157,7 +157,21 @@ Sonia no tiene por qué correr en el Mac donde se desarrolla. El equipo del stan
 - Conectar por cable lo que se pueda (pantalla, cámara, micrófono, altavoz y **red**). Sonia necesita internet para conversar: sin red, el plan B es pasarla a "Solo saludos" desde el panel local de ese equipo (`http://127.0.0.1:8780`), que funciona con frases ya grabadas.
 - Nada de carteles de "todo corre en local": Sonia usa GPT-Live de OpenAI en la nube, y si le preguntan lo dice.
 
-### Instalar Sonia en el equipo del stand
+### Instalar Sonia con la app todo en uno (recomendado)
+
+La app de Unity lleva dentro el orquestador, el `.env` y las frases grabadas: en el equipo del stand no hacen falta Python, `uv` ni el repo, y un doble clic arranca a Sonia entera.
+
+1. Prepararla en un equipo con el repo **del mismo sistema** que el del stand (la app de macOS sale en un Mac y la de Windows en Windows, con el módulo de Windows e IL2CPP de Unity y las herramientas de C++ de Visual Studio), con el `.env` que tendrá el stand (`OPENAI_API_KEY`, `PANEL_CLOUD_TOKEN`):
+   1. `scripts/build_orquestador.sh` (en Windows, desde Git Bash). Congela el orquestador y mete las frases de `cache/voice` de ese equipo, si las hay.
+   2. En Unity, **Sonia > Build macOS** o **Sonia > Build Windows**. La app sale en `unity/Build/macOS/Sonia.app` o en `unity/Build/Windows/` (la carpeta entera: `Sonia.exe`, `Sonia_Data`...). Si el orquestador congelado es anterior al último cambio de `server/` o `assets/`, la build lo avisa en la consola: hay que volver a congelarlo.
+2. Copiar la app al equipo del stand, nunca por git: lleva la clave dentro. Que sea a una carpeta propia en la que se pueda escribir (por ejemplo `~/Sonia/` o `C:\Sonia\`), porque Genies guarda al lado de la app su caché de piezas del avatar (`cache/`, unos 90 MB tras el primer arranque con red). En macOS, si se copia desde otro Mac, la primera vez hay que abrirla con clic derecho > Abrir (está firmada solo en local).
+3. Lo de cada equipo va en `SONIA_HOME` (`~/Library/Application Support/Sonia` en macOS, `%APPDATA%\Sonia` en Windows): caché, estado del panel, registros y `overrides.env`, que manda sobre el `.env` de la app. Ahí van los ajustes de ese equipo, por ejemplo `PANEL_INSTANCE_NAME=Mini PC del stand` o `AUDIO_INPUT_DEVICE`.
+4. Abrir la app. La primera vez el sistema pide permiso de micrófono y cámara para Sonia: hay que aceptarlo (en macOS se cambia en Ajustes > Privacidad y seguridad). No pide la contraseña del llavero: la app no guarda nada en él. La app lanza su orquestador si nadie escucha ya en el puerto 8765, copia a `SONIA_HOME` las frases grabadas que traiga y se conecta al panel.
+5. Comprobar en `https://sonia.sonnetcode.com` (o en el panel local, `http://127.0.0.1:8780`) que sale esta Sonia y solo esta, y que micrófono, cámara y pantalla están bien.
+6. Arranque automático al encender: en macOS, añadir la app en Ajustes > General > Ítems de inicio; en Windows, un acceso directo a `Sonia.exe` en la carpeta de inicio (`Win+R`, `shell:startup`). Si el orquestador se cae, la app lo relanza sola; si se cae la app, hay que volver a abrirla.
+7. Registros para revisar lo que pasó: `SONIA_HOME/logs/orquestador-*.log` (los diez últimos arranques, con cada frase del visitante y de Sonia, las acciones y lo que contestó el backend) y el `Player.log` de Unity (`~/Library/Logs/DefaultCompany/sonia/` en macOS, `%USERPROFILE%\AppData\LocalLow\DefaultCompany\sonia\` en Windows).
+
+### Instalar Sonia desde el repositorio
 
 1. Python 3.12 con `uv` y la build de Unity para ese sistema (`docs/unity.md`; la de macOS está en `unity/Build/macOS/Sonia.app`, la de Windows hay que compilarla).
 2. Clonar el repo (privado, org Sonnet-Code) y, desde `server/`: `uv sync --extra audio --extra camera --extra panel`.
