@@ -3,11 +3,13 @@
 // Una cara que solo mueve la boca parece un muñeco. Sobre los blendshapes ARKit
 // del avatar se compone, cada frame:
 //
-//  - Un gesto de base por estado: en reposo una sonrisa amable; escuchando,
-//    cejas algo arriba y sonrisa abierta (interés); pensando, una ceja arriba y
-//    la otra abajo, los labios apretados y llevados a un lado ("mmm"); hablando,
-//    una sonrisa de conversación.
-//  - La voz: las sílabas tónicas levantan las cejas y abren un poco los ojos, el
+//  - Una sonrisa de base constante, como la emoción "Happy" que Mia lleva
+//    siempre puesta (docs/informe-mia.md), y encima un gesto por estado:
+//    escuchando, cejas algo arriba y sonrisa abierta (interés); pensando, una
+//    ceja arriba y la otra abajo, los labios apretados y llevados a un lado
+//    ("mmm", con media sonrisa de base); hablando, sonrisa de conversación.
+//  - La voz: en los acentos (AvatarStateController.OnEmphasis, el mismo instante
+//    que la cascada del cuerpo) suben las cejas y se abren un poco los ojos; el
 //    arranque de cada frase hace un "flash" de cejas y el final, una sonrisa que
 //    sube y baja. Los eventos llegan del analizador de voz de LipSyncController
 //    un poco antes de su sílaba, como en una persona.
@@ -102,6 +104,18 @@ namespace Sonia
         private LipSyncController lipSync;
 
         [Header("Sonrisa de base (0..1)")]
+        [Range(0f, 1f)]
+        [Tooltip("Sonrisa constante en todos los estados, como la emoción \"Happy\" de Mia (LIP_CORNER_PULLER 0,52). Amable, no forzada; con la boca redonda baja sola para no estorbar al lip-sync.")]
+        public float baseSmile = 0.35f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Parte de la sonrisa de base que queda al pensar (el \"mmm\" aprieta los labios).")]
+        public float baseSmileWhileThinking = 0.5f;
+
+        [Range(0f, 0.5f)]
+        [Tooltip("Cejas algo arriba de base, amables (Mia: INNER_BROW_RAISER 0,26 con su sonrisa).")]
+        public float baseBrows = 0.08f;
+
         [Range(0f, 1f)] public float restSmile = 0.3f;
         [Range(0f, 1f)] public float listenSmile = 0.4f;
         [Range(0f, 1f)] public float thinkSmile = 0.08f;
@@ -109,15 +123,15 @@ namespace Sonia
 
         [Header("Voz")]
         [Range(0f, 1f)]
-        [Tooltip("Cejas en una sílaba tónica.")]
+        [Tooltip("Cejas en un acento de la voz (o en una sílaba tónica, sin AvatarStateController).")]
         public float stressBrows = 0.5f;
 
         [Range(0f, 1f)]
-        [Tooltip("Probabilidad de que una sílaba tónica levante las cejas (no todas lo hacen).")]
+        [Tooltip("Probabilidad de que una sílaba tónica levante las cejas, solo sin AvatarStateController (con él, van con cada acento de cuerpo).")]
         public float stressBrowChance = 0.55f;
 
         [Range(0f, 1f)]
-        [Tooltip("Fuerza mínima (0..1) para que una sílaba cuente como tónica.")]
+        [Tooltip("Fuerza mínima (0..1) para que una sílaba cuente como tónica, solo sin AvatarStateController.")]
         public float stressThreshold = 0.82f;
 
         [Range(0f, 1f)]
@@ -162,6 +176,7 @@ namespace Sonia
         private readonly List<Gesture> _gestures = new List<Gesture>();
         private bool _ready;
         private bool _subscribed;
+        private bool _emphasisLinked;
         private float _seed;
         private float _nextMicro;
         private float _lastStressBrow = -10f;
@@ -215,6 +230,12 @@ namespace Sonia
                 _subscribed = true;
             }
 
+            if (stateController != null && !_emphasisLinked)
+            {
+                stateController.OnEmphasis += HandleEmphasis;
+                _emphasisLinked = true;
+            }
+
             if (faceRig != null)
             {
                 faceRig.Rebuilt -= Bind;
@@ -228,6 +249,12 @@ namespace Sonia
             {
                 lipSync.OnSpeechEvent -= HandleSpeechEvent;
                 _subscribed = false;
+            }
+
+            if (stateController != null && _emphasisLinked)
+            {
+                stateController.OnEmphasis -= HandleEmphasis;
+                _emphasisLinked = false;
             }
 
             if (faceRig != null)
@@ -271,7 +298,9 @@ namespace Sonia
                     AddGesture(GSmilePulse, 1.3f, 0.35f, phraseEndSmile * Random.Range(0.7f, 1.2f));
                     break;
                 case SpeechAnalyzer.EventKind.Syllable:
-                    if (e.Strength >= stressThreshold && now - _lastStressBrow > 0.7f && Random.value < stressBrowChance)
+                    // Con AvatarStateController las cejas van con sus acentos (HandleEmphasis).
+                    if (!_emphasisLinked && e.Strength >= stressThreshold && now - _lastStressBrow > 0.7f
+                        && Random.value < stressBrowChance)
                     {
                         _lastStressBrow = now;
                         float strength = Mathf.InverseLerp(stressThreshold, 1f, e.Strength);
@@ -280,6 +309,13 @@ namespace Sonia
 
                     break;
             }
+        }
+
+        /// <summary>Acento de la voz (cascada de cuerpo en AvatarStateController): cejas arriba en el mismo instante.</summary>
+        private void HandleEmphasis(float strength)
+        {
+            _lastStressBrow = Time.time;
+            AddGesture(GBrowEmphasis, Random.Range(0.35f, 0.55f), 0.3f, stressBrows * Mathf.Lerp(0.6f, 1f, Mathf.Clamp01(strength)));
         }
 
         private void AddGesture(int kind, float duration, float peak, float gain)
@@ -406,6 +442,14 @@ namespace Sonia
             if (state == AvatarState.Idle && talking > 0f)
             {
                 smile = Mathf.Max(smile, talkSmile);
+            }
+
+            // Sonrisa de base constante (media al pensar) y cejas amables.
+            float floor = state == AvatarState.Thinking ? baseSmile * baseSmileWhileThinking : baseSmile;
+            smile = Mathf.Max(smile, floor);
+            if (state != AvatarState.Thinking)
+            {
+                Set(Ch.BrowInnerUp, baseBrows);
             }
 
             smile = Mathf.Clamp01(smile + w2);

@@ -5,14 +5,19 @@
 // thinking, speaking) y las señales de cada frase, y reproduce clips a través
 // de MotionPlayer con fundidos elegidos caso por caso:
 //
-//   idle       bucle base + variaciones de reposo cada pocos segundos + gestos
-//              de atención (bailes, cuarta pared) con el ritmo de siempre
-//   listening  bucle de escucha + asentimientos en la capa de torso
-//   thinking   bucle de pensar + variaciones
-//   speaking   clips de gesticulación encadenados sin bucle: cada uno termina
-//              limpio y el siguiente entra fundido; una frase nueva cambia de
-//              clip solo si el actual ya va avanzado
+//   idle       bucle base; con el stand en calma (sin conversación desde hace
+//              attentionQuietDelay) gestos de atención (bailes, cuarta pared)
+//              espaciados 15 ± 5 s, como el aburrimiento de Genies
+//   listening, thinking, speaking
+//              con singleConversationLoop (por defecto), un solo reposo largo:
+//              el mismo bucle de idle, sin reiniciarlo ni cambiar de clip entre
+//              estados y sin variaciones ni gestos, como Mia. Apagado, cada
+//              estado lleva su bucle, asentimientos, variaciones de pensar y
+//              clips de gesticulación encadenados
 //   greeting   saludo con la mano; se deja terminar salvo que toque hablar
+//
+// Los gestos entran y salen en gestureFade (0,8 s) y MotionPlayer los funde con
+// curva suave, como Genies.
 //
 // Mientras Sonia sale o entra caminando (modo "Fuera", PresenceController) el
 // coreógrafo queda suspendido: apunta el estado que le llega pero no lanza
@@ -60,33 +65,36 @@ namespace Sonia
         private float talkingChainFade = 0.5f;
 
         [SerializeField]
-        [Tooltip("Entrada y salida de las variaciones de reposo y de pensar.")]
-        private float variationFade = 0.6f;
+        [Range(0.1f, 2f)]
+        [Tooltip("Entrada y salida de los gestos (atención, saludo y variaciones), con la curva suave de MotionPlayer. Genies usa 0,8 s.")]
+        private float gestureFade = 0.8f;
 
         [SerializeField]
-        [Tooltip("Entrada de un gesto de atención (baile, cuarta pared).")]
-        private float attentionFadeIn = 0.4f;
-
-        [SerializeField]
-        [Tooltip("Vuelta al reposo después de un gesto de atención o un saludo.")]
-        private float attentionFadeOut = 0.7f;
+        [Range(0.1f, 1.5f)]
+        [Tooltip("Entrada y salida del gesto de presentar una imagen (brazo derecho).")]
+        private float presentFade = 0.5f;
 
         [SerializeField]
         [Tooltip("Asentimientos en la capa de torso.")]
         private float nodFade = 0.3f;
 
+        [Header("Conversación")]
+        [SerializeField]
+        [Tooltip("En conversación (escuchar, pensar, hablar) suena un solo reposo largo, el de idle, sin cambiar de clip entre estados y sin variaciones, asentimientos ni gestos de hablar, como Mia. Apagado: cada estado con su bucle y sus variaciones.")]
+        private bool singleConversationLoop = true;
+
         [Header("Reposo")]
         [SerializeField]
-        [Tooltip("Segundos mínimo y máximo entre variaciones de reposo.")]
+        [Tooltip("Segundos mínimo y máximo entre variaciones de reposo (solo con el stand en calma).")]
         private Vector2 idleVariationInterval = new Vector2(7f, 16f);
 
         [SerializeField]
-        [Tooltip("Segundos hasta el primer gesto de atención al entrar en idle.")]
-        private float firstAttentionDelay = 6f;
+        [Tooltip("Segundos en idle sin conversación antes del primer gesto de atención: con alguien delante (entre turnos el estado también es idle) no se baila.")]
+        private float attentionQuietDelay = 25f;
 
         [SerializeField]
-        [Tooltip("Segundos mínimo y máximo entre gestos de atención.")]
-        private Vector2 attentionInterval = new Vector2(12f, 30f);
+        [Tooltip("Segundos mínimo y máximo entre gestos de atención con el stand en calma (15 ± 5, como el aburrimiento de Genies).")]
+        private Vector2 attentionSpacing = new Vector2(10f, 20f);
 
         [SerializeField]
         [Range(0f, 1f)]
@@ -157,6 +165,13 @@ namespace Sonia
         private bool _started;
         private bool _suspended;
 
+        // Segundos en idle desde la última conversación (escuchar, pensar o hablar).
+        private float _quietSeconds;
+        private bool _quietArmed;
+
+        // Velocidad de los bucles base (ajuste «Movimiento en reposo»).
+        private float _loopSpeed = 1f;
+
         /// <summary>Estado que se le ha comunicado al coreógrafo.</summary>
         public AvatarState State
         {
@@ -201,6 +216,25 @@ namespace Sonia
             get { return _suspended; }
         }
 
+        /// <summary>Segundos en idle desde la última conversación: con poco, alguien sigue delante.</summary>
+        public float QuietSeconds
+        {
+            get { return _quietSeconds; }
+        }
+
+        /// <summary>
+        /// Velocidad de los bucles base (1 = la del clip). Más lenta, el traspaso
+        /// de peso del reposo va más despacio. Lo ajusta «Movimiento en reposo».
+        /// </summary>
+        public void SetLoopSpeed(float speed)
+        {
+            _loopSpeed = Mathf.Clamp(speed, 0.25f, 3f);
+            if (_body != null && _body.IsAlive && _body.Clip != null && _body.Clip.isLooping)
+            {
+                _body.SetSpeed(_loopSpeed);
+            }
+        }
+
         private void Awake()
         {
             if (motionPlayer == null)
@@ -213,7 +247,7 @@ namespace Sonia
         {
             _started = true;
             _variationTimer = Random.Range(idleVariationInterval.x, idleVariationInterval.y);
-            _attentionTimer = firstAttentionDelay;
+            _attentionTimer = RandomSpacing();
             EnterState(_state, stateFade, true);
         }
 
@@ -244,6 +278,12 @@ namespace Sonia
             _state = state;
             _stateSeconds = 0f;
             _speechPaused = false;
+            if (state != AvatarState.Idle)
+            {
+                // Hay conversación: el stand no está en calma.
+                _quietSeconds = 0f;
+                _quietArmed = false;
+            }
 
             // Suspendido (fuera de pantalla o caminando): se apunta el estado y
             // se aplica al devolverle el cuerpo (Resume).
@@ -261,7 +301,7 @@ namespace Sonia
 
             float fade = state == AvatarState.Speaking ? speakFade : stateFade;
             bool cutting = _phase == Phase.Attention || _phase == Phase.Greeting;
-            EnterState(state, cutting ? Mathf.Max(fade, attentionFadeOut * 0.6f) : fade, false);
+            EnterState(state, cutting ? Mathf.Max(fade, gestureFade * 0.6f) : fade, false);
 
             if (previous == AvatarState.Listening && state != AvatarState.Listening && motionPlayer != null)
             {
@@ -321,6 +361,12 @@ namespace Sonia
             _speechPaused = paused;
             if (!Ready || _suspended || _state != AvatarState.Speaking || _phase != Phase.Base)
             {
+                return;
+            }
+
+            if (singleConversationLoop)
+            {
+                // Un solo reposo: la pausa no cambia de clip.
                 return;
             }
 
@@ -386,8 +432,8 @@ namespace Sonia
         {
             _secondsSinceGreeting = 0f;
             _phase = Phase.Greeting;
-            _body = motionPlayer.Play(motionSet.greeting, MotionPlayer.BodyLayer, attentionFadeIn);
-            _attentionTimer = Random.Range(attentionInterval.x, attentionInterval.y);
+            _body = motionPlayer.Play(motionSet.greeting, MotionPlayer.BodyLayer, gestureFade);
+            _attentionTimer = RandomSpacing();
             _variationTimer = Random.Range(idleVariationInterval.x, idleVariationInterval.y);
             Log(why);
         }
@@ -417,7 +463,7 @@ namespace Sonia
             if (motionPlayer != null && motionPlayer.IsReady)
             {
                 motionPlayer.FadeOut(MotionPlayer.UpperLayer, nodFade);
-                motionPlayer.FadeOut(MotionPlayer.RightArmLayer, nodFade);
+                motionPlayer.FadeOut(MotionPlayer.RightArmLayer, presentFade);
             }
 
             Log("coreografía suspendida");
@@ -440,7 +486,7 @@ namespace Sonia
 
             _suspended = false;
             _stateSeconds = 0f;
-            _attentionTimer = firstAttentionDelay;
+            _attentionTimer = RandomSpacing();
             if (!Ready)
             {
                 return;
@@ -473,12 +519,23 @@ namespace Sonia
                 case AvatarState.Idle:
                     return motionSet.idleLoop;
                 case AvatarState.Listening:
-                    return motionSet.listeningLoop;
+                    return ConversationLoop(motionSet.listeningLoop);
                 case AvatarState.Thinking:
-                    return motionSet.thinkingLoop;
+                    return ConversationLoop(motionSet.thinkingLoop);
                 default:
-                    return null;
+                    return singleConversationLoop ? motionSet.idleLoop : null;
             }
+        }
+
+        /// <summary>Bucle de un estado de conversación: el reposo de idle con un solo reposo largo, si no el suyo.</summary>
+        private AnimationClip ConversationLoop(AnimationClip own)
+        {
+            if (singleConversationLoop || own == null)
+            {
+                return motionSet.idleLoop;
+            }
+
+            return own;
         }
 
         /// <summary>
@@ -499,7 +556,7 @@ namespace Sonia
             // Solo el brazo derecho: el torso, la cabeza y el otro brazo siguen el
             // bucle base del estado, que además se queda sin variaciones ni
             // gestos mientras dure la presentación (ver UpdateIdle/UpdateSpeaking).
-            _present = motionPlayer.Play(motionSet.present, MotionPlayer.RightArmLayer, nodFade);
+            _present = motionPlayer.Play(motionSet.present, MotionPlayer.RightArmLayer, presentFade);
             if (_phase != Phase.Base && _phase != Phase.Greeting)
             {
                 // Una variación o un gesto de atención a medias se corta: el cuerpo
@@ -583,9 +640,9 @@ namespace Sonia
 
             if (_presentReleasing)
             {
-                if (_present.Remaining <= nodFade)
+                if (_present.Remaining <= presentFade)
                 {
-                    motionPlayer.FadeOut(MotionPlayer.RightArmLayer, nodFade);
+                    motionPlayer.FadeOut(MotionPlayer.RightArmLayer, presentFade);
                     _present = null;
                     _presentReleasing = false;
                 }
@@ -629,7 +686,7 @@ namespace Sonia
             bool attentionLike = System.Array.Exists(
                 motionSet.attention, m => m != null && m.clip == clip) || clip == motionSet.greeting;
             _phase = attentionLike ? Phase.Attention : Phase.Variation;
-            _body = motionPlayer.Play(clip, MotionPlayer.BodyLayer, attentionLike ? attentionFadeIn : variationFade);
+            _body = motionPlayer.Play(clip, MotionPlayer.BodyLayer, gestureFade);
             Log("previsualización: " + clip.name);
         }
 
@@ -719,8 +776,8 @@ namespace Sonia
 
             _phase = Phase.Attention;
             _lastAttention = index;
-            _body = motionPlayer.Play(motion.clip, MotionPlayer.BodyLayer, attentionFadeIn);
-            _attentionTimer = Random.Range(attentionInterval.x, attentionInterval.y);
+            _body = motionPlayer.Play(motion.clip, MotionPlayer.BodyLayer, gestureFade);
+            _attentionTimer = RandomSpacing();
             _variationTimer = Random.Range(idleVariationInterval.x, idleVariationInterval.y);
             Log("atención " + motion.category + ": " + motion.clip.name);
         }
@@ -734,6 +791,10 @@ namespace Sonia
             float dt = Time.deltaTime;
             _stateSeconds = Mathf.Min(MaxTrackedSeconds, _stateSeconds + dt);
             _secondsSinceGreeting = Mathf.Min(MaxTrackedSeconds, _secondsSinceGreeting + dt);
+            if (_state == AvatarState.Idle)
+            {
+                _quietSeconds = Mathf.Min(MaxTrackedSeconds, _quietSeconds + dt);
+            }
 
             if (!Ready || _suspended)
             {
@@ -772,7 +833,7 @@ namespace Sonia
 
         private float FadeForReturn()
         {
-            return _phase == Phase.Variation ? variationFade : attentionFadeOut;
+            return gestureFade;
         }
 
         private void EndOneShot()
@@ -781,10 +842,15 @@ namespace Sonia
             _phase = Phase.Base;
             if (wasWide)
             {
-                _wideUntil = Time.time + attentionFadeOut;
+                _wideUntil = Time.time + gestureFade;
             }
 
-            EnterState(_state, wasWide ? attentionFadeOut : variationFade, false);
+            EnterState(_state, gestureFade, false);
+        }
+
+        private float RandomSpacing()
+        {
+            return Random.Range(Mathf.Min(attentionSpacing.x, attentionSpacing.y), Mathf.Max(attentionSpacing.x, attentionSpacing.y));
         }
 
         private void UpdateIdle(float dt)
@@ -798,6 +864,20 @@ namespace Sonia
                 return;
             }
 
+            // Entre turnos el estado también es idle: hasta que el stand lleva un
+            // rato en calma no hay gestos ni variaciones (con alguien delante,
+            // Sonia no se pone a bailar). El primero llega poco después.
+            if (_quietSeconds < attentionQuietDelay)
+            {
+                return;
+            }
+
+            if (!_quietArmed)
+            {
+                _quietArmed = true;
+                _attentionTimer = Random.Range(0f, Mathf.Max(0.1f, Mathf.Min(attentionSpacing.x, attentionSpacing.y) * 0.5f));
+            }
+
             _attentionTimer -= dt;
             if (_attentionTimer <= 0f)
             {
@@ -808,7 +888,7 @@ namespace Sonia
                     return;
                 }
 
-                _attentionTimer = Random.Range(attentionInterval.x, attentionInterval.y);
+                _attentionTimer = RandomSpacing();
             }
 
             _variationTimer -= dt;
@@ -820,7 +900,7 @@ namespace Sonia
                 {
                     _lastVariation = clip;
                     _phase = Phase.Variation;
-                    _body = motionPlayer.Play(clip, MotionPlayer.BodyLayer, variationFade);
+                    _body = motionPlayer.Play(clip, MotionPlayer.BodyLayer, gestureFade);
                     Log("variación de reposo: " + clip.name);
                 }
             }
@@ -828,11 +908,12 @@ namespace Sonia
 
         private void UpdateListening(float dt)
         {
-            EnsureLoop(motionSet.listeningLoop, stateFade);
+            EnsureLoop(ConversationLoop(motionSet.listeningLoop), stateFade);
 
-            if (IsPresenting)
+            if (IsPresenting || singleConversationLoop)
             {
-                // Presentando una imagen se queda quieta y atenta: sin asentimientos.
+                // Presentando una imagen, o con un solo reposo largo: sin asentimientos
+                // de clip (la cabeza asiente por código en AvatarStateController).
                 return;
             }
 
@@ -862,13 +943,11 @@ namespace Sonia
 
         private void UpdateThinking(float dt)
         {
-            if (IsPresenting)
+            EnsureLoop(ConversationLoop(motionSet.thinkingLoop), stateFade);
+            if (IsPresenting || singleConversationLoop)
             {
-                EnsureLoop(motionSet.thinkingLoop, stateFade);
                 return;
             }
-
-            EnsureLoop(motionSet.thinkingLoop, stateFade);
 
             _variationTimer -= dt;
             if (_variationTimer <= 0f)
@@ -879,7 +958,7 @@ namespace Sonia
                 {
                     _lastVariation = clip;
                     _phase = Phase.Variation;
-                    _body = motionPlayer.Play(clip, MotionPlayer.BodyLayer, variationFade);
+                    _body = motionPlayer.Play(clip, MotionPlayer.BodyLayer, gestureFade);
                     Log("variación de pensar: " + clip.name);
                 }
             }
@@ -887,6 +966,13 @@ namespace Sonia
 
         private void UpdateSpeaking()
         {
+            if (singleConversationLoop)
+            {
+                // Un solo reposo largo: se habla desde él, sin gesticulación de clip.
+                EnsureLoop(motionSet.idleLoop, speakFade);
+                return;
+            }
+
             if (_speechPaused || IsPresenting)
             {
                 // Sin audio, o señalando una imagen: espera atenta en vez de gesticular.
@@ -921,17 +1007,17 @@ namespace Sonia
             switch (state)
             {
                 case AvatarState.Idle:
-                    _attentionTimer = initial ? firstAttentionDelay : Mathf.Max(_attentionTimer, firstAttentionDelay);
+                    _attentionTimer = initial ? RandomSpacing() : Mathf.Max(_attentionTimer, 0.5f);
                     _variationTimer = Random.Range(idleVariationInterval.x, idleVariationInterval.y);
                     EnsureLoop(motionSet.idleLoop, fade);
                     break;
                 case AvatarState.Listening:
                     _nodTimer = Random.Range(nodInterval.x, nodInterval.y);
-                    EnsureLoop(motionSet.listeningLoop, fade);
+                    EnsureLoop(ConversationLoop(motionSet.listeningLoop), fade);
                     break;
                 case AvatarState.Thinking:
                     _variationTimer = Random.Range(thinkingVariationInterval.x, thinkingVariationInterval.y);
-                    EnsureLoop(motionSet.thinkingLoop, fade);
+                    EnsureLoop(ConversationLoop(motionSet.thinkingLoop), fade);
                     break;
                 case AvatarState.Speaking:
                     PlayNextTalking(fade);
@@ -965,12 +1051,12 @@ namespace Sonia
             // Se entra en un punto aleatorio del bucle para que dos vueltas al
             // mismo estado no arranquen siempre con la misma pose.
             float start = loop.isLooping ? Random.Range(0f, Mathf.Max(0f, loop.length - 0.5f)) : 0f;
-            _body = motionPlayer.Play(loop, MotionPlayer.BodyLayer, fade, 1f, start);
+            _body = motionPlayer.Play(loop, MotionPlayer.BodyLayer, fade, loop.isLooping ? _loopSpeed : 1f, start);
         }
 
         private void PlayNextTalking(float fade)
         {
-            AnimationClip clip = PickDifferent(motionSet.talking, _lastTalking);
+            AnimationClip clip = singleConversationLoop ? null : PickDifferent(motionSet.talking, _lastTalking);
             if (clip == null)
             {
                 EnsureLoop(motionSet.idleLoop, fade);

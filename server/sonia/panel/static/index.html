@@ -368,9 +368,9 @@
       </div>
     </details>
 
-    <!-- ===== Developer (plegado): boca y cámara, guardados en la nube ===== -->
+    <!-- ===== Developer (plegado): boca, cámara y movimiento, guardados en la nube ===== -->
     <details class="card advanced developer" id="developer">
-      <summary><span>Developer</span><span class="summary-hint">Personaje, apertura de la boca y encuadre de la cámara</span></summary>
+      <summary><span>Developer</span><span class="summary-hint">Personaje, boca, encuadre de la cámara y movimiento en reposo</span></summary>
 
       <p class="sync-note" data-sync-note hidden></p>
       <div class="adv-grid">
@@ -403,6 +403,13 @@
           <p class="help">Mueve el encuadre de siempre, el de Sonia hablando. La cámara llega suave, sin saltos.</p>
           <div class="tune-list" id="tune-camera"></div>
           <button type="button" class="btn btn-small tune-reset" data-reset-tuning="camera" data-cap="tuning">Restablecer la cámara</button>
+        </section>
+
+        <section class="adv-block" aria-labelledby="dev-idle-title">
+          <h3 id="dev-idle-title">Movimiento en reposo</h3>
+          <p class="help">La respiración y el vaivén de Sonia cuando no gesticula, y los acentos del cuerpo al hablar. Se nota en unos segundos; los acentos, mientras habla.</p>
+          <div class="tune-list" id="tune-idle"></div>
+          <button type="button" class="btn btn-small tune-reset" data-reset-tuning="idle" data-cap="tuning">Restablecer el movimiento</button>
         </section>
       </div>
       <p class="cap-note dev-cap-note" data-cap-note="tuning" hidden>Esta Sonia no tiene aún los ajustes de Developer: hay que actualizar el orquestador.</p>

@@ -248,17 +248,20 @@ def msg_set_debug(enabled: bool) -> dict[str, Any]:
 
 
 def msg_set_tuning(tuning: dict[str, dict[str, float]]) -> dict[str, Any]:
-    """Ajustes de «Developer»: boca (multiplicadores) y cámara (desplazamientos y zoom).
+    """Ajustes de «Developer»: boca y movimiento (multiplicadores) y cámara (desplazamientos y zoom).
 
     ``mouth``: ``open``, ``jaw``, ``closure`` y ``speed`` multiplican lo que
     trae la escena (1 = tal cual). ``camera``: ``height``, ``distance`` y
     ``side`` en metros sobre el plano base, ``zoom`` (más de 1 acerca) y
-    ``tilt`` en grados (positivo mira más abajo).
+    ``tilt`` en grados (positivo mira más abajo). ``idle``: ``breath``,
+    ``accents`` y ``speed`` multiplican la respiración, los acentos del cuerpo
+    al hablar y el ritmo del reposo (1 = tal cual).
     """
     return {
         "type": MSG_SET_TUNING,
         "mouth": {k: float(v) for k, v in tuning.get("mouth", {}).items()},
         "camera": {k: float(v) for k, v in tuning.get("camera", {}).items()},
+        "idle": {k: float(v) for k, v in tuning.get("idle", {}).items()},
     }
 
 

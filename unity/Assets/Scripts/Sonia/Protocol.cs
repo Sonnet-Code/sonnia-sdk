@@ -188,14 +188,16 @@ namespace Sonia
 
     /// <summary>
     /// Ajustes de la sección «Developer» del panel (mensaje fijo; se guardan en
-    /// la nube y valen para todas las Sonias): la boca en multiplicadores de lo
-    /// que trae la escena y la cámara sobre su plano base.
+    /// la nube y valen para todas las Sonias): la boca y el movimiento en reposo
+    /// en multiplicadores de lo que trae la escena y la cámara sobre su plano base.
+    /// Un orquestador anterior no manda <c>idle</c>: queda en 1 (tal cual).
     /// </summary>
     [Serializable]
     public class SetTuningMessage
     {
         [JsonProperty("mouth")] public MouthTuning Mouth = new MouthTuning();
         [JsonProperty("camera")] public CameraTuning Camera = new CameraTuning();
+        [JsonProperty("idle")] public IdleTuning Idle = new IdleTuning();
     }
 
     /// <summary>
@@ -309,6 +311,23 @@ namespace Sonia
 
         /// <summary>Grados; positivo mira más abajo.</summary>
         [JsonProperty("tilt")] public float Tilt;
+    }
+
+    /// <summary>
+    /// Movimiento en reposo de «Developer»: multiplicadores de
+    /// AvatarStateController (1 = tal cual).
+    /// </summary>
+    [Serializable]
+    public class IdleTuning
+    {
+        /// <summary>Respiración: pecho, hombros y cabeza.</summary>
+        [JsonProperty("breath")] public float Breath = 1f;
+
+        /// <summary>Acentos del cuerpo en las sílabas fuertes al hablar.</summary>
+        [JsonProperty("accents")] public float Accents = 1f;
+
+        /// <summary>Ritmo de la respiración y del bucle de reposo.</summary>
+        [JsonProperty("speed")] public float Speed = 1f;
     }
 
     /// <summary>

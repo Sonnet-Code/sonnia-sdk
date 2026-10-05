@@ -635,11 +635,16 @@ serializados, ajustables en el inspector):
 
 | Estado | Qué hace |
 |---|---|
-| idle | bucle base + una variación de reposo (una sola vez, fundido 0,6 s) cada 7-16 s + un gesto de atención (baile, cuarta pared o suave; entrada 0,4 s, salida 0,7 s) a los 6 s y luego cada 12-30 s, repartidos 45/30/25 % sin repetir |
-| listening | bucle de escucha + un asentimiento en la capa de torso (fundido 0,3 s) cada 4-8 s |
-| thinking | bucle de pensar + una variación cada 4-8 s |
-| speaking | clips de gesticulación encadenados sin bucle (fundido 0,5 s entre ellos); cada `speech_start` cambia de gesto solo si el actual va por más de la mitad |
+| idle | bucle base; con el stand en calma (`attentionQuietDelay`, 25 s en idle sin conversación: entre turnos el estado también es idle) un gesto de atención (baile, cuarta pared o suave) cada 10-20 s, repartidos 45/30/25 % sin repetir, y las variaciones de reposo |
+| listening, thinking, speaking | con `singleConversationLoop` (por defecto) un solo reposo largo: el bucle de idle sigue sin reiniciarse ni cambiar de clip, sin variaciones, asentimientos de clip ni gesticulación, como Mia en genies.com. Apagado: cada estado con su bucle, asentimientos (fundido 0,3 s), variaciones de pensar y clips de habla encadenados |
 | saludo | `PlayGreeting()` al primer listening tras 25 s sola (y 20 s entre saludos); se deja terminar salvo que toque pensar o hablar |
+
+Los gestos (atención, saludo, variaciones) entran y salen en `gestureFade`
+(0,8 s) y `MotionPlayer` pasa el peso de cada fundido por una curva suave
+(smoothstep, `smoothFades`), como Genies; el de presentar imagen va en
+`presentFade` (0,5 s). `AvatarStateController.SetIdleTuning(respiración,
+acentos, velocidad)` cambia en vivo la respiración, los acentos al hablar y la
+velocidad del reposo (`AvatarChoreographer.SetLoopSpeed`), 1 = tal cual.
 
 Mientras suena un gesto grande (atención o saludo) `IsWideShot` es cierto y
 `CameraFramingController` abre el plano. Las listas de clips viven en
@@ -744,27 +749,63 @@ los huesos en el mismo comando.
   frame y se escribe siempre en la escala de la malla; sin esto la cara de Babe
   se estiraba hasta el pecho.
 - **Ojos** (`EyeGazeController`): los huesos `LeftEye`/`RightEye` no van en el
-  rig humanoide (el retargeting los dejaba bizcos). Cada ojo apunta al objetivo
-  de `AvatarStateController` (cámara, panel o punto de pensar) desde su
-  posición, con el punto de enfoque alejado a 2,5 m como mínimo, **ganancia
+  rig humanoide (el retargeting los dejaba bizcos). Cada ojo apunta al
+  visitante (o al panel, o a donde mande una mirada impuesta) desde su
+  posición, con el punto de enfoque alejado a 2,5 m como mínimo y **ganancia
   0,65** (con ojos grandes estilizados, compensar toda la rotación de la cabeza
-  lee como mirar de reojo), límites de 10° de guiñada y 8° de cabeceo, sacadas
-  de hasta 2,5°, vistazos de 5° cada 4-9 s, desviación total acotada a 7°,
-  microtemblor y parpadeo en los saltos grandes. Durante bailes y gestos grandes
-  es un 60 % más vivo.
-- **Cabeza** (`AvatarStateController`): mira al objetivo con peso 0,7 (0,3
-  durante bailes y gestos grandes) y hasta 40°, con vaivén lento de 1,4° (ruido
-  Perlin) y un asentimiento de hasta 2,5° en las sílabas fuertes (según
-  `LipSyncController.MouthOpen`). El desvío se calcula y suaviza **en el
-  espacio local de la cabeza**: si se suavizara en el mundo, al girar el cuerpo
-  deprisa la cabeza se quedaría clavada mirando al sitio antiguo (pasó con un
-  baile). Parpadeo cada 2,5-6 s.
+  lee como mirar de reojo). Sobre eso, **fijaciones por estado** con las
+  plantillas de atención de Genies medidas en Mia (`docs/informe-mia.md`):
+  hablando, fija en el visitante con microsacadas; escuchando, al visitante
+  unos 6 s y un vistazo de 1,5-3 s hasta ±11° a un lado (medido: 83 % del
+  tiempo al visitante; Mia mira menos, el 37 %, pero en el stand se leía como
+  no hacer caso a quien habla);
+  pensando, unos 20 por minuto arriba y a un lado; con el stand en calma, unos
+  17 por minuto, amplios y a menudo abajo. Un cambio de fijación de más de 4°
+  parpadea el 70 % de las veces. Límites de 16° de guiñada y 11° de cabeceo
+  por ojo, aplicados a los dos por igual (si uno toca el tope, el otro se
+  corrige lo mismo y no cambia la vergencia), desvío total acotado a 14°,
+  microsacadas de hasta 2,5° y microtemblor. Durante bailes y gestos grandes
+  las microsacadas son un 60 % más vivas.
+- **Cabeza** (`AvatarStateController`): sigue al visitante solo en parte
+  (`headFollow` 0,3 en reposo y al pensar; 0,5 al escuchar y al hablar; 0,3 en
+  bailes): la mueve sobre todo el reposo y los ojos hacen el resto, como Mia.
+  `DefaultIdle` gira bastante la cabeza (unos 18° de lado a lado con 0,3;
+  12,6° con 0,5), por eso en conversación sigue más. Hasta 40°, con vaivén lento de
+  1,4° (ruido Perlin, escalado por el seguimiento). Escuchando, ladeada 6°,
+  el torso 2° hacia delante y asentimientos lentos (muelle de 1,4 Hz) cada 4-8
+  s; pensando, sube 4° y se ladea mientras los ojos van arriba y a un lado. El
+  desvío se calcula y suaviza **en el espacio local de la cabeza**: si se
+  suavizara en el mundo, al girar el cuerpo deprisa la cabeza se quedaría
+  clavada mirando al sitio antiguo (pasó con un baile).
+- **Cuerpo vivo** (`AvatarStateController`): **respiración aditiva** continua,
+  también al hablar (una inspiración cada 5 s con un 12 % de azar para que no
+  case con el bucle del reposo, pecho ±1,1° y hombros 0,6°, valores de Mia) y
+  **acentos al hablar** como el énfasis de Genies: en las sílabas tónicas, una
+  cascada de 0,85 s (preparación hacia atrás; columna, pecho, cuello, cabeza y
+  brazos, cada uno un poco después) con `accentScale` 0,6 de los grados de
+  Genies. Se escriben en los huesos humanoides después del Animator; si el
+  Animator no escribe un fotograma, se parte de la pose guardada y el giro no
+  se acumula.
+- **Parpadeo** (`AvatarStateController`): 0,38 s (cierra en un tercio, rápido,
+  y abre en dos, despacio), cada 3-5 s más los de la voz y los cambios de
+  mirada (unos 20 por minuto), dobles en un 18 %, los ojos desfasados unos
+  milisegundos y las cejas que bajan un poco. Antes, 0,14 s cada 2,5-6 s.
 - **Expresiones** (`FacialExpressionController`): sobre los blendshapes ARKit,
-  cejas que suben con la energía de la voz y un levantamiento breve al empezar
-  a escuchar o hablar, ceño al pensar, sonrisa de base distinta por estado con
-  mejillas, párpados que se entornan al sonreír y al hablar fuerte y se abren
-  en los énfasis, y un vaivén aleatorio permanente. No toca visemas, mandíbula
-  ni parpadeo, así que no se pisa con el lip-sync.
+  una **sonrisa de base constante** (`baseSmile` 0,35, media al pensar; Mia
+  lleva siempre su emoción "Happy") con cejas algo arriba, cejas que suben en
+  cada acento de la voz (el mismo instante que la cascada del cuerpo,
+  `AvatarStateController.OnEmphasis`) y un levantamiento breve al empezar a
+  escuchar o hablar, ceño al pensar, mejillas, párpados que se entornan al
+  sonreír y al hablar fuerte y se abren en los énfasis, y un vaivén aleatorio
+  permanente. No toca visemas, mandíbula ni parpadeo, así que no se pisa con el
+  lip-sync; con la boca redonda la sonrisa baja sola.
+- **Boca al callarse** (`LipSyncController.closeSeconds`): si ya no hay voz
+  ahora ni en los 60 ms siguientes, lo que queda abierto se cierra en 1 s con
+  una curva que frena al final (casi todo el cierre en los primeros 0,4 s), el
+  MouthCloser de Genies; en una interrupción, igual en 0,25 s. **Ganancias de
+  lip-sync de Genies** (`FaceRig.lipShapeGains`): en los visemas, embudo ×0,5,
+  pucker ×0,75, `LIPS_TOWARD` ×0,4 y `CHIN_RAISER_T` ×0,3, que Genies aplica a
+  su propio lip-sync porque las o, las u y los cierres salían exagerados.
 - **Panel de ajuste** (`SoniaTuningUI`): el botón **Ajustes** arriba a la
   derecha (o F2) abre en la mitad inferior de la pantalla deslizadores para los
   parámetros de ojos, cabeza, expresiones, boca y fonemas, leídos de los

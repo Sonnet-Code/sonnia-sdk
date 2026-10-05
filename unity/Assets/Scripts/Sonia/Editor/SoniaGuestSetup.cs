@@ -105,8 +105,8 @@ namespace Sonia.EditorTools
             SetFloat(choreoObject, "danceWeight", 0f);
             SetFloat(choreoObject, "fourthWallWeight", 0f);
             SetFloat(choreoObject, "softWeight", 1f);
-            SetFloat(choreoObject, "firstAttentionDelay", 30f);
-            SetVector2(choreoObject, "attentionInterval", new Vector2(30f, 60f));
+            SetFloat(choreoObject, "attentionQuietDelay", 30f);
+            SetVector2(choreoObject, "attentionSpacing", new Vector2(30f, 60f));
             choreoObject.ApplyModifiedPropertiesWithoutUndo();
 
             // Cara, cabeza y boca.

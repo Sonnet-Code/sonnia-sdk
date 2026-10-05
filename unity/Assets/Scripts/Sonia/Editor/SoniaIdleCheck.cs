@@ -4,9 +4,13 @@
 // coreógrafo haga lo suyo en un estado), avanza el juego con
 // EditorApplication.Step y mide lo que se nota de un reposo: cuánto se balancea
 // la cadera, cuánto se mueve la cabeza, si los pies apoyados patinan y si las
-// manos se meten en el cuerpo. Guarda fotogramas con tres cámaras: el plano del
-// stand (Camera.main) y dos fijas de cuerpo entero, de frente y de lado. Las
-// fijas no siguen a la cadera: así el balanceo se ve contra el encuadre.
+// manos se meten en el cuerpo. Mide también la vida que ponen los componentes
+// de cara y cuerpo: cabeceo del pecho (respiración) y de la cabeza, cambios de
+// fijación de los ojos por minuto y cuánto miran al visitante, la vergencia de
+// los ojos (bizquera) y los parpadeos (cuántos y cuánto duran). Guarda
+// fotogramas con cuatro cámaras: el plano del stand (Camera.main), dos fijas de
+// cuerpo entero, de frente y de lado, y un primer plano de la cara. Las fijas no
+// siguen a la cadera: así el balanceo se ve contra el encuadre.
 //
 // Uso desde el MCP con Sonia en Play y en pausa (Step no avanza en el mismo
 // comando que pide la pausa): RecordClip(...) o RecordState(...). Salida en
@@ -87,6 +91,14 @@ namespace Sonia.EditorTools
 
             AvatarChoreographer choreographer = SoniaChoreographer();
             choreographer.SetState(state);
+
+            // Cabeza, ojos, cara y respiración leen el estado de AvatarStateController.
+            AvatarStateController avatarState = choreographer.GetComponentInChildren<AvatarStateController>(true);
+            if (avatarState != null)
+            {
+                avatarState.SetState(state);
+            }
+
             for (int i = 0; i < 40; i++)
             {
                 EditorApplication.Step();
@@ -159,6 +171,20 @@ namespace Sonia.EditorTools
             Transform head = animator.GetBoneTransform(HumanBodyBones.Head);
             Transform[] feet = { animator.GetBoneTransform(HumanBodyBones.LeftFoot), animator.GetBoneTransform(HumanBodyBones.RightFoot) };
             Transform[] hands = { animator.GetBoneTransform(HumanBodyBones.LeftHand), animator.GetBoneTransform(HumanBodyBones.RightHand) };
+            Transform upperChest = animator.GetBoneTransform(HumanBodyBones.UpperChest);
+            Transform breathBone = upperChest != null ? upperChest : chest;
+            Transform leftEye = FindChild(head, "LeftEye", "Eye_L", "eye_L");
+            Transform rightEye = FindChild(head, "RightEye", "Eye_R", "eye_R");
+            EyeGazeController gaze = choreographer.GetComponentInChildren<EyeGazeController>(true);
+            FaceRig face = choreographer.GetComponentInChildren<FaceRig>(true);
+            SkinnedMeshRenderer faceMesh = face != null ? face.PrimaryRenderer : null;
+            int blinkShape = faceMesh != null ? LipSyncController.FindBlendShape(faceMesh.sharedMesh, "EYES_CLOSED_L") : -1;
+            if (faceMesh != null && blinkShape < 0)
+            {
+                blinkShape = LipSyncController.FindBlendShape(faceMesh.sharedMesh, "eyeBlinkLeft");
+            }
+
+            float blinkScale = faceMesh != null ? LipSyncController.BlendShapeScale(faceMesh.sharedMesh) : 1f;
 
             string folder = Path.Combine(OutputFolder, label);
             Directory.CreateDirectory(folder);
@@ -171,9 +197,11 @@ namespace Sonia.EditorTools
             Vector3 center = root.position + Vector3.up * 0.86f;
             Camera front = MakeCamera("SoniaIdleCheck.Frente", center + root.forward * 3.4f, center);
             Camera side = MakeCamera("SoniaIdleCheck.Lado", center + root.right * 3.4f, center);
+            Camera closeup = MakeCamera("SoniaIdleCheck.Cara", head.position + root.forward * 0.9f, head.position);
+            closeup.fieldOfView = 22f;
 
             CultureInfo inv = CultureInfo.InvariantCulture;
-            StringBuilder csv = new StringBuilder("t,cadera_x,cadera_y,cadera_z,cabeza_x,cabeza_y,cabeza_z,cabeza_giro,cabeza_ladeo,pie_izq_apoyado,pie_der_apoyado,mano_izq_cuerpo,mano_der_cuerpo\n");
+            StringBuilder csv = new StringBuilder("t,cadera_x,cadera_y,cadera_z,cabeza_x,cabeza_y,cabeza_z,cabeza_giro,cabeza_ladeo,pie_izq_apoyado,pie_der_apoyado,mano_izq_cuerpo,mano_der_cuerpo,pecho_cabeceo,cabeza_cabeceo,fijacion_giro,fijacion_cabeceo,vergencia,parpado\n");
             int steps = Mathf.CeilToInt(seconds / StepSeconds);
             int sampleEvery = Mathf.Max(1, Mathf.RoundToInt(SampleSeconds / StepSeconds));
             int frameStride = Mathf.Max(1, Mathf.RoundToInt(frameEvery / StepSeconds));
@@ -185,6 +213,16 @@ namespace Sonia.EditorTools
             bool[] grounded = new bool[2];
             float[] slide = new float[2];
             float[] handGap = { float.MaxValue, float.MaxValue };
+            Vector2 chestPitch = new Vector2(float.MaxValue, float.MinValue);
+            Vector2 headPitch = new Vector2(float.MaxValue, float.MinValue);
+            Vector2 vergence = new Vector2(float.MaxValue, float.MinValue);
+            Vector2 lastFixation = gaze != null ? gaze.CurrentFixation : Vector2.zero;
+            int fixationJumps = 0;
+            int stepsAtVisitor = 0;
+            float widestFixation = 0f;
+            int blinks = 0;
+            float closedSeconds = 0f;
+            bool wasClosed = false;
             try
             {
                 for (int step = 0; step <= steps; step++)
@@ -199,6 +237,38 @@ namespace Sonia.EditorTools
                     float roll = Mathf.DeltaAngle(0f, headAngles.z);
                     headYaw = new Vector2(Mathf.Min(headYaw.x, yaw), Mathf.Max(headYaw.y, yaw));
                     headRoll = new Vector2(Mathf.Min(headRoll.x, roll), Mathf.Max(headRoll.y, roll));
+                    float headNod = Mathf.DeltaAngle(0f, headAngles.x);
+                    headPitch = new Vector2(Mathf.Min(headPitch.x, headNod), Mathf.Max(headPitch.y, headNod));
+                    float chestNod = breathBone != null ? Mathf.DeltaAngle(0f, (Quaternion.Inverse(root.rotation) * breathBone.rotation).eulerAngles.x) : 0f;
+                    chestPitch = new Vector2(Mathf.Min(chestPitch.x, chestNod), Mathf.Max(chestPitch.y, chestNod));
+
+                    // Vergencia: ángulo horizontal entre las miradas de los dos ojos
+                    // (positivo, convergen). Con la cámara a unos metros, más de
+                    // unos 4° ya se lee como bizquear.
+                    float verge = 0f;
+                    if (leftEye != null && rightEye != null)
+                    {
+                        Vector3 l = Flat(root.InverseTransformDirection(leftEye.forward));
+                        Vector3 r = Flat(root.InverseTransformDirection(rightEye.forward));
+                        verge = Vector3.SignedAngle(r, l, Vector3.up);
+                        vergence = new Vector2(Mathf.Min(vergence.x, verge), Mathf.Max(vergence.y, verge));
+                    }
+
+                    Vector2 fixation = gaze != null ? gaze.CurrentFixation : Vector2.zero;
+                    if ((fixation - lastFixation).sqrMagnitude > 0.01f)
+                    {
+                        fixationJumps++;
+                    }
+
+                    lastFixation = fixation;
+                    stepsAtVisitor += fixation.sqrMagnitude < 0.01f ? 1 : 0;
+                    widestFixation = Mathf.Max(widestFixation, fixation.magnitude);
+
+                    float lid = faceMesh != null && blinkShape >= 0 ? faceMesh.GetBlendShapeWeight(blinkShape) / (100f * blinkScale) : 0f;
+                    bool closed = lid > 0.5f;
+                    blinks += closed && !wasClosed ? 1 : 0;
+                    closedSeconds += closed ? StepSeconds : 0f;
+                    wasClosed = closed;
 
                     // Pie apoyado: se ancla al apoyarlo y se mide cuánto se aleja en horizontal.
                     for (int f = 0; f < 2; f++)
@@ -231,7 +301,10 @@ namespace Sonia.EditorTools
                             .Append(yaw.ToString("F1", inv)).Append(',').Append(roll.ToString("F1", inv)).Append(',')
                             .Append(grounded[0] ? 1 : 0).Append(',').Append(grounded[1] ? 1 : 0).Append(',')
                             .Append(Cm(DistanceToAxis(hands[0].position, hips.position, chest.position))).Append(',')
-                            .Append(Cm(DistanceToAxis(hands[1].position, hips.position, chest.position))).Append('\n');
+                            .Append(Cm(DistanceToAxis(hands[1].position, hips.position, chest.position))).Append(',')
+                            .Append(chestNod.ToString("F2", inv)).Append(',').Append(headNod.ToString("F2", inv)).Append(',')
+                            .Append(fixation.x.ToString("F1", inv)).Append(',').Append(fixation.y.ToString("F1", inv)).Append(',')
+                            .Append(verge.ToString("F2", inv)).Append(',').Append(lid.ToString("F2", inv)).Append('\n');
                     }
 
                     if (step % frameStride == 0)
@@ -240,6 +313,9 @@ namespace Sonia.EditorTools
                         Render(Camera.main, Path.Combine(folder, "plano_" + stamp + ".png"));
                         Render(front, Path.Combine(folder, "frente_" + stamp + ".png"));
                         Render(side, Path.Combine(folder, "lado_" + stamp + ".png"));
+                        closeup.transform.position = head.position + root.forward * 0.9f;
+                        closeup.transform.LookAt(head.position);
+                        Render(closeup, Path.Combine(folder, "cara_" + stamp + ".png"));
                     }
                 }
             }
@@ -247,7 +323,11 @@ namespace Sonia.EditorTools
             {
                 Object.DestroyImmediate(front.gameObject);
                 Object.DestroyImmediate(side.gameObject);
+                Object.DestroyImmediate(closeup.gameObject);
             }
+
+            float minutes = Mathf.Max(0.01f, seconds / 60f);
+            int totalSteps = steps + 1;
 
             StringBuilder report = new StringBuilder();
             report.Append(label).Append(": ").Append(title).Append(", ").Append(seconds.ToString("F0", inv)).Append(" s. ")
@@ -257,10 +337,41 @@ namespace Sonia.EditorTools
                 .Append((headYaw.y - headYaw.x).ToString("F1", inv)).Append("°, ladeo ")
                 .Append((headRoll.y - headRoll.x).ToString("F1", inv)).Append("°. ")
                 .Append("Pies apoyados, lo que más patinan: ").Append(Cm(slide[0])).Append(" / ").Append(Cm(slide[1])).Append(" cm. ")
-                .Append("Manos, lo más cerca del eje del tronco: ").Append(Cm(handGap[0])).Append(" / ").Append(Cm(handGap[1])).Append(" cm.");
+                .Append("Manos, lo más cerca del eje del tronco: ").Append(Cm(handGap[0])).Append(" / ").Append(Cm(handGap[1])).Append(" cm. ")
+                .Append("Pecho: cabeceo ").Append((chestPitch.y - chestPitch.x).ToString("F1", inv)).Append("° de rango; cabeza: ")
+                .Append((headPitch.y - headPitch.x).ToString("F1", inv)).Append("°. ")
+                .Append("Ojos: ").Append((fixationJumps / minutes).ToString("F0", inv)).Append(" cambios de fijación por minuto, ")
+                .Append((100f * stepsAtVisitor / totalSteps).ToString("F0", inv)).Append(" % del tiempo al visitante, hasta ")
+                .Append(widestFixation.ToString("F1", inv)).Append("°; vergencia de ")
+                .Append((vergence.x == float.MaxValue ? 0f : vergence.x).ToString("F1", inv)).Append("° a ")
+                .Append((vergence.y == float.MinValue ? 0f : vergence.y).ToString("F1", inv)).Append("°. ")
+                .Append("Parpadeos: ").Append((blinks / minutes).ToString("F0", inv)).Append(" por minuto, ")
+                .Append((blinks > 0 ? closedSeconds / blinks : 0f).ToString("F2", inv)).Append(" s cerrados más de la mitad cada uno.");
             File.WriteAllText(Path.Combine(folder, "informe.txt"), report + "\n");
             File.WriteAllText(Path.Combine(folder, "muestras.csv"), csv.ToString());
             return report.ToString();
+        }
+
+        private static Transform FindChild(Transform root, params string[] names)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            Transform[] all = root.GetComponentsInChildren<Transform>(true);
+            for (int n = 0; n < names.Length; n++)
+            {
+                for (int i = 0; i < all.Length; i++)
+                {
+                    if (all[i].name == names[n] || all[i].name.EndsWith(":" + names[n]))
+                    {
+                        return all[i];
+                    }
+                }
+            }
+
+            return null;
         }
 
         private static Camera MakeCamera(string name, Vector3 position, Vector3 target)

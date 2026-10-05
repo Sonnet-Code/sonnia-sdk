@@ -67,17 +67,16 @@ namespace Sonia
                 typeof(EyeGazeController),
                 new[]
                 {
-                    "gazeGain", "convergenceDegrees", "maxYaw", "maxPitch", "minFocusDistance", "maxOffsetDegrees", "wideShotLiveliness",
-                    "speed", "jitterDegrees", "saccadeInterval", "saccadeAmplitude", "glanceInterval",
-                    "glanceDuration", "glanceAmplitude"
+                    "gazeGain", "convergenceDegrees", "yawLimit", "pitchLimit", "minFocusDistance", "excursionLimit", "wideShotLiveliness",
+                    "speed", "jitterDegrees", "saccadeInterval", "saccadeAmplitude"
                 }
             },
             {
                 typeof(AvatarStateController),
                 new[]
                 {
-                    "lookWeight", "wideShotLookWeight", "maxLookAngle", "lookSmoothing", "headSwayDegrees",
-                    "blinkIntervalRange", "blinkDuration", "listenNodInterval"
+                    "headFollow", "speakingHeadFollow", "wideShotLookWeight", "maxLookAngle", "lookSmoothing", "headSwayDegrees",
+                    "blinkEvery", "blinkSeconds", "listenNodEvery"
                 }
             },
             {

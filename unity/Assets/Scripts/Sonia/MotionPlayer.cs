@@ -16,6 +16,11 @@
 //
 // El Animator sigue existiendo porque es la salida del grafo y quien aplica el
 // retargeting humanoide, pero no lleva controlador.
+//
+// Los fundidos avanzan en lineal, pero el peso que llega al mezclador pasa por
+// una curva suave (smoothstep): arranca y llega despacio, como los de Genies
+// (medidos en Mia: 0,07, 0,20, 0,37, 0,57, 0,75, 0,90, 0,98 y 1 cada 0,1 s en un
+// gesto de 0,8 s). Los pesos se siguen normalizando después.
 
 using System;
 using System.Collections.Generic;
@@ -144,6 +149,10 @@ namespace Sonia
         [Range(2, 8)]
         [Tooltip("Clips que pueden convivir en una capa durante los fundidos.")]
         private int slotsPerLayer = 4;
+
+        [SerializeField]
+        [Tooltip("Fundidos con curva suave (smoothstep), como los de Genies. Apagado: lineales.")]
+        private bool smoothFades = true;
 
         private PlayableGraph _graph;
         private AnimationLayerMixerPlayable _layers;
@@ -457,21 +466,33 @@ namespace Sonia
             {
                 if (state.Slots[i].Used)
                 {
-                    sum += state.Slots[i].Weight;
+                    sum += Ease(state.Slots[i].Weight);
                 }
             }
 
             for (int i = 0; i < state.Slots.Length; i++)
             {
                 SlotState s = state.Slots[i];
-                float w = s.Used && sum > 0.0001f ? s.Weight / sum : 0f;
+                float w = s.Used && sum > 0.0001f ? Ease(s.Weight) / sum : 0f;
                 state.Mixer.SetInputWeight(i, w);
             }
 
             if (layer != BodyLayer)
             {
-                _layers.SetInputWeight(layer, sum > 0.0001f ? state.LayerWeight : 0f);
+                _layers.SetInputWeight(layer, sum > 0.0001f ? Ease(state.LayerWeight) : 0f);
             }
+        }
+
+        /// <summary>Peso lineal del fundido pasado por la curva suave (si está activa).</summary>
+        private float Ease(float linear)
+        {
+            if (!smoothFades)
+            {
+                return linear;
+            }
+
+            float t = Mathf.Clamp01(linear);
+            return t * t * (3f - 2f * t);
         }
 
         private static float MoveTowards(float value, float target, float maxDelta)

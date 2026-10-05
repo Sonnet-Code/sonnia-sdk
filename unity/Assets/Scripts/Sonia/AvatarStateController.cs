@@ -1,24 +1,32 @@
-// Estado del avatar: cabeza, mirada y parpadeo.
+// Estado del avatar: cabeza, cuerpo vivo (respiración y acentos) y parpadeo.
 //
 // El estado llega por el protocolo (idle, listening, thinking, speaking). Las
-// animaciones del cuerpo las lleva AvatarChoreographer; aquí se decide hacia
-// dónde mira la cabeza y cómo se mueve con la voz, y se parpadea:
+// animaciones del cuerpo las lleva AvatarChoreographer; aquí, encima de ellas:
 //
-//  - Mirada: al visitante (la cámara), al panel de imágenes un momento cuando
-//    aparece, o arriba y a un lado mientras piensa (un vistazo, no un giro de
-//    perfil: mirar abajo y apartar la cara se leía como enfado).
-//  - Con la voz (eventos de LipSyncController, un poco antes de su sílaba):
-//    asentimientos breves en las sílabas tónicas, un cambio de pose de cabeza
-//    (giro e inclinación pequeños) en cada frase y un asentimiento suave al
-//    terminarla.
-//  - Escuchando: la cabeza ladeada hacia un lado y algún asentimiento de "ajá".
-//  - Parpadeo con forma real (cierra rápido, abre más despacio), a ritmo de
-//    2-5 s, al empezar y acabar frases y en los saltos de mirada; a veces doble
-//    o a medias. El párpado acompaña a la mirada: al mirar abajo baja un poco.
+//  - Cabeza: sigue al visitante (la cámara) solo en parte: 0,3 en reposo y al
+//    pensar, 0,5 al escuchar y al hablar. La mueve sobre todo el reposo y los
+//    ojos hacen el resto, como Mia en genies.com (docs/informe-mia.md). Mira al panel de imágenes un
+//    momento cuando aparece; al pensar, la cabeza sube un poco y mira arriba y a
+//    un lado.
+//  - Escuchando: la cabeza ladeada, el torso un poco hacia delante y algún
+//    asentimiento lento de "ajá".
+//  - Respiración aditiva continua, también al hablar: una inspiración cada unos
+//    5 s (con algo de azar, para que no case con el reposo), pecho ±1,1° y
+//    hombros. La cabeza la acompaña. Valores medidos en Mia.
+//  - Acentos al hablar, como el "énfasis" de Genies: en las sílabas tónicas, una
+//    cascada de 0,8 s (preparación hacia atrás, y luego columna, pecho +3,4°,
+//    cuello, cabeza +5,5° y brazos, cada uno un poco después del anterior).
+//    OnEmphasis avisa en el mismo instante (las cejas suben en
+//    FacialExpressionController).
+//  - Parpadeo como el de Genies: 0,38 s (cierra rápido en un tercio, abre
+//    despacio en dos), cada 3-5 s más los de la voz y los cambios de mirada
+//    (unos 20 por minuto), dobles en un 18 %, los ojos desfasados unos ms y las
+//    cejas que bajan un poco. El párpado acompaña a la mirada al mirar abajo.
 //
 // Todo se aplica en LateUpdate, sobre la pose de la animación.
 
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Sonia
@@ -33,8 +41,9 @@ namespace Sonia
     }
 
     /// <summary>
-    /// Orienta la cabeza según el estado y la voz y añade el parpadeo. Todo es
-    /// opcional: sin hueso de cabeza o sin blendshapes de ojos no hace nada.
+    /// Orienta la cabeza según el estado y la voz, da vida al cuerpo (respiración
+    /// y acentos) y parpadea. Todo es opcional: sin huesos o sin blendshapes de
+    /// ojos esa parte no hace nada.
     /// </summary>
     // Corre después del LateUpdate de Vrm10Instance (orden 11000), que aplica sus
     // expresiones (a cero) y la mirada; así los blendshapes de parpadeo que
@@ -78,8 +87,18 @@ namespace Sonia
 
         [SerializeField]
         [Range(0f, 1f)]
-        [Tooltip("Cuánto manda la mirada sobre la rotación que dicta la animación.")]
-        private float lookWeight = 0.7f;
+        [Tooltip("Cuánto sigue la cabeza al visitante sobre lo que dicta la animación. Con 0,3 la cabeza la mueve sobre todo el reposo y los ojos miran al visitante (Mia: cabeza a 0, ojos a 1).")]
+        private float headFollow = 0.3f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Lo mismo mientras habla: más, que hablando se mira a quien se habla. DefaultIdle gira bastante la cabeza (unos 18° de lado a lado con 0,3) y en conversación se leía como no mirar al visitante.")]
+        private float speakingHeadFollow = 0.5f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Lo mismo mientras escucha.")]
+        private float listeningHeadFollow = 0.5f;
 
         [SerializeField]
         [Range(0f, 1f)]
@@ -106,7 +125,7 @@ namespace Sonia
 
         [SerializeField]
         [Range(0f, 5f)]
-        [Tooltip("Amplitud en grados del vaivén lento y continuo de la cabeza, para que nunca esté clavada.")]
+        [Tooltip("Amplitud en grados del vaivén lento y continuo de la cabeza, para que nunca esté clavada (va escalado por el seguimiento).")]
         private float headSwayDegrees = 1.4f;
 
         [SerializeField]
@@ -116,17 +135,17 @@ namespace Sonia
         [Header("Cabeza con la voz")]
         [SerializeField]
         [Range(0f, 10f)]
-        [Tooltip("Grados de un asentimiento en una sílaba tónica.")]
+        [Tooltip("Grados de un asentimiento en una sílaba tónica (solo con los acentos de cuerpo apagados; con ellos la cabeza va en la cascada).")]
         public float stressNodDegrees = 3.5f;
 
         [SerializeField]
         [Range(0f, 1f)]
-        [Tooltip("Probabilidad de asentir en una sílaba tónica.")]
+        [Tooltip("Probabilidad de asentir en una sílaba tónica (con los acentos apagados).")]
         public float stressNodChance = 0.65f;
 
         [SerializeField]
         [Range(0f, 1f)]
-        [Tooltip("Fuerza mínima (0..1) para que una sílaba cuente como tónica.")]
+        [Tooltip("Fuerza mínima (0..1) para que una sílaba cuente como tónica (con los acentos apagados).")]
         public float stressThreshold = 0.8f;
 
         [SerializeField]
@@ -146,12 +165,82 @@ namespace Sonia
 
         [SerializeField]
         [Tooltip("Segundos mínimo y máximo entre asentimientos al escuchar.")]
-        public Vector2 listenNodInterval = new Vector2(2.8f, 5.5f);
+        public Vector2 listenNodEvery = new Vector2(4f, 8f);
+
+        [SerializeField]
+        [Range(0.5f, 4f)]
+        [Tooltip("Rapidez de los asentimientos al escuchar (Hz del muelle). Más bajo, más lentos y tranquilos.")]
+        public float listenNodHz = 1.4f;
 
         [SerializeField]
         [Range(0f, 12f)]
         [Tooltip("Inclinación de la cabeza al pensar.")]
         public float thinkTiltDegrees = 5f;
+
+        [SerializeField]
+        [Range(0f, 10f)]
+        [Tooltip("Cuánto sube la cabeza al pensar (grados).")]
+        public float thinkLiftDegrees = 4f;
+
+        [Header("Cuerpo: respiración")]
+        [SerializeField]
+        [Tooltip("Respiración aditiva continua sobre la animación, también al hablar.")]
+        private bool breathing = true;
+
+        [SerializeField]
+        [Range(2f, 10f)]
+        [Tooltip("Segundos por respiración (Mia: 5, unas 12 por minuto).")]
+        private float breathSeconds = 5f;
+
+        [SerializeField]
+        [Range(0f, 0.4f)]
+        [Tooltip("Azar en la duración y la profundidad de cada respiración, para que no case con el bucle del reposo.")]
+        private float breathJitter = 0.12f;
+
+        [SerializeField]
+        [Range(0f, 4f)]
+        [Tooltip("Grados que se abre el pecho al inspirar (Mia: ±1,1). La cabeza lo acompaña.")]
+        private float breathChestDegrees = 1.1f;
+
+        [SerializeField]
+        [Range(0f, 3f)]
+        [Tooltip("Grados que suben los hombros al inspirar.")]
+        private float breathShoulderDegrees = 0.6f;
+
+        [SerializeField]
+        [Range(0f, 6f)]
+        [Tooltip("Grados que se inclina el torso hacia delante al escuchar: interés.")]
+        private float listenLeanDegrees = 2f;
+
+        [Header("Cuerpo: acentos al hablar")]
+        [SerializeField]
+        [Tooltip("Acentos de cuerpo en las sílabas tónicas (el \"énfasis\" de Genies): cascada de columna, pecho, cuello, cabeza y brazos.")]
+        private bool accents = true;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Fuerza mínima (0..1) de la sílaba para un acento.")]
+        private float accentThreshold = 0.8f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Probabilidad de acento en una sílaba que pasa el umbral.")]
+        private float accentChance = 0.6f;
+
+        [SerializeField]
+        [Range(0.3f, 2f)]
+        [Tooltip("Segundos mínimos entre dos acentos (Genies: 0,6-1).")]
+        private float accentMinGap = 0.9f;
+
+        [SerializeField]
+        [Range(0f, 2f)]
+        [Tooltip("Escala de toda la cascada. 1: los grados de Genies (pecho +3,4°, cuello +2°, cabeza +5,5°), que se suman por la cadena y en primer plano son mucho; 0,6 de partida.")]
+        private float accentScale = 0.6f;
+
+        [SerializeField]
+        [Range(0f, 6f)]
+        [Tooltip("Grados que se adelantan los brazos en un acento.")]
+        private float accentArmDegrees = 2.5f;
 
         [Header("Parpadeo")]
         [SerializeField]
@@ -159,12 +248,13 @@ namespace Sonia
         private FaceRig faceRig;
 
         [SerializeField]
-        [Tooltip("Segundos mínimo y máximo entre parpadeos espontáneos.")]
-        private Vector2 blinkIntervalRange = new Vector2(2.5f, 6f);
+        [Tooltip("Segundos mínimo y máximo entre parpadeos espontáneos (Genies: 4 ± 1). Con los de la voz y los cambios de mirada salen unos 20 por minuto.")]
+        private Vector2 blinkEvery = new Vector2(3f, 5f);
 
         [SerializeField]
-        [Tooltip("Duración de un parpadeo en segundos (cierra en un tercio, abre en el resto).")]
-        private float blinkDuration = 0.14f;
+        [Range(0.1f, 0.7f)]
+        [Tooltip("Duración de un parpadeo en segundos: cierra en un tercio y abre despacio en el resto (Genies: 0,35-0,4).")]
+        private float blinkSeconds = 0.38f;
 
         [SerializeField]
         [Range(0f, 1f)]
@@ -173,8 +263,18 @@ namespace Sonia
 
         [SerializeField]
         [Range(0f, 1f)]
-        [Tooltip("Probabilidad de que un parpadeo espontáneo sea doble.")]
-        public float doubleBlinkChance = 0.12f;
+        [Tooltip("Parte de los parpadeos espontáneos que son dobles (Mia: 18 %).")]
+        public float doubleBlinkShare = 0.18f;
+
+        [SerializeField]
+        [Range(0f, 0.04f)]
+        [Tooltip("Desfase máximo entre los dos ojos en un parpadeo (s). Genies: 16 ms.")]
+        private float blinkEyeOffset = 0.012f;
+
+        [SerializeField]
+        [Range(0f, 0.6f)]
+        [Tooltip("Cuánto bajan las cejas con el parpadeo (0..1). Van más lentas que el párpado: el pico real es algo más de la mitad (Genies: hasta 0,25).")]
+        private float blinkBrowLower = 0.25f;
 
         [SerializeField]
         [Range(0f, 1f)]
@@ -185,6 +285,33 @@ namespace Sonia
         [Tooltip("Ojos, para que el párpado acompañe a la mirada. Opcional.")]
         private EyeGazeController eyeGaze;
 
+        // Huesos del cuerpo que mueven la respiración y los acentos.
+        private const int BSpine = 0;
+        private const int BChest = 1;
+        private const int BUpperChest = 2;
+        private const int BNeck = 3;
+        private const int BLeftShoulder = 4;
+        private const int BRightShoulder = 5;
+        private const int BLeftArm = 6;
+        private const int BRightArm = 7;
+        private const int BodyBoneCount = 8;
+
+        private static readonly HumanBodyBones[] BodyBoneIds =
+        {
+            HumanBodyBones.Spine, HumanBodyBones.Chest, HumanBodyBones.UpperChest, HumanBodyBones.Neck,
+            HumanBodyBones.LeftShoulder, HumanBodyBones.RightShoulder, HumanBodyBones.LeftUpperArm, HumanBodyBones.RightUpperArm
+        };
+
+        /// <summary>Un acento en marcha: cuándo empezó y con qué fuerza (0..1).</summary>
+        private struct Accent
+        {
+            public float Start;
+            public float Gain;
+        }
+
+        // Duración total de la cascada de un acento.
+        private const float AccentSeconds = 0.85f;
+
         private AvatarState _state = AvatarState.Idle;
         private float _stateSince;
 
@@ -194,6 +321,7 @@ namespace Sonia
         // mirando al sitio antiguo.
         private Quaternion _lookOffset = Quaternion.identity;
         private float _currentWeight;
+        private float _gestureWeight = 1f;
         private bool _lookInitialized;
         private bool _imageVisible;
         private float _imageShownAt = -999f;
@@ -201,6 +329,7 @@ namespace Sonia
 
         // Gestos de cabeza (grados): cabeceo (positivo baja la barbilla), giro e inclinación.
         private Spring _pitch;
+        private Spring _slowNod;
         private Spring _yaw;
         private Spring _roll;
         private Spring _pitchPose;
@@ -212,20 +341,54 @@ namespace Sonia
         private int _tiltSide = 1;
         private bool _subscribed;
 
+        // Cuerpo: huesos, pose de la animación y lo último que se escribió (si el
+        // Animator no escribe un fotograma, no se acumula el giro).
+        private readonly Transform[] _bodyBones = new Transform[BodyBoneCount];
+        private readonly Quaternion[] _bodyBase = new Quaternion[BodyBoneCount];
+        private readonly Quaternion[] _bodyWritten = new Quaternion[BodyBoneCount];
+        private readonly bool[] _bodyHasWritten = new bool[BodyBoneCount];
+        private Animator _bodyAnimator;
+        private Transform _bodyResolvedFor;
+        private bool _bodyResolved;
+        private Spring _lean;
+        private float _breathPhase;
+        private float _breathPeriod = 5f;
+        private float _breathDepth = 1f;
+        private float _breathValue;
+        private readonly List<Accent> _accents = new List<Accent>(4);
+        private float _lastAccent = -10f;
+        private float _accentHeadPitch;
+
+        // Ajuste «Movimiento en reposo» (1 = tal cual).
+        private float _breathTuning = 1f;
+        private float _accentTuning = 1f;
+        private float _speedTuning = 1f;
+
         // Parpadeo.
         private int _blinkLeftChannel = -1;
         private int _blinkRightChannel = -1;
+        private int _browLeftChannel = -1;
+        private int _browRightChannel = -1;
         private float _timeToNextBlink;
         private float _blinkElapsed = -1f;
         private float _blinkDepth = 1f;
+        private float _blinkLeftDelay;
+        private float _blinkRightDelay;
         private float _pendingSecondBlink = -1f;
         private float _lid;
+        private Spring _browBlink;
 
         // Mirada dirigida desde fuera (salida y entrada caminando: mira hacia
         // dónde va). Manda sobre el visitante, el panel y el punto de pensar.
         private bool _lookOverride;
         private Vector3 _lookOverridePosition;
         private float _lookOverrideWeight = -1f;
+
+        /// <summary>
+        /// Acento de la voz: una sílaba tónica que lleva cascada de cuerpo. El
+        /// valor es su fuerza (0..1). FacialExpressionController sube las cejas.
+        /// </summary>
+        public event Action<float> OnEmphasis;
 
         /// <summary>Estado actual del avatar.</summary>
         public AvatarState State
@@ -237,6 +400,18 @@ namespace Sonia
         public bool HasLookOverride
         {
             get { return _lookOverride; }
+        }
+
+        /// <summary>Respiración ahora mismo: -1 espirado, 1 inspirado. Para medir.</summary>
+        public float BreathValue
+        {
+            get { return _breathValue; }
+        }
+
+        /// <summary>Cuánto sigue ahora la cabeza al objetivo (0..1). Para medir.</summary>
+        public float CurrentLookWeight
+        {
+            get { return _currentWeight; }
         }
 
         /// <summary>
@@ -257,7 +432,11 @@ namespace Sonia
         public Transform HeadBone
         {
             get { return headBone; }
-            set { headBone = value; }
+            set
+            {
+                headBone = value;
+                _bodyResolved = false;
+            }
         }
 
         /// <summary>Vuelve a mirar a quien toque según el estado (visitante, panel, pensar).</summary>
@@ -265,6 +444,24 @@ namespace Sonia
         {
             _lookOverride = false;
             _lookOverrideWeight = -1f;
+        }
+
+        /// <summary>
+        /// Ajuste «Movimiento en reposo» (Developer): multiplicadores sobre la
+        /// escena, 1 = tal cual. <paramref name="breath"/> escala la respiración,
+        /// <paramref name="accentAmount"/> los acentos al hablar y
+        /// <paramref name="speed"/> el ritmo de la respiración y del bucle de
+        /// reposo (su traspaso de peso).
+        /// </summary>
+        public void SetIdleTuning(float breath, float accentAmount, float speed)
+        {
+            _breathTuning = Mathf.Clamp(breath, 0f, 3f);
+            _accentTuning = Mathf.Clamp(accentAmount, 0f, 3f);
+            _speedTuning = Mathf.Clamp(speed, 0.25f, 3f);
+            if (choreographer != null)
+            {
+                choreographer.SetLoopSpeed(_speedTuning);
+            }
         }
 
         private void Awake()
@@ -290,6 +487,8 @@ namespace Sonia
             }
 
             _noiseSeed = UnityEngine.Random.value * 100f;
+            _breathPhase = UnityEngine.Random.value;
+            _breathPeriod = breathSeconds;
             RefreshBlendShapes();
             ScheduleNextBlink();
         }
@@ -349,6 +548,8 @@ namespace Sonia
         {
             _blinkLeftChannel = faceRig != null ? faceRig.Channel("eyeBlinkLeft") : -1;
             _blinkRightChannel = faceRig != null ? faceRig.Channel("eyeBlinkRight") : -1;
+            _browLeftChannel = faceRig != null ? faceRig.Channel("browDownLeft") : -1;
+            _browRightChannel = faceRig != null ? faceRig.Channel("browDownRight") : -1;
         }
 
         // ------------------------------------------------------------------
@@ -461,8 +662,17 @@ namespace Sonia
 
                     break;
                 case SpeechAnalyzer.EventKind.Syllable:
-                    if (e.Strength >= stressThreshold && now - _lastNod > 0.45f
-                        && UnityEngine.Random.value < stressNodChance)
+                    if (accents)
+                    {
+                        if (e.Strength >= accentThreshold && now - _lastAccent >= accentMinGap
+                            && UnityEngine.Random.value < accentChance)
+                        {
+                            float strength = Mathf.InverseLerp(accentThreshold, 1f, e.Strength);
+                            StartAccent(Mathf.Lerp(0.55f, 1f, strength));
+                        }
+                    }
+                    else if (e.Strength >= stressThreshold && now - _lastNod > 0.45f
+                             && UnityEngine.Random.value < stressNodChance)
                     {
                         float strength = Mathf.InverseLerp(stressThreshold, 1f, e.Strength);
                         Nod(stressNodDegrees * Mathf.Lerp(0.6f, 1f, strength));
@@ -483,14 +693,40 @@ namespace Sonia
             _lastNod = Time.time;
         }
 
+        /// <summary>Asentimiento lento de escucha, con su propio muelle (listenNodHz).</summary>
+        private void SlowNod(float degrees)
+        {
+            float omega = 2f * Mathf.PI * Mathf.Max(0.3f, listenNodHz);
+            _slowNod.Kick(degrees * omega * 2.718f);
+            _lastNod = Time.time;
+        }
+
+        /// <summary>Lanza la cascada de un acento y avisa a quien quiera acompañarlo (cejas).</summary>
+        private void StartAccent(float gain)
+        {
+            _lastAccent = Time.time;
+            if (_accents.Count >= 3)
+            {
+                _accents.RemoveAt(0);
+            }
+
+            _accents.Add(new Accent { Start = Time.time, Gain = gain });
+            Action<float> handler = OnEmphasis;
+            if (handler != null)
+            {
+                handler(gain);
+            }
+        }
+
         // ------------------------------------------------------------------
-        // Mirada y parpadeo
+        // Bucle
         // ------------------------------------------------------------------
 
         private void LateUpdate()
         {
             float deltaTime = Time.deltaTime;
             UpdateGestures(deltaTime);
+            UpdateBody(deltaTime);
             UpdateLook(deltaTime);
             UpdateBlink(deltaTime);
         }
@@ -509,23 +745,230 @@ namespace Sonia
                     targetPitch = 1.5f;
                     if (now >= _nextListenNod)
                     {
-                        _nextListenNod = now + UnityEngine.Random.Range(listenNodInterval.x, listenNodInterval.y);
-                        Nod(listenNodDegrees * UnityEngine.Random.Range(0.7f, 1.1f));
+                        float min = Mathf.Min(listenNodEvery.x, listenNodEvery.y);
+                        float max = Mathf.Max(listenNodEvery.x, listenNodEvery.y);
+                        _nextListenNod = now + UnityEngine.Random.Range(Mathf.Max(0.5f, min), Mathf.Max(0.6f, max));
+                        SlowNod(listenNodDegrees * UnityEngine.Random.Range(0.7f, 1.1f));
                     }
 
                     break;
                 case AvatarState.Thinking:
+                    // Algo arriba y ladeada (los ojos van arriba y a un lado).
                     targetRoll = thinkTiltDegrees * _tiltSide;
+                    targetPitch = -thinkLiftDegrees;
                     break;
             }
 
-            // El cabeceo tiene dos partes: la pose (lenta) y los asentimientos
-            // (empujones que vuelven solos a cero).
+            // El cabeceo tiene tres partes: la pose (lenta), los asentimientos de
+            // la voz y los de escucha (empujones que vuelven solos a cero).
             _pitch.Step(0f, 2.6f, dt);
+            _slowNod.Step(0f, Mathf.Max(0.3f, listenNodHz), dt);
             _pitchPose.Step(targetPitch, 1.2f, dt);
             _yaw.Step(targetYaw, 1.1f, dt);
             _roll.Step(targetRoll, 1.0f, dt);
         }
+
+        // ------------------------------------------------------------------
+        // Cuerpo: respiración, escucha y acentos
+        // ------------------------------------------------------------------
+
+        private void UpdateBody(float dt)
+        {
+            UpdateBreath(dt);
+            _lean.Step(_state == AvatarState.Listening ? listenLeanDegrees : 0f, 0.8f, dt);
+            float now = Time.time;
+            for (int i = _accents.Count - 1; i >= 0; i--)
+            {
+                if (now - _accents[i].Start > AccentSeconds)
+                {
+                    _accents.RemoveAt(i);
+                }
+            }
+
+            // Ángulos de este fotograma (grados; cabeceo positivo hacia delante).
+            float breath = breathing ? _breathValue * breathChestDegrees * _breathDepth * _breathTuning : 0f;
+            float shoulders = breathing ? (_breathValue * 0.5f + 0.5f) * breathShoulderDegrees * _breathDepth * _breathTuning : 0f;
+            float spine = 0f;
+            float chest = -breath + _lean.Value;
+            float neck = 0f;
+            float arms = 0f;
+            _accentHeadPitch = 0f;
+            // Los brazos solo acentúan si nadie más los usa: ni señalando una imagen,
+            // ni caminando, ni en un momento dirigido (mirada impuesta: la entrada
+            // del invitado, el apretón de manos).
+            bool armsFree = !_lookOverride
+                            && (choreographer == null || (!choreographer.IsPresenting && !choreographer.IsSuspended));
+            for (int i = 0; i < _accents.Count; i++)
+            {
+                float t = now - _accents[i].Start;
+                float g = _accents[i].Gain * accentScale * _accentTuning;
+
+                // Preparación hacia atrás y luego el acento, cada parte un poco
+                // después de la anterior (secuencia "breakdown" de Genies). La
+                // "cadera" va en la columna baja para no mover las piernas.
+                spine += g * (-0.4f * Pulse(t, 0f, 0.2f) + 2f * Pulse(t, 0.025f, 0.45f));
+                chest += g * (-1.2f * Pulse(t, 0f, 0.22f) + 3.4f * Pulse(t, 0.11f, 0.65f));
+                neck += g * 2f * Pulse(t, 0.18f, 0.75f);
+                _accentHeadPitch += g * 5.5f * Pulse(t, 0.18f, 0.8f);
+                if (armsFree)
+                {
+                    arms += g * (1f * Pulse(t, 0f, 0.22f) - accentArmDegrees * Pulse(t, 0.2f, 0.75f));
+                }
+            }
+
+            if (!ResolveBody())
+            {
+                return;
+            }
+
+            for (int i = 0; i < BodyBoneCount; i++)
+            {
+                PrepareBone(i);
+            }
+
+            Transform frame = _bodyAnimator.transform;
+            Vector3 right = frame.right;
+            Vector3 forward = frame.forward;
+            RotateBone(BSpine, right, spine);
+            RotateBone(_bodyBones[BUpperChest] != null ? BUpperChest : BChest, right, chest);
+            RotateBone(BNeck, right, neck);
+            LiftShoulder(BLeftShoulder, BLeftArm, forward, shoulders);
+            LiftShoulder(BRightShoulder, BRightArm, forward, shoulders);
+            RotateBone(BLeftArm, right, arms);
+            RotateBone(BRightArm, right, arms);
+
+            for (int i = 0; i < BodyBoneCount; i++)
+            {
+                if (_bodyBones[i] != null)
+                {
+                    _bodyWritten[i] = _bodyBones[i].localRotation;
+                    _bodyHasWritten[i] = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Avanza la respiración: inspira en el 40 % del ciclo y espira en el
+        /// resto, con curva suave. Cada respiración dura y abre algo distinto.
+        /// </summary>
+        private void UpdateBreath(float dt)
+        {
+            _breathPhase += dt * _speedTuning / Mathf.Max(0.5f, _breathPeriod);
+            if (_breathPhase >= 1f)
+            {
+                _breathPhase -= Mathf.Floor(_breathPhase);
+                float jitter = Mathf.Clamp(breathJitter, 0f, 0.5f);
+                _breathPeriod = Mathf.Max(1f, breathSeconds * (1f + UnityEngine.Random.Range(-jitter, jitter)));
+                _breathDepth = 1f + UnityEngine.Random.Range(-jitter, jitter);
+            }
+
+            const float inhale = 0.4f;
+            float v = _breathPhase < inhale
+                ? Smooth(_breathPhase / inhale)
+                : 1f - Smooth((_breathPhase - inhale) / (1f - inhale));
+            _breathValue = v * 2f - 1f;
+        }
+
+        /// <summary>Busca los huesos del cuerpo en el Animator de la cabeza (al cambiar de avatar).</summary>
+        private bool ResolveBody()
+        {
+            if (_bodyResolved && _bodyResolvedFor == headBone)
+            {
+                return _bodyAnimator != null;
+            }
+
+            _bodyResolved = true;
+            _bodyResolvedFor = headBone;
+            _bodyAnimator = headBone != null ? headBone.GetComponentInParent<Animator>() : null;
+            bool any = false;
+            for (int i = 0; i < BodyBoneCount; i++)
+            {
+                _bodyBones[i] = _bodyAnimator != null && _bodyAnimator.isHuman ? _bodyAnimator.GetBoneTransform(BodyBoneIds[i]) : null;
+                _bodyHasWritten[i] = false;
+                any |= _bodyBones[i] != null;
+            }
+
+            if (!any)
+            {
+                _bodyAnimator = null;
+            }
+
+            return _bodyAnimator != null;
+        }
+
+        /// <summary>
+        /// Deja el hueso en la pose de la animación de este fotograma. Si el
+        /// Animator no lo ha escrito (sigue lo que puso este componente), se
+        /// vuelve a la pose guardada para no acumular el giro fotograma a fotograma.
+        /// </summary>
+        private void PrepareBone(int index)
+        {
+            Transform bone = _bodyBones[index];
+            if (bone == null)
+            {
+                return;
+            }
+
+            Quaternion now = bone.localRotation;
+            Quaternion written = _bodyWritten[index];
+            bool stale = _bodyHasWritten[index] && now.x == written.x && now.y == written.y && now.z == written.z && now.w == written.w;
+            if (stale)
+            {
+                bone.localRotation = _bodyBase[index];
+            }
+            else
+            {
+                _bodyBase[index] = now;
+            }
+        }
+
+        private void RotateBone(int index, Vector3 axis, float degrees)
+        {
+            Transform bone = _bodyBones[index];
+            if (bone == null || Mathf.Abs(degrees) < 0.0001f)
+            {
+                return;
+            }
+
+            bone.rotation = Quaternion.AngleAxis(degrees, axis) * bone.rotation;
+        }
+
+        /// <summary>Sube un hombro <paramref name="degrees"/> (hacia la oreja), sea el izquierdo o el derecho.</summary>
+        private void LiftShoulder(int shoulder, int arm, Vector3 forward, float degrees)
+        {
+            Transform s = _bodyBones[shoulder];
+            Transform a = _bodyBones[arm];
+            if (s == null || a == null || Mathf.Abs(degrees) < 0.0001f)
+            {
+                return;
+            }
+
+            // Girando sobre "delante", un brazo a la derecha sube con ángulo
+            // positivo y uno a la izquierda con negativo.
+            float side = Mathf.Sign(Vector3.Dot(a.position - s.position, _bodyAnimator.transform.right));
+            RotateBone(shoulder, forward, degrees * side);
+        }
+
+        /// <summary>Subida y bajada suave entre <paramref name="start"/> y <paramref name="end"/> segundos, con el pico al 35 %.</summary>
+        private static float Pulse(float t, float start, float end)
+        {
+            if (t <= start || t >= end)
+            {
+                return 0f;
+            }
+
+            return FaceCurves.Bump((t - start) / (end - start), 0.35f);
+        }
+
+        private static float Smooth(float x)
+        {
+            x = Mathf.Clamp01(x);
+            return x * x * (3f - 2f * x);
+        }
+
+        // ------------------------------------------------------------------
+        // Cabeza
+        // ------------------------------------------------------------------
 
         private void UpdateLook(float deltaTime)
         {
@@ -535,21 +978,24 @@ namespace Sonia
             }
 
             Quaternion baseRotation = headBone.rotation;
+            bool wide = choreographer != null && choreographer.IsWideShot;
+            float stateWeight = _state == AvatarState.Speaking ? speakingHeadFollow
+                : _state == AvatarState.Listening ? listeningHeadFollow : headFollow;
             if (!_lookInitialized)
             {
                 _lookOffset = Quaternion.identity;
-                _currentWeight = lookWeight;
+                _currentWeight = stateWeight;
                 _lookInitialized = true;
             }
 
-            bool wide = choreographer != null && choreographer.IsWideShot;
-            float targetWeight = wide ? wideShotLookWeight : lookWeight;
+            float targetWeight = wide ? wideShotLookWeight : stateWeight;
             if (_lookOverride && _lookOverrideWeight >= 0f)
             {
                 targetWeight = Mathf.Clamp01(_lookOverrideWeight);
             }
 
             _currentWeight = Mathf.Lerp(_currentWeight, targetWeight, 1f - Mathf.Exp(-3f * deltaTime));
+            _gestureWeight = Mathf.Lerp(_gestureWeight, wide ? 0f : 1f, 1f - Mathf.Exp(-3f * deltaTime));
 
             Quaternion desiredOffset = Quaternion.identity;
             Vector3 targetPosition;
@@ -580,7 +1026,7 @@ namespace Sonia
             // Gestos encima de la mirada, en ejes del mundo alineados con ella:
             // cabeceo alrededor del eje "derecha", giro alrededor de la vertical
             // e inclinación alrededor de la dirección de la mirada. Durante los
-            // bailes manda la animación: los gestos se apagan con el peso.
+            // bailes manda la animación: los gestos se apagan.
             Vector3 forward = Vector3.ProjectOnPlane(lookDirection, Vector3.up);
             if (forward.sqrMagnitude < 0.0001f)
             {
@@ -589,10 +1035,10 @@ namespace Sonia
 
             forward.Normalize();
             Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
-            float gestureWeight = Mathf.InverseLerp(0f, Mathf.Max(0.01f, lookWeight), _currentWeight);
-            Quaternion gesture = Quaternion.AngleAxis(_roll.Value * gestureWeight, forward)
-                                 * Quaternion.AngleAxis((_pitch.Value + _pitchPose.Value) * gestureWeight, right)
-                                 * Quaternion.AngleAxis(_yaw.Value * gestureWeight, Vector3.up);
+            float pitch = _pitch.Value + _slowNod.Value + _pitchPose.Value + _accentHeadPitch;
+            Quaternion gesture = Quaternion.AngleAxis(_roll.Value * _gestureWeight, forward)
+                                 * Quaternion.AngleAxis(pitch * _gestureWeight, right)
+                                 * Quaternion.AngleAxis(_yaw.Value * _gestureWeight, Vector3.up);
             headBone.rotation = gesture * looked;
         }
 
@@ -601,21 +1047,11 @@ namespace Sonia
             return 1f - Mathf.Exp(-Mathf.Max(0.1f, lookSmoothing) * deltaTime);
         }
 
-        /// <summary>Punto del mundo al que mira ahora mismo (visitante, panel o el punto de pensar).</summary>
+        /// <summary>Punto del mundo al que mira la cabeza ahora mismo (visitante, panel o el punto de pensar).</summary>
         public bool TryGetLookPosition(out Vector3 position)
         {
-            if (_lookOverride)
+            if (TryGetOverrideOrPanel(out position))
             {
-                position = _lookOverridePosition;
-                return true;
-            }
-
-            // Un vistazo breve al panel cuando aparece la imagen; después la
-            // mirada vuelve al visitante, que es lo natural en una conversación.
-            bool glancing = imageGlanceSeconds <= 0f || Time.time - _imageShownAt < imageGlanceSeconds;
-            if (lookAtImageWhenVisible && _imageVisible && imageLookTarget != null && glancing)
-            {
-                position = imageLookTarget.position;
                 return true;
             }
 
@@ -634,6 +1070,57 @@ namespace Sonia
                 return true;
             }
 
+            return TryGetVisitor(out position);
+        }
+
+        /// <summary>
+        /// Punto base de los ojos: el mismo que la cabeza salvo al pensar, donde
+        /// los ojos parten del visitante y su plantilla de mirada los lleva arriba
+        /// y a un lado (EyeGazeController).
+        /// </summary>
+        public bool TryGetEyeTarget(out Vector3 position)
+        {
+            if (TryGetOverrideOrPanel(out position))
+            {
+                return true;
+            }
+
+            return TryGetVisitor(out position);
+        }
+
+        /// <summary>Cierto si ahora manda una mirada impuesta (caminar, invitado) o el vistazo al panel.</summary>
+        public bool HasDirectedGaze
+        {
+            get
+            {
+                Vector3 unused;
+                return TryGetOverrideOrPanel(out unused);
+            }
+        }
+
+        private bool TryGetOverrideOrPanel(out Vector3 position)
+        {
+            if (_lookOverride)
+            {
+                position = _lookOverridePosition;
+                return true;
+            }
+
+            // Un vistazo breve al panel cuando aparece la imagen; después la
+            // mirada vuelve al visitante, que es lo natural en una conversación.
+            bool glancing = imageGlanceSeconds <= 0f || Time.time - _imageShownAt < imageGlanceSeconds;
+            if (lookAtImageWhenVisible && _imageVisible && imageLookTarget != null && glancing)
+            {
+                position = imageLookTarget.position;
+                return true;
+            }
+
+            position = Vector3.zero;
+            return false;
+        }
+
+        private bool TryGetVisitor(out Vector3 position)
+        {
             if (lookTarget != null)
             {
                 position = lookTarget.position;
@@ -684,28 +1171,15 @@ namespace Sonia
                 return;
             }
 
-            float blink = 0f;
+            float left = 0f;
+            float right = 0f;
             if (_blinkElapsed >= 0f)
             {
                 _blinkElapsed += deltaTime;
-                float duration = Mathf.Max(0.06f, blinkDuration);
-                float close = duration * 0.35f;
-                float hold = duration * 0.1f;
-                if (_blinkElapsed < close)
-                {
-                    float t = _blinkElapsed / close;
-                    blink = t * t;
-                }
-                else if (_blinkElapsed < close + hold)
-                {
-                    blink = 1f;
-                }
-                else if (_blinkElapsed < duration)
-                {
-                    float t = (_blinkElapsed - close - hold) / (duration - close - hold);
-                    blink = 1f - (t * (2f - t));
-                }
-                else
+                float duration = Mathf.Max(0.08f, blinkSeconds);
+                left = BlinkCurve(_blinkElapsed - _blinkLeftDelay, duration) * _blinkDepth;
+                right = BlinkCurve(_blinkElapsed - _blinkRightDelay, duration) * _blinkDepth;
+                if (_blinkElapsed >= duration + Mathf.Max(_blinkLeftDelay, _blinkRightDelay))
                 {
                     _blinkElapsed = -1f;
                     if (_pendingSecondBlink >= 0f)
@@ -718,8 +1192,6 @@ namespace Sonia
                         ScheduleNextBlink();
                     }
                 }
-
-                blink *= _blinkDepth;
             }
             else
             {
@@ -727,9 +1199,9 @@ namespace Sonia
                 if (_timeToNextBlink <= 0f)
                 {
                     StartBlink(UnityEngine.Random.value < 0.1f ? 0.6f : 1f);
-                    if (UnityEngine.Random.value < doubleBlinkChance)
+                    if (UnityEngine.Random.value < doubleBlinkShare)
                     {
-                        _pendingSecondBlink = 0.08f;
+                        _pendingSecondBlink = UnityEngine.Random.Range(0.05f, 0.3f);
                     }
                 }
             }
@@ -742,11 +1214,40 @@ namespace Sonia
             }
 
             _lid = Mathf.Lerp(_lid, lidTarget, 1f - Mathf.Exp(-12f * deltaTime));
-            float weight = Mathf.Clamp01(Mathf.Max(blink, _lid));
-            ApplyBlink(weight * 100f);
+            faceRig.Add(_blinkLeftChannel, Mathf.Clamp01(Mathf.Max(left, _lid)));
+            faceRig.Add(_blinkRightChannel, Mathf.Clamp01(Mathf.Max(right, _lid)));
+
+            // Las cejas bajan un poco con el parpadeo, más despacio que el párpado.
+            _browBlink.Step(Mathf.Max(left, right), 2.5f, deltaTime);
+            float brow = Mathf.Clamp01(_browBlink.Value) * blinkBrowLower;
+            faceRig.Add(_browLeftChannel, brow);
+            faceRig.Add(_browRightChannel, brow);
         }
 
-        /// <summary>Parpadea ahora mismo (si no está ya parpadeando). Lo usan las sacadas grandes.</summary>
+        /// <summary>
+        /// Forma del parpadeo, 0..1: cierra en un tercio de la duración (rápido,
+        /// frena al cerrar) y abre en dos tercios (empieza despacio). Así el ojo
+        /// pasa algo más de 0,25 s medio cerrado, como en Genies.
+        /// </summary>
+        private static float BlinkCurve(float t, float duration)
+        {
+            if (t <= 0f || t >= duration)
+            {
+                return 0f;
+            }
+
+            float close = duration / 3f;
+            if (t < close)
+            {
+                float x = t / close;
+                return 1f - (1f - x) * (1f - x);
+            }
+
+            float y = (t - close) / (duration - close);
+            return 1f - y * y;
+        }
+
+        /// <summary>Parpadea ahora mismo (si no está ya parpadeando). Lo usan los cambios de mirada.</summary>
         public void TriggerBlink()
         {
             if (_blinkElapsed < 0f)
@@ -759,20 +1260,19 @@ namespace Sonia
         {
             _blinkElapsed = 0f;
             _blinkDepth = depth;
+
+            // Un ojo arranca unos milisegundos antes que el otro.
+            float offset = UnityEngine.Random.Range(0f, Mathf.Max(0f, blinkEyeOffset));
+            bool leftFirst = UnityEngine.Random.value < 0.5f;
+            _blinkLeftDelay = leftFirst ? 0f : offset;
+            _blinkRightDelay = leftFirst ? offset : 0f;
         }
 
         private void ScheduleNextBlink()
         {
-            float min = Mathf.Max(0.2f, Mathf.Min(blinkIntervalRange.x, blinkIntervalRange.y));
-            float max = Mathf.Max(min + 0.1f, Mathf.Max(blinkIntervalRange.x, blinkIntervalRange.y));
+            float min = Mathf.Max(0.2f, Mathf.Min(blinkEvery.x, blinkEvery.y));
+            float max = Mathf.Max(min + 0.1f, Mathf.Max(blinkEvery.x, blinkEvery.y));
             _timeToNextBlink = UnityEngine.Random.Range(min, max);
-        }
-
-        private void ApplyBlink(float weight)
-        {
-            // weight llega en 0..100; FaceRig suma en 0..1.
-            faceRig.Add(_blinkLeftChannel, weight / 100f);
-            faceRig.Add(_blinkRightChannel, weight / 100f);
         }
     }
 }

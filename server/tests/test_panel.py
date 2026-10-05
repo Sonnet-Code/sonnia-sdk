@@ -23,7 +23,13 @@ from sonia.actions import build_default_registry
 from sonia.config import PanelSettings, Settings
 from sonia.live.engine import LiveEngine
 from sonia.live.voicecache import VoiceCache
-from sonia.panel.control import DEFAULT_AWAY_MESSAGE, PanelState, StandControl, _Material
+from sonia.panel.control import (
+    DEFAULT_AWAY_MESSAGE,
+    PanelState,
+    StandControl,
+    _Material,
+    merge_tuning,
+)
 from sonia.panel.logs import LogBuffer
 from sonia.panel.server import AccessVerifier, PanelServer
 from sonia.ws.hub import Hub
@@ -424,6 +430,7 @@ async def test_developer_ajusta_boca_y_camara_y_llega_a_unity(tmp_path: Path) ->
         first = rig.rec.of_type("set_tuning")[-1]
         assert first["mouth"] == {"open": 1.0, "jaw": 1.0, "closure": 1.0, "speed": 1.0}
         assert first["camera"]["zoom"] == 1.0 and first["camera"]["height"] == 0.0
+        assert first["idle"] == {"breath": 1.0, "accents": 1.0, "speed": 1.0}
         ok, _ = await rig.control.act(
             "set_tuning", {"mouth": {"open": 1.4, "nariz": 2}, "camera": {"height": 9, "zoom": 1.2}}
         )
@@ -438,7 +445,7 @@ async def test_developer_ajusta_boca_y_camara_y_llega_a_unity(tmp_path: Path) ->
         assert ok
         tuning = rig.control.status()["tuning"]
         assert tuning["camera"]["height"] == 0.0 and tuning["mouth"]["open"] == 1.4
-        for bad in ({}, {"mouth": 3}, {"camera": "alto"}):
+        for bad in ({}, {"mouth": 3}, {"camera": "alto"}, {"idle": [1]}):
             ok, _ = await rig.control.act("set_tuning", bad)
             assert not ok
         ok, _ = await rig.control.act("reset_tuning", {"part": "pies"})
@@ -575,6 +582,42 @@ async def test_sin_pantalla_no_se_abre_el_editor_y_si_se_cierra_sonia_vuelve(
         assert rig.control.status()["avatar"]["editor_open"] is False
         ok, message = await rig.control.act("open_avatar_editor", {})
         assert not ok and "no está conectada" in message
+
+
+async def test_developer_ajusta_el_movimiento_en_reposo(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        await rig.rec.wait_type("set_tuning")
+        ok, _ = await rig.control.act(
+            "set_tuning", {"idle": {"breath": 1.6, "accents": 5, "speed": 0.1}}
+        )
+        assert ok
+        await rig.rec.wait_type("set_tuning", count=2)
+        sent = rig.rec.of_type("set_tuning")[-1]
+        # Recortado a sus límites; la boca y la cámara siguen como estaban.
+        assert sent["idle"] == {"breath": 1.6, "accents": 2.0, "speed": 0.5}
+        assert sent["mouth"]["open"] == 1.0 and sent["camera"]["zoom"] == 1.0
+        ok, _ = await rig.control.act("set_tuning", {"mouth": {"open": 1.2}})
+        assert ok
+        # Restablecer el movimiento no toca la boca.
+        ok, _ = await rig.control.act("reset_tuning", {"part": "idle"})
+        assert ok
+        tuning = rig.control.status()["tuning"]
+        assert tuning["idle"] == {"breath": 1.0, "accents": 1.0, "speed": 1.0}
+        assert tuning["mouth"]["open"] == 1.2
+
+
+async def test_un_ajuste_guardado_sin_movimiento_recibe_sus_valores_por_defecto(
+    tmp_path: Path,
+) -> None:
+    # Guardado por un orquestador anterior: boca y cámara, sin «idle».
+    path = tmp_path / "panel_state.json"
+    path.write_text(
+        json.dumps({"tuning": {"mouth": {"open": 1.3}, "camera": {"zoom": 1.1}}}), encoding="utf-8"
+    )
+    state = PanelState.load(path)
+    assert state.tuning["mouth"]["open"] == 1.3
+    assert state.tuning["idle"] == {"breath": 1.0, "accents": 1.0, "speed": 1.0}
+    assert merge_tuning({"mouth": {"open": 1.3}})["idle"]["speed"] == 1.0
 
 
 async def test_el_estado_viejo_del_panel_carga_con_los_valores_nuevos_por_defecto(

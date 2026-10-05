@@ -19,6 +19,11 @@
 // entreabría) y la mandíbula se suma en las sílabas fuertes. Todo pasa por
 // muelles críticamente amortiguados.
 //
+// Al callarse, la boca no se cierra de golpe: si por delante ya no hay voz, el
+// resto de apertura se cierra con una curva suave en closeSeconds (el
+// MouthCloser de Genies, docs/informe-mia.md). En una interrupción, igual pero
+// más deprisa.
+//
 // También reparte la prosodia: los eventos de sílaba y de frase del analizador
 // salen por OnSpeechEvent cuando les llega su momento, para que cabeza, cejas y
 // parpadeo vayan con la voz.
@@ -118,6 +123,22 @@ namespace Sonia
         [Tooltip("Constante de tiempo (s) del suavizado de la vocal reconocida. Muy baja: la forma tiembla.")]
         public float vowelSmoothing = 0.05f;
 
+        [Header("Cierre al callarse")]
+        [SerializeField]
+        [Range(0f, 2f)]
+        [Tooltip("Al callarse, la boca termina de cerrarse en este tiempo con una curva suave (el MouthCloser de Genies). Casi todo el cierre ocurre en el primer 40 %. 0: con el muelle, de golpe, como antes.")]
+        public float closeSeconds = 1f;
+
+        [SerializeField]
+        [Range(0.02f, 0.12f)]
+        [Tooltip("Silencio que tiene que verse por delante (s) para cerrar despacio. Las pausas más cortas (consonantes, entre palabras) cierran con el muelle.")]
+        public float closeLookahead = 0.06f;
+
+        [SerializeField]
+        [Range(0.05f, 1f)]
+        [Tooltip("Tiempo de cierre al cortar la voz (interrupción): rápido, pero sin saltar a boca cerrada.")]
+        public float interruptCloseSeconds = 0.25f;
+
         /// <summary>Evento de prosodia cuando le llega su momento (ver gestureLeadMs). Hilo principal.</summary>
         public event Action<SpeechAnalyzer.SpeechEvent> OnSpeechEvent;
 
@@ -158,6 +179,12 @@ namespace Sonia
         private readonly Spring[] _vowelSprings = new Spring[5];
         private float _roundness;
         private bool _active;
+
+        // Cierre suave al callarse: apertura de partida, tiempo transcurrido y duración.
+        private bool _closing;
+        private float _closeFrom;
+        private float _closeElapsed;
+        private float _closeDuration;
 
         // Valores de la escena antes de los multiplicadores de «Developer».
         private bool _tuningBaseCaptured;
@@ -405,7 +432,11 @@ namespace Sonia
         {
         }
 
-        /// <summary>Interrupción: se olvida la voz pendiente y la boca se cierra en el acto.</summary>
+        /// <summary>
+        /// Interrupción: se olvida la voz pendiente y la boca se cierra ya, en
+        /// interruptCloseSeconds y con la misma curva suave que al acabar una
+        /// frase (saltar a boca cerrada en un fotograma se ve como un corte).
+        /// </summary>
         public void StopAndClose()
         {
             if (_analyzer != null)
@@ -413,19 +444,14 @@ namespace Sonia
                 _analyzer.ClearEvents();
             }
 
-            _open.Reset();
             _closure.Reset();
             _sibilant.Reset();
-            _jaw.Reset();
-            for (int v = 0; v < _vowelSprings.Length; v++)
-            {
-                _vowelSprings[v].Reset();
-            }
-
             _vowelCount = 0;
             _active = false;
-            _roundness = 0f;
-            Apply(0f);
+            _closing = true;
+            _closeFrom = Mathf.Max(0f, _open.Value);
+            _closeElapsed = 0f;
+            _closeDuration = Mathf.Max(0.05f, interruptCloseSeconds);
         }
 
         /// <summary>Estado interno en texto, para depurar desde el editor o el HUD.</summary>
@@ -534,8 +560,7 @@ namespace Sonia
             _active = f.Voiced || openTarget > 0.05f;
 
             UpdateVowelMix(at, dt);
-
-            _open.Step(openTarget, mouthSpeed * 1.4f, mouthSpeed, dt);
+            UpdateOpening(f, openTarget, at, dt);
             _closure.Step(closure * closureWeight, closureSpeed, closureSpeed * 0.7f, dt);
             _sibilant.Step(sib * sibilantWeight * (1f - closure), mouthSpeed, dt);
 
@@ -549,6 +574,64 @@ namespace Sonia
             _jaw.Step(jawTarget, mouthSpeed, dt);
             _roundness = Mathf.Clamp01((_mix[VO] + _mix[VU]) * a * 1.6f);
             Apply(a);
+        }
+
+        /// <summary>
+        /// Apertura de la boca. Con voz, el muelle de siempre. Al callarse (no hay
+        /// voz ahora ni en closeLookahead por delante), lo que queda abierto se
+        /// cierra en closeSeconds con una curva que frena al final (cúbica), sin
+        /// el golpe del muelle. Si vuelve la voz, el muelle sigue desde donde esté.
+        /// </summary>
+        private void UpdateOpening(SpeechAnalyzer.Features f, float openTarget, double at, float dt)
+        {
+            bool quiet = !f.Voiced && openTarget < 0.05f;
+            bool interrupting = _closing && _closeDuration < closeSeconds;
+            if (quiet && closeSeconds > 0.01f && (interrupting || SilentAhead(at, closeLookahead)))
+            {
+                if (!_closing)
+                {
+                    _closing = true;
+                    _closeFrom = Mathf.Max(0f, _open.Value);
+                    _closeElapsed = 0f;
+                    _closeDuration = closeSeconds;
+                }
+
+                _closeElapsed += dt;
+                float x = Mathf.Clamp01(_closeElapsed / Mathf.Max(0.05f, _closeDuration));
+                float left = 1f - x;
+                _open.Value = _closeFrom * left * left * left;
+                _open.Velocity = 0f;
+                return;
+            }
+
+            _closing = false;
+            _open.Step(openTarget, mouthSpeed * 1.4f, mouthSpeed, dt);
+        }
+
+        /// <summary>
+        /// Cierto si no hay voz en los <paramref name="seconds"/> que siguen a
+        /// <paramref name="at"/>. Solo se mira lo ya analizado (va unos 100 ms por
+        /// delante de lo que suena); con menos de 30 ms a la vista no se decide.
+        /// </summary>
+        private bool SilentAhead(double at, float seconds)
+        {
+            int rate = _analyzer.SampleRate;
+            double end = Math.Min(at + seconds * rate, _analyzer.AnalyzedUpTo - 1);
+            if (end - at < 0.03 * rate)
+            {
+                return false;
+            }
+
+            double step = Math.Max(1.0, 0.005 * rate);
+            for (double s = at + step; s <= end; s += step)
+            {
+                if (_analyzer.Sample(s).Voiced)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>

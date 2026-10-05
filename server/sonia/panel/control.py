@@ -112,9 +112,9 @@ SHARED_SETTINGS: tuple[str, ...] = (
 )
 
 #: Ajustes de «Developer»: grupo -> valor -> (mínimo, máximo, por defecto). La
-#: boca va en multiplicadores de lo que trae la escena de Unity (1 = tal cual) y
-#: la cámara en desplazamientos sobre su plano base (metros y grados) más un
-#: zoom que estrecha o abre el campo de visión.
+#: boca y el movimiento en reposo van en multiplicadores de lo que trae la escena
+#: de Unity (1 = tal cual) y la cámara en desplazamientos sobre su plano base
+#: (metros y grados) más un zoom que estrecha o abre el campo de visión.
 TUNING_LIMITS: dict[str, dict[str, tuple[float, float, float]]] = {
     "mouth": {
         "open": (0.0, 2.0, 1.0),  # apertura de vocales y mandíbula
@@ -128,6 +128,11 @@ TUNING_LIMITS: dict[str, dict[str, tuple[float, float, float]]] = {
         "side": (-0.4, 0.4, 0.0),  # metros, + a la derecha de la pantalla
         "zoom": (0.5, 2.0, 1.0),  # >1 acerca (campo de visión más estrecho)
         "tilt": (-15.0, 15.0, 0.0),  # grados, + mira más abajo
+    },
+    "idle": {
+        "breath": (0.0, 2.0, 1.0),  # respiración (pecho, hombros y cabeza)
+        "accents": (0.0, 2.0, 1.0),  # acentos del cuerpo en las sílabas fuertes
+        "speed": (0.5, 1.5, 1.0),  # ritmo de la respiración y del reposo
     },
 }
 
@@ -154,7 +159,7 @@ USAGE_SAVE_S = 30.0
 
 
 def default_tuning() -> dict[str, dict[str, float]]:
-    """Ajustes de «Developer» sin tocar: la boca y la cámara como vienen de la escena."""
+    """Ajustes de «Developer» sin tocar: boca, cámara y movimiento como vienen de la escena."""
     return {
         group: {name: limits[2] for name, limits in values.items()}
         for group, values in TUNING_LIMITS.items()
@@ -205,7 +210,7 @@ class PanelState:
     subtitles: bool = True
     #: Clips que Sonia no usa por su cuenta (bloque «Animaciones»).
     disabled_animations: list[str] = field(default_factory=list)
-    #: Ajustes de «Developer»: boca y cámara (ver ``TUNING_LIMITS``).
+    #: Ajustes de «Developer»: boca, cámara y movimiento en reposo (ver ``TUNING_LIMITS``).
     tuning: dict[str, dict[str, float]] = field(default_factory=default_tuning)
     #: Definición del avatar de Genies guardada en el editor de personaje (JSON en
     #: texto); ``None``: el personaje que trae la app.
@@ -872,14 +877,14 @@ class StandControl:
     async def _act_set_tuning(self, params: dict[str, Any]) -> tuple[bool, str]:
         changes = {group: params[group] for group in TUNING_LIMITS if group in params}
         if not changes or not all(isinstance(values, dict) for values in changes.values()):
-            raise _BadRequest("Faltan los valores de la boca o de la cámara.")
+            raise _BadRequest("Faltan los valores de la boca, la cámara o el movimiento.")
         await self._set_shared("tuning", merge_tuning(self.state.tuning, changes))
         return True, "Ajuste aplicado."
 
     async def _act_reset_tuning(self, params: dict[str, Any]) -> tuple[bool, str]:
         part = params.get("part", "all")
         if part not in (*TUNING_LIMITS, "all"):
-            raise _BadRequest("¿Qué hay que restablecer: la boca, la cámara o todo?")
+            raise _BadRequest("¿Qué hay que restablecer: la boca, la cámara, el movimiento o todo?")
         defaults = default_tuning()
         if part == "all":
             tuning = defaults
@@ -889,7 +894,8 @@ class StandControl:
         return True, {
             "mouth": "Boca como viene de la escena.",
             "camera": "Cámara en su encuadre de siempre.",
-            "all": "Boca y cámara como vienen de la escena.",
+            "idle": "Movimiento en reposo como viene de la escena.",
+            "all": "Boca, cámara y movimiento como vienen de la escena.",
         }[str(part)]
 
     async def _act_prepare_voices(self, params: dict[str, Any]) -> tuple[bool, str]:

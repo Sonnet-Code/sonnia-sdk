@@ -494,6 +494,9 @@ MonoBehaviour:
   faceRig: {fileID: 232277533}
   stateController: {fileID: 232277534}
   lipSync: {fileID: 232277535}
+  baseSmile: 0.35
+  baseSmileWhileThinking: 0.5
+  baseBrows: 0.08
   restSmile: 0.3
   listenSmile: 0.4
   thinkSmile: 0.08
@@ -527,19 +530,45 @@ MonoBehaviour:
   headBone: {fileID: 0}
   stateController: {fileID: 232277534}
   choreographer: {fileID: 232277530}
-  blinkOnBigSaccade: 1
+  blinkOnShift: 0.7
   minFocusDistance: 2.5
+  speakingGaze:
+    jumpsPerMinute: 0
+    eyeContact: 1
+    yawDegrees: {x: 0, y: 0}
+    pitchDegrees: {x: 0, y: 0}
+    micro: 0.6
+    glanceSeconds: {x: 0, y: 0}
+  listeningGaze:
+    jumpsPerMinute: 10
+    eyeContact: 0.15
+    yawDegrees: {x: 4, y: 11}
+    pitchDegrees: {x: -3, y: 3}
+    micro: 1
+    glanceSeconds: {x: 1.5, y: 3}
+  thinkingGaze:
+    jumpsPerMinute: 20
+    eyeContact: 0.29
+    yawDegrees: {x: 4, y: 11}
+    pitchDegrees: {x: -9, y: -3}
+    micro: 1
+    glanceSeconds: {x: 0, y: 0}
+  idleGaze:
+    jumpsPerMinute: 17
+    eyeContact: 0.13
+    yawDegrees: {x: 5, y: 14}
+    pitchDegrees: {x: -3, y: 8}
+    micro: 1
+    glanceSeconds: {x: 0, y: 0}
+  thinkingSameSide: 0.75
   gazeGain: 0.65
   convergenceDegrees: -8
-  maxYaw: 10
-  maxPitch: 8
+  yawLimit: 16
+  pitchLimit: 11
+  excursionLimit: 14
   saccadeInterval: {x: 0.7, y: 2.6}
   saccadeAmplitude: {x: 2.5, y: 1.5}
-  glanceInterval: {x: 4, y: 9}
-  glanceDuration: {x: 0.35, y: 0.9}
-  glanceAmplitude: {x: 5, y: 3}
   wideShotLiveliness: 1.6
-  maxOffsetDegrees: 7
   speed: 30
   jitterDegrees: 0.35
 --- !u!114 &232277529
@@ -574,13 +603,13 @@ MonoBehaviour:
   stateFade: 0.55
   speakFade: 0.35
   talkingChainFade: 0.5
-  variationFade: 0.6
-  attentionFadeIn: 0.4
-  attentionFadeOut: 0.7
+  gestureFade: 0.8
+  presentFade: 0.5
   nodFade: 0.3
+  singleConversationLoop: 1
   idleVariationInterval: {x: 7, y: 16}
-  firstAttentionDelay: 30
-  attentionInterval: {x: 30, y: 60}
+  attentionQuietDelay: 30
+  attentionSpacing: {x: 30, y: 60}
   fourthWallWeight: 0
   danceWeight: 0
   softWeight: 1
@@ -605,6 +634,7 @@ MonoBehaviour:
   animator: {fileID: 0}
   upperBodyMask: {fileID: 31900000, guid: 32c5d60b0cc6d4c87ac26c2439745a43, type: 2}
   slotsPerLayer: 4
+  smoothFades: 1
 --- !u!114 &232277532
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -631,6 +661,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Sonia::Sonia.FaceRig
   avatarRoot: {fileID: 0}
+  lipShapeGains: 1
 --- !u!114 &232277534
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -651,7 +682,9 @@ MonoBehaviour:
   imageLookTarget: {fileID: 0}
   lookAtImageWhenVisible: 1
   imageGlanceSeconds: 1.6
-  lookWeight: 0.7
+  headFollow: 0.3
+  speakingHeadFollow: 0.5
+  listeningHeadFollow: 0.5
   wideShotLookWeight: 0.3
   choreographer: {fileID: 232277530}
   maxLookAngle: 40
@@ -665,13 +698,29 @@ MonoBehaviour:
   phrasePoseDegrees: 4
   listenTiltDegrees: 6
   listenNodDegrees: 2.5
-  listenNodInterval: {x: 2.8, y: 5.5}
+  listenNodEvery: {x: 4, y: 8}
+  listenNodHz: 1.4
   thinkTiltDegrees: 5
+  thinkLiftDegrees: 4
+  breathing: 1
+  breathSeconds: 5
+  breathJitter: 0.12
+  breathChestDegrees: 1.1
+  breathShoulderDegrees: 0.6
+  listenLeanDegrees: 2
+  accents: 1
+  accentThreshold: 0.8
+  accentChance: 0.6
+  accentMinGap: 0.9
+  accentScale: 0.6
+  accentArmDegrees: 2.5
   faceRig: {fileID: 232277533}
-  blinkIntervalRange: {x: 2.5, y: 6}
-  blinkDuration: 0.14
+  blinkEvery: {x: 3, y: 5}
+  blinkSeconds: 0.38
   blinkOnSpeechChance: 0.35
-  doubleBlinkChance: 0.12
+  doubleBlinkShare: 0.18
+  blinkEyeOffset: 0.012
+  blinkBrowLower: 0.25
   lidFollowsGaze: 0.25
   eyeGaze: {fileID: 0}
 --- !u!114 &232277535
@@ -702,6 +751,9 @@ MonoBehaviour:
   mouthSpeed: 10
   closureSpeed: 16
   vowelSmoothing: 0.05
+  closeSeconds: 1
+  closeLookahead: 0.06
+  interruptCloseSeconds: 0.25
 --- !u!114 &232277536
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6669,7 +6721,6 @@ MonoBehaviour:
   inputField: {fileID: 656104790}
   interruptButton: {fileID: 362628973}
   visibleOnStart: 1
-  escapeInterrupts: 1
 --- !u!114 &1767658854
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6710,7 +6761,9 @@ MonoBehaviour:
   imageLookTarget: {fileID: 1062066862}
   lookAtImageWhenVisible: 1
   imageGlanceSeconds: 1.6
-  lookWeight: 0.7
+  headFollow: 0.3
+  speakingHeadFollow: 0.5
+  listeningHeadFollow: 0.5
   wideShotLookWeight: 0.3
   choreographer: {fileID: 1767658864}
   maxLookAngle: 40
@@ -6724,13 +6777,29 @@ MonoBehaviour:
   phrasePoseDegrees: 4
   listenTiltDegrees: 6
   listenNodDegrees: 2.5
-  listenNodInterval: {x: 2.8, y: 5.5}
+  listenNodEvery: {x: 4, y: 8}
+  listenNodHz: 1.4
   thinkTiltDegrees: 5
+  thinkLiftDegrees: 4
+  breathing: 1
+  breathSeconds: 5
+  breathJitter: 0.12
+  breathChestDegrees: 1.1
+  breathShoulderDegrees: 0.6
+  listenLeanDegrees: 2
+  accents: 1
+  accentThreshold: 0.8
+  accentChance: 0.6
+  accentMinGap: 0.9
+  accentScale: 0.6
+  accentArmDegrees: 2.5
   faceRig: {fileID: 1767658874}
-  blinkIntervalRange: {x: 2.5, y: 6}
-  blinkDuration: 0.14
+  blinkEvery: {x: 3, y: 5}
+  blinkSeconds: 0.38
   blinkOnSpeechChance: 0.35
-  doubleBlinkChance: 0.12
+  doubleBlinkShare: 0.18
+  blinkEyeOffset: 0.012
+  blinkBrowLower: 0.25
   lidFollowsGaze: 0.25
   eyeGaze: {fileID: 0}
 --- !u!114 &1767658856
@@ -6761,6 +6830,9 @@ MonoBehaviour:
   mouthSpeed: 10
   closureSpeed: 16
   vowelSmoothing: 0.05
+  closeSeconds: 1
+  closeLookahead: 0.06
+  interruptCloseSeconds: 0.25
 --- !u!114 &1767658857
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6959,13 +7031,13 @@ MonoBehaviour:
   stateFade: 0.55
   speakFade: 0.35
   talkingChainFade: 0.5
-  variationFade: 0.6
-  attentionFadeIn: 0.4
-  attentionFadeOut: 0.7
+  gestureFade: 0.8
+  presentFade: 0.5
   nodFade: 0.3
+  singleConversationLoop: 1
   idleVariationInterval: {x: 7, y: 16}
-  firstAttentionDelay: 6
-  attentionInterval: {x: 12, y: 30}
+  attentionQuietDelay: 25
+  attentionSpacing: {x: 10, y: 20}
   fourthWallWeight: 0.45
   danceWeight: 0.3
   softWeight: 0.25
@@ -6990,6 +7062,7 @@ MonoBehaviour:
   animator: {fileID: 0}
   upperBodyMask: {fileID: 31900000, guid: 32c5d60b0cc6d4c87ac26c2439745a43, type: 2}
   slotsPerLayer: 4
+  smoothFades: 1
 --- !u!114 &1767658866
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7007,19 +7080,45 @@ MonoBehaviour:
   headBone: {fileID: 0}
   stateController: {fileID: 1767658855}
   choreographer: {fileID: 1767658864}
-  blinkOnBigSaccade: 1
+  blinkOnShift: 0.7
   minFocusDistance: 2.5
+  speakingGaze:
+    jumpsPerMinute: 0
+    eyeContact: 1
+    yawDegrees: {x: 0, y: 0}
+    pitchDegrees: {x: 0, y: 0}
+    micro: 0.6
+    glanceSeconds: {x: 0, y: 0}
+  listeningGaze:
+    jumpsPerMinute: 10
+    eyeContact: 0.15
+    yawDegrees: {x: 4, y: 11}
+    pitchDegrees: {x: -3, y: 3}
+    micro: 1
+    glanceSeconds: {x: 1.5, y: 3}
+  thinkingGaze:
+    jumpsPerMinute: 20
+    eyeContact: 0.29
+    yawDegrees: {x: 4, y: 11}
+    pitchDegrees: {x: -9, y: -3}
+    micro: 1
+    glanceSeconds: {x: 0, y: 0}
+  idleGaze:
+    jumpsPerMinute: 17
+    eyeContact: 0.13
+    yawDegrees: {x: 5, y: 14}
+    pitchDegrees: {x: -3, y: 8}
+    micro: 1
+    glanceSeconds: {x: 0, y: 0}
+  thinkingSameSide: 0.75
   gazeGain: 0.65
   convergenceDegrees: -8
-  maxYaw: 10
-  maxPitch: 8
+  yawLimit: 16
+  pitchLimit: 11
+  excursionLimit: 14
   saccadeInterval: {x: 0.7, y: 2.6}
   saccadeAmplitude: {x: 2.5, y: 1.5}
-  glanceInterval: {x: 4, y: 9}
-  glanceDuration: {x: 0.35, y: 0.9}
-  glanceAmplitude: {x: 5, y: 3}
   wideShotLiveliness: 1.6
-  maxOffsetDegrees: 7
   speed: 30
   jitterDegrees: 0.35
 --- !u!114 &1767658867
@@ -7066,6 +7165,9 @@ MonoBehaviour:
   faceRig: {fileID: 1767658874}
   stateController: {fileID: 1767658855}
   lipSync: {fileID: 1767658856}
+  baseSmile: 0.35
+  baseSmileWhileThinking: 0.5
+  baseBrows: 0.08
   restSmile: 0.3
   listenSmile: 0.4
   thinkSmile: 0.08
@@ -7147,6 +7249,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Sonia::Sonia.FaceRig
   avatarRoot: {fileID: 0}
+  lipShapeGains: 1
 --- !u!114 &1767658875
 MonoBehaviour:
   m_ObjectHideFlags: 0

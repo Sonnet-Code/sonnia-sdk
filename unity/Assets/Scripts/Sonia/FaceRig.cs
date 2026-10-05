@@ -16,6 +16,10 @@
 // Los controladores suman sus aportaciones durante el fotograma (Add) y aquí,
 // después de todos ellos, se escribe cada forma una sola vez con la suma
 // recortada a 1. Lo que nadie escribe en un fotograma vuelve a 0.
+//
+// En los visemas (el lip-sync) se aplican además las ganancias por forma que
+// Genies usa en su propio lip-sync (demeanor de Veyra, docs/informe-mia.md): el
+// embudo, el pucker y los cierres salían exagerados y Genies los rebaja.
 
 using System;
 using System.Collections.Generic;
@@ -31,6 +35,29 @@ namespace Sonia
         [SerializeField]
         [Tooltip("Raíz del avatar; se usan todas las mallas con blendshapes que cuelgan de ella.")]
         private Transform avatarRoot;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Cuánto se aplican a los visemas las ganancias por forma del lip-sync de Genies: embudo ×0,5, pucker ×0,75, LIPS_TOWARD ×0,4 y CHIN_RAISER_T ×0,3. 1: las de Genies; 0: las recetas tal cual; 0,5: a medias.")]
+        private float lipShapeGains = 1f;
+
+        /// <summary>
+        /// Ganancias por forma que Genies aplica a su lip-sync (demeanor de Veyra,
+        /// docs/informe-mia.md, apartado 5.2). Solo cuentan en los visemas: una
+        /// expresión (pucker al pensar, labios apretados) no se toca.
+        /// </summary>
+        private static readonly Dictionary<string, float> GeniesLipSyncGains =
+            new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "LIP_FUNNELER_LB", 0.5f },
+                { "LIP_FUNNELER_LT", 0.5f },
+                { "LIP_FUNNELER_RB", 0.5f },
+                { "LIP_FUNNELER_RT", 0.5f },
+                { "LIP_PUCKER_L", 0.75f },
+                { "LIP_PUCKER_R", 0.75f },
+                { "LIPS_TOWARD", 0.4f },
+                { "CHIN_RAISER_T", 0.3f },
+            };
 
         private readonly struct Part
         {
@@ -55,6 +82,9 @@ namespace Sonia
         {
             public int Target;
             public float Factor;
+
+            // Ganancia de lip-sync de Genies para esta forma (1 si no lleva).
+            public float LipGain;
         }
 
         private static Part P(string shape, float weight = 1f)
@@ -184,6 +214,13 @@ namespace Sonia
         /// <summary>Malla con más formas de cara, la que se mide y se enseña en el laboratorio.</summary>
         public SkinnedMeshRenderer PrimaryRenderer { get; private set; }
 
+        /// <summary>Cuánto se aplican las ganancias de lip-sync de Genies a los visemas (0..1). Lo usa el laboratorio de cara.</summary>
+        public float LipShapeGains
+        {
+            get { return lipShapeGains; }
+            set { lipShapeGains = Mathf.Clamp01(value); }
+        }
+
         private void Awake()
         {
             EnsureBuilt();
@@ -229,7 +266,13 @@ namespace Sonia
             Contribution[] parts = _channels[channel];
             for (int i = 0; i < parts.Length; i++)
             {
-                _accum[parts[i].Target] += weight01 * parts[i].Factor;
+                float factor = parts[i].Factor;
+                if (parts[i].LipGain != 1f)
+                {
+                    factor *= Mathf.Lerp(1f, parts[i].LipGain, lipShapeGains);
+                }
+
+                _accum[parts[i].Target] += weight01 * factor;
             }
         }
 
@@ -316,9 +359,16 @@ namespace Sonia
 
             Transform root = avatarRoot != null ? avatarRoot : transform;
             SkinnedMeshRenderer[] renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            bool lipSync = _genies && channel.StartsWith("viseme_", StringComparison.OrdinalIgnoreCase);
             List<Contribution> parts = new List<Contribution>();
             for (int p = 0; p < recipe.Length; p++)
             {
+                float lipGain;
+                if (!lipSync || !GeniesLipSyncGains.TryGetValue(recipe[p].Shape, out lipGain))
+                {
+                    lipGain = 1f;
+                }
+
                 for (int r = 0; r < renderers.Length; r++)
                 {
                     Mesh mesh = renderers[r].sharedMesh;
@@ -328,7 +378,10 @@ namespace Sonia
                         continue;
                     }
 
-                    parts.Add(new Contribution { Target = TargetFor(renderers[r], index), Factor = recipe[p].Weight });
+                    parts.Add(new Contribution
+                    {
+                        Target = TargetFor(renderers[r], index), Factor = recipe[p].Weight, LipGain = lipGain
+                    });
                 }
             }
 

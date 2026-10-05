@@ -50,7 +50,8 @@
   const TUNING_SEND_MS = 150; // un deslizador de Developer manda como mucho esto a menudo
 
   // Ajustes de «Developer». Mismos límites que TUNING_LIMITS en control.py: la
-  // boca en multiplicadores de lo que trae la escena y la cámara sobre su plano base.
+  // boca y el movimiento en multiplicadores de lo que trae la escena y la cámara
+  // sobre su plano base.
   const TUNING_SPEC = {
     mouth: [
       { key: "open", label: "Apertura de la boca", min: 0, max: 2, step: 0.05, def: 1, unit: "%", ends: ["Cerrada", "Muy abierta"] },
@@ -64,6 +65,11 @@
       { key: "distance", label: "Distancia", min: -0.6, max: 1, step: 0.02, def: 0, unit: "cm", ends: ["Más cerca", "Más lejos"] },
       { key: "side", label: "Lateral", min: -0.4, max: 0.4, step: 0.01, def: 0, unit: "cm", ends: ["Izquierda", "Derecha"] },
       { key: "tilt", label: "Inclinación", min: -15, max: 15, step: 0.5, def: 0, unit: "°", ends: ["Mira arriba", "Mira abajo"] },
+    ],
+    idle: [
+      { key: "breath", label: "Respiración", min: 0, max: 2, step: 0.05, def: 1, unit: "%", ends: ["Sin respirar", "Muy marcada"] },
+      { key: "accents", label: "Acentos al hablar", min: 0, max: 2, step: 0.05, def: 1, unit: "%", ends: ["Sin acentos", "Muy marcados"] },
+      { key: "speed", label: "Ritmo del reposo", min: 0.5, max: 1.5, step: 0.05, def: 1, unit: "%", ends: ["Más lento", "Más rápido"] },
     ],
   };
 
@@ -269,7 +275,7 @@
       "volume-value", "gate-input", "gate-value", "gate-meter-fill", "gate-meter-mark",
       "gate-meter-caption", "health-list", "last-error", "last-error-text", "chat", "chat-empty",
       "voice-select", "voice-btn", "showcase-input", "anim-groups", "debug-input", "subtitles-input",
-      "hero-debug", "ask-form", "ask-input", "ask-btn", "tune-mouth", "tune-camera",
+      "hero-debug", "ask-form", "ask-input", "ask-btn", "tune-mouth", "tune-camera", "tune-idle",
       "avatar-state", "avatar-edit-btn", "avatar-close-btn", "avatar-reset-btn",
       "guest-avatar-state", "guest-avatar-edit-btn", "guest-avatar-reset-btn",
       "restart-btn", "cache-progress", "cache-text", "cache-btn", "session-facts", "usage-facts", "log",
@@ -1837,9 +1843,9 @@
 
   /** Pinta los deslizadores de Developer a partir de TUNING_SPEC (una vez, al arrancar). */
   function buildTuning() {
-    const lists = { mouth: ui.tuneMouth, camera: ui.tuneCamera };
+    const lists = { mouth: ui.tuneMouth, camera: ui.tuneCamera, idle: ui.tuneIdle };
     for (const [group, specs] of Object.entries(TUNING_SPEC)) {
-      lists[group].replaceChildren(...specs.map((spec) => tuningControl(group, spec)));
+      if (lists[group]) lists[group].replaceChildren(...specs.map((spec) => tuningControl(group, spec)));
     }
     ui.tuningInputs = Array.from(document.querySelectorAll("input[data-tune-group]"));
   }

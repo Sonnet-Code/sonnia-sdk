@@ -455,9 +455,15 @@ namespace Sonia
 
             MouthTuning mouth = message.Mouth ?? new MouthTuning();
             CameraTuning view = message.Camera ?? new CameraTuning();
+            IdleTuning idle = message.Idle ?? new IdleTuning();
             if (lipSync != null)
             {
                 lipSync.ApplyTuning(mouth.Open, mouth.Jaw, mouth.Closure, mouth.Speed);
+            }
+
+            if (avatarState != null)
+            {
+                avatarState.SetIdleTuning(idle.Breath, idle.Accents, idle.Speed);
             }
 
             if (cameraFraming != null)

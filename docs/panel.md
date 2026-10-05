@@ -14,7 +14,7 @@ El orquestador sigue sirviendo el mismo panel en `http://127.0.0.1:8780/` como r
 
 ## Dónde se guardan los ajustes
 
-Los ajustes son de Sonia, no de un equipo: el texto del letrero, los avisos del día, el volumen, la sensibilidad del micrófono, la voz, la animación de stand, los subtítulos, las animaciones que no usa por su cuenta, los de «Developer» (boca y cámara) y los personajes guardados en el editor (el de Sonia y el de Jean del Modo Jean) se guardan **en la nube** y valen para todas las Sonias (`SHARED_SETTINGS` en `server/sonia/panel/control.py`). Da igual desde dónde se cambien, el panel de Cloudflare o el local (`http://127.0.0.1:8780`): el orquestador los aplica al momento y los sube a la nube, que los reparte a las demás Sonias conectadas.
+Los ajustes son de Sonia, no de un equipo: el texto del letrero, los avisos del día, el volumen, la sensibilidad del micrófono, la voz, la animación de stand, los subtítulos, las animaciones que no usa por su cuenta, los de «Developer» (boca, cámara y movimiento en reposo) y los personajes guardados en el editor (el de Sonia y el de Jean del Modo Jean) se guardan **en la nube** y valen para todas las Sonias (`SHARED_SETTINGS` en `server/sonia/panel/control.py`). Da igual desde dónde se cambien, el panel de Cloudflare o el local (`http://127.0.0.1:8780`): el orquestador los aplica al momento y los sube a la nube, que los reparte a las demás Sonias conectadas.
 
 Cada orquestador guarda además una copia en `cache/panel_state.json`, así que sin internet arranca con lo último que supo y lo que se cambie desde el panel local queda apuntado como pendiente (`pending_settings`) hasta que la nube lo confirma al volver la conexión. Si con la red caída se cambia algo aquí y otra Sonia cambia lo mismo, gana el último cambio que llega a la nube.
 
@@ -79,6 +79,7 @@ Sección plegada debajo de «Avanzado» para ajustar a ojo, con Sonia en pantall
 
 - **Boca**: apertura (vocales y mandíbula), mandíbula en las sílabas fuertes, cierre de labios en p, b y m, y rapidez. Son multiplicadores de lo que trae la escena (100 % = tal cual). Para verlo sin gastar, «Saludar ahora» reproduce una frase grabada.
 - **Cámara**: zoom, altura, distancia, lateral e inclinación sobre el encuadre de siempre (el plano medio de Sonia hablando). El plano de imagen se mueve con él; los de cuerpo entero (bailes y modo Fuera) no.
+- **Movimiento en reposo**: respiración, acentos del cuerpo al hablar y ritmo del reposo (respiración y vaivén). Multiplicadores de lo que trae la escena (100 % = tal cual); respiración y acentos de 0 a 200 %, ritmo de 50 a 150 %.
 
 Cada deslizador se aplica en directo mientras se arrastra (como mucho cada 150 ms) y cada sección tiene su botón de restablecer. Los valores van a Unity en el mensaje fijo `set_tuning` (forma en `docs/protocolo.md`) y se guardan en la nube como el resto de ajustes.
 
@@ -136,7 +137,8 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   "voice_cache": {"ready": 18, "total": 25, "busy": false},
   "tuning": {
     "mouth": {"open": 1.0, "jaw": 1.0, "closure": 1.0, "speed": 1.0},
-    "camera": {"height": 0.0, "distance": 0.0, "side": 0.0, "zoom": 1.0, "tilt": 0.0}
+    "camera": {"height": 0.0, "distance": 0.0, "side": 0.0, "zoom": 1.0, "tilt": 0.0},
+    "idle": {"breath": 1.0, "accents": 1.0, "speed": 1.0}
   },
   "avatar": {"custom": true, "editor_open": false, "editor_target": "sonia"},
   "guest_avatar": {"custom": false},
@@ -210,8 +212,8 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `set_mic_gate` | `value`: 0 a 0,2 | Puerta de ruido: por debajo de este nivel el micrófono manda silencio. |
 | `set_voice` | `voice` | Cambia la voz; reinicia la conversación. |
 | `set_notes` | `text` | Avisos del día que Sonia debe conocer; se le pasan al momento. |
-| `set_tuning` | `mouth` y/o `camera`: valores sueltos de `tuning` | Ajustes de «Developer»; se mezclan con los que hay y se recortan a sus límites. |
-| `reset_tuning` | `part`: `mouth`, `camera` o `all` | Vuelve esa parte de «Developer» a como viene de la escena. |
+| `set_tuning` | `mouth`, `camera` y/o `idle`: valores sueltos de `tuning` | Ajustes de «Developer»; se mezclan con los que hay y se recortan a sus límites. Un `tuning` guardado sin `idle` lo recibe con sus valores por defecto. |
+| `reset_tuning` | `part`: `mouth`, `camera`, `idle` o `all` | Vuelve esa parte de «Developer» a como viene de la escena. |
 | `open_avatar_editor` | `target` opcional: `sonia` (por defecto) o `guest` | La pantalla de Sonia pasa a la escena de editar personaje (no estando "Fuera" ni con el Modo Jean en marcha); con `guest`, el de Jean. |
 | `close_avatar_editor` | | Sale del editor de personaje sin guardar. |
 | `reset_avatar` | `target` opcional | Borra el personaje guardado: todas las Sonias vuelven al de la app. Con `target` `guest`, Jean vuelve a su avatar de prueba. |

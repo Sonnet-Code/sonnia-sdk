@@ -167,11 +167,13 @@ Ajustes de la sección «Developer» del panel. Fijo: se repite tras `hello` y c
 ```json
 {"type": "set_tuning",
  "mouth": {"open": 1.2, "jaw": 1.0, "closure": 1.0, "speed": 1.0},
- "camera": {"height": 0.05, "distance": 0.1, "side": 0.0, "zoom": 1.1, "tilt": 2.0}}
+ "camera": {"height": 0.05, "distance": 0.1, "side": 0.0, "zoom": 1.1, "tilt": 2.0},
+ "idle": {"breath": 1.0, "accents": 0.8, "speed": 1.0}}
 ```
 
 - `mouth` multiplica lo que trae la escena en `LipSyncController` (1 = tal cual): `open` la apertura de vocales y mandíbula, `jaw` la mandíbula extra de las sílabas fuertes (`jawBoost`), `closure` el cierre de labios en p, b y m (`closureWeight`) y `speed` la rapidez de la boca (`mouthSpeed` y `closureSpeed`).
 - `camera` mueve el plano base de `CameraFramingController`: `height`, `distance` (positivo se aleja) y `side` (positivo, a la derecha de la pantalla) en metros; `zoom` divide la tangente del campo de visión (más de 1 acerca) y `tilt` inclina en grados (positivo mira más abajo). El plano de panel se mueve con el base; los de cuerpo entero (bailes y modo Fuera) no.
+- `idle` multiplica el movimiento en reposo de `AvatarStateController.SetIdleTuning` (1 = tal cual): `breath` la respiración (pecho, hombros y cabeza), `accents` los acentos del cuerpo en las sílabas fuertes al hablar y `speed` el ritmo de la respiración y del bucle de reposo (`AvatarChoreographer.SetLoopSpeed`). Un orquestador anterior no lo manda y Unity lo deja en 1.
 
 ### `set_avatar`
 
