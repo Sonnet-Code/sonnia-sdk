@@ -174,4 +174,5 @@ El monitor del stand va colocado en vertical (retrato), relación 9:16, por ejem
 - En macOS/Windows, girar la pantalla en los ajustes del sistema (rotación 90°) y comprobar que el escritorio se ve en vertical.
 - La build de Unity está configurada a 1080x1920 en pantalla completa. Si el monitor tiene otra resolución 9:16 (por ejemplo 1440x2560), la escena escala sola.
 - En pantalla solo se ven Sonia, el logo y los subtítulos. Los controles de desarrollo salen arrancando la app con `-dev-ui`.
+- Si el equipo va justo (FPS por debajo de 60 o ventiladores a tope), Esc en la ventana de Sonia abre el menú de calidad gráfica: probar Media y luego Baja, mirando los FPS que marca arriba. Se queda guardado en ese equipo; también se puede arrancar con `-quality media` o `-quality baja`.
 - Colocar la cámara USB encima del monitor, centrada, para que Sonia "mire" a la misma altura que el visitante.

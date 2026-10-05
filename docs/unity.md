@@ -1013,7 +1013,7 @@ En **Edit > Project Settings > Audio**:
    | Tecla | Qué hace |
    |---|---|
    | F1 | Muestra y esconde el HUD |
-   | Escape | Envía `interrupt`: Sonia se calla |
+   | Escape | Abre el menú de calidad gráfica (siempre, también sin `-dev-ui`); para callar a Sonia, el botón **Interrumpir** |
    | Enter | Envía el texto escrito |
 
 6. Para ver el detalle de cada mensaje, marcar **Verbose Log** en `SoniaClient`
@@ -1046,6 +1046,15 @@ cuando el orquestador lo pida con `request_frame`.
    Si el escritorio está en horizontal, la ventana en pantalla completa saldrá
    apaisada y con bandas negras.
 6. Construir fuera del repositorio: las builds no se suben (ver `.gitignore`).
+7. **Calidad gráfica**: Esc en la ventana de Sonia abre un menú con Alta, Media,
+   Baja y Personalizada, los FPS medidos y cada opción (resolución con
+   reescalado FSR, suavizado, sombras, oclusión ambiental, desenfoque del fondo,
+   bloom, partículas y 60 o 30 FPS). Ratón o teclado: ↑↓ fila, ←→ valor, 1-4
+   niveles. Alta es la escena tal como está montada; Media y Baja recortan desde
+   ahí (`Assets/Scripts/Sonia/Graphics`, ensamblado `Sonia.Graphics`, se crea solo
+   al arrancar). Se guarda en PlayerPrefs de cada equipo y se fuerza al arrancar
+   con `-quality alta|media|baja|personalizada`. No toca assets en disco: el URP
+   asset y el SSAO vuelven a como estaban al salir.
 
 Los detalles de montaje físico, arranque automático y checklist del día están en
 [`stand.md`](stand.md).
@@ -1101,6 +1110,7 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `ImagePanelController.cs` | Decodifica el base64 de `show_image` y lo muestra con animación de escala |
 | `WebcamFrameSender.cs` | Captura de `WebCamTexture` y envío en JPEG cuando llega `request_frame` |
 | `SoniaDebugUI.cs` | HUD de conexión, subtítulos, entrada de texto y botón de interrumpir |
+| `Graphics/GraphicsQuality*.cs` | Calidad gráfica: niveles y opciones, el controlador que los aplica sobre lo montado y el menú de Esc |
 | `SoniaBootstrap.cs` | Enlaza todo y aplica los ajustes de kiosco |
 | `Editor/SoniaSceneSetup.cs` | Menús **Sonia > Crear escena base**, **Configurar build 9:16** y **Actualizar componentes** |
 | `Editor/SoniaMotionSetBuilder.cs` | Menú **Sonia > Crear set de animaciones**: importa los FBX, rellena el set, genera la máscara y cablea la escena |

@@ -14,7 +14,8 @@ namespace Sonia
 {
     /// <summary>
     /// Interfaz mínima para probar a Sonia sin micrófono y ver qué está pasando.
-    /// F1 la muestra y la esconde, Escape interrumpe.
+    /// F1 la muestra y la esconde; el botón Interrumpir corta a Sonia (Esc abre el
+    /// menú de calidad gráfica, GraphicsQualityMenu).
     /// </summary>
     [DisallowMultipleComponent]
     public class SoniaDebugUI : MonoBehaviour
@@ -100,10 +101,6 @@ namespace Sonia
         [SerializeField]
         [Tooltip("Mostrar el HUD al arrancar.")]
         private bool visibleOnStart = true;
-
-        [SerializeField]
-        [Tooltip("Escape envía interrupt.")]
-        private bool escapeInterrupts = true;
 
         private bool _visible = true;
         private bool _warnedAboutHudRoot;
@@ -214,11 +211,6 @@ namespace Sonia
             if (keyboard.f1Key.wasPressedThisFrame)
             {
                 SetVisible(!_visible);
-            }
-
-            if (escapeInterrupts && keyboard.escapeKey.wasPressedThisFrame && client != null)
-            {
-                client.SendInterrupt();
             }
         }
 

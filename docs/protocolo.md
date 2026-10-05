@@ -257,7 +257,7 @@ Opcional. Identifica al cliente.
 
 ### `interrupt`
 
-Interrumpir a Sonia por una vía que no es la voz: hoy, el botón "Interrumpir" o la tecla Escape de los controles de desarrollo (`-dev-ui`). El orquestador tira el resto de la respuesta en curso, le dice a GPT-Live que el visitante la ha interrumpido y envía `stop_speaking`. La interrupción por voz la gestiona GPT-Live solo (es full duplex): Unity no tiene que hacer nada para eso.
+Interrumpir a Sonia por una vía que no es la voz: hoy, el botón "Interrumpir" de los controles de desarrollo (`-dev-ui`). El orquestador tira el resto de la respuesta en curso, le dice a GPT-Live que el visitante la ha interrumpido y envía `stop_speaking`. La interrupción por voz la gestiona GPT-Live solo (es full duplex): Unity no tiene que hacer nada para eso.
 
 ```json
 {"type": "interrupt"}
