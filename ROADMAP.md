@@ -23,7 +23,7 @@ El panel vive en Cloudflare (`https://sonia.sonnetcode.com`, Worker `sonia-panel
 
 - [ ] Volver a desplegar el panel (`cd cloud/panel && npm run deploy`): el de `sonia.sonnetcode.com` aún sirve los estáticos de antes del 4 de octubre, con el interruptor "Interrumpirla hablando", que ya no existe.
 - [ ] Poner `PANEL_CLOUD_TOKEN` en el `.env` del repo de cada equipo donde se compile (el valor está en `~/.config/sonia/panel-secrets.env` del Mac de Jean, junto con la contraseña del panel). Desde el 5 de octubre toda app lo lleva y la build no empieza sin él; el nombre de cada Sonia da igual (Jean).
-- [ ] Repartir la contraseña del panel al personal del stand (o cambiarla con `npx wrangler secret put PANEL_PASSWORD` en `cloud/panel/`).
+- [ ] Repartir la contraseña del panel al personal del stand. Jean la cambió el 5 de octubre por una para el evento (`npx wrangler secret put PANEL_PASSWORD` en `cloud/panel/`); cambiarla cierra todas las sesiones abiertas del panel.
 - [ ] Opcional: Cloudflare Access (login con el correo `@sonnetcode.com`) en vez de, o además de, la contraseña. Pasos en `docs/panel.md` ("Acceso"); hace falta una política Bypass para `/agent` y los secretos `ACCESS_TEAM_DOMAIN` y `ACCESS_AUD`. Ningún token disponible tiene permiso de Access: se hace desde el dashboard.
 - [ ] "Preparar voces" una vez con la clave puesta y la voz elegida (graba saludos, frases y cantos en `cache/voice` de ese equipo; se repite solo si cambia la voz).
 - [ ] Ensayo con alguien del stand que no sea técnico: entrar desde el móvil, cambiar de modo, mandar un aviso, mostrar el logo, subir el volumen y ver si entiende los avisos de salud y de Sonias duplicadas.
