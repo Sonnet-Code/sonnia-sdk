@@ -35,12 +35,18 @@ namespace Sonia
         private const string HudCanvasName = "SoniaHUD";
         private const string ResourceFolder = "Stage/";
 
+        /// <summary>Distancia del bocadillo de la invitación al borde de abajo (px de la referencia).</summary>
+        private const float InvitationBottom = 96f;
+
         [Header("Textos")]
         [SerializeField]
-        private string invitation = "Acércate y pregúntame lo que quieras.";
+        [Tooltip("Lo que dice Sonia en el bocadillo de la invitación. El salto de línea es el del diseño.")]
+        [TextArea(2, 3)]
+        private string invitation = "¡Acércate y pregúntame\nlo que quieras!";
 
         [SerializeField]
-        private string invitationHint = "Solo háblame: no hay que tocar nada.";
+        [Tooltip("Quién habla en el bocadillo.")]
+        private string invitationSpeaker = "SONIA";
 
         [SerializeField]
         private string liveLabel = "SONIA · EN VIVO";
@@ -129,6 +135,7 @@ namespace Sonia
         private LayoutElement _visitorTextLayout;
         private TextMeshProUGUI _soniaText;
         private Image _liveGlow;
+        private Image _conversationScrim;
 
         // Estado de la conversación.
         private bool _talk = true;
@@ -549,7 +556,8 @@ namespace Sonia
             Fade(_subtitleGroup, subtitles ? 1f : 0f, dt, subtitles ? 8f : 3f);
             Fade(_visitorGroup, _visitor.Length > 0 ? 1f : 0f, dt, 6f);
             Fade(_invitationGroup, invitationUp ? 1f : 0f, dt, invitationUp ? 2.5f : 6f);
-            _invitationRect.anchoredPosition = new Vector2(0f, 72f - 24f * (1f - _invitationGroup.alpha));
+            _invitationRect.anchoredPosition = new Vector2(0f, InvitationBottom - 24f * (1f - _invitationGroup.alpha));
+            _conversationScrim.color = new Color(Dark.r, Dark.g, Dark.b, 0.9f * _subtitleGroup.alpha);
 
             // Al terminar de apagarse, fuera el texto viejo.
             if (!subtitles && _subtitleGroup.alpha <= 0.001f && hasText && !_speaking)
@@ -636,6 +644,7 @@ namespace Sonia
             RectTransform subtitles = NewRect("StageSubtitles", _hud.transform);
             Stretch(subtitles);
             subtitles.SetAsLastSibling();
+            BuildConversationScrim(subtitles);
             BuildSubtitles(subtitles);
 
             _subtitleGroup.alpha = 0f;
@@ -863,14 +872,21 @@ namespace Sonia
             TextMeshProUGUI title = NewText("Titulo", card, _display, 24f, Navy);
             title.text = qrTitle;
             title.alignment = TextAlignmentOptions.Center;
+            FitToWidth(title, 18f, 24f);
             PlaceTopStretch(title.rectTransform, 222f, 30f);
 
+            // Se encoge si no cabe: «¡Conoce más de nosotros!» a 19 se salía de la tarjeta.
             TextMeshProUGUI caption = NewText("Pie", card, _semibold, 19f, Ink);
             caption.text = qrCaption;
             caption.alignment = TextAlignmentOptions.Center;
+            FitToWidth(caption, 13f, 19f);
             PlaceTopStretch(caption.rectTransform, 254f, 26f);
         }
 
+        /// <summary>
+        /// Invitación a hablar: un bocadillo blanco de Sonia, centrado abajo, con la
+        /// colita a un lado inclinada hacia ella.
+        /// </summary>
         private void BuildInvitation(RectTransform stage)
         {
             _invitationGroup = NewGroup("Invitacion", stage);
@@ -878,56 +894,54 @@ namespace Sonia
             _invitationRect.anchorMin = new Vector2(0f, 0f);
             _invitationRect.anchorMax = new Vector2(1f, 0f);
             _invitationRect.pivot = new Vector2(0.5f, 0f);
-            _invitationRect.offsetMin = new Vector2(56f, 72f);
-            _invitationRect.offsetMax = new Vector2(-56f, 72f + 120f);
-
-            Image shadow = NewImage("Sombra", _invitationRect, _shadow, new Color(0f, 0f, 0f, 0.5f));
-            shadow.type = Image.Type.Sliced;
-            Stretch(shadow.rectTransform);
-            shadow.rectTransform.offsetMin = new Vector2(-60f, -84f);
-            shadow.rectTransform.offsetMax = new Vector2(60f, 40f);
-
-            RectTransform pill = NewRect("Pastilla", _invitationRect);
-            Stretch(pill);
-            Image face = pill.gameObject.AddComponent<Image>();
-            ConfigureRound(face, Color.white, 60f);
-            HorizontalLayoutGroup row = pill.gameObject.AddComponent<HorizontalLayoutGroup>();
-            row.padding = new RectOffset(22, 34, 22, 22);
-            row.spacing = 22f;
-            row.childAlignment = TextAnchor.MiddleLeft;
-            row.childControlWidth = true;
-            row.childControlHeight = true;
-            row.childForceExpandWidth = false;
-            row.childForceExpandHeight = false;
-
-            RectTransform circle = NewRect("Microfono", pill);
-            LayoutElement circleLayout = circle.gameObject.AddComponent<LayoutElement>();
-            circleLayout.preferredWidth = 76f;
-            circleLayout.preferredHeight = 76f;
-            Image circleFace = circle.gameObject.AddComponent<Image>();
-            ConfigureRound(circleFace, Brand, 38f);
-            Image mic = NewImage("Icono", circle, LoadSprite("stage-mic", Vector4.zero), Color.white);
-            mic.preserveAspect = true;
-            mic.rectTransform.sizeDelta = new Vector2(36f, 36f);
-
-            RectTransform column = NewRect("Textos", pill);
-            VerticalLayoutGroup stack = column.gameObject.AddComponent<VerticalLayoutGroup>();
-            stack.spacing = 4f;
-            stack.childAlignment = TextAnchor.MiddleLeft;
+            _invitationRect.offsetMin = new Vector2(72f, InvitationBottom);
+            _invitationRect.offsetMax = new Vector2(-72f, InvitationBottom);
+            VerticalLayoutGroup stack = _invitationRect.gameObject.AddComponent<VerticalLayoutGroup>();
+            stack.padding = new RectOffset(48, 48, 38, 46);
+            stack.spacing = 12f;
+            stack.childAlignment = TextAnchor.UpperCenter;
             stack.childControlWidth = true;
             stack.childControlHeight = true;
             stack.childForceExpandWidth = true;
             stack.childForceExpandHeight = false;
-            LayoutElement columnLayout = column.gameObject.AddComponent<LayoutElement>();
-            columnLayout.flexibleWidth = 1f;
+            ContentSizeFitter fitter = _invitationRect.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            TextMeshProUGUI line = NewText("Invitacion", column, _display, 34f, Navy);
+            // Sombra, cara y colita no cuentan para el tamaño: lo dan los textos.
+            Image shadow = NewImage("Sombra", _invitationRect, _shadow, new Color(0f, 0f, 0f, 0.5f));
+            shadow.type = Image.Type.Sliced;
+            IgnoreLayout(shadow.rectTransform);
+            Stretch(shadow.rectTransform);
+            shadow.rectTransform.offsetMin = new Vector2(-60f, -86f);
+            shadow.rectTransform.offsetMax = new Vector2(60f, 40f);
+
+            Image face = NewImage("Bocadillo", _invitationRect, null, Color.white);
+            ConfigureRound(face, Color.white, 44f);
+            IgnoreLayout(face.rectTransform);
+            Stretch(face.rectTransform);
+
+            // La colita sale del borde de arriba, a la izquierda del centro, y se
+            // inclina hacia el centro de la pantalla, donde está Sonia.
+            Image tail = NewImage("Colita", _invitationRect, LoadSprite("stage-tail", Vector4.zero), Color.white);
+            IgnoreLayout(tail.rectTransform);
+            RectTransform tailRect = tail.rectTransform;
+            tailRect.anchorMin = new Vector2(0f, 1f);
+            tailRect.anchorMax = new Vector2(0f, 1f);
+            tailRect.pivot = new Vector2(0f, 0f);
+            tailRect.anchoredPosition = new Vector2(236f, -6f);
+            tailRect.sizeDelta = new Vector2(110f, 70f);
+
+            TextMeshProUGUI speaker = NewText("Quien", _invitationRect, _mono, 22f, Brand);
+            speaker.text = invitationSpeaker;
+            speaker.characterSpacing = 16f;
+            speaker.alignment = TextAlignmentOptions.Center;
+
+            TextMeshProUGUI line = NewText("Invitacion", _invitationRect, _display, 62f, Navy);
             line.text = invitation;
-            line.characterSpacing = -1f;
-            line.alignment = TextAlignmentOptions.MidlineLeft;
-            TextMeshProUGUI hint = NewText("Pista", column, _semibold, 24f, Ink);
-            hint.text = invitationHint;
-            hint.alignment = TextAlignmentOptions.MidlineLeft;
+            line.characterSpacing = -2.5f;
+            line.lineSpacing = -22f;
+            line.alignment = TextAlignmentOptions.Center;
+            line.textWrappingMode = TextWrappingModes.Normal;
         }
 
         private void BuildSubtitles(RectTransform parent)
@@ -960,9 +974,10 @@ namespace Sonia
             _visitorGroup = holder.gameObject.AddComponent<CanvasGroup>();
             _visitorGroup.alpha = 0f;
 
+            // Oscura: sobre el jersey claro de Sonia una translúcida blanca no se leía.
             RectTransform pill = NewRect("Pastilla", holder);
             Image face = pill.gameObject.AddComponent<Image>();
-            ConfigureRound(face, new Color(1f, 1f, 1f, 0.12f), 34f);
+            ConfigureRound(face, new Color(Dark.r, Dark.g, Dark.b, 0.78f), 34f);
             HorizontalLayoutGroup row = pill.gameObject.AddComponent<HorizontalLayoutGroup>();
             row.padding = new RectOffset(26, 26, 14, 14);
             row.spacing = 12f;
@@ -989,6 +1004,31 @@ namespace Sonia
             _soniaText.characterSpacing = -1.5f;
             _soniaText.lineSpacing = -20f;
             _soniaText.richText = true;
+
+            // Sombra suave pegada a las letras: el texto pasa por encima del jersey.
+            Material material = _soniaText.fontMaterial;
+            material.EnableKeyword(ShaderUtilities.Keyword_Underlay);
+            material.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(0f, 0f, 0f, 0.65f));
+            material.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.6f);
+            material.SetFloat(ShaderUtilities.ID_UnderlayDilate, 0.35f);
+            material.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, -0.5f);
+            _soniaText.fontMaterial = material;
+        }
+
+        /// <summary>
+        /// Oscurecido extra detrás de los subtítulos, más alto que la sombra de
+        /// siempre: se enciende con ellos.
+        /// </summary>
+        private void BuildConversationScrim(RectTransform parent)
+        {
+            Sprite scrim = LoadSprite("stage-scrim", Vector4.zero);
+            _conversationScrim = NewImage("SombraConversacion", parent, scrim, new Color(Dark.r, Dark.g, Dark.b, 0f));
+            RectTransform rect = _conversationScrim.rectTransform;
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(0f, 1000f);
         }
 
         // ------------------------------------------------------------------
@@ -1048,6 +1088,20 @@ namespace Sonia
             image.pixelsPerUnitMultiplier = 64f / Mathf.Max(1f, radius);
             image.color = color;
             image.raycastTarget = false;
+        }
+
+        /// <summary>Que no cuente para el tamaño que calcula el grupo de su padre.</summary>
+        private static void IgnoreLayout(RectTransform rect)
+        {
+            rect.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+        }
+
+        /// <summary>Encoge el texto hasta <paramref name="min"/> si no cabe a <paramref name="max"/>.</summary>
+        private static void FitToWidth(TextMeshProUGUI text, float min, float max)
+        {
+            text.enableAutoSizing = true;
+            text.fontSizeMin = min;
+            text.fontSizeMax = max;
         }
 
         private static void Stretch(RectTransform rect)

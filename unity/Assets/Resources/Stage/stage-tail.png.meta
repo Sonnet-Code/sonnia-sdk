@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 19cf7324e34f649b39ee9c619b5f7da2
+guid: b1ad584de218448e38a4ef5ddace4f14
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 4825018964344060912
-    second: stage-mic_0
+      213: 3913101598240079308
+    second: stage-tail_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -115,13 +115,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: stage-mic_0
+      name: stage-tail_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 128
-        height: 128
+        width: 220
+        height: 140
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -130,8 +130,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 0fb304c1f29e5f240800000000000000
-      internalID: 4825018964344060912
+      spriteID: ccdfc1dcb212e4630800000000000000
+      internalID: 3913101598240079308
       vertices: []
       indices: 
       edges: []
