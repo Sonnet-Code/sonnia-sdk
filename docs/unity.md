@@ -142,9 +142,11 @@ a ponerlos si alguien los toca.
 
 **Sonia > Build macOS** (o **Build Windows**) aplica los ajustes de arriba,
 añade la descripción de uso de cámara y micrófono que exige macOS (sin ella el
-build falla porque `WebcamFrameSender` usa `WebCamTexture`) y deja el
-resultado en `unity/Build/<plataforma>/` (ignorado por git) junto a un
-`build-report.txt` con el resumen. Sin abrir el editor:
+build falla porque `WebcamFrameSender` usa `WebCamTexture`), pone el bundle id
+`com.sonnetcode.sonia` y deja el resultado en `unity/Build/<plataforma>/`
+(ignorado por git) junto a un `build-report.txt` con el resumen. Después,
+`Editor/SoniaPlayerBuildFixes.cs` retoca la app (ver «La app todo en uno» y
+«Build de macOS con Genies», abajo). Sin abrir el editor:
 
 ```bash
 /Applications/Unity/Hub/Editor/6000.6.0f1/Unity.app/Contents/MacOS/Unity \
@@ -167,6 +169,65 @@ unity/Build/macOS/Sonia.app/Contents/MacOS/Sonia \
 
 `-capture-dir` guarda un PNG de la pantalla cada `-capture-every` segundos
 (`ScreenshotService`); sin ese argumento no se instala y no cuesta nada.
+`-sin-orquestador` no lanza el orquestador empaquetado (ver abajo).
+
+### La app todo en uno (orquestador dentro)
+
+La app lleva dentro el orquestador de Python congelado con PyInstaller y lo
+arranca sola: un doble clic y ya está Sonia entera.
+
+1. `scripts/build_orquestador.sh` congela el orquestador en
+   `unity/Build/orquestador/<plataforma>/sonia-orquestador/` (unos 176 MB en
+   macOS: Python, dependencias, `assets/` y los estáticos del panel). Hay que
+   rehacerlo cuando cambie algo de `server/` o de `assets/`, y hacerlo en cada
+   sistema: en macOS sale para macOS y en Windows para Windows.
+2. La build lo copia dentro de la app con el `.env` del repo al lado del
+   ejecutable (Jean: «los envs deben inyectarse en el build»). Se copia como
+   archivo, sin leerlo; las builds están en `.gitignore`, así que la clave no
+   llega a git. Sin orquestador congelado la build avisa y la app espera uno
+   externo, como antes.
+   - macOS: `Sonia.app/Contents/Resources/orquestador/sonia-orquestador/`
+   - Windows: `Sonia_Data/orquestador/sonia-orquestador/`
+3. Al abrir la app, `OrchestratorProcess` lo lanza si nadie escucha en el
+   8765 (si ya hay uno, por ejemplo el de desarrollo, manda ese), lo relanza si
+   se cae (2, 4, 8… hasta 30 s) y lo cierra al salir (con SIGINT en macOS, que
+   cierra la sesión de GPT-Live). En el editor no se lanza nunca y
+   `-sin-orquestador` lo desactiva.
+4. Lo que es de cada equipo va fuera de la app, en `SONIA_HOME`
+   (`~/Library/Application Support/Sonia` en macOS, `%APPDATA%\Sonia` en
+   Windows): `cache/` (voces grabadas, estado del panel, id de la instancia),
+   `overrides.env` (variables cambiadas desde el backoffice, que mandan sobre
+   el `.env` empaquetado) y `logs/orquestador-*.log` (los 10 últimos arranques).
+   Para no grabar de nuevo las voces, se puede copiar `cache/voice` del repo a
+   `SONIA_HOME/cache/voice`.
+
+### Build de macOS con Genies
+
+Genies solo da soporte oficial a Android, iOS y Windows. En macOS la build se
+hace igual, con dos diferencias que aplica el propio pipeline:
+
+- **Mono en vez de IL2CPP**, solo durante la build de macOS (este Mac no tiene
+  el módulo IL2CPP de macOS; con Mono funciona como en el editor). Windows
+  sigue con IL2CPP, que Genies exige.
+- **Puente de NAF.** El preproceso de Genies (`XcodePostProcess`) marca sus
+  librerías NAF como «Load on Startup» en macOS, y Unity las precarga antes de
+  crear el dispositivo Metal. El `UnityPluginLoad` de `libgnUnityPlugin` crea
+  ahí una cola de Metal y, sin dispositivo, tumba la app («Failed to create
+  Metal command queue»). `SoniaPlayerBuildFixes` renombra la librería a
+  `libgnUnityPluginReal.dylib` y pone en su lugar el puente
+  (`unity/NativeSource/SoniaNafShim`): reexporta todos sus símbolos (las
+  llamadas de Genies llegan a ella sin cambios) y la inicializa cuando ya hay
+  `MTLDevice`. El puente compilado está en el repo; solo hay que recompilarlo
+  (`unity/NativeSource/SoniaNafShim/build.sh`) si cambia su código o el SDK de
+  Genies.
+- **Rutas de Genies.** `libGeniesAuthAPI` y `libGeniesTelemetryBridge` buscan
+  `libCommonDeps` en una ruta absoluta del equipo de un desarrollador de
+  Genies: el post-proceso les añade la ruta de la app y vuelve a firmar la app
+  (firma ad hoc).
+
+**Sonia > Build macOS (desarrollo, registro de Genies)** hace una build de
+desarrollo en `unity/Build/macOS-dev/` con `FORCE_LOGS`, el símbolo que activa
+el registro interno de Genies (sin él no escribe nada fuera del editor).
 Pendiente: el log del build avisa de que el shader de post-procesado
 (`PaniniProjection`) se recorta y URP desactiva entonces todos los pases de
 post-procesado en la app, así que el Volume (ACES, bloom) solo se ve en el editor.

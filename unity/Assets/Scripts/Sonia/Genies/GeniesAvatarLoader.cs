@@ -442,6 +442,8 @@ namespace Sonia
         {
             TimeSpan limit = TimeSpan.FromSeconds(Mathf.Max(5f, stepTimeoutSeconds));
             ManagedAvatar pending = null;
+            // Paso en curso, para decir en qué se quedó si falla o tarda.
+            string step = "iniciar el SDK";
             try
             {
                 if (!await AvatarSdk.InitializeAsync().Timeout(limit))
@@ -450,6 +452,7 @@ namespace Sonia
                 }
 
                 token.ThrowIfCancellationRequested();
+                step = "iniciar sesión";
                 if (!AvatarSdk.IsLoggedIn)
                 {
                     var instant = await AvatarSdk.TryInstantLoginAsync().Timeout(limit);
@@ -466,6 +469,7 @@ namespace Sonia
                 token.ThrowIfCancellationRequested();
 
                 // La precarga solo adelanta descargas; si falla, la carga lo vuelve a intentar.
+                step = "precargar las piezas";
                 await AvatarSdk.PrecacheAvatarAssetsByDefinitionAsync(json).Timeout(limit);
                 token.ThrowIfCancellationRequested();
                 if (IsSuperseded(version, json))
@@ -479,6 +483,7 @@ namespace Sonia
                     return Superseded;
                 }
 
+                step = "montar el avatar";
                 UniTaskCompletionSource<bool> complete = new UniTaskCompletionSource<bool>();
                 UniTask<ManagedAvatar> load = AvatarSdk.LoadAvatarAsync(new LoadAvatarOptions.ByDefinition
                 {
@@ -548,7 +553,7 @@ namespace Sonia
             }
             catch (TimeoutException)
             {
-                return "un paso tardó más de " + limit.TotalSeconds.ToString("F0") + " s";
+                return "«" + step + "» tardó más de " + limit.TotalSeconds.ToString("F0") + " s";
             }
             catch (OperationCanceledException)
             {
@@ -556,7 +561,13 @@ namespace Sonia
             }
             catch (Exception exception)
             {
-                return exception.GetType().Name + ": " + exception.Message;
+                if (_failures == 0)
+                {
+                    // La traza completa solo la primera vez, para no llenar el registro con reintentos.
+                    Debug.LogWarning("[Sonia] Genies falló al " + step + ":\n" + exception, this);
+                }
+
+                return "al " + step + ": " + exception.GetType().Name + ": " + exception.Message;
             }
             finally
             {
