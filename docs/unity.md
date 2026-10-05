@@ -159,8 +159,22 @@ en un MacBook Pro M-series); los siguientes salen de la caché en 2 minutos.
 Batch mode necesita que el editor esté cerrado sobre ese proyecto.
 
 El icono de la app (macOS y Windows) es `Assets/UI/SoniaAppIcon.png`, el icono
-por defecto del Player: la cara de Sonia sobre el navy de la marca. Si cambia el
-avatar, se rehace con **Sonia > Icono de la app (en Play)** con Sonia ya cargada.
+por defecto del Player: la cara de Sonia sobre el navy de la marca. **No se
+actualiza solo**: es una imagen fija que entra tal cual en cada build. El avatar
+de Genies solo existe en Play, y el aspecto de Sonia lo recibe la app de la nube
+al arrancar (se cambia desde el panel sin recompilar). Si cambia el aspecto y se
+quiere el icono al día:
+
+1. En el editor, Play y esperar a que Sonia salga con su aspecto nuevo (y a que
+   acabe el saludo con la mano, que puede tapar la cara).
+2. **Sonia > Icono de la app (en Play)**. Guarda el PNG nuevo.
+3. Salir de Play: en ese momento se pone como icono del Player (lo que se
+   cambia del Player en Play se pierde, por eso espera).
+4. Hacer la build de nuevo. Si Finder sigue enseñando el icono viejo:
+   `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f unity/Build/macOS/Sonia.app`.
+
+Encuadre y colores están en `Editor/SoniaAppIcon.cs` (`Make`: altura de la cara
+sobre el hueso de la cabeza, alto del encuadre y campo de visión).
 
 Para probarla en ventana y no a pantalla completa, y para verificarla sin
 editor, la app admite estos argumentos:
