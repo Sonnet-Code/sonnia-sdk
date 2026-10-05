@@ -19,6 +19,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -138,10 +139,15 @@ namespace Sonia
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    // Sin esto los acentos del registro salían como «??».
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
                     WorkingDirectory = Path.GetDirectoryName(_executable)
                 };
                 info.EnvironmentVariables["SONIA_HOME"] = _home;
                 info.EnvironmentVariables["PYTHONUNBUFFERED"] = "1";
+                info.EnvironmentVariables["PYTHONUTF8"] = "1";
+                info.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
                 _process = new Process { StartInfo = info, EnableRaisingEvents = false };
                 _process.OutputDataReceived += (_, e) => WriteLog(e.Data);
                 _process.ErrorDataReceived += (_, e) => WriteLog(e.Data);
