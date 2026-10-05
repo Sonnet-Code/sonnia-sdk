@@ -453,6 +453,19 @@ def test_la_clave_sale_de_openai_api_key_si_no_hay_live(monkeypatch: pytest.Monk
     assert LiveSettings().api_key == "clave-live"
 
 
+def test_la_vision_usa_la_clave_de_gpt_live_si_no_hay_otra(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Un .env con solo LIVE_API_KEY: la visión en OpenAI también la usa.
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("LIVE_API_KEY", "clave-live")
+    assert LLMSettings(base_url="https://api.openai.com/v1").key == "clave-live"
+    # Pero nunca hacia otro servidor.
+    assert LLMSettings(base_url="https://api.moonshot.ai/v1").key == ""
+    # OPENAI_API_KEY manda sobre LIVE_API_KEY.
+    monkeypatch.setenv("OPENAI_API_KEY", "clave-openai")
+    assert LLMSettings(base_url="https://api.openai.com/v1").key == "clave-openai"
+
+
 async def test_sin_clave_no_intenta_conectar() -> None:
     client = LiveClient(LiveSettings(api_key=""))
     with pytest.raises(LiveError, match="LIVE_API_KEY"):

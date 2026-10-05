@@ -21,8 +21,9 @@ class LLMSettings(BaseSettings):
     """Modelo con visión que describe la cámara (GPT-Live no acepta imágenes).
 
     Cualquier endpoint compatible con OpenAI (Chat Completions). Por defecto la
-    API de OpenAI; si falta ``LLM_API_KEY`` se usa ``OPENAI_API_KEY``, pero solo
-    contra la propia OpenAI (ver :attr:`key`).
+    API de OpenAI; si falta ``LLM_API_KEY`` se usa la clave de OpenAI
+    (``OPENAI_API_KEY`` o, si no está, ``LIVE_API_KEY``), pero solo contra la
+    propia OpenAI (ver :attr:`key`).
     """
 
     model_config = SettingsConfigDict(
@@ -33,9 +34,12 @@ class LLMSettings(BaseSettings):
     model: str = "gpt-6-luna"
     #: ``LLM_API_KEY``: la clave del servidor del modelo.
     api_key: str = Field(default="", repr=False)
-    #: ``OPENAI_API_KEY``, que solo vale si ``base_url`` es la API de OpenAI.
+    #: Clave de OpenAI (``OPENAI_API_KEY`` o, si no está, la de GPT-Live,
+    #: ``LIVE_API_KEY``), que solo vale si ``base_url`` es la API de OpenAI.
     openai_api_key: str = Field(
-        default="", validation_alias=AliasChoices("OPENAI_API_KEY"), repr=False
+        default="",
+        validation_alias=AliasChoices("OPENAI_API_KEY", "LIVE_API_KEY"),
+        repr=False,
     )
     #: Si es False, Sonia no mira la cámara (sin notas de la cámara ni ``look``).
     supports_vision: bool = True
@@ -61,7 +65,7 @@ class LLMSettings(BaseSettings):
 
     @property
     def key(self) -> str:
-        """Clave que se manda: ``LLM_API_KEY`` o, contra la API de OpenAI, ``OPENAI_API_KEY``.
+        """Clave que se manda: ``LLM_API_KEY`` o, contra la API de OpenAI, la de OpenAI.
 
         Con otro proveedor (Kimi, un servidor propio...) y sin ``LLM_API_KEY``
         queda vacía: la clave de OpenAI nunca sale hacia otro servidor.

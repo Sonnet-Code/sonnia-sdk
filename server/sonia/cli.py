@@ -33,7 +33,7 @@ from sonia import __version__
 from sonia.actions import Gallery, build_default_registry
 from sonia.actions.registry import ActionRegistry
 from sonia.audio.capture import list_input_devices, resolve_input_device
-from sonia.config import Settings, load_settings
+from sonia.config import Settings, is_openai_url, load_settings
 from sonia.guest.link import FrameGrabber
 from sonia.live.audio import silence_blocks
 from sonia.live.engine import LiveEngine
@@ -340,12 +340,20 @@ def _vision_model_ready(settings: Settings, *, warn: bool = True) -> bool:
     if llm.key:
         return True
     if warn:
-        logger.warning(
-            "Cámara apagada: %s no es la API de OpenAI y falta LLM_API_KEY "
-            "(la clave de OpenAI no se manda a otros servidores)",
-            llm.base_url,
-        )
+        logger.warning("Cámara apagada: %s", _missing_vision_key(settings))
     return False
+
+
+def _missing_vision_key(settings: Settings) -> str:
+    """Qué clave falta para el modelo de visión, dicho para quien edita el ``.env``."""
+    base_url = settings.llm.base_url
+    if is_openai_url(base_url):
+        return (
+            f"falta la clave de OpenAI para {base_url} (OPENAI_API_KEY, LIVE_API_KEY o LLM_API_KEY)"
+        )
+    return (
+        f"falta LLM_API_KEY para {base_url} (la clave de OpenAI solo se usa con la API de OpenAI)"
+    )
 
 
 def _missing_live_key(settings: Settings) -> bool:
@@ -815,13 +823,7 @@ async def check_vision_model(settings: Settings) -> CheckResult:
             "Visión", True, "desactivada (sin cámara o LLM_SUPPORTS_VISION=false)", False
         )
     if not _vision_model_ready(settings, warn=False):
-        return CheckResult(
-            "Visión",
-            False,
-            f"falta LLM_API_KEY para {settings.llm.base_url} "
-            "(la clave de OpenAI solo se usa con la API de OpenAI)",
-            False,
-        )
+        return CheckResult("Visión", False, _missing_vision_key(settings), False)
     llm = await check_llm(settings)
     if not llm.ok:
         return CheckResult("Visión", False, llm.detail, False)
