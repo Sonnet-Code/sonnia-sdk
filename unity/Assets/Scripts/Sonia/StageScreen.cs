@@ -1,5 +1,5 @@
 // Pantalla del stand, diseño F («Navy en vivo»): fondo navy de la marca fijo a
-// la pantalla, logo arriba a la izquierda con la etiqueta «SONIA · EN VIVO», la
+// la pantalla, logo arriba a la izquierda, la
 // tarjeta blanca con el QR de Sonnet Code arriba a la derecha, la invitación a
 // hablar abajo mientras nadie conversa y, cuando sí, subtítulos grandes estilo
 // karaoke con lo que dijo el visitante en una pastilla encima.
@@ -18,12 +18,13 @@
 //    atenuado y se aclara enseguida. Si la frase llega entera en speech_start
 //    (las frases grabadas), lo que aún no ha dicho se ve atenuado y se va
 //    encendiendo al ritmo estimado de la voz: el karaoke del diseño.
-//  - Con una imagen o la trivia en la franja alta, el QR y la etiqueta se apartan.
+//  - Con una imagen o la trivia en la franja alta, el QR se aparta.
 
 using System.Collections.Generic;
 using System.Text;
 using TMPro;
 using UnityEngine;
+using UnityEngine.TextCore.LowLevel;
 using UnityEngine.UI;
 
 namespace Sonia
@@ -49,13 +50,8 @@ namespace Sonia
         private string invitationSpeaker = "SONIA";
 
         [SerializeField]
-        private string liveLabel = "SONIA · EN VIVO";
-
-        [SerializeField]
-        private string qrTitle = "Sonnet Code";
-
-        [SerializeField]
-        private string qrCaption = "¡Conoce más de nosotros!";
+        [Tooltip("Frase bajo el QR. El logo ya dice Sonnet Code: aquí basta la invitación.")]
+        private string qrCaption = "¡Conoce más!";
 
         [Header("Fondo")]
         [SerializeField]
@@ -107,9 +103,7 @@ namespace Sonia
 
         // Colores de la marca (landing de sonnetcode.com).
         private static readonly Color Navy = new Color32(20, 39, 82, 255);
-        private static readonly Color Ink = new Color32(62, 81, 119, 255);
         private static readonly Color Brand = new Color32(3, 113, 245, 255);
-        private static readonly Color Accent = new Color32(113, 191, 255, 255);
         private static readonly Color Dark = new Color32(11, 19, 34, 255);
 
         private SoniaClient _client;
@@ -124,7 +118,6 @@ namespace Sonia
         private TMP_FontAsset _mono;
         private Sprite _round;
         private Sprite _shadow;
-        private Sprite _glow;
 
         private CanvasGroup _topGroup;
         private CanvasGroup _invitationGroup;
@@ -134,7 +127,6 @@ namespace Sonia
         private TextMeshProUGUI _visitorText;
         private LayoutElement _visitorTextLayout;
         private TextMeshProUGUI _soniaText;
-        private Image _liveGlow;
         private Image _conversationScrim;
 
         // Estado de la conversación.
@@ -577,13 +569,6 @@ namespace Sonia
                 _soniaText.text = _sonia.Length == 0 ? string.Empty : BuildKaraoke(now, out animating);
                 _soniaDirty = animating;
             }
-
-            // El punto de «en vivo» late despacio.
-            if (_liveGlow != null)
-            {
-                float pulse = 0.5f + 0.5f * Mathf.Sin(now * Mathf.PI * 2f / 1.8f);
-                _liveGlow.color = new Color(Accent.r, Accent.g, Accent.b, Mathf.Lerp(0.25f, 0.85f, pulse));
-            }
         }
 
         private static void Fade(CanvasGroup group, float target, float dt, float speed)
@@ -636,7 +621,6 @@ namespace Sonia
             BuildScrim(stage);
             BuildLogo(stage);
             _topGroup = NewGroup("Arriba", stage);
-            BuildLivePill((RectTransform)_topGroup.transform);
             BuildQrCard((RectTransform)_topGroup.transform);
             BuildInvitation(stage);
 
@@ -674,8 +658,12 @@ namespace Sonia
             _mono = LoadFont("GeistMono-Medium", fallback);
             _round = LoadSprite("stage-round", new Vector4(64f, 64f, 64f, 64f));
             _shadow = LoadSprite("stage-shadow", new Vector4(112f, 112f, 112f, 112f));
-            _glow = LoadSprite("stage-glow", Vector4.zero);
         }
+
+        /// <summary>Letras que se cargan en cada fuente al crearla: ASCII, español y la tipografía de los subtítulos.</summary>
+        private const string Charset =
+            " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+            + "¡¿ÁÉÍÓÚÜÑáéíóúüñ«»·–—‘’“”…‹›€°ºª";
 
         private static TMP_FontAsset LoadFont(string name, TMP_FontAsset fallback)
         {
@@ -686,13 +674,24 @@ namespace Sonia
                 return fallback;
             }
 
-            TMP_FontAsset asset = TMP_FontAsset.CreateFontAsset(font);
+            TMP_FontAsset asset = TMP_FontAsset.CreateFontAsset(
+                font, 72, 8, GlyphRenderMode.SDFAA, 2048, 2048, AtlasPopulationMode.Dynamic, true);
             if (asset == null)
             {
                 return fallback;
             }
 
             asset.name = name;
+
+            // Todas las letras del español de una vez: así no hay tirones cuando sale
+            // una letra nueva a media conversación y cada fuente rasteriza lo suyo
+            // seguido, sin mezclarse con las otras.
+            string missing;
+            if (!asset.TryAddCharacters(Charset, out missing) && !string.IsNullOrEmpty(missing))
+            {
+                Debug.LogWarning("[Sonia] La fuente " + name + " no tiene: " + missing);
+            }
+
             if (fallback != null)
             {
                 asset.fallbackFontAssetTable = new List<TMP_FontAsset> { fallback };
@@ -804,44 +803,10 @@ namespace Sonia
             PlaceTopLeft(image.rectTransform, new Vector2(56f, 64f), new Vector2(250f, 250f / aspect));
         }
 
-        private void BuildLivePill(RectTransform parent)
-        {
-            RectTransform pill = NewRect("EnVivo", parent);
-            PlaceTopLeft(pill, new Vector2(56f, 196f), new Vector2(0f, 40f));
-            Image background = pill.gameObject.AddComponent<Image>();
-            ConfigureRound(background, new Color(1f, 1f, 1f, 0.09f), 20f);
-            HorizontalLayoutGroup row = pill.gameObject.AddComponent<HorizontalLayoutGroup>();
-            row.padding = new RectOffset(18, 20, 0, 0);
-            row.spacing = 12f;
-            row.childAlignment = TextAnchor.MiddleLeft;
-            row.childControlWidth = true;
-            row.childControlHeight = true;
-            row.childForceExpandWidth = false;
-            row.childForceExpandHeight = false;
-            ContentSizeFitter fitter = pill.gameObject.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            RectTransform dotHolder = NewRect("Punto", pill);
-            LayoutElement dotLayout = dotHolder.gameObject.AddComponent<LayoutElement>();
-            dotLayout.preferredWidth = 12f;
-            dotLayout.preferredHeight = 12f;
-            _liveGlow = NewImage("Brillo", dotHolder, _glow, Accent);
-            _liveGlow.rectTransform.sizeDelta = new Vector2(44f, 44f);
-            Image dot = NewImage("Punto", dotHolder, _round, Accent);
-            dot.type = Image.Type.Sliced;
-            dot.pixelsPerUnitMultiplier = 64f / 6f;
-            dot.rectTransform.sizeDelta = new Vector2(12f, 12f);
-
-            TextMeshProUGUI label = NewText("Texto", pill, _mono, 18f, Color.white);
-            label.text = liveLabel;
-            label.characterSpacing = 14f;
-            label.alignment = TextAlignmentOptions.MidlineLeft;
-        }
-
         private void BuildQrCard(RectTransform parent)
         {
             const float width = 232f;
-            const float height = 298f;
+            const float height = 266f;
             RectTransform card = NewRect("QR", parent);
             card.anchorMin = new Vector2(1f, 1f);
             card.anchorMax = new Vector2(1f, 1f);
@@ -866,21 +831,16 @@ namespace Sonia
             qrRect.anchorMin = new Vector2(0.5f, 1f);
             qrRect.anchorMax = new Vector2(0.5f, 1f);
             qrRect.pivot = new Vector2(0.5f, 1f);
-            qrRect.anchoredPosition = new Vector2(0f, -28f);
+            qrRect.anchoredPosition = new Vector2(0f, -24f);
             qrRect.sizeDelta = new Vector2(176f, 176f);
 
-            TextMeshProUGUI title = NewText("Titulo", card, _display, 24f, Navy);
-            title.text = qrTitle;
-            title.alignment = TextAlignmentOptions.Center;
-            FitToWidth(title, 18f, 24f);
-            PlaceTopStretch(title.rectTransform, 222f, 30f);
-
-            // Se encoge si no cabe: «¡Conoce más de nosotros!» a 19 se salía de la tarjeta.
-            TextMeshProUGUI caption = NewText("Pie", card, _semibold, 19f, Ink);
+            // Solo la invitación, en negrita (Jean: el nombre ya está en el logo).
+            TextMeshProUGUI caption = NewText("Pie", card, _display, 26f, Navy);
             caption.text = qrCaption;
             caption.alignment = TextAlignmentOptions.Center;
-            FitToWidth(caption, 13f, 19f);
-            PlaceTopStretch(caption.rectTransform, 254f, 26f);
+            FitToWidth(caption, 18f, 26f);
+            Thicken(caption, 0.2f);
+            PlaceTopStretch(caption.rectTransform, 210f, 38f);
         }
 
         /// <summary>
@@ -931,10 +891,12 @@ namespace Sonia
             tailRect.anchoredPosition = new Vector2(236f, -6f);
             tailRect.sizeDelta = new Vector2(110f, 70f);
 
-            TextMeshProUGUI speaker = NewText("Quien", _invitationRect, _mono, 22f, Brand);
+            // El nombre, grande y en negrita (Jean): se lee de lejos quién habla.
+            TextMeshProUGUI speaker = NewText("Quien", _invitationRect, _display, 34f, Brand);
             speaker.text = invitationSpeaker;
-            speaker.characterSpacing = 16f;
+            speaker.characterSpacing = 12f;
             speaker.alignment = TextAlignmentOptions.Center;
+            Thicken(speaker, 0.12f);
 
             TextMeshProUGUI line = NewText("Invitacion", _invitationRect, _display, 62f, Navy);
             line.text = invitation;
@@ -1094,6 +1056,18 @@ namespace Sonia
         private static void IgnoreLayout(RectTransform rect)
         {
             rect.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+        }
+
+        /// <summary>
+        /// Engorda el trazo de un texto oscuro sobre blanco. Con el espacio de color
+        /// lineal del proyecto, TextMeshPro pinta esos textos más finos que la fuente
+        /// (medido: la ExtraBold a 23 px salía con trazos de 2,7 px en vez de 3,5).
+        /// </summary>
+        private static void Thicken(TextMeshProUGUI text, float dilate)
+        {
+            Material material = text.fontMaterial;
+            material.SetFloat(ShaderUtilities.ID_FaceDilate, dilate);
+            text.fontMaterial = material;
         }
 
         /// <summary>Encoge el texto hasta <paramref name="min"/> si no cabe a <paramref name="max"/>.</summary>

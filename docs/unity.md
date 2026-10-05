@@ -443,11 +443,10 @@ escena no cambia y en modo edición se sigue viendo el HUD antiguo:
 
 | Elemento | Dónde (px de la referencia 1080x1920) | Cuándo |
 |---|---|---|
-| Fondo navy de la marca: degradado, dos brillos, puntos y la S de marca de agua | Toda la pantalla, en un Canvas propio que dibuja la cámara principal a 12 m (detrás de Sonia, con el mismo postprocesado que la escena, fijo aunque la cámara se mueva) | Siempre |
+| Fondo navy de la marca: degradado, dos brillos, puntos, la S de marca de agua y el halo azul de detrás de Sonia | Toda la pantalla, en un Canvas propio que dibuja la cámara principal a 12 m (detrás de Sonia, fijo aunque la cámara se mueva); pasa por el posprocesado de la escena y por eso va precompensado | Siempre |
 | Logo de Sonnet Code (S en degradado, texto blanco) | Arriba a la izquierda, (56, 64), 250 de ancho | Siempre |
-| Etiqueta «SONIA · EN VIVO» con un punto azul que late | Debajo del logo, (56, 196) | Salvo con imagen o trivia |
-| Tarjeta blanca con el QR a sonnetcode.com/es, «Sonnet Code» y «¡Conoce más de nosotros!» | Arriba a la derecha, margen 56, 232 x 298 | Salvo con imagen o trivia (ocupan esa franja) |
-| Invitación: bocadillo blanco de Sonia, «SONIA» y «¡Acércate y pregúntame lo que quieras!» (Manrope ExtraBold 62, dos líneas), con la colita a la izquierda del centro inclinada hacia ella | Abajo, margen 72 a los lados y 96 abajo; la colita sale a 236 del borde izquierdo del bocadillo | Si Sonia puede conversar (`stage_mode` con `talk`), está en reposo, no hay subtítulos desde hace 7,5 s y no hay imagen, trivia ni modo Fuera |
+| Tarjeta blanca con el QR a sonnetcode.com/es y «¡Conoce más!» en negrita (el logo ya dice Sonnet Code) | Arriba a la derecha, margen 56, 232 x 266 | Salvo con imagen o trivia (ocupan esa franja) |
+| Invitación: bocadillo blanco de Sonia, «SONIA» (Manrope ExtraBold 34, azul de marca) y «¡Acércate y pregúntame lo que quieras!» (Manrope ExtraBold 62, dos líneas), con la colita a la izquierda del centro inclinada hacia ella | Abajo, margen 72 a los lados y 96 abajo; la colita sale a 236 del borde izquierdo del bocadillo | Si Sonia puede conversar (`stage_mode` con `talk`), está en reposo, no hay subtítulos desde hace 7,5 s y no hay imagen, trivia ni modo Fuera |
 | Subtítulos de Sonia: Manrope ExtraBold 64, blancos, centrados, sin caja, con lo que acaba de decir atenuado | Abajo, a 96 del borde, 968 de ancho, como mucho unos 110 caracteres (de una frase larga se ve el final) | Mientras habla y 6 s después |
 | Lo que dijo el visitante: pastilla navy oscura «TÚ …» (sobre el jersey claro una translúcida no se leía) | Encima del texto de Sonia | Con los subtítulos |
 | Sombra navy de abajo (degradado) | Los 760 px de abajo | Siempre |
@@ -466,22 +465,34 @@ Detalles que no son obvios:
   debug, el editor de personaje o el Modo Jean, GPT-Live está apagada y Sonia
   no contestaría: el orquestador lo dice con el mensaje fijo `stage_mode`
   (`docs/protocolo.md`) y la invitación no sale.
+- **El fondo va precompensado.** Lo dibuja la cámara principal, y su
+  posprocesado (ACES, contraste 10, saturación 8 y viñeta 0,28 del perfil
+  `SampleSceneProfile`) lo dejaba mucho más oscuro que la maqueta: el azul a
+  menos de la mitad, el rojo a cero y las esquinas casi negras.
+  `scripts/urp_post.py` simula esa cadena de URP (gradación LDR; contrastada con
+  una captura, falla en un nivel sobre 255) y `scripts/stage_assets.py` pinta el
+  fondo que, tras ella, se ve como la maqueta, con el halo azul de la maqueta
+  centrado a 757 px (entre los ojos del plano de reposo y los del de
+  conversación). El script lee el perfil del Volume: si se toca el perfil o el
+  modo de gradación del pipeline, basta con volver a generar los recursos. Las
+  motas del escenario no influyen: son unos pocos puntos de luz delante del fondo.
 - **Lo antiguo se apaga en Play**: el telón 3D (`Sonia/Backdrop`), el logo del
   HUD (`BrandLogo`) y las burbujas de subtítulos (`Debug/Subtitles`).
 - **Fuentes**: Manrope (ExtraBold y SemiBold) y Geist Mono (Medium), las de
   sonnetcode.com, con licencia OFL, en `Assets/Resources/Stage/Fonts`.
   `StageScreen` crea sus fuentes dinámicas de TextMeshPro al arrancar, con la de
   TextMeshPro de respaldo para los caracteres que falten.
-- **Recursos**: fondo, formas redondeadas (corte en 9), sombra, brillo, colita del
+- **Recursos**: fondo, formas redondeadas (corte en 9), sombra, colita del
   bocadillo, QR y logo están en `Assets/Resources/Stage` y los genera
   `scripts/stage_assets.py` (con `--url` para otro QR y `--brand` para la carpeta
-  de assets del repo sonnet-code). `Editor/SoniaStageAssets.cs` los importa como
+  de assets del repo sonnet-code; el fondo tarda minuto y medio por la
+  compensación). `Editor/SoniaStageAssets.cs` los importa como
   sprites sin compresión ni mipmaps; **Sonia > Reimportar recursos de la
   pantalla** los vuelve a importar.
 - **Pendiente de autorización de Jean**: el cartel. En el diseño, al mostrar una
   imagen Sonia sujeta un cartel con ella; hasta entonces se queda el panel de
   imágenes de la franja alta (sección "Panel de imágenes"), y mientras está
-  puesto el QR y la etiqueta se apartan.
+  puesto el QR se aparta.
 
 ### Encuadre del stand
 
@@ -1214,7 +1225,7 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `MotionPlayer.cs` | Reproductor de clips con la Playables API: fundidos por código, capa de cuerpo y capa de torso con máscara |
 | `AvatarChoreographer.cs` | Decide qué clip suena en cada estado: idle con variaciones y atención, escuchar con asentimientos, pensar, hablar encadenando gestos, saludo |
 | `CameraFramingController.cs` | Planos del stand calculados con los huesos del avatar (conversación de cintura para arriba y reposo de rodillas para arriba), plano de panel, abierto para los bailes y travelling a cuerpo entero en el modo Fuera |
-| `StageScreen.cs` | Pantalla del stand (diseño F), construida por código en Play: fondo de la marca, logo, «SONIA · EN VIVO», QR, invitación a hablar y subtítulos tipo karaoke |
+| `StageScreen.cs` | Pantalla del stand (diseño F), construida por código en Play: fondo de la marca, logo, QR, invitación a hablar (bocadillo de Sonia) y subtítulos tipo karaoke |
 | `PresenceController.cs` | Modo Fuera (`presence`): sale caminando con el root motion del ciclo de caminar, se oculta, y vuelve frenando hasta su marca (sección 6c) |
 | `AwaySignController.cs` | Letrero del modo Fuera en el Canvas del HUD, construido por código, con fundidos |
 | `ImagePanelController.cs` | Decodifica el base64 de `show_image` y lo muestra con animación de escala |
