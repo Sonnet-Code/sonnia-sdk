@@ -158,6 +158,10 @@ El primer build compila todas las variantes de shaders de URP (unos 7 minutos
 en un MacBook Pro M-series); los siguientes salen de la caché en 2 minutos.
 Batch mode necesita que el editor esté cerrado sobre ese proyecto.
 
+El icono de la app (macOS y Windows) es `Assets/UI/SoniaAppIcon.png`, el icono
+por defecto del Player: la cara de Sonia sobre el navy de la marca. Si cambia el
+avatar, se rehace con **Sonia > Icono de la app (en Play)** con Sonia ya cargada.
+
 Para probarla en ventana y no a pantalla completa, y para verificarla sin
 editor, la app admite estos argumentos:
 
@@ -1345,6 +1349,7 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `Genies/GeniesSession.cs` | Un solo inicio de sesión en Genies a la vez para los cargadores de avatar y el editor de personaje (dos registros anónimos a la vez se pisaban) |
 | `Editor/SoniaHumanoidRig.cs` | Construye y guarda un Avatar Humanoid para modelos con esqueleto de Mixamo que llegan sin él (GLB de Ready Player Me) |
 | `Editor/SoniaCapture.cs` | Menú **Sonia > Captura vertical 9:16**: PNG 1080x1920 de la cámara principal |
+| `Editor/SoniaAppIcon.cs` | Menú **Sonia > Icono de la app (en Play)**: saca el icono de las apps (la cara de Sonia sobre el navy de la marca, con la forma de los iconos de macOS) en `Assets/UI/SoniaAppIcon.png` y lo pone en el Player al salir de Play |
 | `Editor/SoniaBrandAssets.cs` | Rutas y ajustes de importación de los assets de marca de Sonnet Code |
 | `Editor/SoniaStageAssets.cs` | Ajustes de importación de `Resources/Stage` (sprites sin compresión, cortes en 9) y menú **Sonia > Reimportar recursos de la pantalla** |
 | `Editor/SoniaStageCheck.cs` | Menú **Sonia > Comprobar pantalla (en Play)**: reposo, conversación, frase grabada y vuelta al reposo a paso fijo, con capturas 9:16 en `Temp/stagecheck/` |

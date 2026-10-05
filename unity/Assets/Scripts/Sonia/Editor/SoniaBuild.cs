@@ -116,7 +116,9 @@ namespace Sonia.EditorTools
             }
             finally
             {
+                // Y a disco: la build guarda los ajustes con Mono y, si no, se quedaba así.
                 PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, backend);
+                AssetDatabase.SaveAssets();
             }
 
             string summary = Summarize(report);
