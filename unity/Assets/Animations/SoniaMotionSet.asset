@@ -14,9 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Sonia::Sonia.SoniaMotionSet
   idleLoop: {fileID: 7400000, guid: 1ed4893abb6aa409da0c422b121cdbe9, type: 2}
   idleVariations: []
-  listeningLoop: {fileID: 7400000, guid: 0b97cb966412d4b58aeca4bbfaa8dad1, type: 2}
+  listeningLoop: {fileID: 7400000, guid: 856dafcc3e163400b973134d11727d02, type: 2}
   nods: []
-  thinkingLoop: {fileID: 7400000, guid: 0b97cb966412d4b58aeca4bbfaa8dad1, type: 2}
+  thinkingLoop: {fileID: 7400000, guid: 1ed4893abb6aa409da0c422b121cdbe9, type: 2}
   thinkingVariations:
   - {fileID: 7400000, guid: 459a0d81b01fb4c569590db31050acc2, type: 2}
   talking: []

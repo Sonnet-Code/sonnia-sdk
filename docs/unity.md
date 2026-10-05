@@ -609,6 +609,19 @@ vez: así el coreógrafo sabe cuándo termina un gesto y encadena el siguiente e
 lugar de cortarlo a mitad, que era lo que hacía el Animator Controller antiguo
 (478 transiciones sin tiempo de salida y clips de habla forzados a bucle).
 
+**Excepción: los bucles de reposo** (`SoniaAnimations.KeepsHorizontalMotionInPose`:
+reposo, escuchar y pensar) llevan el avance XZ **dentro de la pose**. En un
+reposo ese avance es el traspaso de peso de un pie a otro; extraído y
+descartado, la cadera se quedaba clavada y en su lugar patinaban los pies
+(`DefaultIdle`: 0,6 cm de vaivén con los pies resbalando 1,8 cm, frente a
+3,2 cm con los pies quietos). El paseo del modo Fuera (`Walk`) sigue
+extrayéndolo, porque `PresenceController` lee ese avance. Hoy suenan
+`DefaultIdle` en reposo, al hablar y al pensar, e `idles-0024-basicIdle` (más
+contenido) al escuchar; `StillPose`, la pose congelada, ya no se usa. La
+comparación de reposos, y por qué no se usa el motor de comportamiento nativo
+de Genies, está en `docs/informe-reposo-genies.md`; la herramienta para medir
+y fotografiar reposos es `SoniaIdleCheck` (en Play y en pausa, desde el MCP).
+
 ### MotionPlayer y AvatarChoreographer
 
 `MotionPlayer` construye un `PlayableGraph`: un `AnimationClipPlayable` por clip

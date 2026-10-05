@@ -15,6 +15,9 @@ eventos de sus controladores (Sonia > Crear set de animaciones) sin tocar el paq
   (https://github.com/geniesinc/GeniesIRL, `Assets/Project/Animation`).
 - `QuickAction_salute`, `QuickAction_twoThumbsUp` y `QuickAction_vibe`: GeniesCamera
   (https://github.com/geniesinc/GeniesCamera, `Assets/Project/Animation`).
+- `idles-0024-basicIdle` (reposo al escuchar): GeniesCamera, en la copia del SDK de
+  Genies que trae ese repo
+  (`Packages/com.genies.avatar-sdk.client/Internal/Avatars/Runtime/Species/Unified/Resources/Animations/Idle`).
 
 GeniesIRL y GeniesCamera son © Genies, Inc. con licencia Apache 2.0; el texto completo
 está en `LICENSE-Apache-2.0.txt`.

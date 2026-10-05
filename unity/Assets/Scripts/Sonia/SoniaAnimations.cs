@@ -12,8 +12,10 @@
 // (Apache-2.0). Todos han pasado Sonia > Comprobar animaciones (en Play); se
 // quedaron fuera los que dan la espalda a la cámara (IdleZoneOut3, vogue) y los
 // que solo tienen sentido encadenados en inicio, bucle y final. Genies no
-// publica clips para hablar ni escuchar: el coreógrafo se queda en el reposo y
-// la cabeza, la cara y los ojos siguen moviéndose por código.
+// publica clips para hablar ni escuchar: al hablar suena el reposo, al escuchar
+// un reposo más contenido, y la cabeza, la cara y los ojos siguen moviéndose
+// por código. Los reposos que se compararon están en
+// docs/informe-reposo-genies.md.
 
 using UnityEngine;
 
@@ -67,20 +69,33 @@ namespace Sonia
         // Clips por estado
         // ------------------------------------------------------------------
 
-        /// <summary>Bucle base de reposo: el reposo del SDK de Genies (renovado en la 3.8.6).</summary>
+        /// <summary>
+        /// Bucle base de reposo (y de hablar, que no tiene clips propios): el reposo
+        /// del SDK de Genies (renovado en la 3.8.6). Lleva un traspaso de peso de
+        /// unos 3 cm cada 10 s que solo se ve con el avance XZ dentro de la pose
+        /// (ver <see cref="KeepsHorizontalMotionInPose"/>).
+        /// </summary>
         public const string IdleLoopClip = "DefaultIdle";
 
         /// <summary>Variaciones de reposo de una sola vez. Genies no publica ninguna.</summary>
         public static readonly string[] IdleVariationClips = new string[0];
 
-        /// <summary>Bucle de escucha: la pose quieta de Genies (la cabeza asiente y se ladea por código).</summary>
-        public const string ListeningLoopClip = "StillPose";
+        /// <summary>
+        /// Bucle de escucha: un reposo de Genies más contenido (idles-0024, de la
+        /// carpeta de especies del SDK que trae GeniesCamera): 1 cm de vaivén de
+        /// cadera y la cabeza algo ladeada, atenta. La pose quieta (StillPose) la
+        /// dejaba tiesa. Encima asiente y ladea la cabeza AvatarStateController.
+        /// </summary>
+        public const string ListeningLoopClip = "idles-0024-basicIdle";
 
         /// <summary>Asentimientos de una sola vez. Vacío: AvatarStateController asiente por código.</summary>
         public static readonly string[] NodClips = new string[0];
 
-        /// <summary>Bucle de pensar: la pose quieta (la mirada y la cara hacen el resto).</summary>
-        public const string ThinkingLoopClip = "StillPose";
+        /// <summary>
+        /// Bucle de pensar: el mismo reposo que idle y hablar, así el paso de
+        /// pensar a hablar no cambia de clip (la mirada y la cara hacen el resto).
+        /// </summary>
+        public const string ThinkingLoopClip = "DefaultIdle";
 
         /// <summary>Variaciones de pensar: mirarse la mano como examinando algo (GeniesIRL).</summary>
         public static readonly string[] ThinkingVariationClips = { "actions-0224-lookAtObject_Trimmed" };
@@ -134,6 +149,22 @@ namespace Sonia
                 || clipName == ListeningLoopClip
                 || clipName == ThinkingLoopClip
                 || clipName == WalkClip;
+        }
+
+        /// <summary>
+        /// Los reposos llevan el avance horizontal dentro de la pose. Sacado como
+        /// root motion (y descartado, con applyRootMotion apagado) se pierde
+        /// justo el traspaso de peso: la cadera se queda clavada y en su lugar
+        /// patinan los pies (DefaultIdle pasaba de 3,2 cm de vaivén a 0,6 cm, con
+        /// los pies resbalando 1,8 cm). El resto de clips lo siguen sacando: el
+        /// paseo del modo Fuera lo lee PresenceController, y los gestos y bailes
+        /// se quedan en el sitio.
+        /// </summary>
+        public static bool KeepsHorizontalMotionInPose(string clipName)
+        {
+            return clipName == IdleLoopClip
+                || clipName == ListeningLoopClip
+                || clipName == ThinkingLoopClip;
         }
     }
 }

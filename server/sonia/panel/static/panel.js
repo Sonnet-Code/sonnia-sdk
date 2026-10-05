@@ -1653,6 +1653,7 @@
     "actions-presentItem_intro": "Presentar",
     "actions-0224-lookAtObject_Trimmed": "Mirar algo en la mano",
     DefaultIdle: "Reposo",
+    "idles-0024-basicIdle": "Reposo atento",
     StillPose: "Quieta",
     Walk: "Caminar",
   };

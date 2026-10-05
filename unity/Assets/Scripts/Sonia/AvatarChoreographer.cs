@@ -904,7 +904,12 @@ namespace Sonia
         // Reproducción
         // ------------------------------------------------------------------
 
-        /// <summary>Arranca el movimiento base de un estado.</summary>
+        /// <summary>
+        /// Arranca el movimiento base de un estado. Si el bucle del estado nuevo
+        /// es el que ya suena (pensar y hablar comparten reposo con idle), sigue
+        /// donde iba: un fundido del mismo clip consigo mismo en otro punto
+        /// mezclaría dos fases del traspaso de peso.
+        /// </summary>
         private void EnterState(AvatarState state, float fade, bool initial)
         {
             if (!Ready)
@@ -918,15 +923,15 @@ namespace Sonia
                 case AvatarState.Idle:
                     _attentionTimer = initial ? firstAttentionDelay : Mathf.Max(_attentionTimer, firstAttentionDelay);
                     _variationTimer = Random.Range(idleVariationInterval.x, idleVariationInterval.y);
-                    PlayLoop(motionSet.idleLoop, fade);
+                    EnsureLoop(motionSet.idleLoop, fade);
                     break;
                 case AvatarState.Listening:
                     _nodTimer = Random.Range(nodInterval.x, nodInterval.y);
-                    PlayLoop(motionSet.listeningLoop, fade);
+                    EnsureLoop(motionSet.listeningLoop, fade);
                     break;
                 case AvatarState.Thinking:
                     _variationTimer = Random.Range(thinkingVariationInterval.x, thinkingVariationInterval.y);
-                    PlayLoop(motionSet.thinkingLoop, fade);
+                    EnsureLoop(motionSet.thinkingLoop, fade);
                     break;
                 case AvatarState.Speaking:
                     PlayNextTalking(fade);

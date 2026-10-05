@@ -3,7 +3,8 @@
 // "Sonia > Crear set de animaciones" hace tres cosas, en orden:
 //   1. Configura cada clip de las carpetas de SoniaAnimations.ClipFolders: en
 //      bucle solo si es un bucle base, con la rotación y la altura de la raíz
-//      dentro de la pose y el avance XZ fuera (centro de masas). Los .anim (los
+//      dentro de la pose y el avance XZ fuera (centro de masas), salvo en los
+//      reposos, que lo llevan dentro (es su traspaso de peso). Los .anim (los
 //      oficiales de Genies) se ajustan en sus propios ajustes de clip; los FBX,
 //      en el importador (Humanoid, sin compresión de fotogramas, que aplana
 //      dedos y muñecas).
@@ -130,9 +131,12 @@ namespace Sonia.EditorTools
                 touched = true;
             }
 
-            if (settings.loopBlendPositionXZ || settings.keepOriginalPositionXZ)
+            // Avance XZ fuera de la pose (centro de masas), salvo en los reposos:
+            // ahí ese avance es el traspaso de peso (ver KeepsHorizontalMotionInPose).
+            bool keepXZ = SoniaAnimations.KeepsHorizontalMotionInPose(clip.name);
+            if (settings.loopBlendPositionXZ != keepXZ || settings.keepOriginalPositionXZ)
             {
-                settings.loopBlendPositionXZ = false;
+                settings.loopBlendPositionXZ = keepXZ;
                 settings.keepOriginalPositionXZ = false;
                 touched = true;
             }
@@ -235,11 +239,13 @@ namespace Sonia.EditorTools
 
                 // Center of Mass: el desplazamiento del clip se extrae como root
                 // motion y, con applyRootMotion apagado, se descarta. Sonia se
-                // queda en el sitio.
-                if (clip.keepOriginalPositionXZ || clip.lockRootPositionXZ)
+                // queda en el sitio. Los reposos lo dejan en la pose: es su
+                // traspaso de peso (ver KeepsHorizontalMotionInPose).
+                bool keepXZ = SoniaAnimations.KeepsHorizontalMotionInPose(clipName);
+                if (clip.keepOriginalPositionXZ || clip.lockRootPositionXZ != keepXZ)
                 {
                     clip.keepOriginalPositionXZ = false;
-                    clip.lockRootPositionXZ = false;
+                    clip.lockRootPositionXZ = keepXZ;
                     touched = true;
                 }
             }
