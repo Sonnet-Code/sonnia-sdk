@@ -15,6 +15,10 @@ la build; Jean: «los envs deben inyectarse en el build»), y por encima manda
 ``overrides.env`` de ``home()``, que escribe el backoffice para cambiar variables de
 ese equipo sin recompilar.
 
+La app trae además las frases ya grabadas (``cache/voice`` del equipo donde se
+congeló): ``seed_home()`` las copia a ``home()`` si faltan, para que una instalación
+nueva tenga el modo «Solo saludos» listo sin red.
+
 Es la única excepción a «nadie lee ``os.environ``» (``sonia/config.py``): el
 ``.env`` sale de aquí, así que hay que saberlo antes de cargar la configuración.
 """
@@ -22,6 +26,7 @@ Es la única excepción a «nadie lee ``os.environ``» (``sonia/config.py``): el
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -29,9 +34,11 @@ __all__ = [
     "BUNDLE_ROOT",
     "OVERRIDES_FILE",
     "REPO_ROOT",
+    "SEEDED",
     "env_files",
     "frozen",
     "home",
+    "seed_home",
     "user_data_dir",
 ]
 
@@ -39,6 +46,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: Variables de este equipo que mandan sobre el `.env` (las escribe el backoffice).
 OVERRIDES_FILE = "overrides.env"
+
+#: Lo que la app congelada trae hecho para cada equipo nuevo (ver ``seed_home``).
+SEEDED = ("cache/voice",)
 
 
 def frozen() -> bool:
@@ -82,3 +92,35 @@ def env_files() -> list[Path]:
     """
     bundled = Path(sys.executable).resolve().parent / ".env" if frozen() else REPO_ROOT / ".env"
     return [home() / OVERRIDES_FILE, bundled]
+
+
+def seed_home(bundle: Path | None = None, target: Path | None = None) -> int:
+    """Copia a ``home()`` lo que trae la app congelada y aún no tiene este equipo.
+
+    Son las frases grabadas (``SEEDED``): sin ellas, una instalación nueva no tiene
+    voces para «Solo saludos» hasta que conecta y las graba. No pisa nada (lo que
+    grabe este equipo manda) y fuera de la app no hace nada. Devuelve cuántos
+    archivos copió.
+    """
+    if bundle is None:
+        if not frozen():
+            return 0
+        bundle = BUNDLE_ROOT
+    target = home() if target is None else target
+    if bundle.resolve() == target.resolve():
+        return 0
+    copied = 0
+    for relative in SEEDED:
+        source = bundle / relative
+        if not source.is_dir():
+            continue
+        for path in sorted(source.rglob("*")):
+            if not path.is_file():
+                continue
+            destination = target / relative / path.relative_to(source)
+            if destination.exists():
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, destination)
+            copied += 1
+    return copied

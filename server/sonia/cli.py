@@ -43,6 +43,7 @@ from sonia.live.voicecache import VoiceCache
 from sonia.llm.client import LLMClient
 from sonia.panel.control import StandControl
 from sonia.panel.logs import LogBuffer
+from sonia.paths import seed_home
 from sonia.types import ActionContext, AudioChunk, CameraSource
 from sonia.vision.camera import build_camera
 from sonia.vision.policy import VisionPolicy
@@ -619,6 +620,10 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
         return 1
     components = build_components(settings)
     _log_summary(settings, components)
+    # En la app empaquetada, las frases ya grabadas que trae pasan a este equipo.
+    seeded = await asyncio.to_thread(seed_home)
+    if seeded:
+        logger.info("Frases grabadas de la app copiadas a este equipo: %d", seeded)
     voice_cache = VoiceCache(settings.panel.voice_cache_dir, settings.live)
     engine = LiveEngine(
         settings,
