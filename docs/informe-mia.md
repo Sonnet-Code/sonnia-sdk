@@ -505,7 +505,7 @@ de piel respecto a como Genies diseña sus shaders.
   - Primero sale una **silueta negra que ya respira con el reposo**. Después llega el avatar con texturas, y el reposo continúa en el mismo instante (`setIdleTime`).
   - El lienzo aparece con un fundido de 0,4 s.
   - Mensajes de carga en el tono del personaje: "Plugging the aux back in", "Cracking another sour candy"…
-  - Sonia ya arranca al instante con su copia local, así que no le hace falta.
+  - Sonia ya no tiene copia local (5 de octubre): al entrar en Play el escenario está vacío hasta que llega el avatar del SDK, poco si ya está en su caché. Un fundido corto al aparecer, como el de Mia, suavizaría esa llegada.
 - **Esperas:**
   - En texto: gesto "Think" mientras llega la respuesta.
   - En voz: "Listen" al empezar a hablar el visitante.
@@ -680,7 +680,7 @@ es para una persona, y cualquier cambio visual se verifica con la captura 9:16 (
   - Voz por blendshapes con ganancia (`PlayVoiceAnimation`).
 - **Por qué no ahora:**
   - Es la API antigua, sin demeanor, body motion ni énfasis.
-  - Necesita la entidad nativa del avatar (no existe en la copia local que usamos sin red), clips OZZ de Genies y volcar la pose a Unity.
+  - Necesita la entidad nativa del avatar, clips OZZ de Genies y volcar la pose a Unity.
   - Ya tumbó Unity una vez (ver `informe-reposo-genies.md`).
   - Y para el balanceo no aporta nada: en Mia su parte procedural ni funciona.
 
