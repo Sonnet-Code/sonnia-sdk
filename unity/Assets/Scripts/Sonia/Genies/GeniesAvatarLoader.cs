@@ -33,6 +33,7 @@
 
 using System;
 using System.IO;
+using System.Text;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Genies.Sdk;
@@ -453,24 +454,22 @@ namespace Sonia
 
                 token.ThrowIfCancellationRequested();
                 step = "iniciar sesión";
-                if (!AvatarSdk.IsLoggedIn)
+                string noSession = await GeniesSession.EnsureLoggedInAsync(limit);
+                if (noSession != null)
                 {
-                    var instant = await AvatarSdk.TryInstantLoginAsync().Timeout(limit);
-                    if (!instant.isLoggedIn)
-                    {
-                        var guest = await AvatarSdk.StartLoginAnonymousAsync().Timeout(limit);
-                        if (!guest.succeeded)
-                        {
-                            return "sin sesión: " + guest.failReason;
-                        }
-                    }
+                    return noSession;
                 }
 
                 token.ThrowIfCancellationRequested();
 
                 // La precarga solo adelanta descargas; si falla, la carga lo vuelve a intentar.
                 step = "precargar las piezas";
-                await AvatarSdk.PrecacheAvatarAssetsByDefinitionAsync(json).Timeout(limit);
+                bool cached = await AvatarSdk.PrecacheAvatarAssetsByDefinitionAsync(json).Timeout(limit);
+                if (!cached && _failures == 0)
+                {
+                    Debug.LogWarning("[Sonia] Genies no pudo precargar las piezas del avatar; se intenta montarlo igual.", this);
+                }
+
                 token.ThrowIfCancellationRequested();
                 if (IsSuperseded(version, json))
                 {
@@ -500,6 +499,13 @@ namespace Sonia
                 }
                 catch (TimeoutException)
                 {
+                    if (_failures == 0)
+                    {
+                        // Qué llegó a construir el SDK, para saber en qué se quedó.
+                        Debug.LogWarning("[Sonia] Genies no termina de montar el avatar. En el aparcamiento: "
+                                         + DescribeParking(), this);
+                    }
+
                     // El SDK sigue montándolo: el avatar que entregue tarde se suelta.
                     DiscardWhenLoaded(load).Forget();
                     throw;
@@ -513,6 +519,7 @@ namespace Sonia
                 pending.Root.transform.localPosition = Vector3.zero;
                 if (!pending.IsLoadingComplete)
                 {
+                    step = "terminar de cargar el avatar";
                     await complete.Task.Timeout(limit);
                 }
 
@@ -593,6 +600,67 @@ namespace Sonia
             }
 
             return _parking;
+        }
+
+        /// <summary>
+        /// Resumen de lo que hay en el aparcamiento (objetos, mallas, materiales y
+        /// texturas puestas), para el registro cuando una carga se atasca.
+        /// </summary>
+        private string DescribeParking()
+        {
+            if (_parking == null || _parking.childCount == 0)
+            {
+                return "nada (el SDK no llegó a crear el avatar)";
+            }
+
+            StringBuilder sb = new StringBuilder();
+            foreach (Transform child in _parking)
+            {
+                Renderer[] renderers = child.GetComponentsInChildren<Renderer>(true);
+                int vertices = 0;
+                int materials = 0;
+                int textures = 0;
+                int emptySlots = 0;
+                foreach (Renderer renderer in renderers)
+                {
+                    SkinnedMeshRenderer skinned = renderer as SkinnedMeshRenderer;
+                    if (skinned != null && skinned.sharedMesh != null)
+                    {
+                        vertices += skinned.sharedMesh.vertexCount;
+                    }
+
+                    foreach (Material material in renderer.sharedMaterials)
+                    {
+                        if (material == null)
+                        {
+                            continue;
+                        }
+
+                        materials++;
+                        foreach (string property in material.GetTexturePropertyNames())
+                        {
+                            if (material.GetTexture(property) != null)
+                            {
+                                textures++;
+                            }
+                            else
+                            {
+                                emptySlots++;
+                            }
+                        }
+                    }
+                }
+
+                sb.Append('«').Append(child.name).Append("» ")
+                  .Append(child.GetComponentsInChildren<Transform>(true).Length).Append(" objetos, ")
+                  .Append(renderers.Length).Append(" renderers, ")
+                  .Append(vertices).Append(" vértices, ")
+                  .Append(materials).Append(" materiales, ")
+                  .Append(textures).Append(" texturas puestas y ")
+                  .Append(emptySlots).Append(" huecos sin textura; ");
+            }
+
+            return sb.ToString();
         }
 
         /// <summary>Suelta el avatar de una carga abandonada por tiempo cuando el SDK lo entregue.</summary>
