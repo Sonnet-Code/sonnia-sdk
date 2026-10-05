@@ -90,6 +90,13 @@ YELLOW = np.array([248, 205, 28]) / 255.0
 GRIP_HEIGHT = 0.025  # metros sobre la boca a los que las manos cogen la copa
 TEXT_WIDTH = 0.096  # metros, ancho del texto en el gajo delantero
 TEXT_HEIGHT_FRACTION = 0.30  # altura del centro del texto en el gajo delantero (0 abajo, 1 arriba)
+# El texto se proyecta como lo ve la cámara con la gorra puesta: desde delante y
+# por encima de su eje (la gorra va inclinada hacia delante y la cámara de la
+# trivia está alta). Proyectado solo desde el frente, los extremos, que quedan
+# más atrás en la copa, se verían más altos que el centro y el texto saldría
+# combado hacia abajo.
+TEXT_VIEW_PITCH_DEG = 20.0
+TEXT_ARCH = 0.006  # metros que bajan los extremos respecto al centro: arco hacia arriba
 SEAM_HALF_PX = 7  # media anchura, en píxeles de la textura, de la costura central que se borra
 BUMP_STRENGTH = 2.2  # relieve del bordado en el normal map
 
@@ -508,22 +515,34 @@ text_img = bpy.data.images.load(os.path.join(TRABAJO, "noogler_text.png"))
 tw, th = text_img.size
 text = np.array(text_img.pixels[:], dtype=np.float32).reshape(th, tw, 4)
 front_band = covered & (np.abs(az) < 6)
-zf_min = float(np.nanmin(pz[front_band]))
-zf_max = float(np.nanmax(pz[front_band]))
+# Altura vista desde delante y por encima: lo que está más atrás se ve más alto.
+view_pitch = math.radians(TEXT_VIEW_PITCH_DEG)
+pv = pz * math.cos(view_pitch) + py * math.sin(view_pitch)
+zf_min = float(np.nanmin(pv[front_band]))
+zf_max = float(np.nanmax(pv[front_band]))
 text_h = TEXT_WIDTH * th / tw
 text_cz = zf_min + TEXT_HEIGHT_FRACTION * (zf_max - zf_min)
 print(
-    "FRENTE z",
+    "FRENTE alto visto",
     round(zf_min, 4),
     round(zf_max, 4),
-    "texto centro z",
+    "texto centro",
     round(text_cz, 4),
     "alto",
     round(text_h, 4),
 )
 facing = covered & (nrm_map[..., 1] < -0.25)  # caras que miran hacia delante (-Y)
-tu = (px / TEXT_WIDTH) + 0.5
-tv = ((pz - text_cz) / text_h) + 0.5
+if TEXT_ARCH > 0:
+    # Las letras siguen un arco de circunferencia con el centro por debajo: la
+    # posición a lo largo del texto es la longitud de arco y la altura, la
+    # distancia al centro.
+    arch_r = ((TEXT_WIDTH / 2) ** 2 + TEXT_ARCH**2) / (2 * TEXT_ARCH)
+    rel_v = pv - (text_cz - arch_r)
+    tu = (np.arctan2(px, rel_v) * arch_r / TEXT_WIDTH) + 0.5
+    tv = ((np.hypot(px, rel_v) - arch_r) / text_h) + 0.5
+else:
+    tu = (px / TEXT_WIDTH) + 0.5
+    tv = ((pv - text_cz) / text_h) + 0.5
 inside = facing & (tu >= 0) & (tu < 1) & (tv >= 0) & (tv < 1)
 ri, ci = np.nonzero(inside)
 sx = np.clip((tu[ri, ci] * tw).astype(int), 0, tw - 1)
