@@ -2,7 +2,6 @@
   "JsonVersion": "2-0-0",
   "equippedAssetIds": [
     "AvatarBase/recmDqoKYpEG1TQV",
-    "AvatarBase/recTIyxaNSoQsZQaa",
     "Flair/rec9um61avz6QudeQ",
     "AvatarMakeup/rec9Zs6eoELRpvlsA",
     "AvatarBase/recmC2JlPphaEjdVf",
@@ -14,24 +13,24 @@
     "AvatarBase/recaG3AZTGON2489j",
     "AvatarBase/recmdZ4C4enmt630",
     "AvatarMakeup/recBOkwY1zptSGDsQ",
-    "WardrobeGear/recQQbSRTCTJi5ie4",
     "AvatarMakeup/recUaKSO6r3XqtwQ1",
-    "WardrobeGear/recLziQU2EzJQLRU9",
-    "WardrobeGear/0afd6330787bf2a2",
-    "WardrobeGear/330cc0fb7c7c5752",
-    "WardrobeGear/rectgamO8Xc5xvIto"
+    "WardrobeGear/9e0747efefb53aac",
+    "WardrobeGear/ba7383afc44bfe0d",
+    "WardrobeGear/c3a89bc45f9a9ad9",
+    "AvatarBase/recAyIbaC69cO2CnN",
+    "WardrobeGear/recZfKwDGWgdEWQtb"
   ],
   "colors": {
-    "gear-eyebrowsG": {
-      "r": 0.368627459,
-      "g": 0.172549024,
-      "b": 0.0196078438,
-      "a": 1.0
-    },
     "gear-hairG": {
       "r": 0.396544665,
       "g": 0.2935954,
       "b": 0.180535167,
+      "a": 1.0
+    },
+    "gear-eyebrowsG": {
+      "r": 0.368627459,
+      "g": 0.172549024,
+      "b": 0.0196078438,
       "a": 1.0
     },
     "gear-eyebrowsB": {
@@ -64,10 +63,16 @@
       "b": 0.360784322,
       "a": 1.0
     },
-    "unified-eyeshadow2": {
-      "r": 0.8392157,
-      "g": 0.8862745,
-      "b": 0.847058833,
+    "unified-lipstick2": {
+      "r": 0.596078455,
+      "g": 0.2,
+      "b": 0.160784319,
+      "a": 1.0
+    },
+    "unified-lipstick1": {
+      "r": 0.596078455,
+      "g": 0.2,
+      "b": 0.160784319,
       "a": 1.0
     },
     "unified-lipstick3": {
@@ -76,10 +81,22 @@
       "b": 0.0,
       "a": 1.0
     },
-    "unified-lipstick1": {
-      "r": 0.596078455,
-      "g": 0.2,
-      "b": 0.160784319,
+    "unified-freckles": {
+      "r": 0.7764706,
+      "g": 0.494117647,
+      "b": 0.443137258,
+      "a": 1.0
+    },
+    "gear-hairBase": {
+      "r": 0.1693645,
+      "g": 0.111488871,
+      "b": 0.09325497,
+      "a": 1.0
+    },
+    "unified-eyeshadow2": {
+      "r": 0.8392157,
+      "g": 0.8862745,
+      "b": 0.847058833,
       "a": 1.0
     },
     "unified-blush3": {
@@ -100,40 +117,10 @@
       "b": 0.360784322,
       "a": 1.0
     },
-    "gear-hairBase": {
-      "r": 0.1693645,
-      "g": 0.111488871,
-      "b": 0.09325497,
-      "a": 1.0
-    },
-    "unified-freckles": {
-      "r": 0.7764706,
-      "g": 0.494117647,
-      "b": 0.443137258,
-      "a": 1.0
-    },
-    "unified-lipstick2": {
-      "r": 0.596078455,
-      "g": 0.2,
-      "b": 0.160784319,
-      "a": 1.0
-    },
     "unified-skin": {
-      "r": 0.7411765,
-      "g": 0.619607866,
-      "b": 0.490196079,
-      "a": 1.0
-    },
-    "unified-faceGems3": {
-      "r": 0.0,
-      "g": 0.0,
-      "b": 0.0,
-      "a": 1.0
-    },
-    "unified-faceGems2": {
-      "r": 0.8392157,
-      "g": 0.8862745,
-      "b": 0.847058833,
+      "r": 0.768627465,
+      "g": 0.6431373,
+      "b": 0.545098066,
       "a": 1.0
     },
     "gear-hairB": {
@@ -148,6 +135,18 @@
       "b": 0.1254842,
       "a": 1.0
     },
+    "unified-faceGems2": {
+      "r": 0.8392157,
+      "g": 0.8862745,
+      "b": 0.847058833,
+      "a": 1.0
+    },
+    "unified-faceGems3": {
+      "r": 0.0,
+      "g": 0.0,
+      "b": 0.0,
+      "a": 1.0
+    },
     "unified-faceGems1": {
       "r": 0.58431375,
       "g": 0.6862745,
@@ -156,12 +155,18 @@
     }
   },
   "bodyAttributes": {
-    "EyeSize": -0.297862768,
     "LipWidth": -0.3204854,
+    "Belly": -0.3870548,
+    "HipSize": 0.313827634,
+    "EyeSize": -0.297862768,
     "EyeTilt": 0.213028431,
-    "JawLength": 0.3638183,
-    "JawWidth": 0.870965958,
+    "WeightUpperTorso": 0.008070588,
+    "WeightHeadNeck": -0.150856853,
+    "ShoulderSize": 0.238754153,
+    "WeightLegs": 0.235168576,
+    "JawLength": 0.28247118,
     "NoseProjection": -0.463761151,
+    "JawWidth": 0.3050114,
     "LipFullness": -0.254503071
   },
   "equippedTattooIds": {}
