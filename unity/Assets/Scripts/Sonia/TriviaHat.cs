@@ -211,6 +211,9 @@ namespace Sonia
         private bool _pickupSet;
         private float _bow;
         private readonly Transform[] _spine = new Transform[3];
+        private readonly System.Collections.Generic.List<Transform> _dynamicBones = new System.Collections.Generic.List<Transform>();
+        private Vector3[] _dynamicPositions = new Vector3[0];
+        private Quaternion[] _dynamicRotations = new Quaternion[0];
         private readonly HandArm _right = new HandArm(false);
         private readonly HandArm _left = new HandArm(true);
         private Transform _root;
@@ -564,12 +567,25 @@ namespace Sonia
             return 1f - Smooth(Mathf.InverseLerp(GrabEnd, GrabEnd + StraightenSeconds, t));
         }
 
-        /// <summary>Dobla la columna hacia delante <paramref name="angle"/> grados, repartidos entre sus huesos.</summary>
+        /// <summary>
+        /// Dobla la columna hacia delante <paramref name="angle"/> grados, repartidos
+        /// entre sus huesos. Los huesos que mueven las físicas de Genies se quedan
+        /// donde los dejó su simulación (ver FindDynamicBones).
+        /// </summary>
         private void Bow(float angle)
         {
             if (angle <= 0.01f)
             {
                 return;
+            }
+
+            for (int i = 0; i < _dynamicBones.Count; i++)
+            {
+                if (_dynamicBones[i] != null)
+                {
+                    _dynamicPositions[i] = _dynamicBones[i].position;
+                    _dynamicRotations[i] = _dynamicBones[i].rotation;
+                }
             }
 
             Vector3 axis = _avatar.right;
@@ -582,6 +598,47 @@ namespace Sonia
                     _spine[i].rotation = Quaternion.AngleAxis(angle * BowShares[i] / total, axis) * _spine[i].rotation;
                 }
             }
+
+            // En orden de jerarquía (padres antes que hijos), así cada uno acaba en su sitio.
+            for (int i = 0; i < _dynamicBones.Count; i++)
+            {
+                if (_dynamicBones[i] != null)
+                {
+                    _dynamicBones[i].SetPositionAndRotation(_dynamicPositions[i], _dynamicRotations[i]);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Huesos que mueven las físicas de Genies (DynamicsParticle con
+        /// AffectsTransform: el flequillo, los mechones, la coleta...). Genies los
+        /// coloca en el mundo en su LateUpdate, antes que este, con la simulación del
+        /// frame anterior, que ya contaba con la inclinación. Si la columna los
+        /// arrastrara otra vez, se doblarían dos veces: el pelo salía despegado y
+        /// retorcido delante de la cara.
+        /// </summary>
+        private void FindDynamicBones()
+        {
+            _dynamicBones.Clear();
+            foreach (MonoBehaviour behaviour in _avatar.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                if (behaviour == null || behaviour.GetType().Name != "DynamicsParticle")
+                {
+                    continue;
+                }
+
+                // DynamicsParticle es interna del SDK: su campo público se lee por reflexión.
+                System.Reflection.FieldInfo affects = behaviour.GetType().GetField("AffectsTransform");
+                if (affects != null && affects.GetValue(behaviour) is bool moves && !moves)
+                {
+                    continue;
+                }
+
+                _dynamicBones.Add(behaviour.transform);
+            }
+
+            _dynamicPositions = new Vector3[_dynamicBones.Count];
+            _dynamicRotations = new Quaternion[_dynamicBones.Count];
         }
 
         /// <summary>Dónde quedarían los hombros (<paramref name="shoulders"/>, en la pose de ahora) con la columna doblada <paramref name="angle"/> grados, como en Bow.</summary>
@@ -689,6 +746,7 @@ namespace Sonia
                 _spine[0] = animator.GetBoneTransform(HumanBodyBones.Spine);
                 _spine[1] = animator.GetBoneTransform(HumanBodyBones.Chest);
                 _spine[2] = animator.GetBoneTransform(HumanBodyBones.UpperChest);
+                FindDynamicBones();
                 _pickupSet = false;
                 FindAvatarParts();
             }
