@@ -625,6 +625,7 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
         vision_policy=components.policy,
         narrator=components.narrator,
         voice_cache=voice_cache,
+        knowledge_dir=settings.knowledge_dir,
     )
 
     tasks: list[asyncio.Task[None]] = []
@@ -672,6 +673,7 @@ async def cmd_chat(settings: Settings, *, speak: bool = False) -> int:
         camera=None,
         vision_policy=components.policy,
         narrator=None,
+        knowledge_dir=settings.knowledge_dir,
     )
     tap.playback_done = engine.notify_playback_done
 

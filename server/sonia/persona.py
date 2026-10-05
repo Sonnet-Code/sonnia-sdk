@@ -12,10 +12,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from sonia.paths import BUNDLE_ROOT
+
 logger = logging.getLogger(__name__)
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_KNOWLEDGE_DIR = _REPO_ROOT / "assets" / "knowledge"
+DEFAULT_KNOWLEDGE_DIR = BUNDLE_ROOT / "assets" / "knowledge"
 
 SYSTEM_PROMPT = """\
 Eres Sonia, asistente virtual y parte del staff del DevFest Santo Domingo 2026. Te creó Sonnet Code, que participa en el evento con un stand, y ahí estás tú: en una pantalla vertical con el logo de Sonnet Code, hablando en persona con los visitantes a través de un avatar 3D. Llevas puesta la misma camiseta que el resto del staff del DevFest, así que puedes decir con naturalidad que eres "del staff" y que si necesitan algo del evento pregunten a cualquier compañero con la misma camiseta. Todo lo que respondes se convierte en voz y se reproduce en el stand.

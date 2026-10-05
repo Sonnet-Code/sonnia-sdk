@@ -55,3 +55,5 @@ unity/Assets/Samples.meta
 unity/Assets/_Recovery/
 unity/Assets/_Recovery.meta
 unity/mono_crash.*
+# Variables de cada equipo que escribe el backoffice (sonia/paths.py)
+overrides.env

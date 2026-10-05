@@ -14,7 +14,10 @@ from urllib.parse import urlparse
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+from sonia.paths import BUNDLE_ROOT, env_files, home
+
+#: Raíz de `cache/` y `overrides.env`: el repo, o fuera de la app empaquetada (`sonia/paths.py`).
+_HOME = home()
 
 
 class LLMSettings(BaseSettings):
@@ -105,7 +108,7 @@ class VisionSettings(BaseSettings):
     interval_seconds: float = 0.0
     #: Guardar capturas en disco (solo depuración; nunca en el stand).
     debug_save_frames: bool = False
-    debug_dir: str = str(_REPO_ROOT / "debug_frames")
+    debug_dir: str = str(_HOME / "debug_frames")
 
 
 class WSSettings(BaseSettings):
@@ -230,9 +233,9 @@ class PanelSettings(BaseSettings):
     access_team_domain: str = ""
     access_aud: str = ""
     #: Dónde se guarda el estado del panel (modo, avisos, volumen...).
-    state_file: str = str(_REPO_ROOT / "cache" / "panel_state.json")
+    state_file: str = str(_HOME / "cache" / "panel_state.json")
     #: Caché de frases fijas grabadas con la voz de GPT-Live.
-    voice_cache_dir: str = str(_REPO_ROOT / "cache" / "voice")
+    voice_cache_dir: str = str(_HOME / "cache" / "voice")
     #: Modo "Solo saludos": segundos entre saludos (mínimo y máximo).
     greeter_interval_min_seconds: float = 25.0
     greeter_interval_max_seconds: float = 55.0
@@ -248,7 +251,8 @@ class PanelSettings(BaseSettings):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(_REPO_ROOT / ".env", ".env"),
+        # En pydantic-settings el último archivo manda: al revés que env_files().
+        env_file=(".env", *reversed(env_files())),
         env_file_encoding="utf-8",
         extra="ignore",
         env_ignore_empty=True,
@@ -263,7 +267,7 @@ class Settings(BaseSettings):
     trivia: TriviaSettings = Field(default_factory=TriviaSettings)
     panel: PanelSettings = Field(default_factory=PanelSettings)
 
-    assets_dir: str = str(_REPO_ROOT / "assets")
+    assets_dir: str = str(BUNDLE_ROOT / "assets")
     log_level: str = "INFO"
     #: Reiniciar la conversación tras N segundos sin actividad (modo kiosco).
     idle_reset_seconds: float = 120.0
@@ -280,15 +284,20 @@ class Settings(BaseSettings):
         return Path(self.assets_dir) / "showcase"
 
     @property
+    def knowledge_dir(self) -> Path:
+        return Path(self.assets_dir) / "knowledge"
+
+    @property
     def trivia_file(self) -> Path:
         return Path(self.assets_dir) / "trivia" / "preguntas.md"
 
 
 def load_settings() -> Settings:
-    """Carga `.env` (raíz del repo o cwd) y construye la configuración."""
+    """Carga las variables (`overrides.env`, el `.env` del repo o de la app, y el del cwd) y construye la configuración."""
     from dotenv import load_dotenv
 
-    for candidate in (_REPO_ROOT / ".env", Path(".env")):
+    # Sin override: el primero que define una variable gana.
+    for candidate in (*env_files(), Path(".env")):
         if candidate.is_file():
             load_dotenv(candidate, override=False)
     return Settings()
