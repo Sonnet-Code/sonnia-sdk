@@ -43,6 +43,7 @@ from sonia.live.voicecache import VoiceCache
 from sonia.llm.client import LLMClient
 from sonia.panel.control import StandControl
 from sonia.panel.logs import LogBuffer
+from sonia.parent import watch_parent
 from sonia.paths import seed_home
 from sonia.types import ActionContext, AudioChunk, CameraSource
 from sonia.vision.camera import build_camera
@@ -655,6 +656,15 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
                 else _feed_silence(engine, settings, None)
             )
             tasks.append(asyncio.create_task(source, name="microphone"))
+            if settings.sonia_parent_pid is not None:
+                # En la app: si la app muere, se sale como con Ctrl+C (sonia/parent.py).
+                main = asyncio.current_task()
+                assert main is not None
+                tasks.append(
+                    asyncio.create_task(
+                        watch_parent(settings.sonia_parent_pid, main.cancel), name="parent-watch"
+                    )
+                )
             logger.info("Sonia lista con GPT-Live. Ctrl+C para salir.")
             await tasks[0]
     finally:

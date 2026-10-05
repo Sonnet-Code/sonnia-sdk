@@ -13,6 +13,10 @@
 // Lo de cada equipo (cache/, overrides.env del backoffice y los registros) va en
 // SONIA_HOME, fuera de la app: ~/Library/Application Support/Sonia en macOS y
 // %APPDATA%\Sonia en Windows (la misma carpeta que sonia/paths.py).
+//
+// El orquestador recibe el PID de la app (SONIA_PARENT_PID) y se cierra solo si
+// la app muere de golpe (sonia/parent.py): si no, se quedaba huérfano con el
+// micrófono abierto y la sesión de GPT-Live gastando.
 
 using System;
 using System.Diagnostics;
@@ -145,6 +149,7 @@ namespace Sonia
                     WorkingDirectory = Path.GetDirectoryName(_executable)
                 };
                 info.EnvironmentVariables["SONIA_HOME"] = _home;
+                info.EnvironmentVariables["SONIA_PARENT_PID"] = Process.GetCurrentProcess().Id.ToString();
                 info.EnvironmentVariables["PYTHONUNBUFFERED"] = "1";
                 info.EnvironmentVariables["PYTHONUTF8"] = "1";
                 info.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";

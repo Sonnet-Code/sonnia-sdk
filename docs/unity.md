@@ -191,8 +191,10 @@ arranca sola: un doble clic y ya está Sonia entera.
 3. Al abrir la app, `OrchestratorProcess` lo lanza si nadie escucha en el
    8765 (si ya hay uno, por ejemplo el de desarrollo, manda ese), lo relanza si
    se cae (2, 4, 8… hasta 30 s) y lo cierra al salir (con SIGINT en macOS, que
-   cierra la sesión de GPT-Live). En el editor no se lanza nunca y
-   `-sin-orquestador` lo desactiva.
+   cierra la sesión de GPT-Live). Si la app muere de golpe y no llega a
+   cerrarlo, el orquestador se cierra solo en unos segundos: recibe el PID de
+   la app en `SONIA_PARENT_PID` y lo vigila (`sonia/parent.py`). En el editor
+   no se lanza nunca y `-sin-orquestador` lo desactiva.
 4. Lo que es de cada equipo va fuera de la app, en `SONIA_HOME`
    (`~/Library/Application Support/Sonia` en macOS, `%APPDATA%\Sonia` en
    Windows): `cache/` (voces grabadas, estado del panel, id de la instancia),
