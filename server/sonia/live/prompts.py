@@ -335,6 +335,21 @@ def _clock_section(clock_text: str) -> str:
     )
 
 
+#: Nada de inventarse el aspecto de nadie (registro del 7 de octubre: «me encantan esas gafas»
+#: y «vi tu sonrisa desde que llegaste» sin haber mirado).
+_LOOKS_REMINDER: dict[CameraMode, str] = {
+    "look": (
+        "- No sabes cómo es nadie ni qué lleva hasta que miras con la cámara (delegando): no "
+        "comentes ropa, gafas, pelo, sonrisa ni nada de su aspecto sin haberlo visto en esta "
+        "conversación. Para un cumplido, mira primero."
+    ),
+    "notes": (
+        "- Del aspecto de la gente solo sabes lo que dicen las notas [Cámara] recientes: no "
+        "comentes nada que no esté en ellas."
+    ),
+    "none": "- No tienes cámara: no comentes el aspecto ni la ropa de nadie.",
+}
+
 #: Lo que el backend solo hace si se le delega, con su nombre para el recordatorio.
 _BACKEND_DOES = {
     "show_image": "enseñar o retirar imágenes",
@@ -345,7 +360,7 @@ _BACKEND_DOES = {
 }
 
 
-def _reminder_section(names: list[str], *, web_search: bool) -> str:
+def _reminder_section(names: list[str], *, web_search: bool, mode: CameraMode = "look") -> str:
     """Recordatorio de delegación al final de todo, que es lo que el modelo lee más cerca.
 
     Con instrucciones largas (persona, conocimiento, agenda), GPT-Live se quedaba
@@ -379,6 +394,7 @@ def _reminder_section(names: list[str], *, web_search: bool) -> str:
             "- Si no sabes algo y se puede buscar en internet, delega la búsqueda antes de "
             "decir que no lo sabes."
         )
+    lines.append(_LOOKS_REMINDER[mode])
     return "\n".join(lines)
 
 
@@ -450,7 +466,7 @@ def build_live_instructions(
             "Imágenes que el backend puede mostrar en tu pantalla: " + ", ".join(gallery_ids)
         )
     parts.append(describe_live_stack(settings, action_names=names))
-    reminder = _reminder_section(names, web_search=web_search)
+    reminder = _reminder_section(names, web_search=web_search, mode=mode)
     if reminder:
         parts.append(reminder)
     return "\n\n".join(parts)

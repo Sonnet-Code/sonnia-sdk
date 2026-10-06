@@ -390,6 +390,8 @@ def test_las_instrucciones_traen_hora_agenda_busqueda_y_recordatorio(tmp_path: P
     assert reminder.startswith("ANTES DE CADA RESPUESTA, RECUERDA")
     assert "bailar o hacer un gesto" in reminder and "buscar en internet" in reminder
     assert "nunca digas preguntas ni opciones de tu cabeza" in reminder
+    # Sin cámara no se habla del aspecto de nadie (se inventaba «esas gafas»).
+    assert "No tienes cámara: no comentes el aspecto" in reminder
 
     backend = config["delegation"]["responses"]
     assert "AGENDA DEL DEVFEST (prueba)" in backend["instructions"]

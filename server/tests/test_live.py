@@ -916,6 +916,7 @@ async def test_por_defecto_solo_mira_cuando_sonia_lo_decide(
         tools = tool_names(conn.start["session"]["delegation"]["responses"]["tools"])
     assert "look" in tools
     assert "No ves nada por tu cuenta" in instructions
+    assert "No sabes cómo es nadie ni qué lleva hasta que miras" in instructions
     assert "notas internas que empiezan por" not in instructions
     assert "no miras sola" in instructions
 
