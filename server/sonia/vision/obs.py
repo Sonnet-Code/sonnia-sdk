@@ -347,7 +347,7 @@ async def start_obs(settings: VisionSettings, *, wait_s: float = 25.0) -> list[s
     if sys.platform != "darwin":
         return ["OBS no responde: ábrelo y activa Herramientas > Ajustes del servidor WebSocket."]
     running = await asyncio.create_subprocess_exec(
-        "pgrep", "-xq", "obs", stdout=asyncio.subprocess.DEVNULL
+        "pgrep", "-xqi", "obs", stdout=asyncio.subprocess.DEVNULL
     )
     if await running.wait() == 0:
         return [
