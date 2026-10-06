@@ -285,6 +285,10 @@ class Settings(BaseSettings):
     #: Retirar sola una imagen mostrada tras N segundos (0 = nunca). El modelo
     #: la retira al cambiar de tema, pero si se olvida no se queda ahí.
     image_auto_hide_seconds: float = 30.0
+    #: ``MEETING``: Sonia está en una videollamada (Google Meet), no en el stand.
+    #: Lo pone ``sonia reunion``; cambia sus instrucciones (``live/prompts.py``) y
+    #: quita la animación de stand (docs/reunion.md).
+    meeting: bool = False
     #: ``SONIA_PARENT_PID``: el PID de la app que lanzó el orquestador (lo pone
     #: Unity en la app todo en uno). Si esa app muere, el orquestador se cierra
     #: solo (``sonia/parent.py``). Vacío al lanzarlo a mano.

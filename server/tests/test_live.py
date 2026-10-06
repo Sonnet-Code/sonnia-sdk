@@ -433,6 +433,17 @@ def test_en_modo_reunion_sonia_sabe_que_esta_en_una_videollamada(tmp_path: Path)
     assert "que captura OBS" in describe_live_stack(settings, action_names=["look"])
 
 
+def test_con_meeting_sabe_que_esta_en_un_google_meet_y_no_en_el_stand(tmp_path: Path) -> None:
+    # MEETING=true (sonia reunion) basta, vea por donde vea.
+    settings = make_settings(tmp_path, vision_source="none").model_copy(update={"meeting": True})
+    instructions = build_session_config(
+        settings, registry=build_default_registry(include_look=False), gallery_ids=[]
+    )["instructions"]
+    assert "MODO REUNIÓN" in instructions
+    assert "Estás en una videollamada de Google Meet" in instructions
+    assert "Estás en un evento lleno de gente" not in instructions
+
+
 def test_fuera_del_modo_reunion_no_se_habla_de_videollamadas(tmp_path: Path) -> None:
     settings = make_settings(tmp_path, vision_source="opencv", on_turn_start=False)
     config = build_session_config(
@@ -440,6 +451,8 @@ def test_fuera_del_modo_reunion_no_se_habla_de_videollamadas(tmp_path: Path) -> 
     )
     assert "videollamada" not in config["instructions"]
     assert "videollamada" not in config["delegation"]["responses"]["instructions"]
+    assert "MODO REUNIÓN" not in config["instructions"]
+    assert "Estás en un evento lleno de gente" in config["instructions"]
 
 
 def test_las_reglas_piden_parar_si_la_interrumpen(tmp_path: Path) -> None:

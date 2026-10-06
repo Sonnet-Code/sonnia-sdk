@@ -967,7 +967,13 @@ async def cmd_check(settings: Settings) -> int:
 #: Lo que cambia ``sonia reunion`` si no viene ya en el entorno (manda sobre el
 #: ``.env``, que se carga después): Sonia ve la ventana de la reunión por OBS y
 #: la imagen se manda más grande para leer los nombres de los participantes.
-MEETING_DEFAULTS: dict[str, str] = {"VISION_SOURCE": "obs", "VISION_MAX_WIDTH": "1280"}
+MEETING_DEFAULTS: dict[str, str] = {
+    "MEETING": "true",
+    "VISION_SOURCE": "obs",
+    "VISION_MAX_WIDTH": "1280",
+    # Una reunión tiene pausas largas: no olvidar la conversación a los 2 minutos.
+    "IDLE_RESET_SECONDS": "1800",
+}
 if sys.platform == "darwin":
     # Lo que suena en la reunión (docs/reunion.md, «Cómo va el sonido»).
     MEETING_DEFAULTS["AUDIO_INPUT_DEVICE"] = "BlackHole 16ch"

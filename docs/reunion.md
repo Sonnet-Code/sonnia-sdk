@@ -93,6 +93,8 @@ dispositivo.
    | `AUDIO_INPUT_DEVICE` | `BlackHole 16ch` (oye la reunión) |
    | `VISION_SOURCE` | `obs` (ve la ventana de la reunión) |
    | `VISION_MAX_WIDTH` | `1280` (para leer los nombres de los recuadros) |
+   | `MEETING` | `true` (sus instrucciones dicen que está en un Google Meet, no en el stand) |
+   | `IDLE_RESET_SECONDS` | `1800` (no olvida la conversación en las pausas de la reunión) |
 
    Cualquiera se puede cambiar al lanzarlo, por ejemplo
    `VISION_MAX_WIDTH=768 uv run --no-sync sonia reunion`. Mandan sobre el
@@ -114,9 +116,15 @@ dispositivo.
 7. Desde el otro dispositivo, entrar a la reunión y probar: «Sonia, ¿qué ves?»,
    «¿cuántos somos?».
 
-En modo reunión Sonia sabe que está en una videollamada (sus instrucciones
-cambian solas) y no hace la animación de stand: en los silencios de la reunión
-se pondría a bailar o a decir frases del stand.
+En modo reunión las instrucciones de GPT-Live llevan un bloque «MODO REUNIÓN»
+(`MEETING_SECTION` en `server/sonia/live/prompts.py`) que manda sobre lo del stand:
+- está en un Google Meet y la ven y la oyen los participantes;
+- habla cuando le hablan o la nombran, sin rellenar silencios;
+- nada de frases de stand;
+- si le preguntan, dice que el 9 y 10 estará en el stand de Sonnet Code del DevFest.
+
+Tampoco hace la animación de stand: en los silencios de la reunión se pondría a
+bailar o a decir frases del stand.
 
 ### Plan B sin OBS: la pantalla
 

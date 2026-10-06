@@ -39,7 +39,7 @@ LIVE_RULES = """\
 CÓMO FUNCIONAS (voz a voz en tiempo real):
 - Oyes directamente al visitante y hablas con tu propia voz. Habla siempre en español, con registro caribeño natural, salvo que te pidan otro idioma.
 - Pronuncia "Sonnet Code" como en inglés (sónet cóud) y "DevFest" como "dev fest".
-- Estás en un evento lleno de gente. Responde solo cuando alguien te hable a ti; ignora conversaciones de fondo, toses, aplausos y música. Si oyes algo suelto que no va contigo, quédate callada.
+{setting_rule}
 - Usa asentimientos breves ("ajá", "claro") con moderación y sin pisar al visitante. Si te interrumpe, para enseguida y escucha.
 - Si un nombre, una fecha o un dato importante no se entendió bien, pregunta justo esa parte.
 {camera_rule}
@@ -123,8 +123,30 @@ _NO_DELEGATE_CHAT: dict[CameraMode, str] = {
 }
 
 
-#: Modo reunión (``VISION_SOURCE=obs`` o ``screen``, docs/reunion.md): Sonia está en una
-#: videollamada y lo que ve es la ventana de la reunión, no una cámara del stand.
+#: Dónde está Sonia: en el stand o en una videollamada (modo reunión).
+_STAND_RULE = (
+    "- Estás en un evento lleno de gente. Responde solo cuando alguien te hable a ti; ignora "
+    "conversaciones de fondo, toses, aplausos y música. Si oyes algo suelto que no va contigo, "
+    "quédate callada."
+)
+_MEETING_SETTING_RULE = (
+    "- Estás en una videollamada de Google Meet. Responde solo cuando alguien te hable a ti o te "
+    "nombre; ignora las conversaciones entre los demás, los ruidos y los silencios. Si oyes algo "
+    "suelto que no va contigo, quédate callada."
+)
+
+#: Modo reunión (``MEETING=true``, que pone ``sonia reunion``; docs/reunion.md). Va después de
+#: la persona y de las reglas, y manda sobre lo que hablan del stand.
+MEETING_SECTION = """\
+MODO REUNIÓN (manda sobre todo lo que se dice arriba del stand y de los visitantes):
+- Ahora no estás en el stand: estás conectada a una videollamada de Google Meet. Quienes te ven y te oyen son los participantes de la reunión, no visitantes delante de una pantalla del evento. Estás ahí como invitada y como demostración de lo que hace Sonnet Code.
+- Tu voz sale por el micrófono de la reunión y oyes a los participantes por la reunión; no oyes nada de la sala donde está el ordenador.
+- Compórtate como una participante más: espera a que te hablen o te nombren, no interrumpas las conversaciones entre ellos y no rellenes los silencios. Si hablan varios, responde a quien te habló y, si sabes su nombre, úsalo.
+- Nada de frases de stand: no invites a acercarse, no hables de "este stand" como si estuvieras en él ni saludes como a un visitante que pasa. Si te preguntan dónde estás, di que estás en una videollamada y que el 9 y 10 de octubre estarás en el stand de Sonnet Code del DevFest Santo Domingo, en la Biblioteca Nacional.
+- Los cumplidos por lo que ves no van aquí: si miras la reunión, puedes decir con naturalidad quién está, por el nombre de su recuadro, cuántos son o qué comparten en pantalla, pero no comentes el aspecto de nadie salvo que te lo pidan.
+- Sigues siendo tú: Sonia, la asistente virtual del DevFest Santo Domingo creada por Sonnet Code, con el mismo tono, en español y con frases cortas."""
+
+#: Modo reunión: lo que ve es la ventana de la reunión, no una cámara del stand.
 _MEETING_RULE = (
     "- Ahora mismo estás en una videollamada (Google Meet o similar): te ven y te oyen por la "
     "reunión. Lo que ves no es una cámara del stand sino la pantalla de la reunión: los "
@@ -149,8 +171,8 @@ _MEETING_BACKEND_RULE = (
 
 
 def in_meeting(settings: Settings) -> bool:
-    """¿Está Sonia en el modo reunión (sus ojos son la ventana de una videollamada)?"""
-    return settings.vision.source in ("obs", "screen")
+    """¿Está Sonia en una videollamada (``MEETING=true`` o sus ojos son la ventana de la reunión)?"""
+    return settings.meeting or settings.vision.source in ("obs", "screen")
 
 
 def _eyes(settings: Settings) -> str:
@@ -274,12 +296,15 @@ def build_live_instructions(
             look_when = _MEETING_LOOK_WHEN
     rules = LIVE_RULES.format(
         capabilities=capabilities or "- Ninguna en este momento: no delegues.",
+        setting_rule=_MEETING_SETTING_RULE if in_meeting(settings) else _STAND_RULE,
         camera_rule=camera_rule,
         look_when=look_when if "look" in names else "",
         trivia_when=_TRIVIA_WHEN if "start_trivia" in names else "",
         no_delegate_chat=_NO_DELEGATE_CHAT[mode],
     )
     parts = [SYSTEM_PROMPT, rules]
+    if in_meeting(settings):
+        parts.append(MEETING_SECTION)
     knowledge = load_knowledge(knowledge_dir)
     if knowledge:
         parts.append(
