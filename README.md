@@ -69,7 +69,7 @@ El personal del stand controla a Sonia desde el móvil en `https://sonia.sonnetc
 | Acciones | Backend de la API Responses (`gpt-6-luna`) | GPT-Live delega `look`, `show_image` y `hide_image`. |
 | Visión | Cámara USB con OpenCV + modelo con visión | Capturas puntuales descritas en texto, nunca vídeo continuo. |
 | Avatar | Unity 6 con assets gratuitos | Personaje femenino, lip-sync por fonemas (uLipSync), animaciones de estado, panel de imágenes en escena. Pantalla vertical 9:16. |
-| Panel de control | Cloudflare Workers + Durable Objects | Ve todas las Sonias conectadas y avisa de duplicados. |
+| Panel de control | Cloudflare Workers + Durable Objects | Ve todas las Sonias conectadas (pueden ser varias, en sitios distintos) y deja elegir cuál se controla. |
 | Orquestación | Python 3.12 | Servidor WebSocket hacia Unity, micrófono, cámara y panel local. |
 
 Los modelos y la voz se eligen por variables de entorno (`LIVE_MODEL`, `LIVE_VOICE`, `LIVE_BACKEND_MODEL`, `LLM_*`): ver `.env.example`.

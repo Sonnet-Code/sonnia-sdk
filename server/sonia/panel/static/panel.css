@@ -1664,16 +1664,10 @@ progress {
   font-size: 17px;
 }
 
-.dup-alert--warn {
-  background: var(--warn-bg);
-  border: 2px solid var(--warn-strong);
-  color: #4d2800;
-}
-
-.dup-alert--bad {
-  background: var(--bad-bg);
-  border: 2px solid var(--bad);
-  color: #5c120d;
+.dup-alert--info {
+  margin: 14px 0 0;
+  background: var(--surface-2);
+  border: 2px solid var(--line);
 }
 
 .dup-title {

@@ -12,8 +12,8 @@ para todas las Sonias (``SHARED_SETTINGS``). Se cambien desde el panel de
 Cloudflare o desde el local, quedan apuntados como pendientes hasta que la
 nube los confirma (``CloudLink``), así que un cambio hecho sin internet sube
 en cuanto vuelve la conexión. El modo, el modo debug y el gasto son de cada
-Sonia: con dos encendidas por error, cada una sigue en el suyo y el panel
-deja elegir cuál conversa.
+Sonia: con varias encendidas a la vez, cada una sigue en el suyo y el panel
+deja elegir cuál se controla.
 
 """
 

@@ -1,9 +1,10 @@
 """Quién es esta Sonia para el panel: id estable, nombre y equipo.
 
-Puede haber más de una Sonia conectada al panel de Cloudflare (por error o
-mientras se cambia de equipo). Cada una se identifica con un id que combina el
-nombre del equipo y unos caracteres aleatorios guardados en ``cache/``: dos
-equipos nunca comparten id aunque se copie la carpeta entera de uno a otro.
+Puede haber varias Sonias conectadas al panel de Cloudflare a la vez, en
+sitios distintos (el panel deja elegir cuál se controla). Cada una se
+identifica con un id que combina el nombre del equipo y unos caracteres
+aleatorios guardados en ``cache/``: dos equipos nunca comparten id aunque se
+copie la carpeta entera de uno a otro.
 """
 
 from __future__ import annotations

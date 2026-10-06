@@ -1,6 +1,6 @@
 # Panel de control de Sonia
 
-Panel web para que el personal del stand (no necesariamente técnico) controle a Sonia en vivo. Vive en **Cloudflare** (`https://sonia.sonnetcode.com`, Worker `sonia-panel` con un Durable Object, código en `cloud/panel/`) y cada Sonia, esté en el equipo que esté, se conecta a él hacia fuera por WebSocket: no hace falta abrir puertos ni túneles en el equipo del stand. Así el panel ve **todas** las Sonias conectadas y avisa si hay más de una (lo normal es una sola; dos conversando a la vez es pagar doble y que se pisen).
+Panel web para que el personal del stand (no necesariamente técnico) controle a Sonia en vivo. Vive en **Cloudflare** (`https://sonia.sonnetcode.com`, Worker `sonia-panel` con un Durable Object, código en `cloud/panel/`) y cada Sonia, esté en el equipo que esté, se conecta a él hacia fuera por WebSocket: no hace falta abrir puertos ni túneles en el equipo del stand. Así el panel ve **todas** las Sonias conectadas: puede haber varias a la vez en sitios distintos (en el stand solo habrá una) y se elige cuál se controla, cambiando de una a otra cuando haga falta (ver «Varias Sonias»).
 
 El orquestador sigue sirviendo el mismo panel en `http://127.0.0.1:8780/` como respaldo local: funciona sin internet (por ejemplo, para pasar a "Solo saludos" si cae la red) y solo ve a la Sonia de ese equipo.
 
@@ -18,7 +18,7 @@ Los ajustes son de Sonia, no de un equipo: el texto del letrero, los avisos del 
 
 Cada orquestador guarda además una copia en `cache/panel_state.json`, así que sin internet arranca con lo último que supo y lo que se cambie desde el panel local queda apuntado como pendiente (`pending_settings`) hasta que la nube lo confirma al volver la conexión. Si con la red caída se cambia algo aquí y otra Sonia cambia lo mismo, gana el último cambio que llega a la nube.
 
-El modo (Conversando, Solo saludos, Fuera), el modo debug y el gasto del día son de cada Sonia y no viajan a la nube: con dos Sonias encendidas por error, cada una sigue en su modo y desde el panel de Cloudflare se elige cuál conversa (ver "Duplicados"). Esos se guardan solo en `cache/panel_state.json` y se recuperan si el orquestador se reinicia (un reinicio estando "Fuera" no la trae de vuelta).
+El modo (Conversando, Solo saludos, Fuera), el modo debug y el gasto del día son de cada Sonia y no viajan a la nube: con varias Sonias encendidas, cada una sigue en su modo y desde el panel de Cloudflare se elige cuál se controla (ver «Varias Sonias»). Esos se guardan solo en `cache/panel_state.json` y se recuperan si el orquestador se reinicia (un reinicio estando "Fuera" no la trae de vuelta).
 
 El estado lo dice en `settings_sync`, y el panel lo muestra arriba de «Avanzado» y de «Developer»: guardado en la nube, guardando, sin conexión (con lo que falta por subir) o sin nube configurada (falta `PANEL_CLOUD_TOKEN`).
 
@@ -249,14 +249,14 @@ Al conectar llega primero un `{"type": "history", "messages": [...], "logs": [..
 
 ```
 navegador ──HTTPS/WS──► Worker sonia-panel ──► Durable Object "control" ◄──WS (saliente)── Sonia (equipo A)
- (operador)              (login, estáticos)      (estado de cada Sonia,  ◄──WS (saliente)── Sonia (equipo B, duplicado)
+ (operador)              (login, estáticos)      (estado de cada Sonia,  ◄──WS (saliente)── Sonia (equipo B, otro sitio)
                                                   reparte acciones)
 ```
 
 ### Conexión de cada Sonia (agente)
 
 - El orquestador abre `wss://sonia.sonnetcode.com/agent` (`PANEL_CLOUD_URL`) con las cabeceras `Authorization: Bearer <PANEL_CLOUD_TOKEN>`, `X-Sonia-Instance: <id>` y `X-Sonia-Name: <nombre>`. El Worker compara el token con su secreto `AGENT_TOKEN` (comparación de tiempo constante) y pasa la conexión al Durable Object. Sin `PANEL_CLOUD_TOKEN` el orquestador no se conecta.
-- `id`: `<nombre del equipo>-<6 hex>`, guardado en `cache/instance_id` (dos equipos nunca comparten id aunque se copie la carpeta: incluye el nombre del equipo). `nombre`: `PANEL_INSTANCE_NAME` o el nombre del equipo.
+- `id`: `<nombre del equipo>-<6 hex>`, guardado en `cache/instance_id` (dos equipos nunca comparten id aunque se copie la carpeta: incluye el nombre del equipo). `nombre`: `PANEL_INSTANCE_NAME` (opcional, nadie tiene por qué ponerlo) o el nombre del equipo. Si dos Sonias salen con el mismo nombre, el panel añade el final de su id para distinguirlas («MacBook-Pro · d7b4c5»).
 - Reconecta sola con espera creciente (1 a 30 s).
 
 Mensajes **agente → Durable Object**:
@@ -307,10 +307,13 @@ Es la misma API del panel local con un parámetro `instance` (el `id` de la Soni
 
 El panel local implementa lo mismo con una sola instancia (`/api/instances` devuelve la de ese equipo y el parámetro `instance` se ignora).
 
-### Duplicados
+### Varias Sonias
 
-- Con dos o más Sonias conectadas, el panel muestra arriba una barra para elegir cuál se controla (con su modo y si está bien) y un aviso: "Hay 2 Sonias conectadas; normalmente solo debe haber una".
-- Si dos o más están en "Conversando", el aviso es rojo ("se paga doble y pueden responder a la vez") con un botón para dejar solo la elegida y mandar las demás a "Fuera".
+Puede haber varias Sonias a la vez en sitios distintos (por ejemplo, la del stand y otra en la oficina); no es un error. Cada una tiene su id, su modo, su sesión de GPT-Live y su gasto; los ajustes compartidos valen para todas.
+
+- Con dos o más conectadas, el panel muestra arriba «¿Qué Sonia estás controlando?» con todas (nombre, equipo, modo y si está bien). Se toca una para controlarla y todo lo de abajo se aplica solo a esa; se cambia de una a otra en cualquier momento. Cada navegador recuerda la última que eligió (`localStorage`).
+- Si dos o más están en "Conversando", debajo sale una nota informativa (no una alarma): cada una gasta por su cuenta (unos 3 USD por hora) y, si dos están en la misma sala, se contestarían entre ellas. Lleva un botón para dejar solo la elegida conversando y mandar las demás a "Fuera".
+- `conflicts` de `/api/instances` sigue con el mismo nombre por compatibilidad: `conversing` es lo que usa esa nota; `connected` ya no se muestra.
 - Una Sonia desconectada sale en gris con "desconectada hace X min" y sus controles deshabilitados.
 
 ### Acceso

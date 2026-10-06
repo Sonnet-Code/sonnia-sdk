@@ -266,8 +266,7 @@
     const ids = [
       "topbar-status", "topbar-name", "topbar-text", "topbar-state", "topbar-live", "topbar-live-text", "topbar-live-short",
       "instances", "instance-list",
-      "dup-conversing", "dup-conversing-title", "dup-conversing-text", "keep-one-btn", "dup-connected",
-      "dup-connected-title", "dup-connected-text", "hero-kicker", "hero-disconnected", "cache-error", "offline-banner", "offline-detail", "slow-banner", "auth-banner",
+      "dup-conversing", "dup-conversing-title", "dup-conversing-text", "keep-one-btn", "hero-kicker", "hero-disconnected", "cache-error", "offline-banner", "offline-detail", "slow-banner", "auth-banner",
       "reload-btn", "hero", "hero-mode", "hero-activity", "activity-dot", "hero-health", "hero-muted",
       "away-sign", "away-sign-text", "edit-sign-btn", "stop-btn", "greet-btn", "dance-btn", "logo-btn",
       "hide-btn", "mute-btn", "mute-label", "now-showing", "thumbs", "caption-input", "say-form",
@@ -837,9 +836,25 @@
     return app.instances.length >= 2;
   }
 
+  function baseName(instance) {
+    return String(instance.name || instance.host || instance.id);
+  }
+
+  /**
+   * Nombre para mostrar. Nadie tiene por qué ponerles nombre (PANEL_INSTANCE_NAME
+   * es opcional): sale el del equipo y, si dos se llaman igual, se les añade el
+   * final de su id (los 6 caracteres aleatorios de cache/instance_id).
+   */
   function instanceName(instance) {
     if (!instance) return "Sonia";
-    return String(instance.name || instance.host || instance.id);
+    const name = baseName(instance);
+    const key = name.toLowerCase();
+    const repeated = app.instances.some(
+      (other) => other.id !== instance.id && baseName(other).toLowerCase() === key,
+    );
+    if (!repeated) return name;
+    const suffix = String(instance.id).split("-").pop();
+    return `${name} · ${suffix}`;
   }
 
   function nameOf(id) {
@@ -1033,33 +1048,27 @@
     set(parts.button, "aria-label", label);
   }
 
-  /** Avisos de duplicados: varias conectadas (ámbar) o varias conversando (rojo). */
+  /**
+   * Nota (informativa, no un error) cuando varias Sonias conversan a la vez:
+   * puede haber una en el stand y otra en otro sitio. Cada una gasta lo suyo y,
+   * si dos están en la misma sala, se contestarían entre ellas.
+   */
   function renderConflicts() {
-    const connected = app.conflicts.connected;
     const conversing = app.conflicts.conversing;
-    const doubleTalk = conversing.length >= 2;
+    const several = conversing.length >= 2;
 
-    setHidden(ui.dupConversing, !doubleTalk);
-    if (doubleTalk) {
-      setText(ui.dupConversingTitle, `Hay ${conversing.length} Sonias conversando a la vez`);
+    setHidden(ui.dupConversing, !several);
+    if (several) {
+      setText(ui.dupConversingTitle, `${conversing.length} Sonias conversando a la vez`);
       const selected = selectedInstance();
       const keepable = selected && conversing.includes(selected.id);
-      let text = `${joinNames(conversing.map(nameOf))}: se paga doble y pueden responder a la vez.`;
-      if (!keepable) text += " Elige abajo cuál debe seguir conversando y vuelve a este aviso.";
-      setText(ui.dupConversingText, text);
+      setText(
+        ui.dupConversingText,
+        `${joinNames(conversing.map(nameOf))}. Cada una gasta por su cuenta (unos 3 USD por hora). ` +
+          "Si dos están en la misma sala, deja solo una conversando para que no se contesten entre ellas.",
+      );
       setHidden(ui.keepOneBtn, !keepable);
       if (keepable) setText(ui.keepOneBtn, `Dejar solo «${instanceName(selected)}» conversando`);
-    }
-
-    // Si ya está el aviso rojo, el ámbar sobra.
-    const several = connected.length >= 2 && !doubleTalk;
-    setHidden(ui.dupConnected, !several);
-    if (several) {
-      setText(ui.dupConnectedTitle, `Hay ${connected.length} Sonias conectadas`);
-      setText(
-        ui.dupConnectedText,
-        `${joinNames(connected.map(nameOf))}. Normalmente solo debe haber una: cierra Sonia en el equipo que sobre.`,
-      );
     }
   }
 
