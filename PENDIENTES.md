@@ -55,11 +55,17 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
 
 ## 3. Sonnia
 
-- [ ] ✨ **Más gestos con las manos al hablar.** Hoy apenas mueve las manos: el set de Genies no tiene clips de hablar. **En pausa (6 de octubre), por decisión de Jean: se retoma después.**
-  - Respaldo ya activo (5fdd48f): gestos de manos por código en `AvatarStateController` (`handGestures`). Al empezar algunas frases, las manos suben delante del cuerpo, abiertas y con golpes en los acentos. Verificado en silencio con capturas 9:16 en la app compilada.
-  - Los gestos de verdad del chat de Genies están a medias: `docs/informe-gestos-genies.md` (12 de 48 capturados y el horneado con las piernas rotas). Los datos están en `cache/gestos-genies/`.
-  - [ ] Buscar o hacer clips de hablar con manos abiertas y sin atravesar el cuerpo, y pasarlos por **Sonia > Comprobar animaciones (en Play)**.
-  - [ ] Que `AvatarChoreographer` los encadene mientras habla.
+- [x] ✨ **Más gestos con las manos al hablar.** **Hecho (6 de octubre, d5845e5 y ab75d4a).**
+  - Sonnia gesticula con los 161 gestos de Sage del chat de Genies, leídos de sus `.ozz` en tiempo de ejecución (`GeniesGestureLayer`). Detalle en `docs/gestos.md`.
+  - Los elige el director de gestos del orquestador. Por defecto usa `gemini-3.1-flash-lite` con `GEMINI_API_KEY`, ~1 s por petición, con las fichas y la frecuencia de Genies.
+  - Verificado:
+    - las hojas de contactos de los 161;
+    - el flujo con el orquestador falso en el encuadre real;
+    - `sonia check` y la elección de Gemini con el prompt real.
+  - Los gestos de manos por código (5fdd48f) quedan solo de respaldo para un set sin gestos.
+  - [ ] Probar una conversación real con GPT-Live (`sonia run --no-mic` + texto) y mirar el ritmo de los gestos.
+  - [ ] Recompilar las builds de stand y pruebas (macOS y Windows) con los gestos.
+  - [ ] Desplegar el panel de la nube para ver la etiqueta del grupo `sage` (`npx wrangler deploy` en `cloud/panel/`).
   - [ ] Verificarlo con capturas 9:16 por fotogramas.
 - [x] ✨ **Bailes y animaciones por voz.** Hoy solo desde el panel (`_act_animation` en `server/sonia/panel/control.py`). **Hecho (6 de octubre): acción `play_animation` (`server/sonia/actions/moves.py`) con bailar, saludar, paz, saludo militar, pulgares arriba, celebrar, lamentarse y pensar; busca el clip en el catálogo de Unity y lo lanza entero (`whole`) aunque Sonnia hable. Visto en la app compilada, en silencio: el baile suena entero mientras habla. Falta probarlo con GPT-Live de verdad.**
   - [x] Acción del backend, por ejemplo `play_animation`, con la lista de animaciones que manda Unity, para «¡baila!» o «saluda». Registro, handler, protocolo y Unity en el mismo commit (`CLAUDE.md`).
