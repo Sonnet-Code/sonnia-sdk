@@ -984,7 +984,13 @@ def apply_meeting_defaults() -> None:
         os.environ.setdefault(name, value)
 
 
-async def cmd_reunion(settings: Settings, *, use_mic: bool = True) -> int:
+async def cmd_reunion(
+    settings: Settings,
+    *,
+    use_mic: bool = True,
+    window: str | None = None,
+    virtual_camera: bool = False,
+) -> int:
     """Prepara OBS (los ojos de Sonia en la videollamada) y arranca como ``run``."""
     from sonia.vision.obs import prepare_meeting, start_obs
 
@@ -995,7 +1001,8 @@ async def cmd_reunion(settings: Settings, *, use_mic: bool = True) -> int:
         try:
             for line in await start_obs(settings.vision):
                 print(f"  {line}")
-            for line in await asyncio.wait_for(prepare_meeting(settings.vision), timeout=20.0):
+            prepare = prepare_meeting(settings.vision, window=window, virtual_camera=virtual_camera)
+            for line in await asyncio.wait_for(prepare, timeout=20.0):
                 print(f"  {line}")
         except Exception as exc:  # noqa: BLE001 - sin OBS Sonia sigue, pero sin ojos
             print(f"  No se pudo preparar OBS ({exc}): Sonia conversa, pero no verá la reunión.")
@@ -1038,6 +1045,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="no abrir el micrófono; solo texto desde el panel",
     )
+    reunion.add_argument(
+        "--ventana",
+        default=None,
+        help="trozo del título de la ventana de la reunión (p. ej. su código, ujp-ijit-ejb)",
+    )
+    reunion.add_argument(
+        "--camara-virtual",
+        action="store_true",
+        help="encender también la cámara virtual de OBS (si no se comparte pantalla en Meet)",
+    )
 
     chat = commands.add_parser("chat", help="escribir a Sonia desde la consola")
     chat.add_argument("--speak", action="store_true", help="reproducir su voz por el altavoz")
@@ -1061,7 +1078,14 @@ def main(argv: list[str] | None = None) -> int:
         case "run":
             return _run(cmd_run(settings, use_mic=not args.no_mic))
         case "reunion":
-            return _run(cmd_reunion(settings, use_mic=not args.no_mic))
+            return _run(
+                cmd_reunion(
+                    settings,
+                    use_mic=not args.no_mic,
+                    window=args.ventana,
+                    virtual_camera=args.camara_virtual,
+                )
+            )
         case "chat":
             return _run(cmd_chat(settings, speak=args.speak))
         case "say":

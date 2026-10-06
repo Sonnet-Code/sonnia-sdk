@@ -494,14 +494,16 @@ class FakeObsStudio:
             await ws.send(json.dumps({"op": 7, "d": reply}))
 
 
-async def run_prepare(fake: FakeObsStudio, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+async def run_prepare(
+    fake: FakeObsStudio, monkeypatch: pytest.MonkeyPatch, **options: Any
+) -> list[str]:
     from websockets.asyncio.server import serve
 
     monkeypatch.setattr(obs_module, "TEST_SHOT_DELAY_S", 0.0)
     async with serve(fake.handler, "127.0.0.1", 0) as server:
         port = next(iter(server.sockets)).getsockname()[1]
         settings = VisionSettings(source="obs", obs_url=f"ws://127.0.0.1:{port}")
-        return await obs_module.prepare_meeting(settings)
+        return await obs_module.prepare_meeting(settings, **options)
 
 
 async def test_prepare_meeting_crea_la_fuente_fuera_del_lienzo_con_la_ventana_de_meet(
@@ -513,9 +515,25 @@ async def test_prepare_meeting_crea_la_fuente_fuera_del_lienzo_con_la_ventana_de
     reunion = fake.items[2]
     assert reunion["x"] > 1920 and reunion["locked"]
     assert fake.items[1]["x"] == 0.0  # la de Sonia no se toca
-    assert fake.virtualcam
+    assert not fake.virtualcam  # se comparte pantalla desde Meet
     assert any("Meet - abc-defg-hij" in line for line in report)
     assert any("se ve bien" in line for line in report)
+
+
+async def test_prepare_meeting_con_varias_reuniones_no_adivina_y_elige_la_pedida(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    windows = ["[Google Chrome] Meet - ujp-ijit-ejb", "[Google Chrome] Meet - Standup meeting V42"]
+    fake = FakeObsStudio(windows)
+    report = await run_prepare(fake, monkeypatch)
+    assert "window" not in fake.inputs["Reunión"]
+    assert any("Hay varias reuniones abiertas" in line for line in report)
+
+    fake = FakeObsStudio(windows)
+    report = await run_prepare(fake, monkeypatch, window="standup", virtual_camera=True)
+    assert fake.inputs["Reunión"]["window"] == 11
+    assert fake.virtualcam
+    assert any("Standup meeting V42" in line for line in report)
 
 
 async def test_prepare_meeting_sin_ventana_de_reunion_lo_dice_y_no_lanza(

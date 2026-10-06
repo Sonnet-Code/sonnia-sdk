@@ -164,15 +164,20 @@ def _is_meeting_window(name: str) -> bool:
 
 
 async def prepare_meeting(
-    settings: VisionSettings, *, connect: ObsConnect | None = None
+    settings: VisionSettings,
+    *,
+    window: str | None = None,
+    virtual_camera: bool = False,
+    connect: ObsConnect | None = None,
 ) -> list[str]:
     """Deja OBS listo para el modo reunión y devuelve qué hizo, en frases.
 
     - La fuente ``VISION_OBS_SOURCE`` existe (si no, la crea como captura de
       ventana) y está en la escena en programa, fuera del lienzo y bloqueada.
-    - Captura la ventana de la reunión: si la que tiene no es de Meet, Zoom o
-      Teams, elige la primera que lo sea.
-    - La cámara virtual está encendida.
+    - Captura la ventana de la reunión: la de ``window`` (un trozo del título),
+      la que ya tenía si sigue abierta o la única abierta; con varias, no elige.
+    - La cámara virtual, solo con ``virtual_camera`` (lo normal es compartir la
+      ventana de Sonnia desde Meet).
     - Una foto de prueba de la fuente (no se guarda) dice si se ve algo.
     """
     report: list[str] = []
@@ -200,7 +205,9 @@ async def prepare_meeting(
             ]
             report.append(f"Fuente «{source}» añadida a la escena «{scene}».")
 
-        # La ventana de la reunión.
+        # La ventana de la reunión: la elige quien lanza (``window``, un trozo del
+        # título, p. ej. el código de la reunión); si no, la que ya tenía si sigue
+        # abierta, o la única reunión abierta. Con varias no se adivina.
         current = (await obs.request("GetInputSettings", inputName=source)).get("inputSettings", {})
         windows = (
             await obs.request(
@@ -208,24 +215,37 @@ async def prepare_meeting(
             )
         ).get("propertyItems") or []
         names = {item.get("itemValue"): str(item.get("itemName") or "") for item in windows}
+        meetings = [value for value, name in names.items() if _is_meeting_window(name)]
         chosen = current.get("window")
-        if not _is_meeting_window(names.get(chosen, "")):
-            match = next(
-                (item for item in windows if _is_meeting_window(names[item.get("itemValue")])), None
-            )
-            if match is None:
-                report.append(
-                    "No encuentro la ventana de la reunión (Meet, Zoom o Teams): ábrela y vuelve "
-                    f"a lanzar, o elígela a mano en las propiedades de «{source}» en OBS."
-                )
+        pick = None
+        if window:
+            wanted = [value for value, name in names.items() if window.lower() in name.lower()]
+            if wanted:
+                pick = wanted[0]
             else:
-                chosen = match.get("itemValue")
-                update: dict[str, Any] = {"window": chosen}
-                if current.get("type") is not None or sys.platform == "darwin":
-                    update["type"] = 1
-                await obs.request("SetInputSettings", inputName=source, inputSettings=update)
-        if _is_meeting_window(names.get(chosen, "")):
-            report.append(f"Sonnia ve la ventana «{names[chosen]}».")
+                report.append(f"No hay ninguna ventana con «{window}» en el título.")
+        elif chosen in meetings:
+            pick = chosen
+        elif len(meetings) == 1:
+            pick = meetings[0]
+        if pick is not None and pick != chosen:
+            update: dict[str, Any] = {"window": pick}
+            if current.get("type") is not None or sys.platform == "darwin":
+                update["type"] = 1
+            await obs.request("SetInputSettings", inputName=source, inputSettings=update)
+        if pick is not None:
+            report.append(f"Sonnia ve la ventana «{names[pick]}».")
+        elif len(meetings) > 1:
+            listed = "; ".join(f"«{names[value]}»" for value in meetings)
+            report.append(
+                f"Hay varias reuniones abiertas ({listed}): elige la de Sonnia con --ventana <trozo "
+                f"del título> o en las propiedades de «{source}» en OBS."
+            )
+        else:
+            report.append(
+                "No encuentro la ventana de la reunión (Meet, Zoom o Teams): ábrela y vuelve "
+                f"a lanzar, o elígela a mano en las propiedades de «{source}» en OBS."
+            )
 
         # Activa (en la escena en programa) pero fuera del lienzo y bloqueada.
         video = await obs.request("GetVideoSettings")
@@ -246,11 +266,14 @@ async def prepare_meeting(
         )
         report.append(f"«{source}» está fuera del lienzo: la cámara virtual no la enseña.")
 
-        if not (await obs.request("GetVirtualCamStatus")).get("outputActive"):
-            await obs.request("StartVirtualCam")
-            report.append("Cámara virtual encendida.")
-        else:
-            report.append("Cámara virtual ya encendida.")
+        # La reunión ve a Sonnia compartiendo pantalla desde Meet; la cámara virtual
+        # (la ventana de Unity por OBS) solo si se pide.
+        if virtual_camera:
+            if not (await obs.request("GetVirtualCamStatus")).get("outputActive"):
+                await obs.request("StartVirtualCam")
+                report.append("Cámara virtual encendida.")
+            else:
+                report.append("Cámara virtual ya encendida.")
 
         await asyncio.sleep(TEST_SHOT_DELAY_S)
         try:
