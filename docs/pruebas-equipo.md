@@ -4,6 +4,10 @@ Son `Sonnia-pruebas-macOS.zip` y `Sonnia-pruebas-Windows.zip`. Hace falta intern
 Sonnia habla de verdad con GPT-Live, que cuesta unos 3 USD por hora mientras la
 app está abierta. **Ciérrala cuando acabes de probar.**
 
+Cada copia tiene **una hora de conversación en total**, sumando todas las veces que
+la abras. Cuando se acaba, Sonnia se va de la pantalla y deja un letrero: «La prueba
+de Sonnia ha terminado». A partir de ahí ya no conversa.
+
 Estas builds no mandan tu cámara ni tu micrófono al panel: nadie del equipo te
 puede ver ni oír desde `sonia.sonnetcode.com`. Sí sales en el panel con el nombre
 de tu equipo, y desde ahí Jean puede cambiarle el modo a tu Sonnia.

@@ -25,6 +25,7 @@ from sonia.live.engine import LiveEngine
 from sonia.live.voicecache import VoiceCache
 from sonia.panel.control import (
     DEFAULT_AWAY_MESSAGE,
+    TRIAL_OVER_MESSAGE,
     PanelState,
     StandControl,
     _Material,
@@ -96,11 +97,13 @@ async def make_panel_rig(
     *,
     state: PanelState | None = None,
     material: _Material | None = None,
+    trial_minutes: float = 0.0,
     **overrides: Any,
 ) -> AsyncIterator[PanelRig]:
     from websockets.asyncio.client import connect
 
     settings = panel_settings(tmp_path, **overrides)
+    settings.trial_limit_minutes = trial_minutes
     if state is not None:
         state.save(Path(settings.panel.state_file))
     server = FakeLiveServer()
@@ -167,6 +170,45 @@ async def test_fuera_cierra_gpt_live_y_deja_el_letrero(tmp_path: Path) -> None:
         await rig.control.act("set_mode", {"mode": "conversation"})
         await rig.conn(2)
         assert rig.rec.of_type("presence")[-1]["present"] is True
+
+
+async def test_la_build_de_prueba_se_apaga_al_acabar_su_tiempo(tmp_path: Path) -> None:
+    # 0,01 minutos: 0,6 s de conversación.
+    async with make_panel_rig(tmp_path, trial_minutes=0.01) as rig:
+        conn = await rig.conn()
+        await conn.wait_type("session.close", limit=4.0)
+        await wait_until(lambda: not rig.engine.connected, limit=4.0)
+        await wait_until(lambda: rig.rec.of_type("presence")[-1]["present"] is False, limit=4.0)
+        assert rig.rec.of_type("presence")[-1]["message"] == TRIAL_OVER_MESSAGE
+        # Ni el panel la devuelve a conversar.
+        ok, message = await rig.control.act("set_mode", {"mode": "conversation"})
+        assert not ok and "prueba" in message
+        ok, _ = await rig.control.act("greet", {})
+        assert not ok
+        assert rig.control.status()["mode"] == "away"
+        await asyncio.sleep(0.3)
+        assert rig.server.attempts == 1
+    saved = PanelState.load(tmp_path / "cache" / "panel_state.json")
+    assert saved.trial_seconds >= 0.6 and saved.mode == "away"
+
+    # Al volver a abrir la app sigue fuera, con el letrero, y no abre sesión.
+    async with make_panel_rig(tmp_path, trial_minutes=0.01) as rig:
+        await rig.rec.wait_type("presence")
+        assert rig.rec.of_type("presence")[-1] == {
+            "type": "presence",
+            "present": False,
+            "message": TRIAL_OVER_MESSAGE,
+        }
+        await asyncio.sleep(0.5)
+        assert rig.server.attempts == 0
+
+
+async def test_sin_limite_de_prueba_conversa_igual(tmp_path: Path) -> None:
+    usada = PanelState(trial_seconds=99_999.0)
+    async with make_panel_rig(tmp_path, state=usada) as rig:
+        await rig.conn()
+        assert rig.rec.of_type("presence")[-1]["present"] is True
+        assert not rig.control.trial_over
 
 
 async def test_solo_saludos_reproduce_frases_grabadas_sin_gpt_live(tmp_path: Path) -> None:

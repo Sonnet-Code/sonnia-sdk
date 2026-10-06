@@ -30,6 +30,10 @@ La caché de voces guarda cada frase fija (saludos, frases y cantos del stand) l
 
 Con `PANEL_CAMERA_STREAM=false` la Sonia no manda ni la cámara ni el micrófono al panel: sin «Ver cámara» ni Modo Jean. Lo llevan las builds de prueba que se reparten al equipo (`build.env`, ver `docs/unity.md`, «Builds de prueba»), para que nadie del panel vea ni oiga a quien la prueba en casa.
 
+Con `TRIAL_LIMIT_MINUTES` (las builds de prueba llevan 60), la Sonia tiene ese tiempo de conversación en total, sumando todos sus arranques. Al acabarse:
+- se queda en «Fuera» con el letrero «La prueba de Sonnia ha terminado» y no vuelve a abrir GPT-Live;
+- el panel rechaza devolverla a otro modo.
+
 - Va por la sala de vídeo de Cloudflare (`/api/guest` con `role=watch`, la misma del Modo Jean), así que solo funciona desde el panel de la nube. En el local lo dice y no muestra nada.
 - El visor pide la sala con la acción `watch_camera` y la renueva cada 10 s mientras está abierto (`keepalive`, que no llena el registro).
 - El orquestador (`RoomSupervisor`, `server/sonia/guest/room.py`) la cierra sola cuando no queda nadie mirando durante 25 s, o 3 s después de pulsar «Cerrar».

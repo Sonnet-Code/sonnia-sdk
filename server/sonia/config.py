@@ -302,6 +302,11 @@ class Settings(BaseSettings):
     #: Lo pone ``sonia reunion``; cambia sus instrucciones (``live/prompts.py``) y
     #: quita la animación de stand (docs/reunion.md).
     meeting: bool = False
+    #: ``TRIAL_LIMIT_MINUTES``: minutos de conversación (sesión de GPT-Live abierta)
+    #: que tiene esta Sonia en total, sumando todos sus arranques. Al llegar, se
+    #: queda en «Fuera» con un letrero y ya no conversa. Lo ponen las builds de
+    #: prueba del equipo (``build.env``); 0 (por defecto) es sin límite.
+    trial_limit_minutes: float = 0.0
     #: ``KNOWLEDGE_EXTRA_DIR``: otra carpeta de conocimiento que se lee después de la
     #: del stand, para pruebas con datos que no deben llegar al stand. Vacía por defecto.
     knowledge_extra_dir: str = ""

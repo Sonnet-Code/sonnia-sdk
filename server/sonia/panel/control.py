@@ -63,6 +63,12 @@ MODES: tuple[Mode, ...] = ("conversation", "greeter", "away")
 
 DEFAULT_AWAY_MESSAGE = "Me fui a ver una charla, regreso en un momento"
 
+#: Letrero cuando se acaba el tiempo de una build de prueba (``TRIAL_LIMIT_MINUTES``).
+TRIAL_OVER_MESSAGE = "La prueba de Sonnia ha terminado. ¡Gracias por probarla!"
+TRIAL_OVER_PANEL = (
+    "La prueba de esta Sonnia ha terminado: ya usó sus {minutes:g} minutos de conversación."
+)
+
 #: Voces integradas de GPT-Live que se ofrecen en el panel.
 VOICES = ["marin", "cedar", "coral", "sage", "shimmer", "ballad", "verse", "alloy", "ash", "echo"]
 
@@ -223,6 +229,9 @@ class PanelState:
     #: (sobrevive a los reinicios del orquestador).
     usage_date: str = ""
     usage_seconds: float = 0.0
+    #: Segundos de sesión de GPT-Live acumulados desde el primer arranque, para el
+    #: límite de las builds de prueba (``TRIAL_LIMIT_MINUTES``). No se reinicia.
+    trial_seconds: float = 0.0
     #: Revisión de los ajustes compartidos que mandó la nube por última vez.
     cloud_rev: int = 0
     #: Ajustes compartidos cambiados en este equipo que la nube aún no ha confirmado.
@@ -249,7 +258,7 @@ class PanelState:
             state.avatar = _normalize_shared("avatar", raw.get("avatar"))
         with contextlib.suppress(ValueError):
             state.guest_avatar = _normalize_shared("guest_avatar", raw.get("guest_avatar"))
-        for name in ("volume", "mic_gate", "usage_seconds"):
+        for name in ("volume", "mic_gate", "usage_seconds", "trial_seconds"):
             value = raw.get(name)
             if _is_number(value):
                 setattr(state, name, float(value))
@@ -363,6 +372,13 @@ class StandControl:
         self._usage_base = 0.0
         self._last_usage_save = time.monotonic()
         self._roll_usage_day(engine_seconds=0.0)
+        #: Límite de prueba en segundos (0: sin límite) y lo gastado en arranques anteriores.
+        self._trial_limit_s = max(0.0, settings.trial_limit_minutes) * 60.0
+        self._trial_base = self.state.trial_seconds
+        #: Lo más alto que ha marcado el contador: al cerrarse una sesión, el del
+        #: motor baja un instante hasta que suma la sesión cerrada.
+        self._trial_peak = self._trial_base
+        self._trial_ended = False
         hub.add_listener(self._watch_outgoing)
         hub.on(p.MSG_ANIMATIONS, self._on_animations)
         hub.on(p.MSG_ANIMATION_PLAYING, self._on_animation_playing)
@@ -425,13 +441,29 @@ class StandControl:
         await self._hub.set_sticky("tuning", p.msg_set_tuning(state.tuning))
         await self._hub.set_sticky("avatar", p.msg_set_avatar(state.avatar))
         await self._hub.set_sticky("guest_avatar", p.msg_set_guest_avatar(state.guest_avatar))
+        if self._trial_limit_s > 0:
+            if self.trial_over:
+                self._trial_ended = True
+                state.mode = "away"
+                logger.warning("Se acabó el tiempo de prueba: Sonnia se queda fuera y no conversa")
+            else:
+                logger.info(
+                    "Build de prueba: le quedan %.0f de %.0f minutos de conversación",
+                    (self._trial_limit_s - self.trial_used()) / 60.0,
+                    self._trial_limit_s / 60.0,
+                )
         await self._apply_mode(state.mode, announce=False)
         if state.debug:
             logger.info("El panel dejó a Sonnia en modo debug: quieta y sin GPT-Live")
         elif state.mode != "conversation":
             logger.info("El panel dejó a Sonnia en modo %s: no se abre GPT-Live", state.mode)
         self._loop_task = asyncio.create_task(self._loop(), name="sonia-panel-loop")
-        if self._voice_cache is not None and self._settings.live.api_key and not state.debug:
+        if (
+            self._voice_cache is not None
+            and self._settings.live.api_key
+            and not state.debug
+            and not self.trial_over
+        ):
             self._spawn(self._prepare_voices(delay=VOICE_WARMUP_DELAY_S), "voice-warmup")
 
     async def stop(self) -> None:
@@ -452,6 +484,8 @@ class StandControl:
         return self.state.mode
 
     async def set_mode(self, mode: Mode) -> None:
+        if self.trial_over and mode != "away":
+            raise _BadRequest(TRIAL_OVER_PANEL.format(minutes=self._trial_limit_s / 60.0))
         if mode == self.state.mode:
             return
         logger.info("Panel: modo %s -> %s", self.state.mode, mode)
@@ -461,10 +495,11 @@ class StandControl:
 
     async def _apply_mode(self, mode: Mode, *, announce: bool) -> None:
         hub = self._hub
-        if mode == "away":
+        if mode == "away" or self.trial_over:
             await self._set_live(False)
             await hub.hide_image()
-            await hub.set_sticky("presence", p.msg_presence(False, self._away_message))
+            message = TRIAL_OVER_MESSAGE if self.trial_over else self._away_message
+            await hub.set_sticky("presence", p.msg_presence(False, message))
             return
         await hub.set_sticky("presence", p.msg_presence(True, self._away_message))
         if mode == "conversation":
@@ -479,6 +514,7 @@ class StandControl:
 
     async def _set_live(self, active: bool) -> None:
         """Enciende o apaga GPT-Live y se lo cuenta a la pantalla (la invitación a hablar)."""
+        active = active and not self.trial_over
         await self._engine.set_active(active)
         await self._hub.set_sticky("stage_mode", p.msg_stage_mode(self.state.mode, active))
 
@@ -497,6 +533,8 @@ class StandControl:
                     await self._set_avatar_editor_open(False)
                 if time.monotonic() - self._last_usage_save >= USAGE_SAVE_S:
                     self._save_usage()
+                if self.trial_over and not self._trial_ended:
+                    await self._end_trial()
                 if (
                     self.state.mode == "greeter"
                     and not self.state.debug
@@ -1311,7 +1349,38 @@ class StandControl:
     def _save_usage(self) -> None:
         self._last_usage_save = time.monotonic()
         self.state.usage_seconds = round(self.usage_today(), 1)
+        if self._trial_limit_s > 0:
+            # Solo cuenta en las builds de prueba: el stand no gasta la prueba de nadie.
+            self.state.trial_seconds = round(self.trial_used(), 1)
         self._save()
+
+    # -- límite de las builds de prueba -------------------------------------------
+
+    def trial_used(self) -> float:
+        """Segundos de conversación desde el primer arranque (todas las sesiones); nunca baja."""
+        self._trial_peak = max(self._trial_peak, self._trial_base + self._engine_usage())
+        return self._trial_peak
+
+    @property
+    def trial_over(self) -> bool:
+        """¿Se acabó el tiempo de prueba? Siempre falso sin ``TRIAL_LIMIT_MINUTES``.
+
+        Una vez acabada, sigue acabada.
+        """
+        if self._trial_limit_s <= 0:
+            return False
+        return self._trial_ended or self.trial_used() >= self._trial_limit_s
+
+    async def _end_trial(self) -> None:
+        """Se acabó la prueba: GPT-Live se apaga y Sonnia se va con el letrero."""
+        self._trial_ended = True
+        self.state.mode = "away"
+        logger.warning(
+            "Se acabó el tiempo de prueba (%.0f min de conversación): Sonnia se queda fuera",
+            self._trial_limit_s / 60.0,
+        )
+        self._save_usage()
+        await self._apply_mode(self.state.mode, announce=False)
 
     # -- utilidades -------------------------------------------------------------
 
