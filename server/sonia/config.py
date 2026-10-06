@@ -98,6 +98,10 @@ def is_gemini_url(url: str) -> bool:
 #: Tope de respuesta de los gestos: sin razonar bastan unos 10 tokens; si el
 #: modelo razona (Gemini 3 no deja apagarlo), lo que razona cuenta en el tope.
 GESTURE_TOKENS_PLAIN = 64
+#: Modelo de gestos con Gemini si no se dice otro: el ligero que usa Genies para
+#: sus prompts auxiliares. Medido el 6-oct-2026 con razonamiento minimal: 1,1-1,5 s
+#: por petición, frente a 3,8-4,5 s de gpt-6-luna sin razonar.
+GESTURE_GEMINI_MODEL = "gemini-3.1-flash-lite"
 GESTURE_TOKENS_THINKING = 512
 
 
@@ -105,9 +109,11 @@ class GestureSettings(BaseSettings):
     """Director de gestos (``sonia/gestures``, ``docs/gestos.md``).
 
     Un modelo de texto ligero lee lo que dice Sonia y elige el gesto de cada
-    frase del catálogo que manda Unity. Lo que se deja vacío sale del modelo de
-    visión (``LLM_*``): mismo servidor, modelo y clave. También vale Gemini por
-    su endpoint compatible con OpenAI, con la clave de ``GEMINI_API_KEY``.
+    frase del catálogo que manda Unity. Con ``GEMINI_API_KEY`` y sin
+    ``GESTURE_BASE_URL`` ni ``GESTURE_MODEL`` va por Gemini
+    (:data:`GESTURE_GEMINI_MODEL`, por su endpoint compatible con OpenAI): luna
+    tarda demasiado para gesticular frase a frase. Sin ella, lo que se deja vacío
+    sale del modelo de visión (``LLM_*``): mismo servidor, modelo y clave.
     """
 
     model_config = SettingsConfigDict(
@@ -118,7 +124,7 @@ class GestureSettings(BaseSettings):
     enabled: bool = Field(
         default=True, validation_alias=AliasChoices("GESTURES_ENABLED", "GESTURE_ENABLED")
     )
-    #: Vacíos: los de ``LLM_*``.
+    #: Vacíos: Gemini (:data:`GESTURE_GEMINI_MODEL`) si hay ``GEMINI_API_KEY``; si no, los de ``LLM_*``.
     model: str = ""
     base_url: str = ""
     api_key: str = Field(default="", repr=False)
@@ -220,11 +226,22 @@ class GestureSettings(BaseSettings):
             }
         )
 
+    def _prefers_gemini(self) -> bool:
+        """Con clave de Gemini y nada más dicho, los gestos van por Gemini."""
+        return bool(self.gemini_api_key) and not self.base_url.strip() and not self.model.strip()
+
     def _base_url(self, base: LLMSettings) -> str:
-        return self.base_url.strip() or base.base_url
+        if self.base_url.strip():
+            return self.base_url.strip()
+        return GEMINI_OPENAI_URL if self._prefers_gemini() else base.base_url
 
     def _model(self, base: LLMSettings) -> str:
-        return self.model.strip() or base.model
+        if self.model.strip():
+            return self.model.strip()
+        if is_gemini_url(self._base_url(base)) and not is_gemini_url(base.base_url):
+            # Gemini sin modelo: el de visión sería de otro servidor.
+            return GESTURE_GEMINI_MODEL
+        return base.model
 
     def _same_server(self, base: LLMSettings) -> bool:
         return self._base_url(base).rstrip("/") == base.base_url.rstrip("/")

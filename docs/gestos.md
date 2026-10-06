@@ -92,8 +92,10 @@ Se le piden al modelo y además se aplican en código: si elige un gesto que no 
 
 Dos opciones, que se eligen por variables de entorno (plantilla comentada en `.env.example`):
 
-- **A, por defecto: el modelo de los ojos.** Mismo servidor, modelo y clave que el modelo de visión (`LLM_*`: `gpt-6-luna` en la API de OpenAI con `OPENAI_API_KEY`). No hay que poner nada.
-- **B: Gemini** por su endpoint compatible con OpenAI. `gemini-3.1-flash-lite` es el que usa Genies para sus prompts auxiliares. Bastan tres variables:
+- **Por defecto con `GEMINI_API_KEY`: Gemini** por su endpoint compatible con OpenAI, con `gemini-3.1-flash-lite`, el que usa Genies para sus prompts auxiliares. Si está la clave y no se ponen `GESTURE_BASE_URL` ni `GESTURE_MODEL`, no hay que poner nada más. Medido el 6-oct-2026 con `sonia check`: **0,9-1,5 s** por petición.
+- **Sin `GEMINI_API_KEY`: el modelo de los ojos.** Mismo servidor, modelo y clave que el modelo de visión (`LLM_*`: `gpt-6-luna` en la API de OpenAI con `OPENAI_API_KEY`). Funciona y acepta `none`, pero tarda **3,8-4,5 s** por petición (medido igual), más que el tope de 3 s: muchas frases acabarían con un gesto de relleno.
+
+Para forzar Gemini con otra configuración:
 
 ```
 GESTURE_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/

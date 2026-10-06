@@ -142,6 +142,7 @@ def fast(**overrides: Any) -> GestureSettings:
         "uncommon_s": 45.0,
         "rare_s": 300.0,
         "fallback": True,
+        "gemini_api_key": "",
     }
     values.update(overrides)
     return GestureSettings(**values)
@@ -710,8 +711,20 @@ def test_los_gestos_pueden_ir_por_gemini(monkeypatch: pytest.MonkeyPatch) -> Non
     # Con OpenAI no se usa la de Gemini ni cambia el parámetro de tokens.
     for name in ("GESTURE_API_KEY", "GESTURE_BASE_URL", "GESTURE_MODEL"):
         monkeypatch.delenv(name)
-    openai = fast(gemini_api_key="clave-gemini").llm_settings(OPENAI)
-    assert openai.key == "clave-openai" and openai.max_tokens_param == OPENAI.max_tokens_param
+    # Solo con la clave de Gemini, los gestos van por Gemini (luna es lenta para esto).
+    default = fast(gemini_api_key="clave-gemini").llm_settings(OPENAI)
+    assert default.base_url == GEMINI_OPENAI_URL and default.model == "gemini-3.1-flash-lite"
+    assert default.key == "clave-gemini" and default.reasoning_effort == "minimal"
+    # Con un modelo de OpenAI puesto a mano no se usa la de Gemini ni cambia el parámetro.
+    openai = fast(gemini_api_key="clave-gemini", model="gpt-4.1-mini").llm_settings(OPENAI)
+    assert openai.base_url == OPENAI.base_url and openai.key == "clave-openai"
+    assert openai.max_tokens_param == OPENAI.max_tokens_param
+    # Sin clave de Gemini, el modelo de visión, como siempre.
+    assert fast(gemini_api_key="").llm_settings(OPENAI).model == "gpt-6-luna"
+    # URL de Gemini sin modelo: el ligero de Gemini, no el de visión.
+    assert fast(base_url=GEMINI_OPENAI_URL, gemini_api_key="k").llm_settings(OPENAI).model == (
+        "gemini-3.1-flash-lite"
+    )
 
 
 def test_las_variables_de_los_gestos_se_leen_del_entorno(monkeypatch: pytest.MonkeyPatch) -> None:
