@@ -1,5 +1,7 @@
 # Roadmap de Sonia
 
+> Lo pendiente tras la demo al equipo del 6 de octubre (bugs de la trivia, builds, gestos, staff, QR…) está en detalle en [`PENDIENTES.md`](PENDIENTES.md).
+
 Lo que queda pendiente antes y durante el DevFest Santo Domingo (9 y 10 de octubre de 2026), por orden de urgencia. Se tacha al terminar y se apunta la fecha. El histórico de lo ya hecho está en el README ("Hoja de ruta") y en `git log`.
 
 ## 1. Probar GPT-Live con clave (bloqueante)
