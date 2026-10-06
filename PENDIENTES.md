@@ -82,17 +82,7 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
   - [ ] El micrófono abre a 24 kHz (si no, `LIVE_SAMPLE_RATE=16000`).
   - [ ] Cámara y panel.
 
-## 5. Antes y durante el evento
-
-- [ ] **Ensayo en un sitio ruidoso**, con ruido parecido al del pasillo.
-  - [ ] Calibrar «Ruido del pasillo» en el panel (`LIVE_GATE_RMS`).
-  - [ ] Ver si se contesta sola o se corta. Si molesta, mirar primero el micrófono (direccional o de diadema) y dónde van los altavoces (`docs/stand.md`).
-- [ ] **Reiniciar el contexto** al empezar cada día y entre bloques (mañana, almuerzo, tarde) con «Reiniciar conversación» en el panel. En el stand ya se reinicia sola tras 2 minutos sin nadie (`IDLE_RESET_SECONDS`).
-  - [ ] ✨ Opcional: reinicios a horas fijas.
-- [ ] **Coste:** en «Conversando» son unos 3 USD por hora (unos 30 USD los dos días). Pasarla a «Solo saludos» o «Fuera» cuando no haga falta.
-- [ ] **Subtítulos activados** en el stand, por el ruido.
-
-## 6. QR y redes
+## 5. QR y redes
 
 - [ ] ✨ **QR del stand** (`StageScreen`, hoy a sonnetcode.com/es) a una página con la web, Instagram y LinkedIn.
   - [ ] 🗒️ Dónde va la página: sonnetcode.com o una ruta del Worker de Cloudflare.
@@ -100,7 +90,7 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
 - [ ] 🗒️ **Redes (Mariel):** publicaciones de esta semana sobre el DevFest.
 - [ ] 🗒️ **Grabar a gente hablando con Sonnia** para reels y TikTok.
 
-## 7. Fuera de este evento
+## 6. Fuera de este evento
 
 - [ ] Panel autoservicio para configurar avatar, personalidad y base de conocimiento (Sonnia como producto para cualquier evento).
 - [ ] Varios avatares por equipo, uno por especialidad.
