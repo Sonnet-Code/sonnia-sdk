@@ -23,6 +23,14 @@
 // coreógrafo queda suspendido: apunta el estado que le llega pero no lanza
 // ningún clip, ni gestos ni bailes, hasta que se le devuelve el cuerpo.
 //
+// Con un set de Genies con reposos (GeniesGestureLayer, el de Sage) el cuerpo
+// lo llevan sus clips, como en el chat de Genies (genieBody): reposo base en
+// bucle (baseIdle, elegido por frecuencia en cada vuelta), escuchar y pensar con
+// los suyos, aburrimiento cada 15 ± 5 s con el stand en calma, saludo y gestos
+// hacia el público. Lo que el personaje no tiene (bailar, caminar, señalar una
+// imagen, las reacciones de la trivia) sigue en MotionPlayer y el reposo de
+// Genies se aparta con fundido mientras suena (al señalar, solo el brazo).
+//
 // Todo es opcional: sin MotionPlayer o sin set de clips no hace nada.
 
 using UnityEngine;
@@ -84,6 +92,24 @@ namespace Sonia
         [SerializeField]
         [Tooltip("En conversación (escuchar, pensar, hablar) suena un solo reposo largo, el de idle, sin cambiar de clip entre estados y sin variaciones, asentimientos ni gestos de hablar, como Mia. Apagado: cada estado con su bucle y sus variaciones.")]
         private bool singleConversationLoop = true;
+
+        [Header("Cuerpo de Genies")]
+        [SerializeField]
+        [Tooltip("El cuerpo lo llevan los clips de Genies del set de GeniesGestureLayer (reposo, escuchar, pensar, aburrimiento, saludo y gestos hacia el público). Lo que el personaje no tiene (bailar, caminar, señalar una imagen, la trivia) sigue con MotionPlayer.")]
+        private bool genieBody = true;
+
+        [SerializeField]
+        [Tooltip("Segundos mínimo y máximo entre aburrimientos con el stand en calma (BoredTimeBase de Genies: 15 ± 5).")]
+        private Vector2 boredInterval = new Vector2(10f, 20f);
+
+        [SerializeField]
+        [Tooltip("Al hablar, encadena gestos neutros de relleno (lista talk del set) mientras el director no pide otro: así no habla con los brazos quietos.")]
+        private bool talkFillers = true;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Probabilidad de dejar un respiro sin gesto entre dos rellenos.")]
+        private float talkFillerRestChance = 0.25f;
 
         [Header("Reposo")]
         [SerializeField]
@@ -155,8 +181,13 @@ namespace Sonia
         private bool _presentReleasing;
         private AnimationClip _lastTalking;
         private bool _speechPaused;
-        // Gestos de Genies al hablar (los pide el director de gestos del orquestador).
+        // Clips de Genies: reposo, acciones y gestos al hablar (los pide el director de gestos del orquestador).
         private GeniesGestureLayer _gestures;
+        // El gesto de una vez en curso es una acción de Genies (no un clip de MotionPlayer).
+        private bool _genieAction;
+        private string _lastGenieAction;
+        private string _lastFiller;
+        private float _nextFillerAt;
         private AnimationClip _lastVariation;
         private int _lastAttention = -1;
         private float _stateSeconds;
@@ -230,6 +261,12 @@ namespace Sonia
             get { return !_suspended && _phase != Phase.Base; }
         }
 
+        /// <summary>Cierto si el cuerpo lo llevan los clips de Genies (reposo y acciones).</summary>
+        public bool GenieBody
+        {
+            get { return genieBody && _gestures != null && _gestures.HasRest && _gestures.IsReady; }
+        }
+
         /// <summary>
         /// Cierto si ahora puede sonar un gesto de Genies al hablar (director de
         /// gestos, <see cref="GeniesGestureLayer"/>): hablando y con voz, sin
@@ -280,6 +317,132 @@ namespace Sonia
             {
                 _gestures.Stop();
             }
+        }
+
+        // Reposo de Genies del estado actual: la lista que toca, otro de ella por
+        // frecuencia al acabar cada vuelta, y el brazo derecho libre mientras señala.
+        private void EnsureGenieRest(float fade)
+        {
+            if (!GenieBody)
+            {
+                return;
+            }
+
+            GeniesGestureSet set = _gestures.Set;
+            string[] list = RestListOf(_state, set);
+            string current = _gestures.CurrentRest;
+            _gestures.MaskRightArm(IsPresenting);
+            if (current == null || System.Array.IndexOf(list, current) < 0)
+            {
+                _gestures.PlayRest(set.Pick(list, null), Mathf.Max(fade, set.transitionSeconds));
+            }
+            else if (_gestures.ConsumeRestLoopEnd(set.transitionSeconds))
+            {
+                string next = set.Pick(list, null);
+                if (next != null && next != current)
+                {
+                    _gestures.PlayRest(next, set.transitionSeconds);
+                    Log("reposo de Genies: " + next);
+                }
+            }
+
+            _gestures.SetRestWeight(1f, fade);
+        }
+
+        private static string[] RestListOf(AvatarState state, GeniesGestureSet set)
+        {
+            string[] list = state == AvatarState.Listening ? set.restListen
+                : state == AvatarState.Thinking ? set.restThink
+                : set.restIdle;
+            return set.Pick(list, null) != null ? list : set.restIdle;
+        }
+
+        // Un clip de MotionPlayer manda en el cuerpo: el reposo y las acciones de Genies se apartan.
+        private void HideGenieBody(float fade)
+        {
+            if (_gestures == null)
+            {
+                return;
+            }
+
+            _gestures.SetRestWeight(0f, fade);
+            _gestures.StopActions(fade);
+            _genieAction = false;
+        }
+
+        // Lanza una acción de Genies (cuerpo entero, sobre el reposo) como gesto de una vez.
+        private bool StartGenieAction(string name, Phase phase, string why)
+        {
+            if (!GenieBody || string.IsNullOrEmpty(name) || !_gestures.PlayAction(name))
+            {
+                return false;
+            }
+
+            _phase = phase;
+            _genieAction = true;
+            _lastGenieAction = name;
+            _gestures.SetRestWeight(1f, gestureFade);
+            Log(why + ": " + name);
+            return true;
+        }
+
+        // Relleno al hablar: cuando no suena gesto (o el que suena va de salida) entra
+        // otro neutro de la lista talk, con fundido cruzado; a veces, un respiro.
+        // Un gesto pedido por el director entra encima y manda.
+        private void UpdateTalkFillers()
+        {
+            if (!talkFillers || _gestures == null || !CanTalkGesture || !_gestures.IsReady || Time.time < _nextFillerAt)
+            {
+                return;
+            }
+
+            GeniesGestureSet set = _gestures.Set;
+            if (_gestures.IsActive && _gestures.GestureRemaining > set.transitionSeconds * 0.6f)
+            {
+                return;
+            }
+
+            if (!_gestures.IsActive && Random.value < talkFillerRestChance)
+            {
+                _nextFillerAt = Time.time + Random.Range(0.4f, 1.2f);
+                return;
+            }
+
+            string name = set.Pick(set.talk, _lastFiller);
+            if (name != null && _gestures.Play(name))
+            {
+                _lastFiller = name;
+            }
+
+            _nextFillerAt = Time.time + 0.5f;
+        }
+
+        /// <summary>
+        /// Vista previa de un clip de Genies del set (panel): suena de cuerpo entero
+        /// sobre el reposo y se vuelve a lo que tocaba. Falso si no se pudo.
+        /// </summary>
+        public bool PreviewGenie(string name)
+        {
+            if (!Ready || _suspended || !GenieBody)
+            {
+                return false;
+            }
+
+            return StartGenieAction(name, Phase.Variation, "vista previa de Genies");
+        }
+
+        /// <summary>
+        /// Movimiento de Genies pedido de viva voz: como <see cref="PlayReaction"/>,
+        /// suena entero aunque cambie el estado. Falso si no se pudo.
+        /// </summary>
+        public bool PlayGenieReaction(string name)
+        {
+            if (!Ready || _suspended || !GenieBody)
+            {
+                return false;
+            }
+
+            return StartGenieAction(name, Phase.Reaction, "movimiento de Genies");
         }
 
         private void Start()
@@ -495,11 +658,19 @@ namespace Sonia
         {
             StopTalkGesture();
             _secondsSinceGreeting = 0f;
-            _phase = Phase.Greeting;
-            _body = motionPlayer.Play(motionSet.greeting, MotionPlayer.BodyLayer, gestureFade);
+            if (!GenieBody || !StartGenieAction(_gestures.Set.Pick(_gestures.Set.greeting, _lastGenieAction), Phase.Greeting, why))
+            {
+                HideGenieBody(gestureFade);
+                _phase = Phase.Greeting;
+                _body = motionPlayer.Play(motionSet.greeting, MotionPlayer.BodyLayer, gestureFade);
+            }
+
             _attentionTimer = RandomSpacing();
             _variationTimer = Random.Range(idleVariationInterval.x, idleVariationInterval.y);
-            Log(why);
+            if (!_genieAction)
+            {
+                Log(why);
+            }
         }
 
         /// <summary>
@@ -518,6 +689,7 @@ namespace Sonia
 
             _suspended = true;
             StopTalkGesture();
+            HideGenieBody(0.3f);
             _phase = Phase.Base;
             _wideUntil = -1f;
             _speechPaused = false;
@@ -737,6 +909,7 @@ namespace Sonia
             }
 
             StopTalkGesture();
+            HideGenieBody(gestureFade);
             _phase = Phase.Reaction;
             _body = motionPlayer.Play(clip, MotionPlayer.BodyLayer, gestureFade);
             Log("reacción: " + clip.name);
@@ -762,6 +935,7 @@ namespace Sonia
             }
 
             StopTalkGesture();
+            HideGenieBody(gestureFade);
             if (clip.isLooping)
             {
                 _phase = Phase.Base;
@@ -861,10 +1035,22 @@ namespace Sonia
             }
 
             StopTalkGesture();
-            _phase = Phase.Attention;
             _lastAttention = index;
-            _body = motionPlayer.Play(motion.clip, MotionPlayer.BodyLayer, gestureFade);
             _attentionTimer = RandomSpacing();
+            if (GenieBody && motion.category != AttentionCategory.Dance)
+            {
+                GeniesGestureSet set = _gestures.Set;
+                string[] list = motion.category == AttentionCategory.FourthWall ? set.fourthWall : set.bored;
+                if (StartGenieAction(set.Pick(list, _lastGenieAction), Phase.Attention, "atención " + motion.category))
+                {
+                    _variationTimer = Random.Range(boredInterval.x, boredInterval.y);
+                    return;
+                }
+            }
+
+            HideGenieBody(gestureFade);
+            _phase = Phase.Attention;
+            _body = motionPlayer.Play(motion.clip, MotionPlayer.BodyLayer, gestureFade);
             _variationTimer = Random.Range(idleVariationInterval.x, idleVariationInterval.y);
             Log("atención " + motion.category + ": " + motion.clip.name);
         }
@@ -893,13 +1079,18 @@ namespace Sonia
             // Un gesto de una sola vez ha terminado (o casi): vuelta a la base.
             if (_phase != Phase.Base)
             {
-                if (_body == null || !_body.IsAlive || _body.Remaining <= FadeForReturn())
+                bool done = _genieAction
+                    ? _gestures == null || !_gestures.IsActionPlaying || _gestures.ActionRemaining <= gestureFade
+                    : _body == null || !_body.IsAlive || _body.Remaining <= FadeForReturn();
+                if (done)
                 {
                     EndOneShot();
                 }
 
                 return;
             }
+
+            EnsureGenieRest(stateFade);
 
             switch (_state)
             {
@@ -927,6 +1118,8 @@ namespace Sonia
         {
             bool wasWide = _phase == Phase.Attention || _phase == Phase.Greeting;
             _phase = Phase.Base;
+            // La acción de Genies termina sola con su fundido sobre el reposo.
+            _genieAction = false;
             if (wasWide)
             {
                 _wideUntil = Time.time + gestureFade;
@@ -979,6 +1172,14 @@ namespace Sonia
             }
 
             _variationTimer -= dt;
+            if (_variationTimer <= 0f && GenieBody)
+            {
+                // Aburrimiento de Genies: otra pose de reposo un rato, sobre el reposo base.
+                _variationTimer = Random.Range(boredInterval.x, boredInterval.y);
+                StartGenieAction(_gestures.Set.Pick(_gestures.Set.bored, _lastGenieAction), Phase.Variation, "aburrimiento de Genies");
+                return;
+            }
+
             if (_variationTimer <= 0f)
             {
                 _variationTimer = Random.Range(idleVariationInterval.x, idleVariationInterval.y);
@@ -1053,6 +1254,8 @@ namespace Sonia
 
         private void UpdateSpeaking()
         {
+            UpdateTalkFillers();
+
             if (singleConversationLoop)
             {
                 // Un solo reposo largo: se habla desde él, sin gesticulación de clip.
@@ -1091,6 +1294,13 @@ namespace Sonia
             }
 
             _phase = Phase.Base;
+            if (_genieAction && _gestures != null)
+            {
+                _gestures.StopActions(fade);
+            }
+
+            _genieAction = false;
+            EnsureGenieRest(fade);
             switch (state)
             {
                 case AvatarState.Idle:

@@ -612,7 +612,7 @@ namespace Sonia
             string playing = OneShotName(player.CurrentClip(MotionPlayer.BodyLayer))
                              ?? OneShotName(player.CurrentClip(MotionPlayer.UpperLayer))
                              ?? OneShotName(player.CurrentClip(MotionPlayer.RightArmLayer))
-                             ?? (gestureLayer != null ? gestureLayer.Current : null);
+                             ?? (gestureLayer != null ? gestureLayer.CurrentAction ?? gestureLayer.Current : null);
             if (_clipReported && playing == _reportedClip)
             {
                 return;
@@ -644,12 +644,21 @@ namespace Sonia
             {
                 if (gestureLayer != null && gestureLayer.Has(message.Clip))
                 {
-                    // Gesto de Genies (grupo sage): suena en el estado que haya, para probarlo.
-                    bool played = gestureLayer.Play(message.Clip);
+                    // Clip de Genies (grupo sage): de cuerpo entero sobre el reposo. Pedido
+                    // de viva voz suena entero aunque cambie el estado; desde el panel, en
+                    // el estado que haya, para probarlo. Sin reposo de Genies, en el torso.
+                    bool played = message.Whole
+                        ? choreographer.PlayGenieReaction(message.Clip)
+                        : choreographer.PreviewGenie(message.Clip);
+                    if (!played)
+                    {
+                        played = gestureLayer.Play(message.Clip);
+                    }
+
                     if (logEvents)
                     {
-                        Debug.Log("[Sonia] gesto de Genies pedido por el panel: " + message.Clip
-                            + (played ? string.Empty : " (sin avatar todavía)"), this);
+                        Debug.Log("[Sonia] clip de Genies pedido (" + (message.Whole ? "por voz" : "panel") + "): "
+                            + message.Clip + (played ? string.Empty : " (sin avatar todavía)"), this);
                     }
 
                     return;

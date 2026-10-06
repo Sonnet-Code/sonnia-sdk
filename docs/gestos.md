@@ -222,8 +222,10 @@ Unity reproduce los gestos tal cual los guarda Genies. Detalle en
   Genies, en `gestos-genies/README.md` y `scripts/gestos_genies/ozz_genies.py`.
 - **Qué guarda:** la diferencia de cada hueso con la pose de enlace del cuerpo.
 - **Cómo se aplica:** `GeniesGestureLayer` hace lo mismo que el motor de
-  Genies con cualquier cuerpo, `rotación local = enlace de Sonnia · clip`, sobre
-  el torso: columna, cuello, cabeza, brazos, manos y dedos.
+  Genies con cualquier cuerpo, `rotación local = enlace de Sonnia · clip` (y la
+  cadera se desplaza lo que diga el clip). Los gestos al hablar mueven solo el
+  torso (columna, cuello, cabeza, brazos, manos y dedos); el reposo y las
+  acciones, el cuerpo entero (ver «Cuerpo entero» más abajo).
 - **Cuándo corre:** en `LateUpdate`, antes del pelo, la mirada y la cara.
 - **Fundidos:** entra y sale con el fundido de Sage (0,8 s, curva suave).
 - **Cara:** pasa a `FaceRig` las curvas de cejas, párpados y mejillas de cada
@@ -235,6 +237,33 @@ Unity reproduce los gestos tal cual los guarda Genies. Detalle en
 | Lector de C# contra el de Python (972 muestras de los 162 clips) | 0,0000° |
 | Hojas de contactos de los 161 gestos sobre Sonnia (**Hojas de contactos (en Play)**) | Todos naturales |
 | Orquestador falso con frases grabadas: apertura, gesto en frase, gesto tardío | Correcto en el encuadre real |
+
+### Cuerpo entero: reposo, acciones y relleno al hablar
+
+Desde el 6 de octubre de 2026 el cuerpo de Sonnia es el de Sage siempre que
+Sage tenga clip para ello (`AvatarChoreographer.genieBody`). `GeniesGestureLayer`
+tiene tres canales, como el grafo de Genies:
+
+| Canal | Qué lleva | Clips (listas de `SageGestureSet`) |
+|---|---|---|
+| Reposo | Bucles de cuerpo entero con fundido cruzado | `restIdle` (`baseIdle03/04/05`), `restListen` (asentimientos e inclinarse al escuchar), `restThink` (pensar) |
+| Acciones | Clips de cuerpo entero de una vez sobre el reposo | `bored` (cada 10-20 s con el stand en calma, como el `BoredTimeBase` de Genies), `greeting`, `fourthWall` (gestos hacia el público), los pedidos de viva voz y la vista previa del panel |
+| Gestos | Solo torso, al hablar | Los que pide el director de gestos y, mientras no pide ninguno, los de relleno de `talk` (22 neutros: `noImpact01-03`, `3rdPersonHands01/05/08`, `subtleExplaination`, `ofCourse`...), con un respiro sin gesto el 25 % de las veces (`talkFillerRestChance`) para que no hable con los brazos quietos |
+
+- **Espejo:** acciones y gestos salen en espejo la mitad de las veces
+  (`mirrorChance`, como en Genies).
+- **Lo que Sage no tiene** (bailar, caminar en el modo Fuera, señalar una
+  imagen, las reacciones de la trivia) sigue con `MotionPlayer`; mientras
+  suena, el coreógrafo baja el peso del reposo de Sage.
+- **La cabeza por código** (`AvatarStateController`) deja de posar el cuerpo,
+  asentir y acentuar cuando manda Sage (`GenieDrivesBody`): solo suma la
+  respiración, seguir al visitante con la cabeza, la mirada y el parpadeo.
+- **Las listas** las rellena **Crear set de Sage** solo si están vacías: lo
+  retocado a mano en el asset se queda. Fuera quedan los de mal humor, dormirse
+  o coquetear, y `knockKnock` como reposo (da un paso de 35 cm).
+- **Encuadre:** para que estos gestos se vean, el plano de conversación es de
+  medio muslo para arriba y la sombra de abajo de la pantalla está apagada
+  (`docs/unity.md`, «Encuadre del stand»).
 
 ### Cuándo suena un gesto pedido
 

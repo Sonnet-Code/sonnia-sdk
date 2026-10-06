@@ -25,6 +25,40 @@ namespace Sonia.EditorTools
         /// <summary>Asset del set de Sage.</summary>
         public const string SageSetPath = SageFolder + "/SageGestureSet.asset";
 
+        // Papeles de cuerpo entero de Sage, elegidos con su ficha (descripción,
+        // frecuencia, etiqueta Deep Idle) y las listas de Genies de Veyra (bored,
+        // listen, think; docs/informe-mia.md, 3.4). Se quedan fuera los de mal
+        // humor, dormirse o coqueteo, que no pegan en el stand.
+        private static readonly string[] SageRestIdle = { "baseIdle03", "baseIdle04", "baseIdle05" };
+        private static readonly string[] SageRestListen = { "listeningNod", "listeningTildedNod", "listeningLeaningIn" };
+        private static readonly string[] SageRestThink = { "subtleThinkGeneric", "subtleThinkChaotic" };
+
+        private static readonly string[] SageBored =
+        {
+            "idleCalm", "idleCheckHairOneHand", "idleGeneralMirrored", "handsBehindBack",
+            "armsBehindBack", "idleCheckingOutfit", "gentleKeyPose"
+        };
+
+        private static readonly string[] SageGreeting = { "waveCalm", "wave02Paris", "goodbyeGeneric" };
+
+        private static readonly string[] SageFourthWall =
+        {
+            "knockKnock", "waveCalm", "wave02Paris", "peaceSignClip", "thumbsUpCalm"
+        };
+
+        // Relleno al hablar: los de relleno de Genies (noImpact) y sus gestos neutros
+        // de explicar con las manos a la altura del pecho o la cintura (Standard o
+        // Uncommon, LowImpact, sin estilo marcado).
+        private static readonly string[] SageTalk =
+        {
+            "noImpact01", "noImpact02", "noImpact03",
+            "3rdPersonHands01", "3rdPersonHands05", "3rdPersonHands08",
+            "2ndPersonPoised02_1", "refAbstract01Quick", "refUser03Quick", "subtleExplaination",
+            "ofCourse", "openClarify", "smallElaboration02", "3rdPersonPoised02", "3rdPersonPoised04",
+            "3rdPrsnHandPoised04", "3rdPersonHandPoised03", "referenceThere01", "RefOpenHandCute",
+            "emphasizeShort", "Comprehensive", "listingGesture02"
+        };
+
         [MenuItem("Sonia/Gestos de Genies/Crear set de Sage")]
         public static void BuildSageMenu()
         {
@@ -96,6 +130,14 @@ namespace Sonia.EditorTools
             set.character = characterName;
             set.transitionSeconds = transition;
             set.gestures = ok.ToArray();
+            // Los papeles solo se rellenan si están vacíos: lo retocado a mano se queda.
+            set.restIdle = Roles(set.restIdle, SageRestIdle, set);
+            set.restListen = Roles(set.restListen, SageRestListen, set);
+            set.restThink = Roles(set.restThink, SageRestThink, set);
+            set.bored = Roles(set.bored, SageBored, set);
+            set.greeting = Roles(set.greeting, SageGreeting, set);
+            set.fourthWall = Roles(set.fourthWall, SageFourthWall, set);
+            set.talk = Roles(set.talk, SageTalk, set);
             if (created)
             {
                 AssetDatabase.CreateAsset(set, assetPath);
@@ -108,6 +150,25 @@ namespace Sonia.EditorTools
                 + " curvas de cara animadas), fundido " + transition + " s"
                 + (failed.Count > 0 ? "; sin leer: " + string.Join(", ", failed.ToArray()) : ""));
             return set;
+        }
+
+        private static string[] Roles(string[] current, string[] defaults, GeniesGestureSet set)
+        {
+            if (current != null && current.Length > 0)
+            {
+                return current;
+            }
+
+            List<string> found = new List<string>();
+            foreach (string name in defaults)
+            {
+                if (set.Find(name) != null)
+                {
+                    found.Add(name);
+                }
+            }
+
+            return found.ToArray();
         }
 
         /// <summary>Pone GeniesGestureLayer con el set en el objeto Sonia de la escena abierta y la guarda.</summary>

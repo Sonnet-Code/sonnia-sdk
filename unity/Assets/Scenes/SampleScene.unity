@@ -607,6 +607,10 @@ MonoBehaviour:
   presentFade: 0.5
   nodFade: 0.3
   singleConversationLoop: 1
+  genieBody: 1
+  boredInterval: {x: 10, y: 20}
+  talkFillers: 1
+  talkFillerRestChance: 0.25
   idleVariationInterval: {x: 7, y: 16}
   attentionQuietDelay: 30
   attentionSpacing: {x: 30, y: 60}
@@ -7073,6 +7077,10 @@ MonoBehaviour:
   presentFade: 0.5
   nodFade: 0.3
   singleConversationLoop: 1
+  genieBody: 1
+  boredInterval: {x: 10, y: 20}
+  talkFillers: 1
+  talkFillerRestChance: 0.25
   idleVariationInterval: {x: 7, y: 16}
   attentionQuietDelay: 25
   attentionSpacing: {x: 10, y: 20}
@@ -7321,6 +7329,7 @@ MonoBehaviour:
   faceRig: {fileID: 0}
   bodyWeight: 1
   faceGain: 1
+  mirrorChance: 0.5
   logGestures: 1
 --- !u!1 &1890986732
 GameObject:

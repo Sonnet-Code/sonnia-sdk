@@ -1,4 +1,6 @@
-// Gestos de un personaje del chat de Genies (de momento, Sage) con su ficha.
+// Gestos de un personaje del chat de Genies (de momento, Sage) con su ficha, y
+// los papeles de su cuerpo entero: reposo, escuchar, pensar, aburrimiento,
+// saludo y gestos hacia el público (listas de abajo, que rellena el menú).
 //
 // Se crea con Sonia > Gestos de Genies > Crear set de Sage a partir de
 // Assets/Animations/GeniesSage/manifest.json (lo escribe
@@ -97,6 +99,103 @@ namespace Sonia
 
         [Tooltip("Gestos del personaje.")]
         public Gesture[] gestures = new Gesture[0];
+
+        [Header("Cuerpo entero (GeniesGestureLayer y AvatarChoreographer)")]
+        [Tooltip("Reposos base en bucle (Base_Idle de Genies): idle y hablar. Se eligen por frecuencia.")]
+        public string[] restIdle = new string[0];
+
+        [Tooltip("Bucles al escuchar (lista listen de Genies).")]
+        public string[] restListen = new string[0];
+
+        [Tooltip("Bucles al pensar (lista think de Genies).")]
+        public string[] restThink = new string[0];
+
+        [Tooltip("Aburrimiento: variaciones de reposo con el stand en calma (lista bored de Genies), cada 15 ± 5 s.")]
+        public string[] bored = new string[0];
+
+        [Tooltip("Saludo con la mano a quien se acerca.")]
+        public string[] greeting = new string[0];
+
+        [Tooltip("Gestos hacia el público con el stand en calma (cuarta pared).")]
+        public string[] fourthWall = new string[0];
+
+        [Tooltip("Relleno al hablar: gestos neutros (Utility_NoImpact de Genies y gestos de explicar) que se encadenan mientras habla y el director no ha pedido otro, para que no hable con los brazos quietos.")]
+        public string[] talk = new string[0];
+
+        /// <summary>Cierto si hay al menos un reposo base que se pueda reproducir.</summary>
+        public bool HasRest
+        {
+            get { return Pick(restIdle, null) != null; }
+        }
+
+        /// <summary>
+        /// Peso de un gesto al elegir al azar, por su frecuencia de uso en Genies:
+        /// Standard 1, Uncommon 0,35 y Rare 0,12.
+        /// </summary>
+        public static float FrequencyWeight(Gesture gesture)
+        {
+            if (gesture == null)
+            {
+                return 0f;
+            }
+
+            switch (gesture.frequency)
+            {
+                case "Rare":
+                    return 0.12f;
+                case "Uncommon":
+                    return 0.35f;
+                default:
+                    return 1f;
+            }
+        }
+
+        /// <summary>
+        /// Uno de <paramref name="names"/> al azar, ponderado por frecuencia y
+        /// distinto de <paramref name="avoid"/> si hay otro. Null si no hay ninguno.
+        /// </summary>
+        public string Pick(string[] names, string avoid)
+        {
+            if (names == null || names.Length == 0)
+            {
+                return null;
+            }
+
+            float total = 0f;
+            int candidates = 0;
+            foreach (string n in names)
+            {
+                if (n != avoid && Find(n) != null)
+                {
+                    total += FrequencyWeight(Find(n));
+                    candidates++;
+                }
+            }
+
+            if (candidates == 0)
+            {
+                return avoid != null && Array.IndexOf(names, avoid) >= 0 && Find(avoid) != null ? avoid : null;
+            }
+
+            float roll = UnityEngine.Random.value * total;
+            string last = null;
+            foreach (string n in names)
+            {
+                if (n == avoid || Find(n) == null)
+                {
+                    continue;
+                }
+
+                last = n;
+                roll -= FrequencyWeight(Find(n));
+                if (roll <= 0f)
+                {
+                    return n;
+                }
+            }
+
+            return last;
+        }
 
         [NonSerialized]
         private Dictionary<string, Gesture> _byName;

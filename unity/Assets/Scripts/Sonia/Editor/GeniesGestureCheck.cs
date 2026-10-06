@@ -31,11 +31,18 @@ namespace Sonia.EditorTools
             Debug.Log("[Sonia] " + log);
         }
 
+        [MenuItem("Sonia/Gestos de Genies/Hojas de contactos de cuerpo entero (en Play)")]
+        public static void RenderAllFullBodyMenu()
+        {
+            string log = RenderSheets(null, new[] { 0.2f, 0.4f, 0.6f, 0.8f }, 8, OutputFolder + "-cuerpo", 200, 400, true);
+            Debug.Log("[Sonia] " + log);
+        }
+
         /// <summary>
         /// Hojas de <paramref name="rowsPerSheet"/> gestos por imagen. Con
         /// <paramref name="gestures"/> null, todos los del set. Devuelve un resumen.
         /// </summary>
-        public static string RenderSheets(string[] gestures, float[] fractions, int rowsPerSheet, string folder, int frameWidth, int frameHeight)
+        public static string RenderSheets(string[] gestures, float[] fractions, int rowsPerSheet, string folder, int frameWidth, int frameHeight, bool fullBody = false)
         {
             if (!Application.isPlaying)
             {
@@ -71,7 +78,7 @@ namespace Sonia.EditorTools
             }
 
             Directory.CreateDirectory(folder);
-            Camera camera = MakeCamera(animator);
+            Camera camera = MakeCamera(animator, fullBody);
             SkinnedMeshRenderer[] skins = animator.GetComponentsInChildren<SkinnedMeshRenderer>();
             bool[] force = new bool[skins.Length];
             for (int i = 0; i < skins.Length; i++)
@@ -82,7 +89,11 @@ namespace Sonia.EditorTools
 
             // Pose de partida (la del Animator) para devolverla al acabar.
             List<KeyValuePair<Transform, Quaternion>> saved = new List<KeyValuePair<Transform, Quaternion>>();
-            foreach (string boneName in GeniesGestureLayer.BoneNames)
+            Transform hips = FindDeep(animator.transform, "Hips");
+            Vector3 hipsPosition = hips != null ? hips.localPosition : Vector3.zero;
+            List<string> boneNames = new List<string>(GeniesGestureLayer.LowerBoneNames);
+            boneNames.AddRange(GeniesGestureLayer.BoneNames);
+            foreach (string boneName in boneNames)
             {
                 Transform t = FindDeep(animator.transform, boneName);
                 if (t != null)
@@ -108,7 +119,7 @@ namespace Sonia.EditorTools
                         index.AppendLine("  fila " + (r + 1) + ": " + gesture + " (" + duration.ToString("0.0") + " s)");
                         for (int c = 0; c < fractions.Length; c++)
                         {
-                            layer.ApplyPose(gesture, fractions[c] * duration);
+                            layer.ApplyPose(gesture, fractions[c] * duration, fullBody);
                             Texture2D frame = SoniaCapture.Render(camera, frameWidth, frameHeight);
                             // Las filas van de arriba abajo (la textura empieza abajo).
                             sheet.SetPixels(c * frameWidth, (rows - 1 - r) * frameHeight, frameWidth, frameHeight, frame.GetPixels());
@@ -126,6 +137,11 @@ namespace Sonia.EditorTools
                 foreach (KeyValuePair<Transform, Quaternion> pair in saved)
                 {
                     pair.Key.localRotation = pair.Value;
+                }
+
+                if (hips != null)
+                {
+                    hips.localPosition = hipsPosition;
                 }
 
                 for (int i = 0; i < skins.Length; i++)
@@ -153,16 +169,17 @@ namespace Sonia.EditorTools
             return null;
         }
 
-        // Cámara de frente que encuadra de la cadera a la cabeza con los brazos abiertos.
-        private static Camera MakeCamera(Animator animator)
+        // Cámara de frente que encuadra de la cadera a la cabeza con los brazos
+        // abiertos, o de los pies a la cabeza (cuerpo entero, para ver los pies).
+        private static Camera MakeCamera(Animator animator, bool fullBody)
         {
             Transform head = animator.GetBoneTransform(HumanBodyBones.Head);
-            Transform hips = animator.GetBoneTransform(HumanBodyBones.Hips);
-            Vector3 center = Vector3.Lerp(hips.position, head.position, 0.55f);
+            Transform hips = animator.GetBoneTransform(fullBody ? HumanBodyBones.LeftFoot : HumanBodyBones.Hips);
+            Vector3 center = Vector3.Lerp(hips.position, head.position, fullBody ? 0.5f : 0.55f);
             Vector3 toViewer = Camera.main != null ? Camera.main.transform.position - center : -animator.transform.forward;
             toViewer.y = 0f;
             toViewer = toViewer.sqrMagnitude > 1e-4f ? toViewer.normalized : animator.transform.forward;
-            float span = (head.position.y - hips.position.y) + 0.55f;
+            float span = (head.position.y - hips.position.y) + (fullBody ? 0.45f : 0.55f);
             GameObject go = new GameObject("GestureCheckCamera");
             go.hideFlags = HideFlags.HideAndDontSave;
             Camera camera = go.AddComponent<Camera>();

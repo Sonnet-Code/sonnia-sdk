@@ -465,6 +465,19 @@ namespace Sonia
         private GeniesGestureLayer _gestureLayer;
         private bool _gestureLayerSearched;
 
+        // Cierto mientras el cuerpo lo llevan los clips de Genies (reposo o acción):
+        // ya traen sus asentimientos, ladeos y acentos, así que los de código se
+        // apartan. Siguen la respiración, la cabeza que sigue al visitante, la
+        // mirada y el parpadeo.
+        private bool GenieDrivesBody
+        {
+            get
+            {
+                GeniesGestureLayer layer = GestureLayer;
+                return layer != null && layer.DrivesBody;
+            }
+        }
+
         // Capa de gestos de Genies junto al coreógrafo (null si no hay).
         private GeniesGestureLayer GestureLayer
         {
@@ -764,10 +777,12 @@ namespace Sonia
             {
                 case SpeechAnalyzer.EventKind.PhraseStart:
                     // Cada frase, una pose de cabeza algo distinta: así no habla
-                    // siempre con la cara clavada en el mismo sitio.
-                    _poseYaw = UnityEngine.Random.Range(-1f, 1f) * phrasePoseDegrees;
-                    _poseRoll = UnityEngine.Random.Range(-1f, 1f) * phrasePoseDegrees * 0.8f;
-                    _posePitch = UnityEngine.Random.Range(-0.6f, 0.4f) * phrasePoseDegrees * 0.5f;
+                    // siempre con la cara clavada en el mismo sitio. Con el cuerpo
+                    // de Genies la pose la ponen sus clips.
+                    bool genie = GenieDrivesBody;
+                    _poseYaw = genie ? 0f : UnityEngine.Random.Range(-1f, 1f) * phrasePoseDegrees;
+                    _poseRoll = genie ? 0f : UnityEngine.Random.Range(-1f, 1f) * phrasePoseDegrees * 0.8f;
+                    _posePitch = genie ? 0f : UnityEngine.Random.Range(-0.6f, 0.4f) * phrasePoseDegrees * 0.5f;
                     if (UnityEngine.Random.value < blinkOnSpeechChance)
                     {
                         TriggerBlink();
@@ -781,7 +796,11 @@ namespace Sonia
                     break;
                 case SpeechAnalyzer.EventKind.PhraseEnd:
                     LowerHands(true);
-                    Nod(stressNodDegrees * 0.6f);
+                    if (!GenieDrivesBody)
+                    {
+                        Nod(stressNodDegrees * 0.6f);
+                    }
+
                     _poseYaw *= 0.4f;
                     _poseRoll *= 0.4f;
                     _posePitch = 0f;
@@ -793,7 +812,11 @@ namespace Sonia
                     break;
                 case SpeechAnalyzer.EventKind.Syllable:
                     HandBeat(e.Strength);
-                    if (accents)
+                    if (GenieDrivesBody)
+                    {
+                        // Los acentos y asentimientos los ponen los gestos de Genies.
+                    }
+                    else if (accents)
                     {
                         if (e.Strength >= accentThreshold && now - _lastAccent >= accentMinGap
                             && UnityEngine.Random.value < accentChance)
@@ -868,7 +891,8 @@ namespace Sonia
             float targetYaw = _poseYaw;
             float targetRoll = _poseRoll;
             float targetPitch = _posePitch;
-            switch (_state)
+            // Con el cuerpo de Genies, escuchar y pensar ya ladean y asienten en sus clips.
+            switch (GenieDrivesBody ? AvatarState.Idle : _state)
             {
                 case AvatarState.Listening:
                     // Ladeada y un poco hacia delante: atenta.
@@ -906,7 +930,7 @@ namespace Sonia
         private void UpdateBody(float dt)
         {
             UpdateBreath(dt);
-            _lean.Step(_state == AvatarState.Listening ? listenLeanDegrees : 0f, 0.8f, dt);
+            _lean.Step(_state == AvatarState.Listening && !GenieDrivesBody ? listenLeanDegrees : 0f, 0.8f, dt);
             float now = Time.time;
             for (int i = _accents.Count - 1; i >= 0; i--)
             {
