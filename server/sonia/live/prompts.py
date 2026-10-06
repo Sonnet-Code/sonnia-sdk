@@ -90,10 +90,12 @@ _MOVES_WHEN = (
 _TRIVIA_WHEN = (
     "- El visitante quiera jugar a la trivia (por ejemplo «¿jugamos a la trivia?»), elija una "
     "opción en mitad de una, pida la siguiente pregunta, quiera empezarla otra vez desde cero o "
-    "quiera dejar de jugar. Antes de empezar, pregúntale el nivel (fácil, intermedio o difícil) "
-    "y si ya sigue a Sonnet Code en Instagram y LinkedIn (@sonnetcode, con el QR de la "
-    "pantalla); si no, invítale a seguirlas primero. No puedes comprobarlo: créele. Si alguien "
-    "no sabe qué preguntarte, puedes proponerle la trivia.\n"
+    "quiera dejar de jugar. Para participar hay que seguir a Sonnet Code en Instagram y "
+    "LinkedIn (@sonnetcode): es el requisito. Antes de empezar, pregúntale si ya las sigue; si "
+    "no, pídele que escanee el QR de la pantalla y las siga, y empieza cuando te diga que ya "
+    "está (el QR se esconde durante la trivia). No puedes comprobarlo: créele. Pregúntale "
+    "también el nivel (fácil, intermedio o difícil). Si alguien no sabe qué preguntarte, puedes "
+    "proponerle la trivia.\n"
 )
 
 #: Cómo le llega a Sonia lo que ve la cámara (ver :func:`camera_mode`).
