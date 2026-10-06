@@ -10,6 +10,7 @@ del GDG, del lugar y de Sonnet Code vive en archivos Markdown de
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 
 from sonia.paths import BUNDLE_ROOT
@@ -51,26 +52,36 @@ Sobre ti misma (si te preguntan, y también cuando venga bien presumir):
 """
 
 
-def load_knowledge(knowledge_dir: str | Path | None = None) -> str:
+#: Una carpeta de conocimiento o varias (la del stand y, en una prueba, la de datos de prueba).
+KnowledgeSource = str | Path | Sequence[str | Path] | None
+
+
+def load_knowledge(knowledge_dir: KnowledgeSource = None) -> str:
     """Concatena los archivos ``*.md`` de la base de conocimiento, en orden alfabético.
 
-    ``README.md`` se ignora. Si el directorio no existe o está vacío, devuelve
-    una cadena vacía y Sonia funciona solo con el prompt base.
+    Con varias carpetas, una detrás de otra. ``README.md`` se ignora. Si no hay
+    nada, devuelve una cadena vacía y Sonia funciona solo con el prompt base.
     """
-    directory = Path(knowledge_dir) if knowledge_dir else DEFAULT_KNOWLEDGE_DIR
-    if not directory.is_dir():
-        return ""
+    if knowledge_dir is None:
+        directories = [DEFAULT_KNOWLEDGE_DIR]
+    elif isinstance(knowledge_dir, (str, Path)):
+        directories = [Path(knowledge_dir)]
+    else:
+        directories = [Path(d) for d in knowledge_dir]
     parts: list[str] = []
-    for path in sorted(directory.glob("*.md")):
-        if path.name.lower() == "readme.md":
+    for directory in directories:
+        if not directory.is_dir():
             continue
-        try:
-            text = path.read_text(encoding="utf-8").strip()
-        except OSError as exc:
-            logger.warning("No se pudo leer %s: %s", path, exc)
-            continue
-        if text:
-            parts.append(text)
+        for path in sorted(directory.glob("*.md")):
+            if path.name.lower() == "readme.md":
+                continue
+            try:
+                text = path.read_text(encoding="utf-8").strip()
+            except OSError as exc:
+                logger.warning("No se pudo leer %s: %s", path, exc)
+                continue
+            if text:
+                parts.append(text)
     return "\n\n".join(parts)
 
 

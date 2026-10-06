@@ -14,12 +14,11 @@ Así la persona vive en un solo sitio.
 from __future__ import annotations
 
 import platform
-from pathlib import Path
 from typing import Any, Literal
 
 from sonia.actions.registry import ActionRegistry
 from sonia.config import Settings
-from sonia.persona import SYSTEM_PROMPT, host_of, is_local_host, load_knowledge
+from sonia.persona import SYSTEM_PROMPT, KnowledgeSource, host_of, is_local_host, load_knowledge
 
 __all__ = [
     "CAMERA_NOTE_PREFIX",
@@ -276,7 +275,7 @@ def build_live_instructions(
     *,
     registry: ActionRegistry | None,
     gallery_ids: list[str],
-    knowledge_dir: str | Path | None = None,
+    knowledge_dir: KnowledgeSource = None,
     notes: str = "",
 ) -> str:
     """``instructions`` de la sesión: persona, reglas de este modo, conocimiento y stack."""
@@ -324,7 +323,7 @@ def build_live_instructions(
 def build_backend_instructions(
     *,
     gallery_ids: list[str],
-    knowledge_dir: str | Path | None = None,
+    knowledge_dir: KnowledgeSource = None,
     notes: str = "",
     meeting: bool = False,
 ) -> str:
@@ -344,7 +343,7 @@ def build_session_config(
     *,
     registry: ActionRegistry | None,
     gallery_ids: list[str],
-    knowledge_dir: str | Path | None = None,
+    knowledge_dir: KnowledgeSource = None,
     notes: str = "",
 ) -> dict[str, Any]:
     """El objeto ``session`` de ``session.start``.

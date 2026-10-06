@@ -34,7 +34,6 @@ import re
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
@@ -47,6 +46,7 @@ from sonia.live.client import LiveClient, WsConnect, describe_error
 from sonia.live.prompts import CAMERA_NOTE_PREFIX, build_session_config, in_meeting
 from sonia.live.vision import VisionNarrator
 from sonia.live.voicecache import VoiceCache
+from sonia.persona import KnowledgeSource
 from sonia.showcase import Showcase
 from sonia.trivia import TriviaGame
 from sonia.types import (
@@ -214,7 +214,7 @@ class LiveEngine:
         narrator: VisionNarrator | None = None,
         showcase: Showcase | None = None,
         connect: WsConnect | None = None,
-        knowledge_dir: str | Path | None = None,
+        knowledge_dir: KnowledgeSource = None,
         voice_cache: VoiceCache | None = None,
         tick_s: float = 0.05,
     ) -> None:

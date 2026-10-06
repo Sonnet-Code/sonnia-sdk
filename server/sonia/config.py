@@ -289,6 +289,10 @@ class Settings(BaseSettings):
     #: Lo pone ``sonia reunion``; cambia sus instrucciones (``live/prompts.py``) y
     #: quita la animación de stand (docs/reunion.md).
     meeting: bool = False
+    #: ``KNOWLEDGE_EXTRA_DIR``: otra carpeta de conocimiento que se lee después de la
+    #: del stand. Solo para pruebas (``sonia reunion`` pone la de datos de prueba,
+    #: ``assets/knowledge-prueba``); en el stand va vacía.
+    knowledge_extra_dir: str = ""
     #: ``SONIA_PARENT_PID``: el PID de la app que lanzó el orquestador (lo pone
     #: Unity en la app todo en uno). Si esa app muere, el orquestador se cierra
     #: solo (``sonia/parent.py``). Vacío al lanzarlo a mano.
@@ -315,6 +319,12 @@ class Settings(BaseSettings):
     @property
     def knowledge_dir(self) -> Path:
         return Path(self.assets_dir) / "knowledge"
+
+    @property
+    def knowledge_dirs(self) -> list[Path]:
+        """La del stand y, si se pide, la extra (``KNOWLEDGE_EXTRA_DIR``)."""
+        extra = [Path(self.knowledge_extra_dir)] if self.knowledge_extra_dir.strip() else []
+        return [self.knowledge_dir, *extra]
 
     @property
     def trivia_file(self) -> Path:
