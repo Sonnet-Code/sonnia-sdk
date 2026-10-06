@@ -23,6 +23,11 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
   - [ ] Que el guion «PARA SONIA:» repita cada letra con el texto de su opción, para que GPT-Live no tenga que deducirla.
   - [ ] Partida de prueba: aciertan las 5 respuestas dichas de varias formas («la B», «la segunda», el texto de la opción).
 
+- [ ] 🐞 **La trivia se quedó congelada en la pregunta 5 y nunca terminó.** En la demo, la pantalla de la trivia se quedó en la quinta pregunta y Sonnia no llegó a cerrar la partida (sin veredicto final ni pantalla de victoria o derrota).
+  - [ ] Ver en el registro qué pasó tras la respuesta a la 5: si llegó `trivia_answer`, qué devolvió y si se mandó a Unity el mensaje de fin.
+  - [ ] Que la última respuesta cierre siempre la partida, aunque GPT-Live no delegue nada más, y que la pantalla no se quede colgada si se pierde un mensaje.
+  - [ ] Test que juegue una partida entera hasta el final.
+
 - [ ] 🐞 **No hay app para el Mac antiguo (anterior a M1).** `Sonnia.app` y su orquestador congelado son solo arm64 (comprobado con `file`).
   - [ ] Compilar la app de Unity para macOS como Universal o x64 (arquitectura de macOS en `PlayerSettings` de Standalone).
   - [ ] Congelar el orquestador para x86_64: en un Mac Intel o con un workflow en el runner `macos-13` de GitHub (Intel), como el de Windows.
@@ -72,36 +77,12 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
   - [ ] Windows: antes, el orquestador congelado con `gh workflow run orquestador-windows.yml` y descargar el artefacto (docs/unity.md, «Build de Windows»).
   - [ ] Mac Intel (ver bugs).
   - [ ] Rehacer los zips de `unity/Build/`.
-- [ ] **Repartir** por un enlace privado que caduque, nunca por git, porque llevan la clave en el `.env`:
-  - [ ] Mac: Mariel y Bryan.
-  - [ ] Windows: Lizeth.
-  - [ ] Mac Intel: quien lo use.
-  - [ ] 🗒️ Mandar aparte la dirección y la contraseña del panel. No se escriben en ningún archivo del repo.
-- [ ] **Probar la app de Windows en un Windows de verdad.** Nunca se ha hecho.
-  - [ ] Genies carga a Sonnia con Vulkan.
-  - [ ] El micrófono abre a 24 kHz (si no, `LIVE_SAMPLE_RATE=16000`).
-  - [ ] Cámara y panel.
-
-## 5. QR y redes
-
-- [ ] ✨ **QR del stand** (`StageScreen`, hoy a sonnetcode.com/es) a una página con la web, Instagram y LinkedIn.
-  - [ ] 🗒️ Dónde va la página: sonnetcode.com o una ruta del Worker de Cloudflare.
-  - [ ] 🗒️ «Seguir las dos cuentas antes de jugar» no se puede comprobar solo: o lo verifica el staff, o Sonnia lo pide de palabra antes de la trivia.
-- [ ] 🗒️ **Redes (Mariel):** publicaciones de esta semana sobre el DevFest.
-- [ ] 🗒️ **Grabar a gente hablando con Sonnia** para reels y TikTok.
-
-## 6. Fuera de este evento
-
-- [ ] Panel autoservicio para configurar avatar, personalidad y base de conocimiento (Sonnia como producto para cualquier evento).
-- [ ] Varios avatares por equipo, uno por especialidad.
-- [ ] Voz en español nativo cuando GPT-Live la tenga. Hoy suena con acento no nativo: es una limitación del modelo.
-- [ ] Dirección visual en manos de Mariel: diseño 2D y 3D, pantalla y avatar.
 
 ## Hecho el 6 de octubre
 
 - [x] Nombre escrito «Sonnia» (hablado sigue siendo «Sonia»).
 - [x] Panel con varias Sonias a la vez, sin necesidad de nombres.
 - [x] Build de Windows desde el Mac y orquestador de Windows por GitHub Actions.
-- [x] Modo reunión (`sonia reunion`): Sonnia ve la reunión por OBS, tiene instrucciones de Google Meet y una agenda de prueba en `assets/knowledge-prueba`.
+- [x] Modo reunión (`sonia reunion`): Sonnia ve la reunión por OBS y tiene instrucciones de Google Meet.
 - [x] Demo al equipo por Google Meet.
 - [x] Camiseta de staff en azul, negra y blanca, horneada sobre la prenda de Genies, sin el trozo en la manga.

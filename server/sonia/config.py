@@ -290,8 +290,7 @@ class Settings(BaseSettings):
     #: quita la animación de stand (docs/reunion.md).
     meeting: bool = False
     #: ``KNOWLEDGE_EXTRA_DIR``: otra carpeta de conocimiento que se lee después de la
-    #: del stand. Solo para pruebas (``sonia reunion`` pone la de datos de prueba,
-    #: ``assets/knowledge-prueba``); en el stand va vacía.
+    #: del stand, para pruebas con datos que no deben llegar al stand. Vacía por defecto.
     knowledge_extra_dir: str = ""
     #: ``SONIA_PARENT_PID``: el PID de la app que lanzó el orquestador (lo pone
     #: Unity en la app todo en uno). Si esa app muere, el orquestador se cierra

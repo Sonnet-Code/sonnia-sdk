@@ -45,7 +45,7 @@ from sonia.llm.client import LLMClient
 from sonia.panel.control import StandControl
 from sonia.panel.logs import LogBuffer
 from sonia.parent import watch_parent
-from sonia.paths import BUNDLE_ROOT, seed_home
+from sonia.paths import seed_home
 from sonia.types import ActionContext, AudioChunk, CameraSource
 from sonia.vision.camera import build_camera
 from sonia.vision.policy import VisionPolicy
@@ -974,8 +974,6 @@ MEETING_DEFAULTS: dict[str, str] = {
     # Una reunión tiene pausas largas: no olvidar la conversación a los 2 minutos.
     "IDLE_RESET_SECONDS": "1800",
 }
-#: Datos de prueba (agenda y charlas inventadas) para ensayar en una reunión.
-MEETING_DEFAULTS["KNOWLEDGE_EXTRA_DIR"] = str(BUNDLE_ROOT / "assets" / "knowledge-prueba")
 if sys.platform == "darwin":
     # Lo que suena en la reunión (docs/reunion.md, «Cómo va el sonido»).
     MEETING_DEFAULTS["AUDIO_INPUT_DEVICE"] = "BlackHole 16ch"

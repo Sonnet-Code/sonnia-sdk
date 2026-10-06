@@ -27,7 +27,8 @@ def test_la_base_de_conocimiento_del_repo_existe_y_cabe_en_el_prompt() -> None:
     text = load_knowledge()
     assert "DevFest Santo Domingo 2026" in text
     assert "Sonnet Code" in text
-    assert len(text.split()) < 3000, "la base de conocimiento cuenta como tokens en cada turno"
+    # La agenda real (08-agenda-devfest-2026.md, unas 1000 palabras) la subió de ~3000 a ~4300.
+    assert len(text.split()) < 4600, "la base de conocimiento cuenta como tokens en cada turno"
 
 
 def test_persona_es_staff_y_hace_cumplidos_seguros() -> None:
