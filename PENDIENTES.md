@@ -66,7 +66,7 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
 - [x] ✨ **El staff de Sonnet Code en sus instrucciones:** Bryan (desarrollo), Mariel y Angie (diseño y marketing); Carlos no estará disponible. **Hecho (6 de octubre): equipo de sonnetcode.com/es/about más Elieser Grullon (ciberseguridad) y Mariel Cruz (publicidad), con a quién mandar a cada visitante.**
   - [x] 🗒️ Confirmar apellidos y cargos exactos. **Hecho (6 de octubre): copiados de sonnetcode.com/es/about; Mariel Cruz no sale en la página y queda como encargada de publicidad.**
   - [x] Archivo nuevo `assets/knowledge/08-equipo-sonnet-code.md`: quién es quién en el stand y a quién mandar a la gente según lo que pregunten. **Hecho dentro de `04-sonnet-code.md` (el `08` es la agenda): equipo y a quién mandar a cada visitante según lo que pregunte.**
-- [x] ✨ **Su propia descripción física:** **Hecho (6 de octubre), en `server/sonia/persona.py`; sin el color de la camiseta, porque la variante se elige al arrancar la app.** avatar de Genies, camiseta azul del staff con el lockup del DevFest Santo Domingo, STAFF y Sonnet Code; asistente virtual. Va en `server/sonia/persona.py`.
+- [x] ✨ **Su propia descripción física:** **Hecho (6 de octubre), en `server/sonia/persona.py`. A las 22:20 se puso al día con el avatar guardado a las 20:50: coletas bajas con horquillas, vaqueros acampanados, tenis blancos y la camiseta azul del staff. Si se cambia el personaje en el editor, hay que retocar ese texto.**
 - [ ] ✨ **Camiseta igual a la oficial.**
   - [ ] 🗒️ Foto de la camiseta real de staff de este año (Delia o Mariel).
   - [ ] Ajustar color, estampa y patrocinadores en `scripts/camiseta_staff/genera.py` (docs/unity.md, «Camiseta de staff»).
