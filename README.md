@@ -27,7 +27,7 @@ Sonia se divide en dos procesos que se comunican por WebSocket en el equipo del 
 flowchart TB
     Mic[Micrófono] -->|audio continuo| Live[GPT-Live<br/>voz a voz, OpenAI]
     Live -->|voz + transcripción| Orq[Orquestador]
-    Live <-->|delegación| Backend[Backend Responses<br/>look, show_image, hide_image]
+    Live <-->|delegación| Backend[Backend Responses<br/>look, show_image, hide_image,<br/>play_animation, trivia]
     Backend <--> Orq
     Cam[Cámara] -->|captura puntual| Vision[Modelo con visión]
     Vision -->|nota de texto| Live
@@ -66,7 +66,7 @@ El personal del stand controla a Sonia desde el móvil en `https://sonia.sonnetc
 | Capa | Tecnología | Notas |
 |---|---|---|
 | Voz y conversación | GPT-Live (`gpt-live-1`) de OpenAI | Voz a voz por WebSocket, full duplex, con transcripción en los dos sentidos. 0,05 USD por minuto de sesión. |
-| Acciones | Backend de la API Responses (`gpt-6-luna`) | GPT-Live delega `look`, `show_image` y `hide_image`. |
+| Acciones | Backend de la API Responses (`gpt-6-luna`) | GPT-Live delega `look`, `show_image`, `hide_image`, `play_animation` (bailes y gestos) y la trivia. |
 | Visión | Cámara USB con OpenCV + modelo con visión | Capturas puntuales descritas en texto, nunca vídeo continuo. |
 | Avatar | Unity 6 con assets gratuitos | Personaje femenino, lip-sync por fonemas (uLipSync), animaciones de estado, panel de imágenes en escena. Pantalla vertical 9:16. |
 | Panel de control | Cloudflare Workers + Durable Objects | Ve todas las Sonias conectadas (pueden ser varias, en sitios distintos) y deja elegir cuál se controla. |
@@ -128,6 +128,7 @@ Lo que queda pendiente, con detalle y por orden de urgencia, está en [`ROADMAP.
 - [x] Servidor WebSocket con protocolo de eventos hacia Unity
 - [x] Descripción de la cámara al empezar cada turno y acción `look` bajo demanda
 - [x] Acciones `show_image` y `hide_image` con galería local
+- [x] Bailes y gestos por voz (`play_animation`) con los clips que anuncia Unity
 - [x] Persona de Sonia como asistente y staff del DevFest, con base de conocimiento editable en `assets/knowledge/`
 - [x] Panel de control web para el personal del stand (`docs/panel.md`): modos Conversando, Solo saludos y Fuera, avisos, imágenes, volumen, salud en lenguaje llano
 - [x] Panel alojado en Cloudflare (`sonia.sonnetcode.com`, `cloud/panel/`) que ve todas las Sonias conectadas y avisa de duplicados

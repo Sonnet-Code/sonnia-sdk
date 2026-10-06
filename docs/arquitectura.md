@@ -52,10 +52,11 @@ Cliente mínimo del modelo con visión que describe la cámara (`VisionNarrator`
 ### `sonia/actions`
 
 - `registry.py`: `ActionRegistry` con `register(spec)`, `get(name)`, `to_responses_tools()` (las herramientas del backend Responses) y `async execute(name, args, ctx) -> ActionResult`, que valida argumentos contra el JSON Schema de forma básica (campos requeridos y tipos primitivos) y captura excepciones devolviendo un `ActionResult` con el error en texto.
-- `builtin.py`: `look`, `show_image`, `hide_image`, y `build_default_registry(include_look=...)`.
+- `builtin.py`: `look`, `show_image`, `hide_image`, y `build_default_registry(include_look=..., include_trivia=...)`, que añade siempre `play_animation` y, con banco de preguntas, las acciones de la trivia (`trivia.py`).
   - `look`: captura con `ctx.camera`; guarda en `ctx.last_frame`; devuelve `ActionResult(text="Captura tomada.", image=frame)`.
   - `show_image(image_id: str, caption?: str)`: `image_id` es un nombre de archivo sin extensión de `assets/gallery` (png/jpg) o `camera` para `ctx.last_frame`. Llama a `ctx.avatar.show_image(...)`. El motor la retira sola a los `IMAGE_AUTO_HIDE_SECONDS`.
   - `hide_image()`.
+- `moves.py`: `play_animation(movimiento)` para bailar o hacer un gesto cuando se lo piden (bailar, saludar, paz, saludo militar, pulgares arriba, celebrar, lamentarse, pensar). `MoveCatalog` guarda el catálogo que manda Unity (mensaje `animations`), elige un clip del movimiento y lo manda con `play_animation` y `whole: true`, para que suene entero aunque Sonia hable. El motor lo deja en `ctx.extra["moves"]`.
 - `gallery.py`: lista los ids disponibles y carga una imagen por id de forma segura (sin path traversal).
 
 ### `sonia/vision`
