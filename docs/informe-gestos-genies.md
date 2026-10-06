@@ -118,7 +118,7 @@ retomarlo.
 |---|---|
 | `gestos/capturas/gestos-genies-1.json` (3,9 MB) | `noImpact01`, `noImpact02`, `noImpact03`, `affirmationYamada`, `holdHandNodCute`, `subtleExplaination`, `refAbstract01Quick`, `refOpenHandsCute`, `refRaisedHandsCute`, `softEmphasis`, `ofCourse`, `emphasizeShort`. |
 | `gestos/capturas/gestos-genies-prueba.json` | Solo `noImpact02`. |
-| `gestos/pagina/ec.html`, `ec_next.json` | La página y su `__NEXT_DATA__` (lista completa con fichas). También `sage.html`, movida desde la raíz del repo. |
+| `gestos/pagina/ec.html`, `ec_next.json` | La página y su `__NEXT_DATA__` (lista completa con fichas). |
 | `gestos/bundles/*.js`, `gestos/wasm/NAFWebGL.wasm`, `strings.txt` | Bundles del SDK web y el WASM, para consulta. |
 | `gestos/hojas/` y `gestos/poses/` | Hoja de contactos y vistas de la primera prueba (piernas rotas). |
 | `herramientas/umcp.py`, `runlog.sh` y los `.cs` de `RunCommand` | `bind.cs`, `hd.cs`, `binds.cs`, `units.cs`, `bake.cs`, `preview.cs`, `pose.cs`, `ikmeasure*.cs`. |
@@ -127,7 +127,7 @@ retomarlo.
 - **Habla y referencias:** `emphasize`, `3rdPersonPoised02/04/05`, `3rdPersonHandPoised03`, `3rdPrsnHandPoised01/04`, `3rdPrsnHandCute01/03/04`, `2ndPersonPoised04`, `refUser03Quick`, `refUser04Quick`, `1stPersonGesture03`, `1stPersonGesture01Quick`, `refSelf02Quick`, `refFuture`, `refFuture02`, `referenceThere01`, `refOptions02Quick`, `uncertainOptions`, `listingGesture02`.
 - **Hombros y énfasis:** `subtleShrug`, `shrugging`, `noBigDeal`, `eccentricHands`, `handsWavingUpDown`, `envisionNagi`, `affirmPoised`, `agreeHipHopM`, `thumbsUpCalm`, `clappingCalm`, `2ndPersonCute02_1`, `gesturingAway02`, `referenceThis02`, `slowDown`.
 
-Jean mencionó `cheerleader.html` en la raíz del repo, pero no estaba al cerrar (puede que sea la `sage.html` movida al scratchpad). No se revisó.
+Jean mencionó `cheerleader.html` en la raíz del repo, pero no estaba al cerrar. En la raíz está `sage.json`, de Jean, que no se revisó ni se toca.
 
 ## 4. Cómo retomarlo
 
