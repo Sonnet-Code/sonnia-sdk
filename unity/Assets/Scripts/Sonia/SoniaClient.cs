@@ -101,6 +101,9 @@ namespace Sonia
         /// <summary>El panel pide una animación concreta del catálogo.</summary>
         public event Action<PlayAnimationMessage> OnPlayAnimation;
 
+        /// <summary>El director de gestos del orquestador pide un gesto de Genies para una frase.</summary>
+        public event Action<GestureMessage> OnGesture;
+
         /// <summary>Subtítulos en pantalla sí o no.</summary>
         public event Action<SetSubtitlesMessage> OnSetSubtitles;
 
@@ -346,6 +349,17 @@ namespace Sonia
         public void SendAnimations(IList<KeyValuePair<string, string>> clips)
         {
             SendJson(Protocol.AnimationsMessage(clips));
+        }
+
+        /// <summary>Manda los gestos de Genies que puede reproducir, con su ficha (director de gestos).</summary>
+        public void SendGestureCatalog(GeniesGestureSet set)
+        {
+            if (set == null)
+            {
+                return;
+            }
+
+            SendJson(Protocol.GestureCatalogMessage(set));
         }
 
         /// <summary>Avisa de qué clip del catálogo suena ahora (null: ninguno).</summary>
@@ -650,6 +664,8 @@ namespace Sonia
                     return Protocol.Deserialize<AttentionMessage>(payload);
                 case MessageTypes.PlayAnimation:
                     return Protocol.Deserialize<PlayAnimationMessage>(payload);
+                case MessageTypes.Gesture:
+                    return Protocol.Deserialize<GestureMessage>(payload);
                 case MessageTypes.SetSubtitles:
                     return Protocol.Deserialize<SetSubtitlesMessage>(payload);
                 case MessageTypes.SetDisabledAnimations:
@@ -837,6 +853,13 @@ namespace Sonia
             if (playAnimation != null)
             {
                 Raise(OnPlayAnimation, playAnimation);
+                return;
+            }
+
+            GestureMessage gesture = message as GestureMessage;
+            if (gesture != null)
+            {
+                Raise(OnGesture, gesture);
                 return;
             }
 

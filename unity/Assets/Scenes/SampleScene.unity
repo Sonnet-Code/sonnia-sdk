@@ -714,6 +714,20 @@ MonoBehaviour:
   accentMinGap: 0.9
   accentScale: 0.6
   accentArmDegrees: 2.5
+  handGestures: 1
+  handGestureChance: 0.75
+  handBothChance: 0.35
+  handElbowDegrees: 70
+  handArmForwardDegrees: 16
+  handArmOutDegrees: 10
+  handArmInwardDegrees: 18
+  handPalmUpDegrees: 45
+  handWristDegrees: 0
+  handBeatDegrees: 9
+  handHoldSeconds: {x: 1.6, y: 3.2}
+  handRestSeconds: {x: 0.6, y: 1.8}
+  handRiseHz: 1.3
+  handFallHz: 0.9
   faceRig: {fileID: 232277533}
   blinkEvery: {x: 3, y: 5}
   blinkSeconds: 0.38
@@ -6650,6 +6664,7 @@ GameObject:
   - component: {fileID: 1767658873}
   - component: {fileID: 1767658872}
   - component: {fileID: 1767658875}
+  - component: {fileID: 1767658876}
   m_Layer: 0
   m_Name: Sonia
   m_TagString: Untagged
@@ -6679,6 +6694,7 @@ MonoBehaviour:
   webcam: {fileID: 1767658854}
   debugUI: {fileID: 1767658853}
   presence: {fileID: 0}
+  gestureLayer: {fileID: 0}
   presenceInstantWindowSeconds: 2
   runInBackground: 1
   preventScreenSleep: 1
@@ -6793,6 +6809,20 @@ MonoBehaviour:
   accentMinGap: 0.9
   accentScale: 0.6
   accentArmDegrees: 2.5
+  handGestures: 1
+  handGestureChance: 0.75
+  handBothChance: 0.35
+  handElbowDegrees: 70
+  handArmForwardDegrees: 16
+  handArmOutDegrees: 10
+  handArmInwardDegrees: 18
+  handPalmUpDegrees: 45
+  handWristDegrees: 0
+  handBeatDegrees: 9
+  handHoldSeconds: {x: 1.6, y: 3.2}
+  handRestSeconds: {x: 0.6, y: 1.8}
+  handRiseHz: 1.3
+  handFallHz: 0.9
   faceRig: {fileID: 1767658874}
   blinkEvery: {x: 3, y: 5}
   blinkSeconds: 0.38
@@ -7013,6 +7043,14 @@ MonoBehaviour:
   presenceShotPosition: {x: 0, y: 0, z: 0}
   presenceShotFieldOfView: 0
   presenceSmoothTime: 0.75
+  stageFraming: 1
+  conversationHeight: 1.16
+  conversationEyeLine: 0.368
+  idleShotEnabled: 1
+  idleHeight: 1.32
+  idleEyeLine: 0.327
+  idleShotDelay: 8
+  eyesAboveHeadBone: 0.11
   smoothing: 2.5
 --- !u!114 &1767658864
 MonoBehaviour:
@@ -7266,6 +7304,24 @@ MonoBehaviour:
   client: {fileID: 1767658859}
   idleCloseSeconds: 300
   guestTestDefinition: {fileID: 4900000, guid: fa056c08700454d26b4c5493e2378615, type: 3}
+--- !u!114 &1767658876
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1767658851}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c216089947d5e4a54a77cfa9dc2c17ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonia::Sonia.GeniesGestureLayer
+  gestureSet: {fileID: 11400000, guid: faa7123dc33cf4d92884ead9e2002179, type: 2}
+  motionPlayer: {fileID: 0}
+  faceRig: {fileID: 0}
+  bodyWeight: 1
+  faceGain: 1
+  logGestures: 1
 --- !u!1 &1890986732
 GameObject:
   m_ObjectHideFlags: 0

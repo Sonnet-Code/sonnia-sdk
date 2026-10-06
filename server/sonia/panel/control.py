@@ -1250,6 +1250,7 @@ class StandControl:
                 else {"available": False, "active": False, "live": False, "viewers": 0}
             ),
             "trivia": snap.get("trivia") or {"available": False, "active": False},
+            "gesture_director": snap.get("gestures"),
             "settings_sync": self._settings_sync(),
             "last_error": snap.get("last_error") or None,
             "capabilities": self.capabilities,

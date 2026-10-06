@@ -44,10 +44,18 @@ Comprobado con la API real el 4 de octubre de 2026; el motor depende de ello:
 
 ### `sonia/llm`
 
-Cliente mínimo del modelo con visión que describe la cámara (`VisionNarrator`).
+Cliente mínimo del modelo con visión que describe la cámara (`VisionNarrator`) y del que elige los gestos (`sonia/gestures`).
 
-- `client.py`: `LLMClient` habla con `POST {LLM_BASE_URL}/chat/completions` usando `httpx.AsyncClient`, en streaming (SSE). Envía `reasoning_effort` solo si está configurado y el tope de tokens con el nombre de `LLM_MAX_TOKENS_PARAM` (`max_completion_tokens` para la API de OpenAI). Reintenta una vez ante errores de red, nunca ante un timeout. `LLM_REQUEST_TIMEOUT` acota el hueco entre dos trozos del stream. Un chunk `{"error": ...}` dentro del stream se convierte en `LLMError`. Sin tool calling: solo texto e imagen de entrada y texto de salida. Sin SDK de OpenAI.
+- `client.py`: `LLMClient` habla con `POST {LLM_BASE_URL}/chat/completions` usando `httpx.AsyncClient`, en streaming (SSE). Envía `reasoning_effort` solo si está configurado y el tope de tokens con el nombre de `LLM_MAX_TOKENS_PARAM` (`max_completion_tokens` para la API de OpenAI). Reintenta una vez ante errores de red, nunca ante un timeout. `LLM_REQUEST_TIMEOUT` acota el hueco entre dos trozos del stream. Un chunk `{"error": ...}` dentro del stream se convierte en `LLMError`. Sin tool calling: solo texto e imagen de entrada y texto de salida. Sin SDK de OpenAI. `complete()` hace una petición sin streaming y sin reintentos, y devuelve el texto con el uso de tokens (los gestos).
 - `messages.py`: `system`, `user_text` y `user_with_image(text, frame)`; la imagen va como `{"type": "image_url", "image_url": {"url": "data:..."}}`.
+
+### `sonia/gestures`
+
+El director de gestos (`docs/gestos.md`). Un modelo de texto ligero (`GESTURE_*`, por defecto el de `LLM_*` con `reasoning_effort: none`) lee lo que va diciendo Sonia y elige un gesto del catálogo que manda Unity (`gesture_catalog`): uno de apertura con lo que dijo el visitante (`gesture` con `utterance_id: null`) y uno por frase. Las reglas de frecuencia de Genies (núcleo del gesto anterior, sin repetir, pocos `Uncommon` y menos `Rare`, lo que llega tarde se tira) se aplican también en código. `LiveEngine` le cuenta turnos, frases, transcripción, interrupciones y estados con métodos `on_*`.
+
+- `catalog.py`: `GestureCatalog` y `Gesture`, la ficha de cada gesto.
+- `prompt.py`: la parte fija del prompt (igual en todas las llamadas, para la caché de prompts), el mensaje de cada llamada y el parser de `{"gesto": "..."}`.
+- `director.py`: `GestureDirector`: cuándo pedir, una petición en vuelo, plazos, relleno de `Utility_NoImpact` si el modelo falla, registro y contadores para el panel.
 
 ### `sonia/actions`
 
@@ -90,7 +98,7 @@ Subcomandos con `argparse`:
 - `sonia run`: demo completa. Abre el micrófono a `LIVE_SAMPLE_RATE` y arranca `LiveEngine`, el servidor WebSocket hacia Unity y el panel. Con `--no-mic` manda silencio y solo atiende `text_input`.
 - `sonia chat`: pasa cada línea de la consola a GPT-Live como texto escrito e imprime lo que dice. Con `--speak` reproduce su voz localmente. También levanta el WebSocket, así que Unity puede estar conectado.
 - `sonia say "texto"`: GPT-Live lee el texto con `LIVE_VOICE` (o lo guarda a WAV con `--out`).
-- `sonia check`: comprueba el micrófono, la cámara, una sesión de GPT-Live (abrir y cerrar), el modelo de visión (si hay cámara) y la galería. Imprime una tabla con OK/FALLO.
+- `sonia check`: comprueba el micrófono, la cámara, una sesión de GPT-Live (abrir y cerrar), el modelo de visión (si hay cámara), el de los gestos (una petición mínima con sus ajustes reales) y la galería. Imprime una tabla con OK/FALLO.
 
 `check`, `chat`, `say` y `run` usan la API de OpenAI y gastan.
 

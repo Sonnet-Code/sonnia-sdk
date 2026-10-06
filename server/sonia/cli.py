@@ -7,8 +7,8 @@ Subcomandos:
   Con ``--speak`` reproduce su voz por el altavoz.
 - ``sonia say "texto"``: GPT-Live lee el texto con su voz (o lo guarda a WAV
   con ``--out``). Sirve para elegir la voz.
-- ``sonia check``: comprueba micrófono, cámara, GPT-Live, el modelo de visión y
-  la galería, e imprime OK/FALLO por línea.
+- ``sonia check``: comprueba micrófono, cámara, GPT-Live, el modelo de visión,
+  el de los gestos y la galería, e imprime OK/FALLO por línea.
 
 Todas las dependencias pesadas (sounddevice, cv2, starlette...) se importan
 dentro de las funciones que las usan: importar este módulo es barato.
@@ -34,7 +34,8 @@ from sonia import __version__
 from sonia.actions import Gallery, build_default_registry
 from sonia.actions.registry import ActionRegistry
 from sonia.audio.capture import list_input_devices, resolve_input_device
-from sonia.config import Settings, is_openai_url, load_settings
+from sonia.config import Settings, is_gemini_url, is_openai_url, load_settings
+from sonia.gestures.director import GestureDirector
 from sonia.guest.link import FrameGrabber
 from sonia.live.audio import silence_blocks
 from sonia.live.engine import LiveEngine
@@ -42,6 +43,7 @@ from sonia.live.oneshot import probe_session, speak_text
 from sonia.live.vision import VisionNarrator
 from sonia.live.voicecache import VoiceCache
 from sonia.llm.client import LLMClient
+from sonia.llm.messages import system, user_text
 from sonia.panel.control import StandControl
 from sonia.panel.logs import LogBuffer
 from sonia.parent import watch_parent
@@ -311,6 +313,9 @@ class Components:
     #: Modelo de visión que describe la cámara (``LLM_*``), si la visión está activa.
     llm: LLMClient | None
     narrator: VisionNarrator | None
+    #: Modelo que elige los gestos al hablar (``GESTURE_*``) y el director que lo usa.
+    gesture_llm: LLMClient | None = None
+    gestures: GestureDirector | None = None
 
     def action_context(self) -> ActionContext:
         return ActionContext(
@@ -322,10 +327,14 @@ class Components:
     async def close(self) -> None:
         if self.llm is not None:
             await self.llm.aclose()
+        if self.gesture_llm is not None:
+            await self.gesture_llm.aclose()
         await _aclose(self.camera)
 
 
-def build_components(settings: Settings, *, with_camera: bool = True) -> Components:
+def build_components(
+    settings: Settings, *, with_camera: bool = True, with_gestures: bool = True
+) -> Components:
     hub = Hub(settings.ws, sample_rate=settings.live.sample_rate)
 
     async def request_frame() -> None:
@@ -340,6 +349,16 @@ def build_components(settings: Settings, *, with_camera: bool = True) -> Compone
         include_look=policy.enabled, include_trivia=_trivia_ready(settings)
     )
     llm = LLMClient(settings.llm) if policy.enabled else None
+    gesture_llm: LLMClient | None = None
+    gestures: GestureDirector | None = None
+    if with_gestures and _gesture_model_ready(settings):
+        gesture_llm = LLMClient(settings.gestures.llm_settings(settings.llm))
+        gestures = GestureDirector(
+            settings.gestures,
+            gesture_llm,
+            hub.broadcast_json,
+            has_clients=lambda: hub.client_count > 0,
+        )
     return Components(
         settings=settings,
         hub=hub,
@@ -348,7 +367,30 @@ def build_components(settings: Settings, *, with_camera: bool = True) -> Compone
         registry=registry,
         llm=llm,
         narrator=VisionNarrator(llm) if llm is not None else None,
+        gesture_llm=gesture_llm,
+        gestures=gestures,
     )
+
+
+def _gesture_model_ready(settings: Settings, *, warn: bool = True) -> bool:
+    """¿Gestos al hablar activados y con clave para su modelo? Sin clave, se apagan con un aviso."""
+    if not settings.gestures.enabled:
+        return False
+    if settings.gestures.llm_settings(settings.llm).key:
+        return True
+    if warn:
+        logger.warning("Gestos al hablar apagados: %s", _missing_gesture_key(settings))
+    return False
+
+
+def _missing_gesture_key(settings: Settings) -> str:
+    """Qué clave falta para el modelo de gestos, dicho para quien edita el ``.env``."""
+    base_url = settings.gestures.llm_settings(settings.llm).base_url
+    if is_gemini_url(base_url):
+        return f"falta GEMINI_API_KEY (o GESTURE_API_KEY) para {base_url}"
+    if is_openai_url(base_url):
+        return f"falta la clave de OpenAI para {base_url} (OPENAI_API_KEY o GESTURE_API_KEY)"
+    return f"falta GESTURE_API_KEY (o LLM_API_KEY si es el servidor de LLM_*) para {base_url}"
 
 
 def _trivia_ready(settings: Settings) -> bool:
@@ -406,7 +448,8 @@ def _missing_live_key(settings: Settings) -> bool:
 def _log_summary(settings: Settings, components: Components) -> None:
     live = settings.live
     logger.info(
-        "Sonia %s | WS ws://%s:%d | GPT-Live %s (voz %s, %d Hz) | backend %s | visión %s | cámara %s",
+        "Sonia %s | WS ws://%s:%d | GPT-Live %s (voz %s, %d Hz) | backend %s | visión %s | "
+        "cámara %s | gestos %s",
         __version__,
         settings.ws.host,
         settings.ws.port,
@@ -416,6 +459,9 @@ def _log_summary(settings: Settings, components: Components) -> None:
         live.backend_model,
         settings.llm.model if components.narrator is not None else "no",
         settings.vision.source if components.policy.enabled else "no",
+        settings.gestures.llm_settings(settings.llm).model
+        if components.gestures is not None
+        else "no",
     )
 
 
@@ -642,6 +688,7 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
         narrator=components.narrator,
         voice_cache=voice_cache,
         knowledge_dir=settings.knowledge_dirs,
+        gestures=components.gestures,
     )
 
     tasks: list[asyncio.Task[None]] = []
@@ -686,7 +733,7 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
 async def cmd_chat(settings: Settings, *, speak: bool = False) -> int:
     if _missing_live_key(settings):
         return 1
-    components = build_components(settings, with_camera=False)
+    components = build_components(settings, with_camera=False, with_gestures=False)
     player: LocalPlayer | None = None
     if speak:
         player = LocalPlayer(settings.live.sample_rate, lambda uid: tap.notify_playback_done(uid))
@@ -897,6 +944,48 @@ async def check_vision_model(settings: Settings) -> CheckResult:
     return CheckResult("Visión", True, f"{llm.detail}; acepta imágenes", False)
 
 
+async def check_gestures(settings: Settings) -> CheckResult:
+    """Una petición mínima al modelo de gestos con sus ajustes reales (razonamiento incluido).
+
+    Así se sabe antes de abrir el stand si el servidor acepta el esfuerzo de
+    razonamiento y el tope de tokens que se le mandan (``none`` en OpenAI,
+    ``minimal`` en Gemini 3), y si contesta antes de agotar el tope razonando.
+    Es un aviso: sin gestos elegidos Sonia conversa igual.
+    """
+    gestures = settings.gestures
+    if not gestures.enabled:
+        return CheckResult("Gestos", True, "desactivados (GESTURES_ENABLED=false)", False)
+    # La primera petición abre la conexión: se le da más margen que en el stand.
+    llm = gestures.llm_settings(settings.llm).model_copy(update={"request_timeout": 15.0})
+    effort = llm.reasoning_effort or "el del modelo"
+    target = f"{llm.base_url} ({llm.model}, razonamiento {effort})"
+    if not llm.key:
+        return CheckResult("Gestos", False, f"{target}: {_missing_gesture_key(settings)}", False)
+    messages = [system('Responde solo {"gesto": "ninguno"}.'), user_text("Frase actual: «Hola».")]
+    try:
+        async with LLMClient(llm) as client:
+            started = time.monotonic()
+            completion = await asyncio.wait_for(client.complete(messages), timeout=20.0)
+            elapsed = time.monotonic() - started
+    except Exception as exc:
+        return CheckResult("Gestos", False, f"{target}: {exc}", False)
+    reply = " ".join(completion.content.split())[:60]
+    if not reply:
+        why = (
+            f"agotó el tope de {llm.max_tokens} tokens razonando; baja "
+            "GESTURE_REASONING_EFFORT o sube GESTURE_MAX_TOKENS"
+            if completion.finish_reason == "length"
+            else "contestó vacío"
+        )
+        return CheckResult("Gestos", False, f"{target}: {why}", False)
+    thinking = (
+        f", {completion.reasoning_tokens} tokens razonando" if completion.reasoning_tokens else ""
+    )
+    return CheckResult(
+        "Gestos", True, f"{target}: '{reply}' en {elapsed * 1000:.0f} ms{thinking}", False
+    )
+
+
 async def run_checks(settings: Settings) -> list[CheckResult]:
     """Ejecuta todas las comprobaciones en orden y devuelve sus resultados."""
     return [
@@ -904,6 +993,7 @@ async def run_checks(settings: Settings) -> list[CheckResult]:
         await check_camera(settings),
         await check_live(settings),
         await check_vision_model(settings),
+        await check_gestures(settings),
         check_gallery(settings),
     ]
 
@@ -1069,7 +1159,9 @@ def build_parser() -> argparse.ArgumentParser:
     say.add_argument("text", help="texto que leer")
     say.add_argument("--out", type=Path, default=None, help="guardar a WAV en vez de reproducir")
 
-    commands.add_parser("check", help="comprobar micrófono, cámara, GPT-Live, visión y galería")
+    commands.add_parser(
+        "check", help="comprobar micrófono, cámara, GPT-Live, visión, gestos y galería"
+    )
     return parser
 
 

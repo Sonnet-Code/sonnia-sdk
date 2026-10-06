@@ -100,7 +100,7 @@ sonia/
 
 1. `cd server && uv sync --extra audio --extra camera --extra panel` (añade `--group dev` para tests y lint).
 2. `cp .env.example .env` desde la raíz y poner `OPENAI_API_KEY` (la usan GPT-Live y el modelo de visión) y, si el equipo sale en el panel de Cloudflare, `PANEL_CLOUD_TOKEN`.
-3. `uv run sonia check`: micrófono, cámara, una sesión de GPT-Live (abrir y cerrar), modelo de visión y galería.
+3. `uv run sonia check`: micrófono, cámara, una sesión de GPT-Live (abrir y cerrar), modelo de visión, modelo de gestos y galería.
 4. `uv run sonia say "Hola, soy Sonia"` para oír la voz (`LIVE_VOICE`) y `uv run sonia chat` para escribirle por consola.
 5. `uv run sonia run`: demo completa (orquestador, servidor WebSocket y panel local).
 6. Abre el proyecto de Unity y dale a Play, o ejecuta la build empaquetada. Ver `docs/unity.md` para el detalle de esa parte.

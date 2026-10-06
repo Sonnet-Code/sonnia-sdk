@@ -49,9 +49,10 @@ GPT-Live. Desde la raíz del repositorio:
 1. `.env` con `OPENAI_API_KEY` (la usan GPT-Live y el modelo de visión) y
    `PANEL_CLOUD_TOKEN` (ver "Instalar Sonia en el equipo del stand").
 2. `scripts/check_stand.sh`: corre `sonia check` (micrófono, cámara, abre y
-   cierra una sesión de GPT-Live, modelo de visión, galería) y comprueba que
-   el puerto del WebSocket está libre. Todo en OK antes de seguir; un AVISO
-   en el modelo de visión solo deja a Sonia sin ojos.
+   cierra una sesión de GPT-Live, modelo de visión, modelo de gestos, galería)
+   y comprueba que el puerto del WebSocket está libre. Todo en OK antes de
+   seguir; un AVISO en el modelo de visión solo deja a Sonia sin ojos, y uno en
+   el de gestos, sin gestos elegidos al hablar (`docs/gestos.md`).
 3. `uv run sonia say "Hola, soy Sonia"` desde `server/` para oír la voz
    (`LIVE_VOICE`) por el altavoz del stand.
 4. `scripts/kiosk.sh` (o `uv run sonia run` desde `server/` si vas a estar

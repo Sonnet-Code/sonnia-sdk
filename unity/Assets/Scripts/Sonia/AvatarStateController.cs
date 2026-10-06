@@ -462,6 +462,23 @@ namespace Sonia
         private float _handsDownAt;
         private float _handsRestUntil;
         private bool _handsFree;
+        private GeniesGestureLayer _gestureLayer;
+        private bool _gestureLayerSearched;
+
+        // Capa de gestos de Genies junto al coreógrafo (null si no hay).
+        private GeniesGestureLayer GestureLayer
+        {
+            get
+            {
+                if (!_gestureLayerSearched && choreographer != null)
+                {
+                    _gestureLayerSearched = true;
+                    _gestureLayer = choreographer.GetComponent<GeniesGestureLayer>();
+                }
+
+                return _gestureLayer;
+            }
+        }
         private TriviaHat _triviaHat;
         private float _nextHatLookup;
 
@@ -910,9 +927,15 @@ namespace Sonia
             // Los brazos solo acentúan si nadie más los usa: ni señalando una imagen,
             // ni caminando, ni en un momento dirigido (mirada impuesta: la entrada
             // del invitado, el apretón de manos).
+            // Con los gestos de Genies (director de gestos) las manos son suyas: los
+            // gestos por código quedan solo de respaldo para un set sin ellos, y
+            // mientras suena uno los brazos no acentúan.
+            GeniesGestureLayer gestures = GestureLayer;
             bool armsFree = !_lookOverride
+                            && (gestures == null || !gestures.IsActive)
                             && (choreographer == null || (!choreographer.IsPresenting && !choreographer.IsSuspended));
-            _handsFree = armsFree && (choreographer == null || !choreographer.IsPlayingOneShot) && !HatBusy();
+            _handsFree = armsFree && (choreographer == null || !choreographer.IsPlayingOneShot) && !HatBusy()
+                         && (gestures == null || !gestures.IsReady);
             UpdateHands(dt);
             for (int i = 0; i < _accents.Count; i++)
             {

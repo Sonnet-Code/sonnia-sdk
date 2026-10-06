@@ -1690,6 +1690,7 @@
     ["fourth_wall", "Hacia el público"],
     ["soft", "Gestos suaves"],
     ["talking", "Gestos al hablar"],
+    ["sage", "Gestos de Sage (los elige el director al hablar)"],
     ["idle_variation", "En reposo"],
     ["thinking", "Pensando"],
     ["nod", "Escuchando"],

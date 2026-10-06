@@ -16,6 +16,8 @@ voz en streaming. Este motor se limita a:
   (``response.event`` con ``function_call``) y devolverle el resultado.
 - Darle ojos: al empezar a hablar alguien, describir la cámara con un modelo
   de visión y pasárselo como nota silenciosa.
+- Contarle al director de gestos (``sonia/gestures``) lo que pasa para que
+  elija el gesto de cada frase de Sonia.
 - Mantener la sesión viva: reconectar con espera creciente si se cae y
   empezar una sesión limpia tras un rato sin nadie (modo kiosco).
 
@@ -42,6 +44,7 @@ from sonia.actions.gallery import Gallery
 from sonia.actions.moves import MoveCatalog
 from sonia.actions.registry import ActionRegistry
 from sonia.config import Settings
+from sonia.gestures.director import GestureDirector
 from sonia.live.audio import NoiseGate, pcm16_from_float, rms
 from sonia.live.client import LiveClient, WsConnect, describe_error
 from sonia.live.prompts import CAMERA_NOTE_PREFIX, build_session_config, in_meeting
@@ -217,6 +220,7 @@ class LiveEngine:
         connect: WsConnect | None = None,
         knowledge_dir: KnowledgeSource = None,
         voice_cache: VoiceCache | None = None,
+        gestures: GestureDirector | None = None,
         tick_s: float = 0.05,
     ) -> None:
         self._settings = settings
@@ -327,6 +331,11 @@ class LiveEngine:
         self._moves = MoveCatalog(hub.broadcast_json)
         hub.on(p.MSG_ANIMATIONS, self._moves.update)
 
+        # Gestos al hablar: el catálogo lo manda Unity al conectar; el director los elige.
+        self._gestures = gestures
+        if gestures is not None:
+            hub.on(p.MSG_GESTURE_CATALOG, gestures.on_catalog)
+
         hub.on(p.MSG_INTERRUPT, lambda msg: self._spawn(self._on_interrupt(), "interrupt"))
         hub.on(p.MSG_PLAYBACK_DONE, self._on_ws_playback_done)
         hub.on(p.MSG_TEXT_INPUT, self._on_ws_text_input)
@@ -427,6 +436,8 @@ class LiveEngine:
         except Exception as exc:  # noqa: BLE001
             _log_stage_failure("No se pudo pasar el texto a GPT-Live: %s", exc)
             return
+        if self._gestures is not None:
+            self._gestures.on_user_turn(text, answering=self._audible)
         self._expect_response_until = now + RESPONSE_WAIT_S
         if not self._audible:
             await self._set_state(AssistantState.THINKING)
@@ -559,6 +570,8 @@ class LiveEngine:
         self._delegations.clear()
         self._last_delegation_id = None
         self._command_owner.clear()
+        if self._gestures is not None:
+            self._gestures.on_session(True)
 
     async def _end_session(self) -> None:
         """Deja a Unity en un estado coherente cuando cae la sesión."""
@@ -570,6 +583,8 @@ class LiveEngine:
         if self._segment is not None:
             with contextlib.suppress(Exception):
                 await self._close_segment(time.monotonic())
+        if self._gestures is not None:
+            self._gestures.on_session(False)
         self._pending_assistant = []
         self._discard_audio = False
         self._playback_end_at = min(self._playback_end_at, time.monotonic())
@@ -582,6 +597,8 @@ class LiveEngine:
                 await self._trivia.on_session_lost()
 
     async def _shutdown(self) -> None:
+        if self._gestures is not None:
+            self._gestures.close()
         for task in [*self._tasks, self._vision_task, self._image_hide_task]:
             if task is not None and not task.done():
                 task.cancel()
@@ -670,6 +687,14 @@ class LiveEngine:
         await self._hub.broadcast_json(
             p.msg_speech_start(segment.uid, segment.text, ambient=ambient)
         )
+        if self._gestures is not None:
+            # Si el visitante aún no cerró su turno, Sonia le está contestando ya.
+            self._gestures.on_speech_start(
+                segment.uid,
+                ambient=ambient,
+                text=segment.text,
+                user_text=self._user_text if self._user_turn_open else None,
+            )
         if not ambient:
             self._touch()
             self._session_conversation = True
@@ -689,6 +714,8 @@ class LiveEngine:
             await hub.broadcast_json(p.msg_transcript("assistant", text, True))
         await hub.send_audio(segment.uid, AudioChunk(pcm=b"", sample_rate=self._rate, is_last=True))
         await hub.broadcast_json(p.msg_speech_end(segment.uid))
+        if self._gestures is not None:
+            self._gestures.on_speech_end(segment.uid, text)
         logger.info(
             "Sonia (%s%d, %.2f s): %s",
             "stand, " if segment.ambient else "",
@@ -709,7 +736,10 @@ class LiveEngine:
             self._pending_assistant.append(delta)
             return
         segment.parts.append(delta)
-        await self._hub.broadcast_json(p.msg_transcript("assistant", segment.text, False))
+        text = segment.text
+        await self._hub.broadcast_json(p.msg_transcript("assistant", text, False))
+        if self._gestures is not None:
+            self._gestures.on_assistant_text(segment.uid, text)
 
     async def _on_input_transcript(self, event: dict[str, Any]) -> None:
         delta = event.get("delta")
@@ -746,6 +776,8 @@ class LiveEngine:
         if text:
             await self._hub.broadcast_json(p.msg_transcript("user", text, True))
             logger.info("Usuario (nivel %.3f): %s", self._turn_level, text)
+            if self._gestures is not None:
+                self._gestures.on_user_turn(text, answering=self._audible)
         if not self._audible:
             self._expect_response_until = now + RESPONSE_WAIT_S
 
@@ -984,6 +1016,8 @@ class LiveEngine:
         self._touch()
         was_audible = self._audible
         await self._hub.broadcast_json(p.msg_stop_speaking("interrupted"))
+        if self._gestures is not None:
+            self._gestures.on_interrupt()
         segment, self._segment = self._segment, None
         if segment is not None:
             # El resto de esa respuesta se tira hasta el siguiente silencio.
@@ -1420,6 +1454,7 @@ class LiveEngine:
             "camera_ok": self._camera_ok,
             "last_error": self.last_error,
             "trivia": self._trivia.snapshot() if self._trivia is not None else None,
+            "gestures": self._gestures.snapshot() if self._gestures is not None else None,
         }
 
     # -- utilidades -----------------------------------------------------------
@@ -1430,6 +1465,8 @@ class LiveEngine:
         previous, self._state = self._state, state
         logger.info("Estado: %s -> %s", previous, state)
         await self._hub.broadcast_json(p.msg_state(state))
+        if self._gestures is not None:
+            self._gestures.on_state(state)
 
     def _touch(self) -> None:
         self._last_activity = time.monotonic()

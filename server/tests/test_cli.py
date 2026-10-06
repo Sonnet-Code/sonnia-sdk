@@ -18,7 +18,9 @@ import pytest
 
 from sonia import cli
 from sonia.config import (
+    GEMINI_OPENAI_URL,
     AudioSettings,
+    GestureSettings,
     LiveSettings,
     LLMSettings,
     Settings,
@@ -26,7 +28,7 @@ from sonia.config import (
     WSSettings,
 )
 from sonia.live.oneshot import ProbeResult
-from sonia.llm.client import LLMError
+from sonia.llm.client import Completion, LLMError
 from sonia.types import AudioChunk
 from sonia.ws import protocol as p
 from sonia.ws.hub import Hub
@@ -68,6 +70,9 @@ class FakeLLMClient:
     probe_error: Exception | None = None
     pings = 0
     probes: list[dict[str, Any]] = []
+    #: El modelo de gestos (``complete``): respuesta y ajustes con los que se pidió.
+    completion: str | Completion | Exception = '{"gesto": "ninguno"}'
+    completions: list[LLMSettings] = []
 
     def __init__(self, settings: LLMSettings) -> None:
         self.settings = settings
@@ -89,6 +94,14 @@ class FakeLLMClient:
         if FakeLLMClient.probe_error is not None:
             raise FakeLLMClient.probe_error
 
+    async def complete(self, messages: list[dict[str, Any]]) -> Completion:
+        FakeLLMClient.completions.append(self.settings)
+        if isinstance(FakeLLMClient.completion, Exception):
+            raise FakeLLMClient.completion
+        if isinstance(FakeLLMClient.completion, Completion):
+            return FakeLLMClient.completion
+        return Completion(FakeLLMClient.completion)
+
 
 @pytest.fixture
 def fake_llm(monkeypatch: pytest.MonkeyPatch) -> type[FakeLLMClient]:
@@ -96,6 +109,8 @@ def fake_llm(monkeypatch: pytest.MonkeyPatch) -> type[FakeLLMClient]:
     FakeLLMClient.probe_error = None
     FakeLLMClient.pings = 0
     FakeLLMClient.probes = []
+    FakeLLMClient.completion = '{"gesto": "ninguno"}'
+    FakeLLMClient.completions = []
     monkeypatch.setattr(cli, "LLMClient", FakeLLMClient)
     return FakeLLMClient
 
@@ -178,6 +193,7 @@ async def test_check_todo_ok(
         ("Cámara", True),
         ("GPT-Live", True),
         ("Visión", True),
+        ("Gestos", True),
         ("Galería", True),
     ]
     detail = {r.name: r.detail for r in results}
@@ -192,10 +208,13 @@ async def test_check_todo_ok(
     assert fake_llm.pings == 1
     assert len(fake_llm.probes) == 1
     assert fake_llm.probes[0]["content"][1]["type"] == "image_url"
+    # El modelo de gestos: una petición con sus ajustes de verdad.
+    assert "ninguno" in detail["Gestos"] and "modelo-de-prueba" in detail["Gestos"]
+    assert len(fake_llm.completions) == 1
 
     assert cli.print_results(results) is True
     out = capsys.readouterr().out
-    assert out.count("OK   ") == 5
+    assert out.count("OK   ") == 6
     assert "Todo listo." in out
 
 
@@ -489,3 +508,44 @@ def test_run_sin_clave_sale_con_error(
     monkeypatch.setattr(cli, "load_settings", lambda: settings)
     assert cli.main(["run", "--no-mic"]) == 1
     assert "LIVE_API_KEY" in capsys.readouterr().err
+
+
+async def test_check_de_gestos_usa_el_razonamiento_mas_bajo_y_avisa_si_falla(
+    tmp_path: Path,
+    fake_llm: type[FakeLLMClient],
+    fake_live: list[LiveSettings],
+    fake_audio: list[dict[str, Any]],
+) -> None:
+    openai = LLMSettings(base_url="https://api.openai.com/v1", openai_api_key="clave")
+    result = await cli.check_gestures(make_settings(tmp_path, llm=openai))
+    assert result.ok and "razonamiento none" in result.detail
+    assert fake_llm.completions[-1].reasoning_effort == "none"
+    # Un fallo es un aviso: Sonia conversa igual sin gestos elegidos.
+    fake_llm.completion = LLMError("El servidor del modelo devolvió 400: reasoning_effort")
+    results = await cli.run_checks(make_settings(tmp_path, llm=openai))
+    gestures = next(r for r in results if r.name == "Gestos")
+    assert gestures.ok is False and gestures.critical is False and "400" in gestures.detail
+    assert cli.print_results(results) is True
+
+
+async def test_check_de_gestos_con_gemini(
+    tmp_path: Path,
+    fake_llm: type[FakeLLMClient],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    model = "gemini-3.1-flash-lite"
+    gemini = GestureSettings(base_url=GEMINI_OPENAI_URL, model=model, gemini_api_key="g")
+    result = await cli.check_gestures(make_settings(tmp_path, gestures=gemini))
+    assert result.ok and model in result.detail and "razonamiento minimal" in result.detail
+    used = fake_llm.completions[-1]
+    assert used.key == "g" and used.max_tokens_param == "max_tokens"
+    # Sin clave dice cuál falta, y no llama.
+    no_key = GestureSettings(base_url=GEMINI_OPENAI_URL, model=model)
+    result = await cli.check_gestures(make_settings(tmp_path, gestures=no_key))
+    assert not result.ok and not result.critical and "GEMINI_API_KEY" in result.detail
+    assert len(fake_llm.completions) == 1
+    # Si razona hasta agotar el tope y contesta vacío, dice qué tocar.
+    fake_llm.completion = Completion("", "length", completion_tokens=512)
+    result = await cli.check_gestures(make_settings(tmp_path, gestures=gemini))
+    assert not result.ok and "GESTURE_MAX_TOKENS" in result.detail

@@ -63,6 +63,7 @@ MSG_PRESENCE = "presence"
 MSG_STAGE_MODE = "stage_mode"
 MSG_SET_VOLUME = "set_volume"
 MSG_PLAY_ANIMATION = "play_animation"
+MSG_GESTURE = "gesture"
 MSG_SET_SUBTITLES = "set_subtitles"
 MSG_SET_DISABLED_ANIMATIONS = "set_disabled_animations"
 MSG_SET_DEBUG = "set_debug"
@@ -85,6 +86,7 @@ MSG_PLAYBACK_DONE = "playback_done"
 MSG_TEXT_INPUT = "text_input"
 MSG_CAMERA_FRAME = "camera_frame"
 MSG_ANIMATIONS = "animations"
+MSG_GESTURE_CATALOG = "gesture_catalog"
 MSG_ANIMATION_PLAYING = "animation_playing"
 MSG_AVATAR_EDITOR = "avatar_editor"
 MSG_AVATAR_SAVED = "avatar_saved"
@@ -92,6 +94,14 @@ MSG_GUEST_STATE = "guest_state"
 
 #: Tope de clips que se aceptan en ``animations`` (el set real tiene unos 40).
 MAX_ANIMATIONS = 200
+
+#: Tope de gestos que se aceptan en ``gesture_catalog`` (Sage tiene 162).
+MAX_GESTURES = 400
+
+#: Valores de las fichas de ``gesture_catalog`` (los de ``llmMetadata`` de Genies).
+GESTURE_FREQUENCIES = ("Standard", "Uncommon", "Rare")
+GESTURE_TIMINGS = ("Instant", "Short", "Long")
+GESTURE_IMPACTS = ("NoImpact", "LowImpact", "HighImpact")
 
 #: Tope de la definición del avatar de Genies (JSON en texto; la real ronda 4 KB).
 MAX_AVATAR_DEFINITION = 64 * 1024
@@ -193,6 +203,21 @@ def msg_play_animation(clip: str, *, whole: bool = False) -> dict[str, Any]:
     if whole:
         msg["whole"] = True
     return msg
+
+
+def msg_gesture(name: str, utterance_id: int | None) -> dict[str, Any]:
+    """Un gesto de hablar del catálogo de ``gesture_catalog`` para la frase ``utterance_id``.
+
+    Lo elige el director de gestos (``sonia/gestures``). Unity lo reproduce
+    enseguida si esa frase sigue sonando y lo descarta si ya terminó. ``None``
+    es «para la próxima frase»: Unity lo guarda unos segundos y lo lanza con el
+    siguiente ``speech_start`` no ambiental (el gesto de apertura).
+    """
+    return {
+        "type": MSG_GESTURE,
+        "name": str(name),
+        "utterance_id": None if utterance_id is None else int(utterance_id),
+    }
 
 
 def msg_speech_end(utterance_id: int) -> dict[str, Any]:
@@ -481,3 +506,97 @@ def parse_animations(msg: dict[str, Any]) -> list[dict[str, str]]:
             seen.add(clip)
             catalog.append({"clip": clip, "group": group})
     return catalog
+
+
+def parse_gesture_catalog(msg: dict[str, Any]) -> dict[str, Any]:
+    """Catálogo de un mensaje ``gesture_catalog``, normalizado.
+
+    Devuelve ``{"character", "transition_s", "gestures"}``. Cada gesto trae
+    todos los campos de la ficha con su tipo (``critical_beat``,
+    ``min_duration`` e ``intensity`` pueden ser ``None``; los textos, cadena
+    vacía). Es tolerante: un campo que falta o no vale toma su valor por
+    defecto, los números pueden llegar como texto, una frecuencia desconocida
+    cuenta como ``Standard`` y los nombres repetidos o vacíos se ignoran.
+    """
+    character = msg.get("character")
+    items = msg.get("gestures")
+    gestures: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in items[:MAX_GESTURES] if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if not isinstance(name, str):
+            continue
+        name = name.strip()
+        if not 0 < len(name) <= 80 or name in seen:
+            continue
+        seen.add(name)
+        duration = _number(item.get("duration")) or 0.0
+        core_stop = _number(item.get("core_stop"))
+        intensity = _number(item.get("intensity"))
+        gestures.append(
+            {
+                "name": name,
+                "lists": _texts(item.get("lists")),
+                "duration": max(0.0, duration),
+                "core_start": max(0.0, _number(item.get("core_start")) or 0.0),
+                # Sin núcleo, el gesto ocupa entero.
+                "core_stop": max(0.0, core_stop if core_stop is not None else duration),
+                "critical_beat": _number(item.get("critical_beat")),
+                "held": item.get("held") is True,
+                "min_duration": _number(item.get("min_duration")),
+                "frequency": _choice(item.get("frequency"), GESTURE_FREQUENCIES) or "Standard",
+                "timing": _choice(item.get("timing"), GESTURE_TIMINGS),
+                "impact": _choice(item.get("impact"), GESTURE_IMPACTS),
+                # De 1 a 4 en las fichas; 0 o nada es que no la tiene.
+                "intensity": int(intensity) if intensity is not None and intensity >= 1 else None,
+                "special": item.get("special") is True,
+                "description": _text(item.get("description"), 400),
+                "intents": _texts(item.get("intents")),
+                "intent_description": _text(item.get("intent_description"), 600),
+                "tags": _texts(item.get("tags")),
+            }
+        )
+    return {
+        "character": _text(character, 80),
+        "transition_s": _number(msg.get("transition_s")),
+        "gestures": gestures,
+    }
+
+
+def _number(value: Any) -> float | None:
+    """Un número finito (también escrito como texto, como en las fichas de Genies) o ``None``."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        try:
+            value = float(value.strip())
+        except ValueError:
+            return None
+    if isinstance(value, int | float) and value == value and abs(value) != float("inf"):
+        return float(value)
+    return None
+
+
+def _text(value: Any, limit: int) -> str:
+    """Texto recortado a ``limit`` caracteres (cadena vacía si no es texto)."""
+    return value.strip()[:limit] if isinstance(value, str) else ""
+
+
+def _texts(value: Any, limit: int = 30) -> list[str]:
+    """Lista de textos cortos no vacíos (como mucho ``limit``)."""
+    if not isinstance(value, list):
+        return []
+    texts = [v.strip()[:80] for v in value if isinstance(v, str) and v.strip()]
+    return texts[:limit]
+
+
+def _choice(value: Any, options: tuple[str, ...]) -> str:
+    """El valor de ``options`` que coincide sin mirar mayúsculas, o cadena vacía."""
+    if isinstance(value, str):
+        wanted = value.strip().lower()
+        for option in options:
+            if option.lower() == wanted:
+                return option
+    return ""

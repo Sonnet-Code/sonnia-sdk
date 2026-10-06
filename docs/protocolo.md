@@ -122,6 +122,20 @@ Sin `whole` (el panel), pasar a pensar o a hablar corta el clip. Con `whole: tru
 {"type": "play_animation", "clip": "QuickAction_vibe", "whole": true}
 ```
 
+### `gesture`
+
+Un gesto de hablar del catálogo que Unity mandó con `gesture_catalog`, elegido por el director de gestos del orquestador (`server/sonia/gestures`, ver `docs/gestos.md`) para acompañar una frase de Sonia. `name` es el nombre tal cual vino en el catálogo.
+
+- `utterance_id` es el de la frase (`speech_start`) que acompaña. Unity lo reproduce enseguida si esa frase sigue sonando y lo descarta si ya terminó.
+- `utterance_id: null` es «para la próxima frase»: Unity lo guarda hasta 4 s y lo lanza con el siguiente `speech_start` no ambiental. Es el gesto de apertura, elegido con lo que dijo el visitante mientras GPT-Live prepara la respuesta.
+- Las frases `ambient` (animación de stand, «Solo saludos») nunca llevan gesto.
+- Unity corta el gesto con un fundido al salir de `speaking` o con `stop_speaking`. Un gesto largo puede seguir entre frases del mismo turno.
+- El orquestador ya aplica el ritmo (como mucho uno por frase, ninguno antes de que acabe el núcleo del anterior, ver `docs/gestos.md`): Unity no tiene que filtrar nada más.
+
+```json
+{"type": "gesture", "name": "noBigDeal", "utterance_id": 12}
+```
+
 ### `presence`
 
 Sonia está en pantalla (`present: true`) o se ha ido (`false`): sale caminando y deja un letrero con `message`. Lo manda el panel de control al cambiar al modo "Fuera" o volver. Es un mensaje fijo: el orquestador lo repite justo después de `hello` a cada cliente nuevo, y entonces Unity lo aplica sin animación. Ver `docs/panel.md`.
@@ -343,6 +357,23 @@ Unity lo envía al recibir `hello`: el catálogo de clips que el panel puede lan
 {"type": "animations", "animations": [{"clip": "Greeting", "group": "greeting"}, {"clip": "Dance_HipHop", "group": "dance"}]}
 ```
 
+### `gesture_catalog`
+
+Unity lo envía al recibir `hello`, junto a `animations`: los gestos de hablar de Genies que puede reproducir (los de Sage), cada uno con la ficha que Genies le da a su LLM (`llmMetadata`). El orquestador lo usa para el director de gestos (`docs/gestos.md`) y lo reemplaza entero en cada reconexión. Sin este mensaje, el director no pide nada.
+
+- `character`: de quién son los gestos. `transition_s`: fundido de entrada de Unity hacia cada gesto, en segundos.
+- Por gesto: `name` (único, hasta 80 caracteres); `lists`, las listas de Genies (`Utility_NoImpact` marca los de relleno neutro); `duration`, `core_start` y `core_stop` en segundos del clip (el núcleo: antes de `core_stop` no empieza otro gesto); `critical_beat` y `min_duration` (pueden ser `null`); `held`; `frequency` (`Standard`, `Uncommon` o `Rare`); `timing` (`Instant`, `Short` o `Long`); `impact` (`NoImpact`, `LowImpact`, `HighImpact` o vacío); `intensity` (1 a 4); `special`; `description`, la descripción física; `intents`; `intent_description`, las reglas «USE: ... DO NOT USE: ...» (o vacío), y `tags`.
+- El orquestador es tolerante: un campo que falta toma su valor por defecto, los números pueden llegar como texto, una frecuencia desconocida cuenta como `Standard` y los nombres repetidos se ignoran (hasta 400 gestos).
+
+```json
+{"type": "gesture_catalog", "character": "Sage", "transition_s": 0.8,
+ "gestures": [{"name": "noBigDeal", "lists": ["Sage(IDset)"], "duration": 3.63,
+   "core_start": 0.4, "core_stop": 2.1, "critical_beat": 1.0, "held": false, "min_duration": 1.5,
+   "frequency": "Standard", "timing": "Short", "impact": "LowImpact", "intensity": 2, "special": false,
+   "description": "Raises right hand ...", "intents": ["To Dismiss"],
+   "intent_description": "USE: ...\nDO NOT USE: ...", "tags": ["descriptor:Neutral", "personality:Poised"]}]}
+```
+
 ### `animation_playing`
 
 Qué clip de una sola vez suena ahora en el avatar (capa de cuerpo, luego torso y luego brazo), o `null` si solo suena un bucle base. Unity lo manda cuando cambia y otra vez tras cada `hello`; el panel resalta ese botón de «Animaciones», también cuando Sonia lo hace por su cuenta.
@@ -393,6 +424,7 @@ Unity                                  Orquestador                       GPT-Liv
   |                                        |    foto → modelo de visión → nota "[Cámara] ...")
   |<--- transcript(user, final) -----------|   (pausa del visitante)
   |<--- state: thinking -------------------|
+  |<--- gesture(null) ---------------------|   (apertura: el director de gestos, con lo que dijo el visitante)
   |<--- speech_start(1) -------------------|<--- primer audio con voz de Sonia
   |<--- state: speaking -------------------|
   |<--- [binario 1] x N -------------------|<--- audio a ritmo real (100 ms)
@@ -401,6 +433,7 @@ Unity                                  Orquestador                       GPT-Liv
   |<--- speech_end(1) ---------------------|
   |<--- show_image ------------------------|<--- acción delegada en el backend Responses
   |<--- speech_start(2) ... ---------------|   (siguiente tramo de voz)
+  |<--- gesture(2) ------------------------|   (el gesto de esa frase, si el director elige uno)
   |---- playback_done(1) ----------------->|
   |---- playback_done(2) ----------------->|
   |<--- state: idle -----------------------|

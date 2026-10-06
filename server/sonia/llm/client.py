@@ -1,9 +1,10 @@
 """Cliente de streaming para cualquier endpoint compatible con OpenAI.
 
-Con GPT-Live solo se usa para describir la cámara (``sonia/live/vision.py``):
-texto e imagen de entrada, texto de salida, sin acciones. No se usa ningún
-SDK: solo ``httpx`` y un parser de SSE. Todo lo específico del servidor viene
-de :class:`LLMSettings`.
+Con GPT-Live se usa para describir la cámara (``sonia/live/vision.py``):
+texto e imagen de entrada, texto de salida, sin acciones; y, sin streaming
+(:meth:`LLMClient.complete`), para elegir los gestos (``sonia/gestures``). No
+se usa ningún SDK: solo ``httpx`` y un parser de SSE. Todo lo específico del
+servidor viene de :class:`LLMSettings`.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import httpx
 from sonia.config import LLMSettings
 from sonia.types import LLMEvent, Message, TextDelta, TurnDone
 
-__all__ = ["LLMClient", "LLMError"]
+__all__ = ["Completion", "LLMClient", "LLMError"]
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,20 @@ class LLMError(RuntimeError):
         super().__init__(message)
         self.status_code = status_code
         self.body = body
+
+
+@dataclass(frozen=True, slots=True)
+class Completion:
+    """Respuesta entera de :meth:`LLMClient.complete`, con el uso de tokens si el servidor lo da."""
+
+    content: str
+    finish_reason: str | None = None
+    prompt_tokens: int | None = None
+    #: De ``prompt_tokens``, cuántos salieron de la caché de prompts del servidor.
+    cached_tokens: int | None = None
+    completion_tokens: int | None = None
+    #: De ``completion_tokens``, cuántos gastó razonando (si el servidor lo dice).
+    reasoning_tokens: int | None = None
 
 
 @dataclass(slots=True)
@@ -252,6 +267,62 @@ class LLMClient:
             finish_reason=state.finish_reason,
         )
 
+    # -- respuesta entera ---------------------------------------------------
+
+    async def complete(self, messages: list[Message]) -> Completion:
+        """Una petición sin streaming para respuestas cortas con prisa (los gestos).
+
+        Sin reintentos: quien la usa tiene un plazo y prefiere seguir sin
+        respuesta a llegar tarde. Lanza :class:`LLMError` si el servidor falla,
+        tarda más de ``request_timeout`` o devuelve un error.
+        """
+        body = self._build_body(messages, stream=False)
+        try:
+            # La respuesta entera en JSON, no el SSE que pide el cliente por defecto.
+            response = await self._client.post(
+                self._url, json=body, headers={"Accept": "application/json"}
+            )
+        except httpx.TimeoutException as exc:
+            raise LLMError(
+                f"El modelo no contestó en {self._settings.request_timeout:g} s."
+            ) from exc
+        except httpx.TransportError as exc:
+            raise LLMError(f"Fallo de red hablando con el modelo: {exc}") from exc
+        if response.status_code >= 400:
+            text = response.text
+            raise LLMError(
+                f"El servidor del modelo devolvió {response.status_code}: {text[:300]}",
+                status_code=response.status_code,
+                body=text,
+            )
+        payload = _load_chunk(response.text) or {}
+        error = payload.get("error")
+        if error:
+            raise LLMError(f"El servidor del modelo devolvió un error: {_error_text(error)}")
+        content = ""
+        finish_reason: str | None = None
+        choices = payload.get("choices") or []
+        if choices and isinstance(choices[0], dict):
+            message = choices[0].get("message") or {}
+            if isinstance(message, dict) and isinstance(message.get("content"), str):
+                content = message["content"]
+            reason = choices[0].get("finish_reason")
+            finish_reason = reason if isinstance(reason, str) else None
+        usage = payload.get("usage")
+        usage = usage if isinstance(usage, dict) else {}
+        prompt_details = usage.get("prompt_tokens_details")
+        prompt_details = prompt_details if isinstance(prompt_details, dict) else {}
+        output_details = usage.get("completion_tokens_details")
+        output_details = output_details if isinstance(output_details, dict) else {}
+        return Completion(
+            content=content,
+            finish_reason=finish_reason,
+            prompt_tokens=_count(usage.get("prompt_tokens")),
+            cached_tokens=_count(prompt_details.get("cached_tokens")),
+            completion_tokens=_count(usage.get("completion_tokens")),
+            reasoning_tokens=_count(output_details.get("reasoning_tokens")),
+        )
+
     # -- comprobación ------------------------------------------------------
 
     async def ping(self) -> str:
@@ -372,6 +443,11 @@ def _error_text(error: Any) -> str:
             return f"{message} (code={code})" if code is not None else message
         return json.dumps(error)[:300]
     return str(error)[:300]
+
+
+def _count(value: Any) -> int | None:
+    """Un recuento de tokens del campo ``usage`` (``None`` si no viene o no vale)."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def _load_chunk(data: str) -> dict[str, Any] | None:

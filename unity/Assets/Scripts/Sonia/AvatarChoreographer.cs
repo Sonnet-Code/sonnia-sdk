@@ -155,6 +155,8 @@ namespace Sonia
         private bool _presentReleasing;
         private AnimationClip _lastTalking;
         private bool _speechPaused;
+        // Gestos de Genies al hablar (los pide el director de gestos del orquestador).
+        private GeniesGestureLayer _gestures;
         private AnimationClip _lastVariation;
         private int _lastAttention = -1;
         private float _stateSeconds;
@@ -228,6 +230,20 @@ namespace Sonia
             get { return !_suspended && _phase != Phase.Base; }
         }
 
+        /// <summary>
+        /// Cierto si ahora puede sonar un gesto de Genies al hablar (director de
+        /// gestos, <see cref="GeniesGestureLayer"/>): hablando y con voz, sin
+        /// imagen, saludo, reacción, baile ni salida caminando.
+        /// </summary>
+        public bool CanTalkGesture
+        {
+            get
+            {
+                return Ready && _started && !_suspended && _state == AvatarState.Speaking
+                       && _phase == Phase.Base && !_speechPaused && !IsPresenting;
+            }
+        }
+
         /// <summary>Segundos en idle desde la última conversación: con poco, alguien sigue delante.</summary>
         public float QuietSeconds
         {
@@ -252,6 +268,17 @@ namespace Sonia
             if (motionPlayer == null)
             {
                 motionPlayer = GetComponentInChildren<MotionPlayer>(true);
+            }
+
+            _gestures = GetComponent<GeniesGestureLayer>();
+        }
+
+        // Funde hacia fuera el gesto de Genies que suene: otro clip o estado manda en el cuerpo.
+        private void StopTalkGesture()
+        {
+            if (_gestures != null && _gestures.IsActive)
+            {
+                _gestures.Stop();
             }
         }
 
@@ -290,6 +317,10 @@ namespace Sonia
             _state = state;
             _stateSeconds = 0f;
             _speechPaused = false;
+            if (state != AvatarState.Speaking)
+            {
+                StopTalkGesture();
+            }
             if (state != AvatarState.Idle)
             {
                 // Hay conversación: el stand no está en calma.
@@ -378,6 +409,12 @@ namespace Sonia
             }
 
             _speechPaused = paused;
+            if (paused)
+            {
+                // Sin voz, el gesto se queda a medias: se deja ir, como Genies al acabar de hablar.
+                StopTalkGesture();
+            }
+
             if (!Ready || _suspended || _state != AvatarState.Speaking || _phase != Phase.Base)
             {
                 return;
@@ -456,6 +493,7 @@ namespace Sonia
 
         private void StartGreeting(string why)
         {
+            StopTalkGesture();
             _secondsSinceGreeting = 0f;
             _phase = Phase.Greeting;
             _body = motionPlayer.Play(motionSet.greeting, MotionPlayer.BodyLayer, gestureFade);
@@ -479,6 +517,7 @@ namespace Sonia
             }
 
             _suspended = true;
+            StopTalkGesture();
             _phase = Phase.Base;
             _wideUntil = -1f;
             _speechPaused = false;
@@ -579,6 +618,7 @@ namespace Sonia
 
             _presentHolding = false;
             _presentReleasing = false;
+            StopTalkGesture();
             // Solo el brazo derecho: el torso, la cabeza y el otro brazo siguen el
             // bucle base del estado, que además se queda sin variaciones ni
             // gestos mientras dure la presentación (ver UpdateIdle/UpdateSpeaking).
@@ -696,6 +736,7 @@ namespace Sonia
                 return;
             }
 
+            StopTalkGesture();
             _phase = Phase.Reaction;
             _body = motionPlayer.Play(clip, MotionPlayer.BodyLayer, gestureFade);
             Log("reacción: " + clip.name);
@@ -720,6 +761,7 @@ namespace Sonia
                 return;
             }
 
+            StopTalkGesture();
             if (clip.isLooping)
             {
                 _phase = Phase.Base;
@@ -818,6 +860,7 @@ namespace Sonia
                 return;
             }
 
+            StopTalkGesture();
             _phase = Phase.Attention;
             _lastAttention = index;
             _body = motionPlayer.Play(motion.clip, MotionPlayer.BodyLayer, gestureFade);

@@ -84,6 +84,152 @@ def is_openai_url(url: str) -> bool:
     return parsed.scheme == "https" and (parsed.hostname or "") == "api.openai.com"
 
 
+#: Servidor de la API de Gemini y su endpoint compatible con OpenAI (Chat Completions).
+GEMINI_HOST = "generativelanguage.googleapis.com"
+GEMINI_OPENAI_URL = f"https://{GEMINI_HOST}/v1beta/openai/"
+
+
+def is_gemini_url(url: str) -> bool:
+    """¿Es ``url`` la API de Gemini (su endpoint compatible con OpenAI, por HTTPS)?"""
+    parsed = urlparse(url.strip())
+    return parsed.scheme == "https" and (parsed.hostname or "") == GEMINI_HOST
+
+
+#: Tope de respuesta de los gestos: sin razonar bastan unos 10 tokens; si el
+#: modelo razona (Gemini 3 no deja apagarlo), lo que razona cuenta en el tope.
+GESTURE_TOKENS_PLAIN = 64
+GESTURE_TOKENS_THINKING = 512
+
+
+class GestureSettings(BaseSettings):
+    """Director de gestos (``sonia/gestures``, ``docs/gestos.md``).
+
+    Un modelo de texto ligero lee lo que dice Sonia y elige el gesto de cada
+    frase del catálogo que manda Unity. Lo que se deja vacío sale del modelo de
+    visión (``LLM_*``): mismo servidor, modelo y clave. También vale Gemini por
+    su endpoint compatible con OpenAI, con la clave de ``GEMINI_API_KEY``.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="GESTURE_", extra="ignore", env_ignore_empty=True, populate_by_name=True
+    )
+
+    #: ``GESTURES_ENABLED``: con ``false`` Sonia habla sin gestos elegidos por el modelo.
+    enabled: bool = Field(
+        default=True, validation_alias=AliasChoices("GESTURES_ENABLED", "GESTURE_ENABLED")
+    )
+    #: Vacíos: los de ``LLM_*``.
+    model: str = ""
+    base_url: str = ""
+    api_key: str = Field(default="", repr=False)
+    #: ``GEMINI_API_KEY``: la clave de Gemini, que se usa si ``base_url`` es la
+    #: API de Gemini y no hay ``GESTURE_API_KEY``. Nunca sale hacia otro servidor.
+    gemini_api_key: str = Field(
+        default="", validation_alias=AliasChoices("GEMINI_API_KEY"), repr=False
+    )
+    #: Vacío: el más bajo que acepta cada servidor (ver :meth:`effective_reasoning_effort`).
+    #: ``off`` no lo envía.
+    reasoning_effort: str = ""
+    #: Tope de una petición. Con la frase ya sonando, además, lo que le quede hasta ``max_delay_s``.
+    timeout_s: float = 3.0
+    #: Tope de la respuesta. 0: 64 sin razonar (``none``) y 512 si el modelo
+    #: razona, porque lo que razona cuenta en el tope.
+    max_tokens: int = 0
+    #: Vacío: ``max_tokens`` con Gemini y otros servidores, ``max_completion_tokens``
+    #: con OpenAI, o el de ``LLM_MAX_TOKENS_PARAM`` si es el mismo servidor.
+    max_tokens_param: Literal["", "max_tokens", "max_completion_tokens"] = ""
+    #: Campos extra del cuerpo, en JSON (como ``LLM_EXTRA_BODY``). Vacío: los de
+    #: ``LLM_EXTRA_BODY`` si es el mismo servidor; si no, ninguno.
+    extra_body: dict[str, Any] = Field(default_factory=dict)
+    #: Se pide el gesto de una frase en cuanto su texto llega a tantos caracteres...
+    trigger_chars: int = 20
+    #: ... o pasan estos segundos desde que empezó, lo primero.
+    trigger_s: float = 0.5
+    #: Un gesto no empieza hasta que acaba el núcleo del anterior más esto.
+    min_gap_s: float = 0.5
+    #: Un gesto que llegaría más tarde que esto desde el principio de su frase se descarta.
+    max_delay_s: float = 2.5
+    #: El mismo gesto no se repite antes de esto.
+    repeat_s: float = 90.0
+    #: Como mucho un gesto ``Uncommon`` cada tanto y uno ``Rare`` cada tanto.
+    uncommon_s: float = 45.0
+    rare_s: float = 300.0
+    #: Si el modelo falla o no contesta a tiempo, un gesto de relleno neutro
+    #: (lista ``Utility_NoImpact``). No se usa cuando el modelo dice «ninguno».
+    fallback: bool = True
+
+    def effective_reasoning_effort(self, base: LLMSettings) -> str:
+        """El esfuerzo de razonamiento que se manda: el más bajo que acepta cada servidor.
+
+        - OpenAI: ``none`` (sin razonar).
+        - Gemini: ``none`` en los 2.5; ``minimal`` en los 3, que no dejan
+          apagar el razonamiento (``none`` no les vale).
+        - El mismo servidor que ``LLM_*``: su ``LLM_REASONING_EFFORT``.
+        - Otro servidor: ``off`` (no se envía).
+        """
+        if self.reasoning_effort.strip():
+            return self.reasoning_effort.strip()
+        base_url = self._base_url(base)
+        if is_openai_url(base_url):
+            return "none"
+        if is_gemini_url(base_url):
+            model = self._model(base).lower().removeprefix("models/")
+            return "none" if model.startswith("gemini-2") else "minimal"
+        return base.reasoning_effort if self._same_server(base) else "off"
+
+    def llm_settings(self, base: LLMSettings) -> LLMSettings:
+        """Ajustes del cliente del modelo de gestos, heredando lo que falte de ``base`` (``LLM_*``).
+
+        Con otro servidor que el de ``base`` no se heredan su clave, su
+        temperatura ni sus campos extra (son de ese servidor). La clave de
+        OpenAI solo se usa contra la API de OpenAI (``LLMSettings.key``) y la de
+        Gemini solo contra la de Gemini.
+        """
+        base_url = self._base_url(base)
+        same_server = self._same_server(base)
+        gemini = is_gemini_url(base_url)
+        effort = self.effective_reasoning_effort(base)
+        max_tokens = self.max_tokens
+        if max_tokens <= 0:
+            plain = effort.lower() == "none"
+            max_tokens = GESTURE_TOKENS_PLAIN if plain else GESTURE_TOKENS_THINKING
+        tokens_param = self.max_tokens_param or (
+            base.max_tokens_param
+            if same_server
+            else "max_completion_tokens"
+            if is_openai_url(base_url)
+            else "max_tokens"
+        )
+        return base.model_copy(
+            update={
+                "base_url": base_url,
+                "model": self._model(base),
+                "api_key": (
+                    self.api_key
+                    or (self.gemini_api_key if gemini else "")
+                    or (base.api_key if same_server else "")
+                ),
+                "reasoning_effort": effort,
+                "temperature": base.temperature if same_server else None,
+                "extra_body": dict(self.extra_body)
+                if self.extra_body
+                else (dict(base.extra_body) if same_server else {}),
+                "max_tokens": max_tokens,
+                "max_tokens_param": tokens_param,
+                "request_timeout": max(0.5, self.timeout_s),
+            }
+        )
+
+    def _base_url(self, base: LLMSettings) -> str:
+        return self.base_url.strip() or base.base_url
+
+    def _model(self, base: LLMSettings) -> str:
+        return self.model.strip() or base.model
+
+    def _same_server(self, base: LLMSettings) -> bool:
+        return self._base_url(base).rstrip("/") == base.base_url.rstrip("/")
+
+
 class AudioSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="AUDIO_", extra="ignore", env_ignore_empty=True)
 
@@ -284,6 +430,7 @@ class Settings(BaseSettings):
 
     live: LiveSettings = Field(default_factory=LiveSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    gestures: GestureSettings = Field(default_factory=GestureSettings)
     audio: AudioSettings = Field(default_factory=AudioSettings)
     vision: VisionSettings = Field(default_factory=VisionSettings)
     ws: WSSettings = Field(default_factory=WSSettings)

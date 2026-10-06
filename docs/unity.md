@@ -1016,6 +1016,82 @@ Mientras suena un gesto grande (atención o saludo) `IsWideShot` es cierto y
 `CameraFramingController` abre el plano. Las listas de clips viven en
 `SoniaAnimations.cs` y el asset `SoniaMotionSet` las materializa.
 
+### Gestos de hablar de Genies (Sage)
+
+Al hablar, Sonnia gesticula con los 161 gestos de Sage, un personaje del chat
+de genies.com. No son clips de Unity: los `.ozz` de Genies se leen en tiempo
+de ejecución.
+
+**Qué hay en el proyecto**
+
+- **Los clips:** `Assets/Animations/GeniesSage/ozz/*.ozz`. Los baja
+  `scripts/gestos_genies/descarga_ozz.py` del CDN de Genies y los importa
+  `GeniesOzzImporter` como `GeniesOzzAsset` (los bytes tal cual).
+- **El lector:** `GeniesOzzClip`, traducción del lector de Python
+  (`scripts/gestos_genies/ozz_genies.py`). Coincide al 0,0000° en 972 muestras
+  de los 162 clips.
+- **El set:** `SageGestureSet.asset`, que crea **Sonia > Gestos de Genies > Crear
+  set de Sage** desde `manifest.json`. Lleva la ficha que Genies da a su LLM:
+  descripción, intenciones, frecuencia, momento, impacto, intensidad y tiempos
+  del núcleo. El mismo menú añade `GeniesGestureLayer` al objeto Sonia y le
+  asigna el set.
+
+**Cómo se mueven (`GeniesGestureLayer`)**
+
+- **Regla de Genies:** el OZZ guarda la diferencia con la pose de enlace, así
+  que cada hueso del torso queda en `enlace de Sonnia · clip`. Es lo que hace el
+  motor de Genies con cada cuerpo (comprobado contra su motor web a 0,65°,
+  `gestos-genies/README.md`).
+- **De dónde sale el enlace:** de las `bindposes` de las mallas. Los huesos sin
+  peso lo toman de su hijo `…Bind`.
+- **Qué huesos mueve:** columna, cuello, cabeza, hombros, brazos, manos y 15
+  falanges por mano. La cadera y las piernas siguen con `MotionPlayer` (reposo,
+  IK de pies).
+- **Orden de ejecución:** corre en `LateUpdate` con orden -20, después del
+  Animator. Las físicas del pelo de Genies (orden 0) colocan el pelo sobre la
+  cabeza ya movida. La cabeza que sigue al visitante, la mirada y la cara suman
+  encima.
+- **Fundidos:** cada gesto entra y sale con el fundido de Sage
+  (`TransitionToClip_Duration`, 0,8 s) en curva suave. Si llega otro, el
+  anterior se funde hacia fuera a la vez.
+- **Cara:** pasa a `FaceRig` las curvas FACS del gesto, solo párpados, cejas,
+  mejillas y comisuras (`faceGain`, 1 como Genies). Boca y mandíbula son del
+  lip-sync, y `EYES_LOOK_*` de los ojos.
+
+**Quién decide**
+
+- **El director de gestos del orquestador** (mensaje `gesture`, ver
+  `docs/gestos.md`) elige el gesto.
+- **`SoniaBootstrap`** lo lanza cuando la voz de su frase ya suena:
+  - si la frase ya terminó, lo descarta;
+  - el de apertura (`utterance_id` null) espera hasta 4 s a la siguiente frase.
+- **`AvatarChoreographer.CanTalkGesture`** pide que esté hablando y con voz, sin
+  imagen, saludo, reacción, baile ni salida caminando.
+- **Corte:** el coreógrafo funde el gesto hacia fuera al salir de hablar, en una
+  pausa de voz, con otro clip de cuerpo y con `stop_speaking`.
+- **Gestos de manos por código** (`AvatarStateController.handGestures`): se
+  apagan mientras haya set, y los acentos de brazos callan mientras suena uno.
+- **Panel:** recibe los 161 en el catálogo `animations` (grupo `sage`) y puede
+  lanzar cualquiera por su nombre, en cualquier estado, para probarlo. Los
+  clips desactivados en el panel y el modo debug también frenan los
+  automáticos.
+
+**Comprobar**
+
+- **Sonia > Gestos de Genies > Hojas de contactos (en Play):** cada gesto en
+  cuatro instantes, con una cámara que encuadra torso y brazos. Sale en
+  `Temp/gestos-genies/` con un `indice.txt`.
+- **Resultado (6-oct):** revisados los 161, todos naturales. Los exagerados
+  (`blowingKissTinashe`, los `userTouch…`, `hairFlipTwoRiver`) son así por
+  diseño; el director los evita en el stand.
+
+**Lo que no se aplica**
+
+- La cadera y las piernas.
+- El reparto del giro de antebrazo y brazo en los huesos `…TwistNBind`, que
+  sí hace el motor de Genies.
+- La emoción `Happy` de Sage, que está vacía: sin huesos ni curvas animadas.
+
 ### Añadir una animación nueva
 
 1. Dejar el FBX en `Assets/Animations/Mixamo/` (o `RPM/`) con el nombre del
@@ -1516,6 +1592,10 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `SoniaMotionSet.cs` | ScriptableObject con los clips ya resueltos, generado por el menú |
 | `MotionPlayer.cs` | Reproductor de clips con la Playables API: fundidos por código, capa de cuerpo y capa de torso con máscara |
 | `AvatarChoreographer.cs` | Decide qué clip suena en cada estado: idle con variaciones y atención, escuchar con asentimientos, pensar, hablar encadenando gestos, saludo |
+| `Gestures/GeniesOzzClip.cs` | Lector de los clips OZZ de Genies (huesos y curvas de cara) |
+| `Gestures/GeniesOzzAsset.cs` | Bytes de un `.ozz` importado (`Editor/GeniesOzzImporter.cs`) |
+| `Gestures/GeniesGestureSet.cs` | Gestos de un personaje de Genies (Sage) con su ficha para el director de gestos |
+| `Gestures/GeniesGestureLayer.cs` | Reproduce los gestos de Genies sobre el torso (`enlace · clip`) con fundidos y curvas de cara |
 | `CameraFramingController.cs` | Planos del stand calculados con los huesos del avatar (conversación de cintura para arriba y reposo de rodillas para arriba), plano de panel, abierto para los bailes y travelling a cuerpo entero en el modo Fuera |
 | `StageScreen.cs` | Pantalla del stand (diseño F), construida por código en Play: fondo de la marca, logo, QR, invitación a hablar (bocadillo de Sonia) y subtítulos tipo karaoke |
 | `PresenceController.cs` | Modo Fuera (`presence`): sale caminando con el root motion del ciclo de caminar, se oculta, y vuelve frenando hasta su marca (sección 6c) |
@@ -1536,6 +1616,8 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `GeniesDefinition.cs` | Huella de una definición de avatar de Genies, para comparar definiciones sin depender del formato |
 | `Genies/GeniesSession.cs` | Un solo inicio de sesión en Genies a la vez para los cargadores de avatar y el editor de personaje (dos registros anónimos a la vez se pisaban) |
 | `Editor/SoniaHumanoidRig.cs` | Construye y guarda un Avatar Humanoid para modelos con esqueleto de Mixamo que llegan sin él (GLB de Ready Player Me) |
+| `Editor/GeniesGestureSetBuilder.cs` | Menú **Sonia > Gestos de Genies > Crear set de Sage**: set desde `manifest.json` y `GeniesGestureLayer` en Sonia |
+| `Editor/GeniesGestureCheck.cs` | Menú **Sonia > Gestos de Genies > Hojas de contactos (en Play)**: cada gesto en cuatro instantes, en `Temp/gestos-genies/` |
 | `Editor/SoniaCapture.cs` | Menú **Sonia > Captura vertical 9:16**: PNG 1080x1920 de la cámara principal |
 | `Editor/SoniaAppIcon.cs` | Menú **Sonia > Icono de la app (en Play)**: saca el icono de las apps (la cara de Sonia sobre el navy de la marca, con la forma de los iconos de macOS) en `Assets/UI/SoniaAppIcon.png` y lo pone en el Player al salir de Play |
 | `Editor/SoniaBrandAssets.cs` | Rutas y ajustes de importación de los assets de marca de Sonnet Code |

@@ -55,6 +55,10 @@ namespace Sonia
         [Tooltip("Salida y entrada caminando (modo Fuera) con su letrero. Si la escena no lo trae, se añade por código en este objeto.")]
         private PresenceController presence;
 
+        [SerializeField]
+        [Tooltip("Gestos de Genies al hablar (los elige el director de gestos del orquestador, mensaje gesture). Si está vacío se busca junto al coreógrafo.")]
+        private GeniesGestureLayer gestureLayer;
+
         [Header("Modo Fuera")]
         [SerializeField]
         [Range(0f, 10f)]
@@ -105,6 +109,14 @@ namespace Sonia
         private bool _pendingSpeakingState;
         private float _pendingSince;
         private int _lastAudioUtteranceId = -1;
+        // Frase cuya voz ya suena (la última que arrancó la gesticulación) y la última cerrada.
+        private int _speakingUtteranceId = -1;
+        private int _endedUtteranceId = -1;
+        // Gesto del director que espera a su frase (o a la siguiente, si es de apertura).
+        private string _pendingGesture;
+        private int _pendingGestureUtterance = -1;
+        private float _pendingGestureUntil;
+        private const float GestureWaitSeconds = 4f;
         // Momento en que se agotó el audio en mitad de 'hablando' (-1 si suena).
         private float _audioDrainedAt = -1f;
         // Imagen anunciada que espera a que la mano llegue arriba.
@@ -149,6 +161,7 @@ namespace Sonia
                 client.OnHideImage += HandleHideImage;
                 client.OnAttention += HandleAttention;
                 client.OnPlayAnimation += HandlePlayAnimation;
+                client.OnGesture += HandleGesture;
                 client.OnSetDisabledAnimations += HandleSetDisabledAnimations;
                 client.OnSetDebug += HandleSetDebug;
                 client.OnSetTuning += HandleSetTuning;
@@ -183,6 +196,7 @@ namespace Sonia
                 client.OnHideImage -= HandleHideImage;
                 client.OnAttention -= HandleAttention;
                 client.OnPlayAnimation -= HandlePlayAnimation;
+                client.OnGesture -= HandleGesture;
                 client.OnSetDisabledAnimations -= HandleSetDisabledAnimations;
                 client.OnSetDebug -= HandleSetDebug;
                 client.OnSetTuning -= HandleSetTuning;
@@ -223,6 +237,11 @@ namespace Sonia
             if (choreographer == null)
             {
                 choreographer = GetComponentInChildren<AvatarChoreographer>(true);
+            }
+
+            if (gestureLayer == null && choreographer != null)
+            {
+                gestureLayer = choreographer.GetComponent<GeniesGestureLayer>();
             }
 
             if (cameraFraming == null)
@@ -415,7 +434,24 @@ namespace Sonia
                 return;
             }
 
-            client.SendAnimations(AnimationCatalog.ToPairs(AnimationCatalog.Build(FullMotionSet)));
+            List<KeyValuePair<string, string>> pairs = AnimationCatalog.ToPairs(AnimationCatalog.Build(FullMotionSet));
+            GeniesGestureSet gestures = gestureLayer != null ? gestureLayer.Set : null;
+            if (gestures != null)
+            {
+                foreach (GeniesGestureSet.Gesture gesture in gestures.gestures)
+                {
+                    if (gesture != null && gesture.clip != null && !string.IsNullOrEmpty(gesture.name))
+                    {
+                        pairs.Add(new KeyValuePair<string, string>(gesture.name, "sage"));
+                    }
+                }
+            }
+
+            client.SendAnimations(pairs);
+            if (gestures != null)
+            {
+                client.SendGestureCatalog(gestures);
+            }
         }
 
         private void HandleSetDisabledAnimations(SetDisabledAnimationsMessage message)
@@ -575,7 +611,8 @@ namespace Sonia
             MotionPlayer player = choreographer.Player;
             string playing = OneShotName(player.CurrentClip(MotionPlayer.BodyLayer))
                              ?? OneShotName(player.CurrentClip(MotionPlayer.UpperLayer))
-                             ?? OneShotName(player.CurrentClip(MotionPlayer.RightArmLayer));
+                             ?? OneShotName(player.CurrentClip(MotionPlayer.RightArmLayer))
+                             ?? (gestureLayer != null ? gestureLayer.Current : null);
             if (_clipReported && playing == _reportedClip)
             {
                 return;
@@ -605,6 +642,19 @@ namespace Sonia
             AnimationCatalog.Entry entry;
             if (!AnimationCatalog.TryFind(FullMotionSet, message.Clip, out entry))
             {
+                if (gestureLayer != null && gestureLayer.Has(message.Clip))
+                {
+                    // Gesto de Genies (grupo sage): suena en el estado que haya, para probarlo.
+                    bool played = gestureLayer.Play(message.Clip);
+                    if (logEvents)
+                    {
+                        Debug.Log("[Sonia] gesto de Genies pedido por el panel: " + message.Clip
+                            + (played ? string.Empty : " (sin avatar todavía)"), this);
+                    }
+
+                    return;
+                }
+
                 Debug.LogWarning("[Sonia] se pidió una animación que no está en el set: " + message.Clip, this);
                 return;
             }
@@ -623,6 +673,105 @@ namespace Sonia
                 Debug.Log("[Sonia] animación pedida (" + (message.Whole ? "por voz" : "panel") + "): "
                     + entry.Clip.name, this);
             }
+        }
+
+        /// <summary>
+        /// El director de gestos del orquestador pide un gesto de Genies para una
+        /// frase. Suena cuando la voz de esa frase ya se oye y el coreógrafo lo
+        /// permite (hablando, sin imagen, reacción ni saludo); si su frase ya
+        /// terminó se descarta, y uno de apertura (sin frase) espera a la
+        /// siguiente. Ninguno espera más de <see cref="GestureWaitSeconds"/>.
+        /// </summary>
+        private void HandleGesture(GestureMessage message)
+        {
+            if (message == null || gestureLayer == null)
+            {
+                return;
+            }
+
+            if (!gestureLayer.Has(message.Name))
+            {
+                Debug.LogWarning("[Sonia] el director pidió un gesto que no está en el set: " + message.Name, this);
+                return;
+            }
+
+            if (_debugQuiet || _disabledClips.Contains(message.Name))
+            {
+                return;
+            }
+
+            int utterance = message.UtteranceId.HasValue ? message.UtteranceId.Value : -1;
+            if (utterance >= 0 && utterance <= _endedUtteranceId)
+            {
+                if (logEvents)
+                {
+                    Debug.Log("[Sonia] gesto " + message.Name + " descartado: la frase " + utterance + " ya terminó", this);
+                }
+
+                return;
+            }
+
+            _pendingGesture = message.Name;
+            _pendingGestureUtterance = utterance;
+            _pendingGestureUntil = Time.time + GestureWaitSeconds;
+            TryStartPendingGesture();
+        }
+
+        /// <summary>La voz de una frase empezó a sonar: puede arrancar su gesto.</summary>
+        private void OnSpeechAudible(int utteranceId)
+        {
+            _speakingUtteranceId = Mathf.Max(_speakingUtteranceId, utteranceId);
+            if (!string.IsNullOrEmpty(_pendingGesture))
+            {
+                TryStartPendingGesture();
+            }
+        }
+
+        private void TryStartPendingGesture()
+        {
+            // Tras una recarga del editor un string privado puede llegar vacío en vez de null.
+            if (string.IsNullOrEmpty(_pendingGesture))
+            {
+                return;
+            }
+
+            bool expired = Time.time > _pendingGestureUntil;
+            bool passed = _pendingGestureUtterance >= 0
+                          && (_pendingGestureUtterance <= _endedUtteranceId || _pendingGestureUtterance < _speakingUtteranceId);
+            if (expired || passed)
+            {
+                if (logEvents)
+                {
+                    Debug.Log("[Sonia] gesto " + _pendingGesture + " descartado: " + (passed ? "su frase ya pasó" : "no llegó a sonar"), this);
+                }
+
+                ClearPendingGesture();
+                return;
+            }
+
+            bool audible = _speakingUtteranceId >= 0 && _speakingUtteranceId > _endedUtteranceId;
+            if (_pendingGestureUtterance >= 0 ? _pendingGestureUtterance != _speakingUtteranceId || !audible : !audible)
+            {
+                return;
+            }
+
+            if (choreographer == null || !choreographer.CanTalkGesture)
+            {
+                return;
+            }
+
+            string name = _pendingGesture;
+            ClearPendingGesture();
+            if (gestureLayer.Play(name) && logEvents)
+            {
+                Debug.Log("[Sonia] gesto " + name + " con la frase " + _speakingUtteranceId, this);
+            }
+        }
+
+        private void ClearPendingGesture()
+        {
+            _pendingGesture = null;
+            _pendingGestureUtterance = -1;
         }
 
         private void HandleState(StateMessage message)
@@ -688,6 +837,8 @@ namespace Sonia
                     {
                         choreographer.NotifySpeechStart();
                     }
+
+                    OnSpeechAudible(message.UtteranceId);
                 }
             }
 
@@ -713,6 +864,8 @@ namespace Sonia
                 {
                     choreographer.NotifySpeechStart();
                 }
+
+                OnSpeechAudible(_pendingUtteranceId);
             }
 
             if (logEvents && why != null)
@@ -724,6 +877,10 @@ namespace Sonia
         private void Update()
         {
             ReportPlayingAnimation();
+            if (!string.IsNullOrEmpty(_pendingGesture))
+            {
+                TryStartPendingGesture();
+            }
 
             if (_pendingSpeakingState && Time.time - _pendingSince > speakingAudioTimeout)
             {
@@ -860,6 +1017,12 @@ namespace Sonia
             {
                 audioPlayer.MarkUtteranceComplete(message.UtteranceId);
             }
+
+            _endedUtteranceId = Mathf.Max(_endedUtteranceId, message.UtteranceId);
+            if (!string.IsNullOrEmpty(_pendingGesture))
+            {
+                TryStartPendingGesture();
+            }
         }
 
         private void HandleStopSpeaking(StopSpeakingMessage message)
@@ -877,6 +1040,12 @@ namespace Sonia
         {
             _pendingSpeakingState = false;
             _pendingSpeechStart = false;
+            ClearPendingGesture();
+            if (gestureLayer != null)
+            {
+                gestureLayer.Stop();
+            }
+
             _audioDrainedAt = -1f;
             if (audioPlayer != null)
             {

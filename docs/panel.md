@@ -153,6 +153,8 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
                      "guest_level": 0.0, "guest_frames": 0, "dropped_audio": 0, "stand_muted": false}},
   "camera_watch": {"available": true, "active": false, "open": false, "connected": false, "viewers": 0, "live": false,
                    "video": {"fps": 0.0, "kbps": 0, "rtt_ms": null, "step": 1, "width": 640, "quality": 65, "lost": 0}},
+  "gesture_director": {"enabled": true, "character": "Sage", "catalog": 162, "requests": 41, "gestures": 17, "fallbacks": 1,
+                       "none": 19, "unknown": 0, "vetoed": 2, "late": 3, "failures": 1, "avg_latency_s": 0.82, "last": "noBigDeal"},
   "settings_sync": {"cloud": "online", "synced": true, "pending": [], "rev": 42},
   "last_error": null,
   "capabilities": ["modes", "say", "ask", "stop", "mute", "restart", "images", "gestures", "animations", "animation_toggles", "subtitles", "debug", "greet", "showcase", "volume", "mic_gate", "voice", "notes", "voice_cache", "tuning", "cloud_settings", "avatar_editor", "guest_avatar_editor", "guest_mode", "camera_watch"]
@@ -183,6 +185,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   - `live`: si la cámara sale ahora del stand (sala conectada y alguien mirando).
   - `video`: las estadísticas del vídeo.
 - `trivia` (modo trivia, ver `docs/trivia.md`): `available`, si hay preguntas suficientes en `assets/trivia/preguntas.md` (si la trivia está apagada con `TRIVIA_ENABLED=false`, no aparece `trivia` en `capabilities`); `active`; `phase` (`off`, `asking` esperando respuesta o `revealing` con el resultado en pantalla); `number` y `total`; `threshold`, los aciertos para ganar; `score`, y la pregunta en curso con sus tres `options`.
+- `gesture_director` (gestos al hablar, ver `docs/gestos.md`): `null` si está apagado (`GESTURES_ENABLED=false` o sin clave para su modelo). Si no, contadores desde que arrancó el orquestador: `catalog`, cuántos gestos mandó Unity; `requests`, peticiones al modelo; `gestures`, gestos mandados a Unity (de ellos, `fallbacks` de relleno); `none`, frases en las que eligió no gesticular (incluidos `unknown`, respuestas que no eran un gesto, y `vetoed`, gestos que tiró la regla de frecuencia); `late`, gestos que llegaban tarde; `failures`, fallos o esperas agotadas del modelo; `avg_latency_s`, lo que tarda de media, y `last`, el último gesto. Solo informativo: la página aún no lo muestra.
 - `settings_sync`: `cloud` es `off` (sin `PANEL_CLOUD_TOKEN`), `offline` u `online`; `synced`, si ya llegaron los ajustes de la nube en esta conexión; `pending`, los ajustes cambiados aquí que la nube aún no ha confirmado, y `rev`, la última revisión de la nube aplicada.
 
 ### `GET /api/gallery`

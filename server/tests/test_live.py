@@ -33,6 +33,7 @@ from sonia.config import (
     VisionSettings,
     WSSettings,
 )
+from sonia.gestures import GestureDirector
 from sonia.live.audio import NoiseGate, pcm16_from_float, rms
 from sonia.live.client import LiveClient, LiveError
 from sonia.live.engine import INTERRUPT_TEXT, LiveEngine
@@ -317,6 +318,7 @@ async def make_rig(
     narrator: VisionNarrator | None = None,
     showcase: Showcase | None = None,
     trivia: bool = False,
+    gestures: Callable[[Hub], GestureDirector] | None = None,
     **settings_overrides: Any,
 ) -> AsyncIterator[LiveRig]:
     from websockets.asyncio.client import connect
@@ -340,6 +342,7 @@ async def make_rig(
             showcase=showcase,
             connect=live_connect,
             knowledge_dir=knowledge,
+            gestures=gestures(hub) if gestures is not None else None,
             tick_s=0.02,
         )
         async with connect(f"ws://127.0.0.1:{hub.port}/") as client:

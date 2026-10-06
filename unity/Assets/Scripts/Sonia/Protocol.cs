@@ -34,6 +34,7 @@ namespace Sonia
         public const string StageMode = "stage_mode";
         public const string SetVolume = "set_volume";
         public const string PlayAnimation = "play_animation";
+        public const string Gesture = "gesture";
         public const string SetSubtitles = "set_subtitles";
         public const string SetDisabledAnimations = "set_disabled_animations";
         public const string SetDebug = "set_debug";
@@ -56,6 +57,7 @@ namespace Sonia
         public const string TextInput = "text_input";
         public const string CameraFrame = "camera_frame";
         public const string Animations = "animations";
+        public const string GestureCatalog = "gesture_catalog";
         public const string AnimationPlaying = "animation_playing";
         public const string AvatarEditor = "avatar_editor";
         public const string AvatarSaved = "avatar_saved";
@@ -160,6 +162,24 @@ namespace Sonia
 
         /// <summary>Nombre de clip concreto, opcional.</summary>
         [JsonProperty("clip")] public string Clip;
+    }
+
+    /// <summary>
+    /// El director de gestos del orquestador pide un gesto de Genies
+    /// (<see cref="GeniesGestureSet"/>) para acompañar una frase de Sonia.
+    /// </summary>
+    [Serializable]
+    public class GestureMessage
+    {
+        /// <summary>Nombre del gesto, tal cual va en <c>gesture_catalog</c>.</summary>
+        [JsonProperty("name")] public string Name;
+
+        /// <summary>
+        /// Frase (<c>speech_start</c>) que acompaña: si ya terminó, se descarta.
+        /// Null: para la próxima frase (el gesto de apertura, elegido con lo que
+        /// dijo el visitante); se guarda unos segundos.
+        /// </summary>
+        [JsonProperty("utterance_id")] public int? UtteranceId;
     }
 
     /// <summary>
@@ -763,6 +783,55 @@ namespace Sonia
             {
                 ["type"] = MessageTypes.Animations,
                 ["animations"] = list
+            };
+            return message.ToString(Formatting.None);
+        }
+
+        /// <summary>
+        /// Gestos de Genies que Unity puede reproducir, con la ficha que el
+        /// director de gestos del orquestador le pasa a su modelo (docs/gestos.md).
+        /// </summary>
+        public static string GestureCatalogMessage(GeniesGestureSet set)
+        {
+            JArray list = new JArray();
+            if (set != null && set.gestures != null)
+            {
+                foreach (GeniesGestureSet.Gesture g in set.gestures)
+                {
+                    if (g == null || g.clip == null || string.IsNullOrEmpty(g.name))
+                    {
+                        continue;
+                    }
+
+                    list.Add(new JObject
+                    {
+                        ["name"] = g.name,
+                        ["lists"] = new JArray(g.lists ?? new string[0]),
+                        ["duration"] = Math.Round(g.duration, 3),
+                        ["core_start"] = Math.Round(g.coreStart, 3),
+                        ["core_stop"] = Math.Round(g.coreStop, 3),
+                        ["critical_beat"] = g.criticalBeat >= 0f ? new JValue(Math.Round(g.criticalBeat, 3)) : JValue.CreateNull(),
+                        ["held"] = g.held,
+                        ["min_duration"] = g.minDuration >= 0f ? new JValue(Math.Round(g.minDuration, 3)) : JValue.CreateNull(),
+                        ["frequency"] = g.frequency ?? "Standard",
+                        ["timing"] = g.timing ?? "Short",
+                        ["impact"] = g.impact ?? "",
+                        ["intensity"] = g.intensity,
+                        ["special"] = g.special,
+                        ["description"] = g.description ?? "",
+                        ["intents"] = new JArray(g.intents ?? new string[0]),
+                        ["intent_description"] = g.intentDescription ?? "",
+                        ["tags"] = new JArray(g.tags ?? new string[0])
+                    });
+                }
+            }
+
+            JObject message = new JObject
+            {
+                ["type"] = MessageTypes.GestureCatalog,
+                ["character"] = set != null ? set.character : "",
+                ["transition_s"] = set != null ? Math.Round(set.transitionSeconds, 3) : 0.8,
+                ["gestures"] = list
             };
             return message.ToString(Formatting.None);
         }
