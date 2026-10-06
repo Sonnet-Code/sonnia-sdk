@@ -9,7 +9,10 @@
 // SoniaPlayerBuildFixes la retoca (en macOS: NAF sin precarga y sin llavero; en
 // las dos: el orquestador empaquetado con su .env). En macOS se compila con
 // Mono: Genies pide IL2CPP, pero este Mac no tiene el módulo IL2CPP de macOS y
-// con Mono funciona igual que en el editor. Windows sigue con IL2CPP.
+// con Mono funciona igual que en el editor. Windows va con IL2CPP si se compila
+// en Windows y con Mono si se compila desde un Mac (IL2CPP de Windows solo se
+// puede compilar en Windows); en las dos, con Vulkan como única API gráfica,
+// porque las texturas de NAF (Genies) llegan en formatos de Vulkan.
 // El resumen del BuildReport se escribe en unity/Build/<plataforma>/build-report.txt
 // para poder leerlo sin rebuscar en el log de Unity.
 
@@ -19,6 +22,7 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Sonia.EditorTools
 {
@@ -102,9 +106,19 @@ namespace Sonia.EditorTools
                 extraScriptingDefines = defines
             };
 
-            // macOS con Mono solo durante esta build (ver la cabecera).
+            if (target == BuildTarget.StandaloneWindows64)
+            {
+                PlayerSettings.SetUseDefaultGraphicsAPIs(target, false);
+                PlayerSettings.SetGraphicsAPIs(target, new[] { GraphicsDeviceType.Vulkan });
+            }
+
+            // Mono solo durante esta build (ver la cabecera).
             ScriptingImplementation backend = PlayerSettings.GetScriptingBackend(NamedBuildTarget.Standalone);
-            if (target == BuildTarget.StandaloneOSX)
+            bool mono = target == BuildTarget.StandaloneOSX;
+#if !UNITY_EDITOR_WIN
+            mono |= target == BuildTarget.StandaloneWindows64;
+#endif
+            if (mono)
             {
                 PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, ScriptingImplementation.Mono2x);
             }
@@ -119,6 +133,8 @@ namespace Sonia.EditorTools
                 // Y a disco: la build guarda los ajustes con Mono y, si no, se quedaba así.
                 PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, backend);
                 AssetDatabase.SaveAssets();
+                // Sin esto el editor puede no volver a abrir el proyecto (ver el método).
+                SoniaPlayerBuildFixes.RestoreEditorNafPreload();
             }
 
             string summary = Summarize(report);

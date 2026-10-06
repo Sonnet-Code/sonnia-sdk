@@ -13,12 +13,20 @@
 # funciona sin red desde la primera vez. Hay que congelarlo en cada sistema: en
 # macOS sale para macOS y en Windows para Windows.
 #
+# En Windows se ejecuta desde Git Bash (viene con Git para Windows) con uv
+# instalado, o en el runner de GitHub (.github/workflows/orquestador-windows.yml).
+#
 # Uso: scripts/build_orquestador.sh
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 case "$(uname -s)" in
   Darwin) PLATFORM=macOS; SEP=":" ;;
-  MINGW*|MSYS*|CYGWIN*) PLATFORM=Windows; SEP=";" ;;
+  MINGW*|MSYS*|CYGWIN*)
+    PLATFORM=Windows; SEP=";"
+    # PyInstaller es un programa de Windows: rutas C:/... y sin que Git Bash
+    # las reescriba (las de --add-data llevan «;» y las estropeaba).
+    REPO="$(cd "$REPO" && pwd -W)"
+    export MSYS_NO_PATHCONV=1 ;;
   *) PLATFORM=Linux; SEP=":" ;;
 esac
 OUT="$REPO/unity/Build/orquestador/$PLATFORM"

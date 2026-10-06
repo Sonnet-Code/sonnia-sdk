@@ -230,8 +230,8 @@ Genies solo da soporte oficial a Android, iOS y Windows. En macOS la build se
 hace igual; `SoniaPlayerBuildFixes` y `SoniaBuild` aplican estas diferencias:
 
 - **Mono en vez de IL2CPP**, solo durante la build de macOS (este Mac no tiene
-  el módulo IL2CPP de macOS; con Mono funciona como en el editor). Windows
-  sigue con IL2CPP, que Genies exige.
+  el módulo IL2CPP de macOS; con Mono funciona como en el editor). Windows,
+  ver «Build de Windows».
 - **NAF sin precarga.** El preproceso de Genies (`XcodePostProcess`) marca sus
   siete librerías NAF como «Load on Startup» en macOS. Precargadas, el
   `UnityPluginLoad` de `libgnUnityPlugin` corre antes de que Unity cree el
@@ -245,6 +245,15 @@ hace igual; `SoniaPlayerBuildFixes` y `SoniaBuild` aplican estas diferencias:
   nulos aunque tuvieran los mismos archivos que en el editor. (Antes había un
   puente nativo, `SoniaNafShim`, que retrasaba el arranque de NAF; arreglaba el
   cierre pero no las piezas vacías y se quitó.)
+  **Ojo con el editor:** la precarga es de la build, nunca del editor. El 6 de
+  octubre los `.meta` de esas librerías quedaron con `isPreloaded: 1` tras una
+  build buena (los importadores decían que no) y el editor no volvía a abrir el
+  proyecto: se caía al arrancar con «Failed to create Metal command queue»,
+  también en modo batch. Desde entonces `SoniaBuild` llama al acabar cada build,
+  salga bien o mal, a `SoniaPlayerBuildFixes.RestoreEditorNafPreload`, que lo
+  deja a 0 también en el texto del `.meta`. Si vuelve a pasar con el editor
+  cerrado: `sed -i '' 's/^  isPreloaded: 1$/  isPreloaded: 0/'` en
+  `Packages/com.genies.avatar-sdk.client/Internal/NAF Plugin/Runtime/Plugins/macOS/*.dylib.meta`.
 - **Rutas de Genies.** `libGeniesAuthAPI` y `libGeniesTelemetryBridge` buscan
   `libCommonDeps` en una ruta absoluta del equipo de un desarrollador de
   Genies: el post-proceso les añade la ruta de la app.
@@ -288,6 +297,55 @@ Logging, que escribe `cache/logs/naf.log`.
 Si el avatar no llega a montarse, el cargador escribe en el registro qué había
 construido el SDK cuando se agotó el tiempo («Genies no termina de montar el
 avatar. En el aparcamiento: …», con objetos, mallas y texturas).
+
+### Build de Windows
+
+Se puede compilar en Windows o desde un Mac. **Sonia > Build Windows** (o
+`SoniaBuild.BuildWindows` en modo batch, ver más abajo) deja la carpeta
+`unity/Build/Windows/` (`Sonia.exe`, `Sonia_Data`, `UnityPlayer.dll`…), que
+se copia entera al equipo.
+
+- **Vulkan como única API gráfica.** Genies lo exige en Windows: NAF entrega las
+  texturas del avatar en formatos de Vulkan. `SoniaBuild` lo fija antes de cada
+  build de Windows (queda guardado en `ProjectSettings`).
+- **IL2CPP en Windows, Mono desde un Mac.** Genies pide IL2CPP, pero IL2CPP para
+  Windows solo se compila en Windows (con las herramientas de C++ de Visual
+  Studio). Desde un Mac `SoniaBuild` usa Mono durante la build, como en macOS.
+  Hace falta el módulo **Windows Build Support (Mono)** de Unity 6000.6.0f1:
+  `"/Applications/Unity Hub.app/Contents/MacOS/Unity Hub" -- --headless install-modules --version 6000.6.0f1 --module windows-mono`.
+- **El orquestador congelado tiene que ser de Windows.** PyInstaller solo
+  congela para el sistema en el que corre, así que la carpeta
+  `unity/Build/orquestador/Windows/sonia-orquestador/` sale de una de estas dos:
+  - `scripts/build_orquestador.sh` en Windows, desde Git Bash y con `uv`.
+  - El workflow **Orquestador para Windows** de GitHub Actions
+    (`.github/workflows/orquestador-windows.yml`, se lanza a mano:
+    `gh workflow run orquestador-windows.yml` y `gh run download -n sonia-orquestador-windows -D unity/Build/orquestador/Windows/sonia-orquestador`).
+    Congela el código que haya en GitHub, así que antes hay que subir los
+    cambios.
+
+  Sin esa carpeta la build sale igual, pero sin orquestador (lo avisa la
+  consola) y la app espera uno externo en el puerto 8765 (`uv run sonia run` en
+  ese equipo). La build mete en el orquestador el `.env` del repo y, si no las
+  trae, las frases grabadas de `cache/voice` del equipo donde se compila.
+- **Sin probar todavía en un Windows de verdad** (6 de octubre de 2026). El
+  lado de Windows de Genies no lleva los arreglos de macOS (llavero y rutas): su
+  librería de sesión usa DPAPI y no hace falta tocarla. Al probarla por primera
+  vez, mirar el `Player.log`
+  (`%USERPROFILE%\AppData\LocalLow\DefaultCompany\sonia\Player.log`) y
+  `%APPDATA%\Sonia\logs`.
+
+Desde un Mac, en modo batch y con el editor cerrado (tarda unos minutos la
+primera vez, porque compila los shaders para Vulkan):
+
+```bash
+cd unity
+/Applications/Unity/Hub/Editor/6000.6.0f1/Unity.app/Contents/MacOS/Unity -batchmode -quit \
+  -projectPath "$PWD" -executeMethod Sonia.EditorTools.SoniaBuild.BuildWindows -logFile Build/build-windows.log
+cat Build/Windows/build-report.txt
+```
+
+La build cambia la plataforma activa del proyecto a Windows. Para seguir con la
+de macOS no hay que hacer nada: **Sonia > Build macOS** la vuelve a cambiar.
 
 ### Probar en el editor
 

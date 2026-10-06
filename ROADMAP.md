@@ -21,7 +21,7 @@ El motor GPT-Live (ADR 007) ya habló con la API real el 4 de octubre: de esa pr
 
 El panel vive en Cloudflare (`https://sonia.sonnetcode.com`, Worker `sonia-panel`, código en `cloud/panel/`) y cada Sonia se conecta a él hacia fuera. Desplegado y probado de punta a punta el 3 de octubre (login, lista de Sonias, acción y conexión de una Sonia real). El panel local (`http://127.0.0.1:8780`) queda de respaldo sin internet. Para volver a desplegar: `cd cloud/panel && npm install && npm run deploy` con la sesión de wrangler.
 
-- [ ] Volver a desplegar el panel (`cd cloud/panel && npm run deploy`): el de `sonia.sonnetcode.com` aún sirve los estáticos de antes del 4 de octubre, con el interruptor "Interrumpirla hablando", que ya no existe.
+- [x] Volver a desplegar el panel (6 de octubre, versión `669c6b96`): ya sirve los estáticos de ahora, con el selector para varias Sonias a la vez.
 - [ ] Poner `PANEL_CLOUD_TOKEN` en el `.env` del repo de cada equipo donde se compile (el valor está en `~/.config/sonia/panel-secrets.env` del Mac de Jean, junto con la contraseña del panel). Desde el 5 de octubre toda app lo lleva y la build no empieza sin él; el nombre de cada Sonia da igual (Jean).
 - [ ] Repartir la contraseña del panel al personal del stand. Jean la cambió el 5 de octubre por una para el evento (`npx wrangler secret put PANEL_PASSWORD` en `cloud/panel/`); cambiarla cierra todas las sesiones abiertas del panel.
 - [ ] Opcional: Cloudflare Access (login con el correo `@sonnetcode.com`) en vez de, o además de, la contraseña. Pasos en `docs/panel.md` ("Acceso"); hace falta una política Bypass para `/agent` y los secretos `ACCESS_TEAM_DOMAIN` y `ACCESS_AUD`. Ningún token disponible tiene permiso de Access: se hace desde el dashboard.
@@ -51,8 +51,12 @@ El código está escrito y compila contra las DLL de Unity 6000.6.0f1 (0 errores
 Sonia no tiene por qué correr en el Mac de desarrollo. Guía de instalación para cualquier equipo en `docs/stand.md`, "Instalar Sonia en el equipo del stand".
 
 - [ ] Decidir el equipo (mini PC GMKtec con Windows, otro portátil o el Mac) e instalarlo siguiendo esa guía: claves y `PANEL_CLOUD_TOKEN` en su `.env`.
-- [ ] Que no quede otra Sonia con `PANEL_CLOUD_TOKEN` corriendo en otro equipo (el panel avisa de duplicados).
-- [ ] Si es Windows: comprobar que el micrófono abre a 24 kHz (si no, `LIVE_SAMPLE_RATE=16000`), compilar la build de Unity para Windows y buscar un equivalente de `scripts/kiosk.sh` (es bash).
+- [x] Varias Sonias a la vez (6 de octubre, pedido de Jean): pueden funcionar en sitios distintos y el panel deja elegir cuál se controla y cambiar de una a otra, sin ponerles nombre (`docs/stand.md`, «Varias Sonias a la vez»). En el stand solo habrá una.
+- [ ] Si es Windows (`docs/unity.md`, «Build de Windows»):
+  - [x] Build de Unity para Windows desde el Mac (6 de octubre): Mono, porque IL2CPP de Windows solo se compila en Windows, y Vulkan, que Genies exige.
+  - [ ] Orquestador congelado para Windows: workflow «Orquestador para Windows» de GitHub Actions (hay que subir los commits) o `scripts/build_orquestador.sh` en Git Bash en ese equipo. Sin él, la app espera un `uv run sonia run` externo.
+  - [ ] Probar la app en un Windows de verdad: que Genies cargue a Sonia con Vulkan, micrófono a 24 kHz (si no, `LIVE_SAMPLE_RATE=16000`), cámara y panel. Mirar el `Player.log` y `%APPDATA%\Sonia\logs`.
+  - [ ] Arranque automático: acceso directo a `Sonia.exe` en `shell:startup` (con la app todo en uno no hace falta `scripts/kiosk.sh`).
 - [ ] Internet estable todo el día: sin red Sonia no conversa. Plan B: pasar a "Solo saludos" desde el panel local (sigue funcionando con las frases grabadas).
 - [ ] Prueba completa con micrófono, cámara y Unity en el equipo del stand.
 

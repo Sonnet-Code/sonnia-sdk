@@ -161,13 +161,13 @@ Sonia no tiene por qué correr en el Mac donde se desarrolla. El equipo del stan
 
 La app de Unity lleva dentro el orquestador, el `.env` y las frases grabadas: en el equipo del stand no hacen falta Python, `uv` ni el repo, y un doble clic arranca a Sonia entera.
 
-1. Prepararla en un equipo con el repo **del mismo sistema** que el del stand (la app de macOS sale en un Mac y la de Windows en Windows, con el módulo de Windows e IL2CPP de Unity y las herramientas de C++ de Visual Studio), con el `.env` que tendrá el stand (`OPENAI_API_KEY` y `PANEL_CLOUD_TOKEN`; sin `PANEL_CLOUD_TOKEN` la build no empieza, para que toda app salga en el panel):
-   1. `scripts/build_orquestador.sh` (en Windows, desde Git Bash). Congela el orquestador y mete las frases de `cache/voice` de ese equipo, si las hay.
-   2. En Unity, **Sonia > Build macOS** o **Sonia > Build Windows**. La app sale en `unity/Build/macOS/Sonia.app` o en `unity/Build/Windows/` (la carpeta entera: `Sonia.exe`, `Sonia_Data`...). Si el orquestador congelado es anterior al último cambio de `server/` o `assets/`, la build lo avisa en la consola: hay que volver a congelarlo.
+1. Prepararla en un equipo con el repo y con el `.env` que tendrá el stand (`OPENAI_API_KEY` y `PANEL_CLOUD_TOKEN`; sin `PANEL_CLOUD_TOKEN` la build no empieza, para que toda app salga en el panel). La app de macOS sale en un Mac; la de Windows, en Windows o desde un Mac (detalle en `docs/unity.md`, «Build de Windows»):
+   1. Congelar el orquestador **para el sistema del stand**: `scripts/build_orquestador.sh` en ese sistema (en Windows, desde Git Bash con `uv`) o, para Windows desde un Mac, el workflow «Orquestador para Windows» de GitHub Actions, que deja la carpeta para `unity/Build/orquestador/Windows/`.
+   2. En Unity, **Sonia > Build macOS** o **Sonia > Build Windows**. La app sale en `unity/Build/macOS/Sonia.app` o en `unity/Build/Windows/` (la carpeta entera: `Sonia.exe`, `Sonia_Data`...). La build mete en el orquestador el `.env` y las frases de `cache/voice` del equipo donde se compila. Si el orquestador congelado es anterior al último cambio de `server/` o `assets/`, la build lo avisa en la consola: hay que volver a congelarlo.
 2. Copiar la app al equipo del stand, nunca por git: lleva la clave dentro. Que sea a una carpeta propia en la que se pueda escribir (por ejemplo `~/Sonia/` o `C:\Sonia\`), porque Genies guarda al lado de la app su caché de piezas del avatar (`cache/`, unos 90 MB tras el primer arranque con red). En macOS, si se copia desde otro Mac, la primera vez hay que abrirla con clic derecho > Abrir (está firmada solo en local).
-3. Lo de cada equipo va en `SONIA_HOME` (`~/Library/Application Support/Sonia` en macOS, `%APPDATA%\Sonia` en Windows): caché, estado del panel, registros y `overrides.env`, que manda sobre el `.env` de la app. Ahí van los ajustes de ese equipo, por ejemplo `PANEL_INSTANCE_NAME=Mini PC del stand` o `AUDIO_INPUT_DEVICE`.
+3. Lo de cada equipo va en `SONIA_HOME` (`~/Library/Application Support/Sonia` en macOS, `%APPDATA%\Sonia` en Windows): caché, estado del panel, registros y `overrides.env`, que manda sobre el `.env` de la app. Ahí van los ajustes de ese equipo, por ejemplo `AUDIO_INPUT_DEVICE`.
 4. Abrir la app. La primera vez el sistema pide permiso de micrófono y cámara para Sonia: hay que aceptarlo (en macOS se cambia en Ajustes > Privacidad y seguridad). No pide la contraseña del llavero: la app no guarda nada en él. La app lanza su orquestador si nadie escucha ya en el puerto 8765, copia a `SONIA_HOME` las frases grabadas que traiga y se conecta al panel.
-5. Comprobar en `https://sonia.sonnetcode.com` (o en el panel local, `http://127.0.0.1:8780`) que sale esta Sonia y solo esta, y que micrófono, cámara y pantalla están bien.
+5. Comprobar en `https://sonia.sonnetcode.com` (o en el panel local, `http://127.0.0.1:8780`) que sale esta Sonia, y que micrófono, cámara y pantalla están bien. Si hay otras encendidas (por ejemplo, una en la oficina), salen todas arriba del panel: se toca la que se quiere controlar y se cambia cuando haga falta (ver «Varias Sonias a la vez»).
 6. Arranque automático al encender: en macOS, añadir la app en Ajustes > General > Ítems de inicio; en Windows, un acceso directo a `Sonia.exe` en la carpeta de inicio (`Win+R`, `shell:startup`). Si el orquestador se cae, la app lo relanza sola; si se cae la app, su orquestador se cierra solo en unos segundos (no se queda gastando) y hay que volver a abrir la app.
 7. Registros para revisar lo que pasó: `SONIA_HOME/logs/orquestador-*.log` (los diez últimos arranques, con cada frase del visitante y de Sonia, las acciones y lo que contestó el backend) y el `Player.log` de Unity (`~/Library/Logs/DefaultCompany/sonia/` en macOS, `%USERPROFILE%\AppData\LocalLow\DefaultCompany\sonia\` en Windows).
 
@@ -175,11 +175,21 @@ La app de Unity lleva dentro el orquestador, el `.env` y las frases grabadas: en
 
 1. Python 3.12 con `uv` y la build de Unity para ese sistema (`docs/unity.md`; la de macOS está en `unity/Build/macOS/Sonia.app`, la de Windows hay que compilarla).
 2. Clonar el repo (privado, org Sonnet-Code) y, desde `server/`: `uv sync --extra audio --extra camera --extra panel`.
-3. `.env` a partir de `.env.example`, con las claves pasadas a mano (nunca por git): `OPENAI_API_KEY`, `AUDIO_INPUT_DEVICE`, `PANEL_CLOUD_TOKEN` (para que salga en el panel de `sonia.sonnetcode.com`) y un nombre reconocible en `PANEL_INSTANCE_NAME` (por ejemplo "Mini PC del stand").
-4. Nada más de red: Sonia se conecta sola hacia fuera al panel de Cloudflare; no hay que abrir puertos ni instalar túneles. Si otro equipo (el Mac de desarrollo, por ejemplo) también tiene `PANEL_CLOUD_TOKEN` y está corriendo, el panel mostrará dos Sonias y avisará: hay que dejar solo una.
+3. `.env` a partir de `.env.example`, con las claves pasadas a mano (nunca por git): `OPENAI_API_KEY`, `AUDIO_INPUT_DEVICE`, `PANEL_CLOUD_TOKEN` (para que salga en el panel de `sonia.sonnetcode.com`). No hace falta ponerle nombre.
+4. Nada más de red: Sonia se conecta sola hacia fuera al panel de Cloudflare; no hay que abrir puertos ni instalar túneles. Si otro equipo (el Mac de desarrollo, por ejemplo) también tiene `PANEL_CLOUD_TOKEN` y está corriendo, el panel mostrará las dos y se elige cuál se controla (ver «Varias Sonias a la vez»).
 5. `uv run sonia check` y `uv run sonia say "Hola, soy Sonia"` por el altavoz del stand.
 6. `uv run sonia run`. A los 20 segundos graba solas las frases del modo saludos en `cache/voice` de ese equipo (o con "Preparar voces" en el panel). Cada equipo tiene su caché y su estado del panel (`cache/`).
-7. Abrir la app de Unity y comprobar en `https://sonia.sonnetcode.com` (desde un móvil, con la contraseña del panel) que sale esta Sonia y solo esta. Sin internet queda el panel local en `http://127.0.0.1:8780` de ese equipo.
+7. Abrir la app de Unity y comprobar en `https://sonia.sonnetcode.com` (desde un móvil, con la contraseña del panel) que sale esta Sonia. Sin internet queda el panel local en `http://127.0.0.1:8780` de ese equipo.
+
+### Varias Sonias a la vez
+
+Pueden funcionar varias Sonias a la vez en sitios distintos (por ejemplo, la del stand y otra en la oficina para una demo). En el stand solo habrá una.
+
+- Cada equipo es una Sonia distinta para el panel: tiene su propio id (en `cache/instance_id` o en `SONIA_HOME`), su modo (Conversando, Solo saludos o Fuera), su sesión de GPT-Live y su gasto. **No hace falta ponerles nombre**: cada una sale con el nombre de su equipo y, si dos equipos se llaman igual, el panel les añade el final de su id (por ejemplo «MacBook-Pro · d7b4c5» y «MacBook-Pro · 2135d8»). `PANEL_INSTANCE_NAME` existe por si algún día se quiere un nombre, pero nada depende de él.
+- En `https://sonia.sonnetcode.com`, con dos o más conectadas, arriba sale «¿Qué Sonia estás controlando?» con todas (modo y salud de cada una). Se toca una para controlarla y todo lo de abajo se aplica solo a esa; se puede cambiar de una a otra en cualquier momento. Cada navegador recuerda la última que eligió.
+- Los ajustes (letrero, volumen, voz, avisos, Developer, personaje…) son compartidos: cambiarlos en una los cambia en todas. Lo que no se comparte es el modo y el gasto.
+- Si dos conversan a la vez, el panel lo indica (sin alarma): cada una gasta unos 3 USD por hora. Si las dos están en la misma sala se oirían y se contestarían entre ellas: el botón «Dejar solo … conversando» manda las demás a «Fuera».
+- En un mismo equipo solo puede ir una: la app usa el orquestador que ya esté escuchando en el puerto 8765.
 
 ## Pantalla vertical (9:16)
 

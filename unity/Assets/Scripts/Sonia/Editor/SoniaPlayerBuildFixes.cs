@@ -182,6 +182,51 @@ namespace Sonia.EditorTools
             Debug.Log("[Sonia] Build de macOS: " + changed + " librería(s) NAF sin precarga; se cargan al primer uso, como en el editor.");
         }
 
+        /// <summary>
+        /// Deja las librerías NAF de macOS sin precarga en disco. Se llama al acabar
+        /// cada build, salga bien o mal (SoniaBuild). El 6 de octubre los .meta
+        /// quedaron con «isPreloaded: 1» tras una build buena aunque los
+        /// importadores decían que no, y así el editor carga NAF al arrancar,
+        /// antes de tener Metal, y se cae al abrir el proyecto («Failed to create
+        /// Metal command queue»). Por eso se mira también el texto del .meta.
+        /// </summary>
+        public static void RestoreEditorNafPreload()
+        {
+            int fixedCount = 0;
+            foreach (PluginImporter importer in PluginImporter.GetAllImporters())
+            {
+                string path = importer.assetPath.Replace('\\', '/');
+                if (!path.Contains(NafMacPlugins))
+                {
+                    continue;
+                }
+
+                if (importer.isPreloaded)
+                {
+                    importer.isPreloaded = false;
+                    importer.SaveAndReimport();
+                    fixedCount++;
+                }
+
+                string meta = Path.GetFullPath(path) + ".meta";
+                if (File.Exists(meta))
+                {
+                    string text = File.ReadAllText(meta);
+                    if (text.Contains("isPreloaded: 1"))
+                    {
+                        File.WriteAllText(meta, text.Replace("isPreloaded: 1", "isPreloaded: 0"));
+                        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+                        fixedCount++;
+                    }
+                }
+            }
+
+            if (fixedCount > 0)
+            {
+                Debug.Log("[Sonia] Librerías NAF de macOS otra vez sin precarga en el editor (" + fixedCount + " cambio(s)).");
+            }
+        }
+
         private static void FixMac(string app)
         {
             string plugins = Path.Combine(app, "Contents", "PlugIns");
@@ -289,6 +334,16 @@ namespace Sonia.EditorTools
 #else
             CopyDirectory(frozen, target);
 #endif
+
+            // Frases grabadas de este equipo si el orquestador congelado no las trae
+            // (el del runner de GitHub para Windows no las tiene: cache/ no está en git).
+            string voice = Path.Combine(RepoRoot, "cache", "voice");
+            string bundledVoice = Path.Combine(target, "_internal", "cache", "voice");
+            if (Directory.Exists(voice) && !Directory.Exists(bundledVoice))
+            {
+                CopyDirectory(voice, bundledVoice);
+                Debug.Log("[Sonia] Frases grabadas de este equipo añadidas al orquestador (" + platform + ").");
+            }
 
             string env = Path.Combine(RepoRoot, ".env");
             if (File.Exists(env))
