@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Estampados de la camiseta de staff de Sonnia (DevFest Santo Domingo 2026).
 
-Genera, para cada variante (azul, negra, blanca), en
+Genera, para cada variante (marino, azul, negra, blanca), en
 unity/Assets/Resources/StaffShirt/<variante>/:
-  staff-front.png    lo de delante: lockup oficial (emblema GDG + «DevFest /
-                     Santo Domingo»), «STAFF» y Sonnet Code;
+  staff-front.png    lo de delante: el arte del DevFest Santo Domingo 2026 (el de
+                     la camiseta real) y, debajo, Sonnet Code;
   staff-back.png     lo de detrás: «STAFF» grande y los patrocinadores 2026,
                      con Sonnet Code el más grande;
   staff-shirt.json   color de la camiseta y dónde va cada estampado, en metros
@@ -16,12 +16,20 @@ camiseta y lo hornea en su textura (docs/unity.md, «Camiseta de staff»). La ap
 usa la variante de -camiseta <nombre> o, sin él, DefaultVariant.
 
 Referencias (6 de octubre de 2026, ver docs/unity.md):
+  - la camiseta de staff de 2026 es azul marino con la estampa en blanco (foto de
+    Jean del 7 de octubre): #3A3448 es la tela de esa foto con el balance de
+    blancos corregido con la tinta blanca;
+  - el arte del pecho (logos/devfest-sd-2026-arte.svg, «DevFest 2026 / # →
+    Santo Domingo» con fray Antón de Montesinos gritando su sermón, el mapa con
+    el corazón, [*] y GDG) es el de la camiseta real, vectorizado el 7 de
+    octubre; el PNG de al lado sale de él con arte.py (líneas del dibujo más
+    gruesas para la pantalla);
   - las camisetas de DevFest Santo Domingo 2023 eran azul royal con la estampa en
     blanco; el lockup 2026 es el de https://devfest.gdgsantodomingo.org;
   - patrocinadores 2026 de la web oficial del evento (Platino, Oro, Plata, Aliado).
 Todo se estampa en una tinta (blanca en las oscuras, casi negra en la blanca),
-salvo el emblema de GDG, a color con anillos de la tinta, y, en la blanca, el
-logo de Sonnet Code a color. Los logos de origen están en logos/.
+salvo el emblema de GDG y el corazón del arte, a color, y, en la blanca, el logo
+de Sonnet Code a color. Los logos de origen están en logos/.
 
 Uso: python3 scripts/camiseta_staff/genera.py [--preview carpeta] [variante...]
 Solo necesita Pillow y la fuente Avenir Next de macOS (parecida a Google Sans).
@@ -66,6 +74,8 @@ class Variant:
 
 
 VARIANTS = {
+    # Como la camiseta de staff de 2026 (azul marino, foto del 7 de octubre).
+    "marino": Variant("marino", "#3A3448", (255, 255, 255), "sonnet-code-blanco-2lineas.png"),
     # Como las de DevFest Santo Domingo 2023.
     "azul": Variant("azul", "#1F5FD6", (255, 255, 255), "sonnet-code-blanco-2lineas.png"),
     "negra": Variant("negra", "#1A1A1A", (255, 255, 255), "sonnet-code-blanco-2lineas.png"),
@@ -218,6 +228,23 @@ def lockup(width_m: float, ink: RGB) -> Image.Image:
     return fit(image, width_m=width_m)
 
 
+#: Arte del pecho: blanco y los colores de GDG sobre transparente (ver la cabecera).
+ART = "devfest-sd-2026-arte.png"
+
+
+def devfest_art(width_m: float, ink: RGB) -> Image.Image:
+    """El arte del DevFest 2026 con lo blanco en la tinta (los colores se quedan)."""
+    image = trimmed(LOGOS / ART)
+    if ink != (255, 255, 255):
+        pixels = image.load()
+        for y in range(image.height):
+            for x in range(image.width):
+                r, g, b, a = pixels[x, y]
+                if a and min(r, g, b) > 200:
+                    pixels[x, y] = ink + (a,)
+    return fit(image, width_m=width_m)
+
+
 def staff_badge(height_m: float, ink: RGB) -> Image.Image:
     """«STAFF» espaciado entre dos líneas finas."""
     word = fit(text("STAFF", BOLD, height_m * 1.35, ink, tracking=0.32), height_m=height_m)
@@ -280,11 +307,11 @@ def build(variant: Variant) -> list[Canvas]:
     ink = variant.ink
     sonnet = trimmed(LOGOS / variant.sonnet)
 
-    # Delante: entre el cuello (unos 11 cm por encima del pecho) y la cintura.
-    front = Canvas("staff-front", "front", (-0.15, -0.14, 0.15, 0.10), ink)
-    front.place(lockup(0.165, ink), 0.0, 0.052)
-    front.place(staff_badge(0.017, ink), 0.0, 0.002)
-    front.place(fit(sonnet, width_m=0.125), 0.0, -0.062)
+    # Delante: entre el cuello (unos 11 cm por encima del pecho) y la cintura. El
+    # arte del DevFest grande, como en la camiseta real, y Sonnet Code debajo.
+    front = Canvas("staff-front", "front", (-0.15, -0.16, 0.15, 0.10), ink)
+    front.place(devfest_art(0.18, ink), 0.0, 0.004)
+    front.place(fit(sonnet, width_m=0.077), 0.0, -0.122)
 
     # Detrás: STAFF grande arriba y los patrocinadores por niveles, dentro de
     # ±11 cm (más allá la espalda ya gira hacia el costado) y por encima del bajo

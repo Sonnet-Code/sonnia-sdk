@@ -804,11 +804,26 @@ namespace Sonia
 
         private void BuildLogo(RectTransform stage)
         {
+            const float width = 250f;
+            Vector2 offset = new Vector2(56f, 64f);
             Sprite logo = LoadSprite("stage-logo", Vector4.zero);
+            float aspect = logo != null ? logo.rect.width / logo.rect.height : 1200f / 486f;
+            Vector2 size = new Vector2(width, width / aspect);
+
+            // Sombra suave detrás, como la del recuadro del QR: el contorno del logo
+            // difuminado (stage-logo-shadow, con margen alrededor), 12 px más abajo.
+            Sprite shadow = LoadSprite("stage-logo-shadow", Vector4.zero);
+            if (logo != null && shadow != null)
+            {
+                Vector2 shadowSize = shadow.rect.size * (width / logo.rect.width);
+                Vector2 margin = (shadowSize - size) * 0.5f;
+                Image shade = NewImage("SombraLogo", stage, shadow, new Color(0f, 0f, 0f, 0.55f));
+                PlaceTopLeft(shade.rectTransform, offset - margin + new Vector2(0f, 12f), shadowSize);
+            }
+
             Image image = NewImage("Logo", stage, logo, Color.white);
             image.preserveAspect = true;
-            float aspect = logo != null ? logo.rect.width / logo.rect.height : 1200f / 486f;
-            PlaceTopLeft(image.rectTransform, new Vector2(56f, 64f), new Vector2(250f, 250f / aspect));
+            PlaceTopLeft(image.rectTransform, offset, size);
         }
 
         private void BuildQrCard(RectTransform parent)

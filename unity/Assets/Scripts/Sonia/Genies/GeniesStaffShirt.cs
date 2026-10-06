@@ -28,8 +28,9 @@
 // Al destruirse el avatar se devuelve la textura original al material (NAF puede
 // reutilizarlo) y se suelta la horneada.
 //
-// Variantes: azul (la de por defecto, DefaultVariant), negra y blanca; se elige
-// con -camiseta <variante>. -sin-camiseta-staff lo desactiva.
+// Variantes: marino (la de por defecto, DefaultVariant, como la de staff de 2026),
+// azul, negra y blanca; se elige con -camiseta <variante>. -sin-camiseta-staff lo
+// desactiva.
 
 using System;
 using System.Collections.Generic;
@@ -44,11 +45,11 @@ namespace Sonia
     {
         public const string DisableArgument = "-sin-camiseta-staff";
 
-        /// <summary>Argumento que elige la variante: -camiseta azul|negra|blanca.</summary>
+        /// <summary>Argumento que elige la variante: -camiseta marino|azul|negra|blanca.</summary>
         public const string VariantArgument = "-camiseta";
 
         /// <summary>La que se pone sin -camiseta.</summary>
-        public const string DefaultVariant = "azul";
+        public const string DefaultVariant = "marino";
 
         /// <summary>Nombre de la textura horneada (la sonda la reconoce).</summary>
         public const string BakedTextureName = "staff-shirt";

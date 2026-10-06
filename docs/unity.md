@@ -621,22 +621,32 @@ Las del stand no llevan `build.env`.
 Sonnia lleva la camiseta de staff del DevFest Santo Domingo 2026 sobre la prenda
 de arriba que tenga su personaje de Genies (`Genies/GeniesStaffShirt.cs`, 6 de
 octubre de 2026). Se pone siempre: el editor de personaje elige la prenda y la
-camiseta la viste. Hay tres variantes:
-- `azul`: azul royal con tinta blanca. Es la de por defecto (`GeniesStaffShirt.DefaultVariant`).
+camiseta la viste. Hay cuatro variantes:
+- `marino`: azul marino (#3A3448) con tinta blanca, como la camiseta de staff de 2026. Es la de por defecto (`GeniesStaffShirt.DefaultVariant`).
+- `azul`: azul royal con tinta blanca, como las de 2023.
 - `negra`: tinta blanca.
 - `blanca`: tinta #1E1E1E, anillos oscuros en el emblema, como el oficial para fondo claro, y Sonnet Code a color.
 
-`-camiseta negra` (o `blanca`) en la línea de comandos elige otra variante y `-sin-camiseta-staff` la quita.
+`-camiseta azul` (o `negra` o `blanca`) en la línea de comandos elige otra variante y `-sin-camiseta-staff` la quita.
 
 **Diseño** (`scripts/camiseta_staff/genera.py`, con los logos de origen en
 `scripts/camiseta_staff/logos/`):
-- Azul royal (#1F5FD6), como las camisetas del DevFest Santo Domingo 2023, que
-  contrasta con el fondo navy de la pantalla. Todo en blanco, una sola tinta,
+- Azul marino (#3A3448), como la camiseta de staff de 2026 (foto del 7 de
+  octubre: la tela con el balance de blancos corregido con la tinta blanca).
+  Antes era azul royal (#1F5FD6), como las de 2023, que contrastaba con el
+  fondo navy de la pantalla; con la marino, el fondo pasó al azul royal del
+  DevFest (ver «Pantalla del stand»). Todo en blanco, una sola tinta,
   salvo el emblema de GDG, que va a color con sus anillos blancos, como el de la
   web del evento.
-- Delante: el lockup oficial de 2026 (emblema de GDG + «DevFest / Santo
-  Domingo»), «— STAFF —» y Sonnet Code, el patrocinador más visible porque es el
-  único delante.
+- Delante: el arte de la camiseta real de 2026 («DevFest 2026 / # → Santo
+  Domingo», fray Antón de Montesinos gritando su sermón, el mapa con el corazón,
+  [*] y Google Developer Groups), de
+  18 cm de ancho, y debajo Sonnet Code, el patrocinador más visible porque es el
+  único delante. El arte está vectorizado en
+  `scripts/camiseta_staff/logos/devfest-sd-2026-arte.svg` (sirve también para
+  imprimir) y `genera.py` usa el PNG de al lado; en la variante `blanca` lo
+  blanco pasa a la tinta oscura. Hasta el 7 de octubre delante iban el lockup
+  (emblema de GDG + «DevFest / Santo Domingo») y «— STAFF —».
 - Detrás: «STAFF» grande, el lockup y los patrocinadores 2026 de la web oficial
   del evento por niveles. Sonnet Code va el más grande. Después vienen Google y
   Banco Popular (Platino); Heva, Bojote, Caribium y TT Academy (Oro); Thraive y
@@ -654,8 +664,8 @@ escribe él) y `staff-shirt.json`, con el color y
 el rectángulo de cada estampado en metros respecto al hueso del pecho
 (UpperChest): x hacia la derecha de quien mira e y hacia arriba. Para cambiar el
 diseño hay que tocar `build()` en `genera.py`, ejecutar
-`python3 scripts/camiseta_staff/genera.py --preview <carpeta>` (vistas sobre el
-azul) y volver a compilar.
+`python3 scripts/camiseta_staff/genera.py --preview <carpeta>` (vistas sobre la
+tela de cada variante) y volver a compilar.
 
 **Cómo se pone.** La camiseta de Genies es un URP Lit (NAF lo convierte en
 tiempo de ejecución). Sus texturas son color (blanco puro), normales (pliegues y
@@ -735,8 +745,8 @@ escena no cambia y en modo edición se sigue viendo el HUD antiguo:
 
 | Elemento | Dónde (px de la referencia 1080x1920) | Cuándo |
 |---|---|---|
-| Fondo navy de la marca: degradado, dos brillos, puntos, la S de marca de agua y el halo azul de detrás de Sonia | Toda la pantalla, en un Canvas propio que dibuja la cámara principal a 12 m (detrás de Sonia, fijo aunque la cámara se mueva); pasa por el posprocesado de la escena y por eso va precompensado | Siempre |
-| Logo de Sonnet Code (S en degradado, texto blanco) | Arriba a la izquierda, (56, 64), 250 de ancho | Siempre |
+| Fondo azul royal, el del arte del DevFest 2026 (hasta el 7 de octubre, el navy de la marca: con la camiseta marino Sonnia se perdía en él): degradado, dos brillos, puntos, la S de marca de agua y el halo azul de detrás de Sonia | Toda la pantalla, en un Canvas propio que dibuja la cámara principal a 12 m (detrás de Sonia, fijo aunque la cámara se mueva); pasa por el posprocesado de la escena y por eso va precompensado | Siempre |
+| Logo de Sonnet Code todo en blanco (variación 14 de la marca; la S en degradado se perdía en el azul royal) con una sombra suave como la del recuadro del QR (`stage-logo-shadow`, negra al 55 %, 12 px más abajo) | Arriba a la izquierda, (56, 64), 250 de ancho | Siempre |
 | Tarjeta blanca con el QR a sonnetcode.com/es y «¡Conoce más!» en negrita (el logo ya dice Sonnet Code) | Arriba a la derecha, margen 56, 232 x 266 | Salvo con imagen o trivia (ocupan esa franja) |
 | Invitación: bocadillo blanco de Sonia, «SONIA» (Manrope ExtraBold 34, azul de marca) y «¡Acércate y pregúntame lo que quieras!» (Manrope ExtraBold 62, dos líneas), con la colita a la izquierda del centro inclinada hacia ella | Abajo, margen 72 a los lados y 96 abajo; la colita sale a 236 del borde izquierdo del bocadillo | Si Sonia puede conversar (`stage_mode` con `talk`), está en reposo, no hay subtítulos desde hace 7,5 s y no hay imagen, trivia ni modo Fuera |
 | Subtítulos de Sonia: Manrope ExtraBold 64, blancos, centrados, sin caja, con lo que acaba de decir atenuado | Abajo, a 96 del borde, 968 de ancho, como mucho unos 110 caracteres (de una frase larga se ve el final) | Mientras habla y 6 s después |
@@ -765,8 +775,9 @@ Detalles que no son obvios:
   `scripts/urp_post.py` simula esa cadena de URP (gradación LDR; contrastada con
   una captura, falla en un nivel sobre 255) y `scripts/stage_assets.py` pinta el
   fondo que, tras ella, se ve como la maqueta, con el halo azul de la maqueta
-  centrado a 757 px (entre los ojos del plano de reposo y los del de
-  conversación). El script lee el perfil del Volume: si se toca el perfil o el
+  centrado a 600 px (90 px por debajo de los ojos del plano de reposo y de los
+  del de conversación). Los colores del fondo están arriba del script
+  (`BG_STOPS`, `GLOW_TOP`, `GLOW_BOTTOM`, `HALO_COLOR`, `HALO_PEAK`). El script lee el perfil del Volume: si se toca el perfil o el
   modo de gradación del pipeline, basta con volver a generar los recursos. Las
   motas del escenario no influyen: son unos pocos puntos de luz delante del fondo.
 - **Lo antiguo se apaga en Play**: el telón 3D (`Sonia/Backdrop`), el logo del
