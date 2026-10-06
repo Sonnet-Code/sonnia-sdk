@@ -114,6 +114,17 @@ namespace Sonia
         /// </summary>
         public static event Action<GeniesAvatarLoader, string> AvatarShown;
 
+        /// <summary>
+        /// Se espera antes de poner en pantalla un avatar ya montado, aún en el
+        /// aparcamiento, para retocarlo sin que se vea el cambio: la camiseta de
+        /// staff (GeniesStaffShirt). Cada uno tiene BeforeShowTimeoutSeconds; si
+        /// falla o tarda, el avatar sale igual.
+        /// </summary>
+        public static event Func<GeniesAvatarLoader, Transform, UniTask> BeforeShow;
+
+        /// <summary>Tope de cada BeforeShow (s).</summary>
+        private const float BeforeShowTimeoutSeconds = 8f;
+
         /// <summary>Donde espera el avatar mientras carga, lejos de la cámara.</summary>
         private static readonly Vector3 ParkedPosition = new Vector3(0f, -1000f, 0f);
 
@@ -536,6 +547,12 @@ namespace Sonia
                     return Superseded;
                 }
 
+                await RunBeforeShow(pending.Root.transform, token);
+                if (IsSuperseded(version, json))
+                {
+                    return Superseded;
+                }
+
                 // Cambio en un solo fotograma: Bind apaga el anterior (el ancla, el
                 // doble o el avatar de antes) y pone este en su sitio.
                 if (!binder.Bind(pending.Root.transform))
@@ -770,6 +787,34 @@ namespace Sonia
             }
 
             AvatarEditorSession.SetDefinitionFor(role, string.IsNullOrEmpty(current) ? null : current);
+        }
+
+        private async UniTask RunBeforeShow(Transform root, CancellationToken token)
+        {
+            Func<GeniesAvatarLoader, Transform, UniTask> handlers = BeforeShow;
+            if (handlers == null)
+            {
+                return;
+            }
+
+            foreach (Delegate handler in handlers.GetInvocationList())
+            {
+                token.ThrowIfCancellationRequested();
+                try
+                {
+                    await ((Func<GeniesAvatarLoader, Transform, UniTask>)handler)(this, root)
+                        .Timeout(TimeSpan.FromSeconds(BeforeShowTimeoutSeconds));
+                }
+                catch (TimeoutException)
+                {
+                    Debug.LogWarning("[Sonia] Un retoque del avatar antes de mostrarlo tardó más de "
+                                     + BeforeShowTimeoutSeconds + " s; sale sin esperarlo.", this);
+                }
+                catch (Exception exception) when (!(exception is OperationCanceledException))
+                {
+                    Debug.LogException(exception, this);
+                }
+            }
         }
 
         private void RaiseShown(string json)

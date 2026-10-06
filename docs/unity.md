@@ -593,6 +593,81 @@ abierto y de panel, panel de imágenes, telón y luz. El encuadre guardado
 (cámara en (0; 1,201; −1,363), FOV 40) se ajustó con el avatar del SDK; el doble
 mide algo distinto, así que recalcularlo cambia un poco el plano.
 
+### Camiseta de staff
+
+Sonnia lleva la camiseta de staff del DevFest Santo Domingo 2026 sobre la prenda
+de arriba que tenga su personaje de Genies (`Genies/GeniesStaffShirt.cs`, 6 de
+octubre de 2026). Se pone siempre: el editor de personaje elige la prenda y la
+camiseta la viste. `-sin-camiseta-staff` en la línea de comandos la quita.
+
+**Diseño** (`scripts/camiseta_staff/genera.py`, con los logos de origen en
+`scripts/camiseta_staff/logos/`):
+- Azul royal (#1F5FD6), como las camisetas del DevFest Santo Domingo 2023, que
+  contrasta con el fondo navy de la pantalla. Todo en blanco, una sola tinta,
+  salvo el emblema de GDG, que va a color con sus anillos blancos, como el de la
+  web del evento.
+- Delante: el lockup oficial de 2026 (emblema de GDG + «DevFest / Santo
+  Domingo»), «— STAFF —» y Sonnet Code, el patrocinador más visible porque es el
+  único delante.
+- Detrás: «STAFF» grande, el lockup y los patrocinadores 2026 de la web oficial
+  del evento por niveles. Sonnet Code va el más grande. Después vienen Google y
+  Banco Popular (Platino); Heva, Bojote, Caribium y TT Academy (Oro); Thraive y
+  Talento Digital (Plata); y Festiva (Aliado). Los logos pensados para fondo
+  oscuro se pasan a blanco dejando lo oscuro como tela (el cuadrado del Popular,
+  los ojos del panda de Bojote). Los pensados para fondo claro quedan como
+  silueta blanca con sus blancos en tela (las letras de «academy»).
+- El emblema de GDG se dibuja desde la geometría de su SVG oficial: ImageMagick
+  lo rasterizaba mal. «DevFest» va en Avenir Next, la de macOS más parecida a
+  Google Sans.
+
+`genera.py` escribe en `Assets/Resources/StaffShirt/` los dos PNG (legibles, sin
+comprimir y sin mipmaps, ver sus `.meta`) y `staff-shirt.json`, con el color y
+el rectángulo de cada estampado en metros respecto al hueso del pecho
+(UpperChest): x hacia la derecha de quien mira e y hacia arriba. Para cambiar el
+diseño hay que tocar `build()` en `genera.py`, ejecutar
+`python3 scripts/camiseta_staff/genera.py --preview <carpeta>` (vistas sobre el
+azul) y volver a compilar.
+
+**Cómo se pone.** La camiseta de Genies es un URP Lit (NAF lo convierte en
+tiempo de ejecución). Sus texturas son color (blanco puro), normales (pliegues y
+tejido) y metal/rugosidad, todas a 2048. No trae el mapa de proyección que usan
+las prendas de `MegaShader` con estampado: `_DecalAlbedoTransparency`
+proyectado con `_DecalUVProjection`, que es como Genies pone sus estampados
+(`MegaMaterial.ApplyProjectedTexturesAsync`). Así que `GeniesStaffShirt` hace
+esa proyección:
+1. Corre en `GeniesAvatarLoader.BeforeShow`, con el avatar aún en el
+   aparcamiento, así que nunca se le ve con la camiseta blanca. Tiene 8 s de
+   tope; si falla, sale con su ropa.
+2. Busca la prenda de arriba: la submalla que no es piel ni pelo de Genies y que
+   pasa por encima y por debajo del pecho.
+3. Copia su textura de color por la GPU y, en un hilo aparte, rasteriza los
+   triángulos de la malla en el espacio de la textura. Cada texel sabe en qué
+   punto del cuerpo está y con qué normal, y coge el color del estampado que cae
+   ahí proyectado de frente o de espaldas. Usa 2x2 muestras por texel y se
+   desvanece cuando la tela gira hacia el costado.
+4. La tela se multiplica por el azul y la tinta va encima, también por la
+   textura. Las normales no se tocan, así que el estampado se pliega y se ilumina
+   con la tela.
+5. Al destruirse el avatar se devuelve la textura original al material, porque
+   NAF puede reutilizarlo.
+Unos 2 s en este Mac, mientras el avatar sigue aparcado. El registro dice
+«Camiseta de staff puesta en …».
+
+**Para revisarla sin editor** (`Genies/GeniesShirtProbe.cs`):
+
+```bash
+unity/Build/macOS/Sonnia.app/Contents/MacOS/Sonnia -sin-orquestador -probe-shirt /tmp/sonda -capture-dir /tmp/capturas
+```
+
+Escribe en la carpeta:
+- `sonda.txt`, con cada submalla y su shader, sus texturas y una rejilla de
+  rayos que da las UV del pecho y de la espalda;
+- las texturas de la prenda, ya horneadas;
+- `vista-frente.png`, `vista-espalda.png` y `vista-tres-cuartos.png`, con una
+  cámara temporal y sin el posprocesado del stand.
+
+Con `-capture-dir`, además, capturas de la pantalla del stand.
+
 ### Cambiar de avatar
 
 **Sonia > Colocar avatar** vale para cualquier VRM. Detecta solo la convención
