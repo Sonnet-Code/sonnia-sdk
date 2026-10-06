@@ -598,7 +598,12 @@ mide algo distinto, así que recalcularlo cambia un poco el plano.
 Sonnia lleva la camiseta de staff del DevFest Santo Domingo 2026 sobre la prenda
 de arriba que tenga su personaje de Genies (`Genies/GeniesStaffShirt.cs`, 6 de
 octubre de 2026). Se pone siempre: el editor de personaje elige la prenda y la
-camiseta la viste. `-sin-camiseta-staff` en la línea de comandos la quita.
+camiseta la viste. Hay tres variantes:
+- `azul`: azul royal con tinta blanca. Es la de por defecto (`GeniesStaffShirt.DefaultVariant`).
+- `negra`: tinta blanca.
+- `blanca`: tinta #1E1E1E, anillos oscuros en el emblema, como el oficial para fondo claro, y Sonnet Code a color.
+
+`-camiseta negra` (o `blanca`) en la línea de comandos elige otra variante y `-sin-camiseta-staff` la quita.
 
 **Diseño** (`scripts/camiseta_staff/genera.py`, con los logos de origen en
 `scripts/camiseta_staff/logos/`):
@@ -620,8 +625,9 @@ camiseta la viste. `-sin-camiseta-staff` en la línea de comandos la quita.
   lo rasterizaba mal. «DevFest» va en Avenir Next, la de macOS más parecida a
   Google Sans.
 
-`genera.py` escribe en `Assets/Resources/StaffShirt/` los dos PNG (legibles, sin
-comprimir y sin mipmaps, ver sus `.meta`) y `staff-shirt.json`, con el color y
+`genera.py` escribe, para cada variante, en `Assets/Resources/StaffShirt/<variante>/`
+los dos PNG (legibles, sin comprimir y sin mipmaps; los `.meta` que falten los
+escribe él) y `staff-shirt.json`, con el color y
 el rectángulo de cada estampado en metros respecto al hueso del pecho
 (UpperChest): x hacia la derecha de quien mira e y hacia arriba. Para cambiar el
 diseño hay que tocar `build()` en `genera.py`, ejecutar

@@ -7,7 +7,7 @@
 //   - el color de la tela se multiplica por el de la camiseta. Genies pinta la
 //     tela de blanco y saca los pliegues y el tejido del mapa de normales, que no
 //     se toca, así que la prenda se queda con su textura y su sombreado;
-//   - los estampados (Resources/StaffShirt, los genera
+//   - los estampados (Resources/StaffShirt/<variante>, los genera
 //     scripts/camiseta_staff/genera.py con su staff-shirt.json) se proyectan de
 //     frente o de espaldas sobre la malla y se hornean en la textura de la
 //     prenda: cada texel sabe en qué punto del cuerpo está y coge el color del
@@ -18,7 +18,8 @@
 // Al destruirse el avatar se devuelve la textura original al material (NAF puede
 // reutilizarlo) y se suelta la horneada.
 //
-// -sin-camiseta-staff en la línea de comandos lo desactiva.
+// Variantes: azul (la de por defecto, DefaultVariant), negra y blanca; se elige
+// con -camiseta <variante>. -sin-camiseta-staff lo desactiva.
 
 using System;
 using System.Collections.Generic;
@@ -32,6 +33,12 @@ namespace Sonia
     public static class GeniesStaffShirt
     {
         public const string DisableArgument = "-sin-camiseta-staff";
+
+        /// <summary>Argumento que elige la variante: -camiseta azul|negra|blanca.</summary>
+        public const string VariantArgument = "-camiseta";
+
+        /// <summary>La que se pone sin -camiseta.</summary>
+        public const string DefaultVariant = "azul";
 
         /// <summary>Nombre de la textura horneada (la sonda la reconoce).</summary>
         public const string BakedTextureName = "staff-shirt";
@@ -63,7 +70,7 @@ namespace Sonia
             }
 
             float started = Time.realtimeSinceStartup;
-            Design design = Design.Load();
+            Design design = Design.Load(Variant());
             if (design == null)
             {
                 return;
@@ -120,9 +127,17 @@ namespace Sonia
             owner.Material = garment.Material;
             owner.Property = garment.AlbedoProperty;
             owner.Texture = texture;
-            Debug.Log("[Sonia] Camiseta de staff puesta en «" + garment.Material.name + "» ("
+            Debug.Log("[Sonia] Camiseta de staff (" + design.Name + ") puesta en «" + garment.Material.name + "» ("
                       + width + "x" + height + ", " + job.PrintedTexels + " texeles estampados, "
                       + ((Time.realtimeSinceStartup - started) * 1000f).ToString("F0") + " ms).");
+        }
+
+        /// <summary>La variante de la línea de comandos (-camiseta) o la de por defecto.</summary>
+        private static string Variant()
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            int index = Array.IndexOf(args, VariantArgument);
+            return index >= 0 && index + 1 < args.Length ? args[index + 1].Trim().ToLowerInvariant() : DefaultVariant;
         }
 
         /// <summary>Píxeles de una textura aunque no sea legible (copia por la GPU, en sRGB).</summary>
@@ -173,26 +188,36 @@ namespace Sonia
 
         private sealed class Design
         {
+            public string Name;
             public Color32 Color;
             public List<Print> Prints = new List<Print>();
 
-            public static Design Load()
+            public static Design Load(string variant)
             {
-                TextAsset json = Resources.Load<TextAsset>(ResourceFolder + "staff-shirt");
+                string folder = ResourceFolder + variant + "/";
+                TextAsset json = Resources.Load<TextAsset>(folder + "staff-shirt");
+                if (json == null && variant != DefaultVariant)
+                {
+                    Debug.LogWarning("[Sonia] Camiseta de staff: no hay variante «" + variant + "»; uso la " + DefaultVariant + ".");
+                    folder = ResourceFolder + DefaultVariant + "/";
+                    json = Resources.Load<TextAsset>(folder + "staff-shirt");
+                }
+
                 if (json == null)
                 {
-                    Debug.LogWarning("[Sonia] Camiseta de staff: falta Resources/StaffShirt/staff-shirt.json.");
+                    Debug.LogWarning("[Sonia] Camiseta de staff: falta Resources/" + folder + "staff-shirt.json.");
                     return null;
                 }
 
                 DesignFile file = JsonUtility.FromJson<DesignFile>(json.text);
                 var design = new Design
                 {
+                    Name = folder.TrimEnd('/').Substring(ResourceFolder.Length),
                     Color = ColorUtility.TryParseHtmlString(file.color, out Color color) ? (Color32)color : new Color32(255, 255, 255, 255)
                 };
                 foreach (PrintFile entry in file.prints ?? Array.Empty<PrintFile>())
                 {
-                    Texture2D image = Resources.Load<Texture2D>(ResourceFolder + entry.texture);
+                    Texture2D image = Resources.Load<Texture2D>(folder + entry.texture);
                     if (image == null || !image.isReadable || entry.rect == null || entry.rect.Length != 4)
                     {
                         Debug.LogWarning("[Sonia] Camiseta de staff: estampado «" + entry.texture + "» ausente, no legible o sin rect.");
