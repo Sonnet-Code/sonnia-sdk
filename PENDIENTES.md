@@ -74,7 +74,7 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
 
 ## 4. Builds y reparto 📦
 
-- [x] **Recompilar todo tras los arreglos de arriba.** **Hecho (6 de octubre, 22:06): stand y pruebas, macOS y Windows, con los orquestadores congelados de nuevo. Llevan los bailes por voz, la descripción física, los gestos por código, la trivia con los arreglos del registro de la demo, la agenda y los cargos reales y el último avatar guardado.**
+- [x] **Recompilar todo tras los arreglos de arriba.** **Hecho (6 de octubre, 22:24): stand y pruebas, macOS y Windows, con los orquestadores congelados de nuevo. Llevan los bailes por voz, la descripción física, los gestos por código, la trivia con los arreglos del registro de la demo, la agenda y los cargos reales y el último avatar guardado.**
   - [x] macOS (Apple Silicon): `unity/Build/Sonnia-macOS.zip` y `Sonnia-pruebas-macOS.zip`. Probada en silencio con el orquestador falso.
   - [x] Windows: `unity/Build/Sonnia-Windows.zip` y `Sonnia-pruebas-Windows.zip`, con el orquestador del workflow `orquestador-windows.yml`. Sin probar en un PC de verdad.
   - [x] Mac Intel: no se puede (ver bugs).
