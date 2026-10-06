@@ -651,6 +651,18 @@ esa proyección:
    punto del cuerpo está y con qué normal, y coge el color del estampado que cae
    ahí proyectado de frente o de espaldas. Usa 2x2 muestras por texel y se
    desvanece cuando la tela gira hacia el costado.
+   Para que la tinta caiga solo donde caería con una prenda de verdad hay tres
+   condiciones:
+   - **La malla se toma con los brazos en cruz.** En el aparcamiento están a
+     76° y la tela de la axila queda plegada detrás de la espalda.
+   - **Cada estampado va solo en su pieza de tela:** la isla UV del torso que
+     más superficie le aporta. Las mangas quedan fuera.
+   - **Solo se tiñe la tela visible desde el estampado:** hay un mapa de
+     profundidad de 1,5 mm por estampado y una tolerancia de 1,2 cm.
+
+   Sin esto, Jean vio el 6 de octubre un trozo de la «S» de la espalda en la
+   cara interior de la manga izquierda, que se separaba del resto al mover el
+   brazo.
 4. La tela se multiplica por el azul y la tinta va encima, también por la
    textura. Las normales no se tocan, así que el estampado se pliega y se ilumina
    con la tela.
