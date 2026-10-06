@@ -74,12 +74,14 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
   - [x] 🗒️ Confirmar apellidos y cargos exactos. **Hecho (6 de octubre): copiados de sonnetcode.com/es/about; Mariel Cruz no sale en la página y queda como encargada de publicidad.**
   - [x] Archivo nuevo `assets/knowledge/08-equipo-sonnet-code.md`: quién es quién en el stand y a quién mandar a la gente según lo que pregunten. **Hecho dentro de `04-sonnet-code.md` (el `08` es la agenda): equipo y a quién mandar a cada visitante según lo que pregunte.**
 - [x] ✨ **Su propia descripción física:** **Hecho (6 de octubre), en `server/sonia/persona.py`. A las 22:20 se puso al día con el avatar guardado a las 20:50: coletas bajas con horquillas, vaqueros acampanados, tenis blancos y la camiseta azul del staff. Si se cambia el personaje en el editor, hay que retocar ese texto.**
-- [ ] ✨ **Camiseta igual a la oficial.**
-  - [ ] 🗒️ Foto de la camiseta real de staff de este año (Delia o Mariel).
-  - [ ] Ajustar color, estampa y patrocinadores en `scripts/camiseta_staff/genera.py` (docs/unity.md, «Camiseta de staff»).
-  - [ ] 🗒️ Mientras tanto, elegir variante (azul, negra o blanca) y dejarla en `GeniesStaffShirt.DefaultVariant`.
+- [x] ✨ **Camiseta igual a la oficial.** **Hecho (7 de octubre, 1e88cdd): azul marino `#3A3448`, el de la foto de Jean, con el arte del DevFest 2026 en el pecho en lugar del lockup y de «STAFF», y Sonnet Code debajo. La pantalla pasa a azul royal para que contraste.**
+  - [x] 🗒️ Foto de la camiseta real de staff de este año. **La mandó Jean el 7 de octubre.**
+  - [x] Ajustar color y estampa en `scripts/camiseta_staff/genera.py` (docs/unity.md, «Camiseta de staff»).
+  - [x] Variante por defecto: `marino` en `GeniesStaffShirt.DefaultVariant`.
 
 ## 4. Builds y reparto 📦
+
+- [x] **Recompilar con la camiseta marino.** **Hecho (7 de octubre, 00:52), 1e88cdd: las cuatro builds (stand y pruebas, macOS y Windows) y sus zips, con los dos orquestadores congelados de nuevo (Windows con el workflow 37542922615). Llevan la camiseta marino con el arte del DevFest 2026, la pantalla en azul royal, Sonnia como anfitriona de IA con el QR, la trivia con las redes, el cuerpo de Sage y el encuadre nuevo.**
 
 - [x] **Recompilar todo tras los arreglos de arriba.** **Hecho (6 de octubre, 22:24): stand y pruebas, macOS y Windows, con los orquestadores congelados de nuevo. Llevan los bailes por voz, la descripción física, los gestos por código, la trivia con los arreglos del registro de la demo, la agenda y los cargos reales y el último avatar guardado.**
   - [x] macOS (Apple Silicon): `unity/Build/Sonnia-macOS.zip` y `Sonnia-pruebas-macOS.zip`. Probada en silencio con el orquestador falso.
