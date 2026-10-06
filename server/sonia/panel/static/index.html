@@ -398,7 +398,7 @@
 
     <!-- ===== Developer (plegado): boca, cámara y movimiento, guardados en la nube ===== -->
     <details class="card advanced developer" id="developer">
-      <summary><span>Developer</span><span class="summary-hint">Personaje, boca, encuadre de la cámara y movimiento en reposo</span></summary>
+      <summary><span>Developer</span><span class="summary-hint">Personaje, boca, encuadre de la cámara, movimiento en reposo y registro</span></summary>
 
       <p class="sync-note" data-sync-note hidden></p>
       <div class="adv-grid">
@@ -438,6 +438,24 @@
           <p class="help">La respiración y el vaivén de Sonnia cuando no gesticula, y los acentos del cuerpo al hablar. Se nota en unos segundos; los acentos, mientras habla.</p>
           <div class="tune-list" id="tune-idle"></div>
           <button type="button" class="btn btn-small tune-reset" data-reset-tuning="idle" data-cap="tuning">Restablecer el movimiento</button>
+        </section>
+
+        <section class="adv-block adv-wide" aria-labelledby="dev-log-title">
+          <h3 id="dev-log-title">Registro</h3>
+          <p class="help">Lo que pasa por dentro: lo que GPT-Live delega en el backend, cada acción con sus argumentos y su resultado, los gestos que elige, la agenda y el reloj, y los avisos y errores. Si Sonnia dice que hace algo y aquí no sale «GPT-Live delega», no lo delegó.</p>
+          <div class="log-filters" role="group" aria-label="Filtrar el registro">
+            <button type="button" class="btn btn-small log-filter" data-log-filter="all" aria-pressed="true">Todo</button>
+            <button type="button" class="btn btn-small log-filter" data-log-filter="actions" aria-pressed="false">Delegaciones y acciones</button>
+            <button type="button" class="btn btn-small log-filter" data-log-filter="gestures" aria-pressed="false">Gestos</button>
+            <button type="button" class="btn btn-small log-filter" data-log-filter="agenda" aria-pressed="false">Agenda y reloj</button>
+            <button type="button" class="btn btn-small log-filter" data-log-filter="problems" aria-pressed="false">Errores y avisos</button>
+          </div>
+          <div class="log dev-log" id="dev-log" tabindex="0" aria-label="Registro de Developer"></div>
+          <div class="dev-log-foot">
+            <button type="button" class="btn btn-small" id="dev-log-copy-btn">Copiar lo que se ve</button>
+            <span class="dev-log-count" id="dev-log-count" aria-live="polite"></span>
+          </div>
+          <p class="cap-note" data-cap-note="log_tags" hidden>Esta Sonnia aún no etiqueta su registro: los filtros se deciden por el texto y pueden fallar. Hay que actualizar el orquestador.</p>
         </section>
       </div>
       <p class="cap-note dev-cap-note" data-cap-note="tuning" hidden>Esta Sonnia no tiene aún los ajustes de Developer: hay que actualizar el orquestador.</p>

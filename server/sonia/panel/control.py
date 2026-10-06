@@ -99,6 +99,8 @@ CAPABILITIES = [
     "cloud_settings",
     "avatar_editor",
     "guest_avatar_editor",
+    #: El registro lleva ``logger`` y ``tags`` (filtros del registro de «Developer»).
+    "log_tags",
 ]
 
 #: Ajustes que se guardan en la nube y comparten todas las Sonnias. El modo, el

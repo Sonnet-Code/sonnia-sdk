@@ -89,6 +89,14 @@ Sección plegada debajo de «Avanzado» para ajustar a ojo, con Sonia en pantall
 
 Cada deslizador se aplica en directo mientras se arrastra (como mucho cada 150 ms) y cada sección tiene su botón de restablecer. Los valores van a Unity en el mensaje fijo `set_tuning` (forma en `docs/protocolo.md`) y se guardan en la nube como el resto de ajustes.
 
+**Registro**: las últimas 500 líneas del registro del orquestador de la Sonia elegida, con su hora, su nivel y el módulo que las escribe, lo más nuevo abajo. Sirve para depurar lo que no se ve en la pantalla, por ejemplo si GPT-Live dice «ahí va el baile» pero no lo delega. Filtros:
+- **Delegaciones y acciones**: cada «GPT-Live delega» (con lo que traiga la delegación además de sus ids), cada acción con sus argumentos y su resultado (también los argumentos rotos), y el cierre de cada tarea del backend con cuántas acciones pidió (o «sin acciones») y lo que respondió. Si Sonia dice que hace algo y aquí no sale «GPT-Live delega», no lo delegó.
+- **Gestos**: lo que elige o descarta el director de gestos en cada frase.
+- **Agenda y reloj**: la agenda y la hora que se le pasan a Sonia.
+- **Errores y avisos**: todo lo que va con nivel de aviso o de error.
+
+«Copiar lo que se ve» copia las líneas del filtro elegido. Las etiquetas las pone el orquestador (`log_tags()` en `server/sonia/panel/logs.py`) según el módulo y la plantilla de cada línea, no por lo que diga el visitante. Una Sonia sin actualizar no las manda (no tiene la capacidad `log_tags`): el panel las adivina por el texto y lo avisa. El registro de «Avanzado» sigue igual, sin filtros.
+
 **Personaje**: «Editar personaje» pasa la pantalla de Sonia a la escena de editar personaje de Genies (`open_avatar_editor`). Se edita allí, en el equipo del stand y con el ratón; el panel no edita el avatar. Mientras la escena está abierta Sonia no conversa (GPT-Live cerrado) y el panel lo dice. Al pulsar Guardar en el editor, Unity manda la definición (`avatar_saved`), el orquestador la guarda en la nube como ajuste compartido (`avatar`) y todas las Sonias la reciben en el mensaje fijo `set_avatar`. «Cerrar sin guardar» sale del editor y «Volver al personaje de la app» borra el aspecto guardado.
 
 «Editar personaje de Jean» abre el mismo editor para el avatar de Jean del Modo Jean (`open_avatar_editor` con `target` `guest`, también desde el modal del Modo Jean). Parte del aspecto actual de Jean (su avatar de prueba si no hay ninguno guardado) y, al guardar, el orquestador lo guarda en el ajuste compartido `guest_avatar` y lo reparte en el mensaje fijo `set_guest_avatar`, sin tocar a Sonia. «Volver al avatar de prueba de Jean» lo borra. Con el Modo Jean en marcha no se abre el editor, y con el editor abierto no se activa el Modo Jean.
@@ -242,7 +250,7 @@ El servidor manda objetos JSON:
 
 - `{"type": "status", "status": {...}}`: la instantánea de `/api/status`, cada medio segundo.
 - `{"type": "message", "message": {...}}`: cada mensaje que el orquestador manda a Unity (`state`, `transcript`, `speech_start`, `show_image` sin `data_base64`, `hide_image`, `presence`, `attention`, `error`...), con un campo `time` (`HH:MM:SS`) añadido. Sirve para la conversación en vivo. Las frases grabadas del modo saludos llegan como `transcript` de `assistant` y `speech_start` con `ambient: true`.
-- `{"type": "log", "level": "INFO", "time": "12:03:04", "text": "..."}`: líneas del registro.
+- `{"type": "log", "level": "INFO", "time": "12:03:04", "logger": "live.engine", "tags": ["actions"], "text": "..."}`: líneas del registro. `logger` es el módulo sin el `sonia.` del principio y `tags`, las etiquetas de los filtros de «Developer» (`actions`, `gestures`, `agenda`); las Sonias antiguas no los mandan.
 
 Al conectar llega primero un `{"type": "history", "messages": [...], "logs": [...]}` con lo último (conversación y registro) para pintar la página sin esperar.
 

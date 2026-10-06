@@ -1562,6 +1562,41 @@ progress {
 .log-line[data-level="ERROR"],
 .log-line[data-level="CRITICAL"] { color: var(--bad); font-weight: 700; }
 
+/* Registro de Developer: filtros, módulo de cada línea y pie con copiar. */
+.log-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.log-filter[aria-pressed="true"] {
+  background: var(--blue-strong);
+  border-color: var(--blue-strong);
+  color: #fff;
+}
+
+.dev-log {
+  max-height: 420px;
+}
+
+.log-logger {
+  color: var(--na);
+}
+
+.dev-log-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+
+.dev-log-count {
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
 /* ---------- Respuestas (avisos flotantes) ---------- */
 
 .toasts {

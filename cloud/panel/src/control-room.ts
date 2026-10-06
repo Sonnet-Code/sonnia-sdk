@@ -28,8 +28,8 @@ import type { Env } from "./env";
 
 /** Mensajes de conversación que se guardan para el historial. */
 const MAX_MESSAGES = 80;
-/** Líneas de registro que se guardan para el historial. */
-const MAX_LOGS = 200;
+/** Líneas de registro que se guardan para el historial (las mismas que guarda cada Sonnia). */
+const MAX_LOGS = 500;
 /** Las desconectadas se siguen listando durante este tiempo. */
 const KEEP_DISCONNECTED_MS = 2 * 60 * 60 * 1000;
 /** Tiempo máximo de espera del `result` de una acción. */
@@ -500,6 +500,15 @@ export class ControlRoom extends DurableObject<Env> {
       time: str(message.time) ?? clock(),
       text: str(message.text) ?? "",
     };
+    // Módulo y etiquetas para los filtros del registro de «Developer» (Sonnias nuevas).
+    const logger = str(message.logger);
+    if (logger !== null) line.logger = logger.slice(0, 80);
+    if (Array.isArray(message.tags)) {
+      line.tags = message.tags
+        .filter((tag): tag is string => typeof tag === "string")
+        .slice(0, 8)
+        .map((tag) => tag.slice(0, 32));
+    }
     live.logs.push(line);
     if (live.logs.length > MAX_LOGS) live.logs.splice(0, live.logs.length - MAX_LOGS);
     const watchers = this.browsersWatching(id);

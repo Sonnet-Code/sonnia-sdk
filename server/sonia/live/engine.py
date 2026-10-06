@@ -207,6 +207,8 @@ class _Delegation:
     running_calls: int = 0
     #: Acciones pedidas en la respuesta actual del backend.
     calls_in_response: int = 0
+    #: Acciones pedidas en toda la tarea (para el registro).
+    calls_total: int = 0
     #: La respuesta actual del backend ya terminó (``response.completed``...).
     response_done: bool = False
     text: list[str] = field(default_factory=list)
@@ -837,7 +839,16 @@ class LiveEngine:
         self._last_delegation_id = delegation_id
         self._session_conversation = True
         self._touch()
-        logger.info("GPT-Live delega una tarea en el backend %s (%s)", target, delegation_id)
+        # Lo que traiga la delegación además de sus ids (la tarea, si la API la manda).
+        details = {
+            k: v for k, v in delegation.items() if k not in ("id", "type", "target", "response_id")
+        }
+        logger.info(
+            "GPT-Live delega una tarea en el backend %s (%s)%s",
+            target,
+            delegation_id,
+            f": {json.dumps(details, ensure_ascii=False)[:300]}" if details else "",
+        )
         if not self._audible:
             await self._set_state(AssistantState.THINKING)
 
@@ -897,9 +908,14 @@ class LiveEngine:
             arguments = parsed if isinstance(parsed, dict) else None
         except json.JSONDecodeError:
             arguments = None
+        if arguments is None:
+            logger.warning(
+                "Acción %s con argumentos que no son JSON válido: %s", name, str(raw)[:200]
+            )
         if delegation is not None:
             delegation.running_calls += 1
             delegation.calls_in_response += 1
+            delegation.calls_total += 1
         self._spawn(
             self._run_call(self._client, delegation, name, call_id, arguments), f"action-{name}"
         )
@@ -1026,10 +1042,12 @@ class LiveEngine:
         for event_id in [k for k, v in self._command_owner.items() if v == delegation.id]:
             del self._command_owner[event_id]
         text = " ".join("".join(delegation.text).split())
+        calls = delegation.calls_total
         logger.info(
-            "Backend (%s, %.1f s): %s",
+            "Backend (%s, %.1f s, %s): %s",
             delegation.id,
             time.monotonic() - delegation.created_at,
+            f"{calls} {'acción' if calls == 1 else 'acciones'}" if calls else "sin acciones",
             text[:300] or "(sin texto)",
         )
         # GPT-Live dirá ahora el resultado: se espera su voz en ``thinking``.

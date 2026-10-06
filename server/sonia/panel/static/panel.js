@@ -46,6 +46,7 @@
   const PARTIAL_LINE_STALE_MS = 20000;
   const MAX_CHAT_LINES = 200;
   const MAX_LOG_LINES = 400;
+  const MAX_DEV_LOG_LINES = 500; // las mismas que guarda cada Sonnia (LogBuffer)
   const MAX_TOASTS = 3;
   const TUNING_SEND_MS = 150; // un deslizador de Developer manda como mucho esto a menudo
 
@@ -97,6 +98,18 @@
   const HEALTH_NAMES = { internet: "Internet", screen: "Pantalla", mic: "Micrófono", camera: "Cámara" };
   const ENGINE_NAMES = { live: "GPT-Live", pipeline: "Motor de respaldo" };
   const LOG_LEVELS = { DEBUG: "depuración", WARNING: "aviso", ERROR: "error", CRITICAL: "error grave" };
+  const PROBLEM_LEVELS = new Set(["WARNING", "ERROR", "CRITICAL"]);
+
+  /**
+   * Etiquetas por el texto, para las líneas que llegan sin `tags` (una Sonnia
+   * sin actualizar o un Worker antiguo). Las de verdad las pone `log_tags()`
+   * en `server/sonia/panel/logs.py`, mirando quién escribe la línea.
+   */
+  const LOG_TAG_GUESSES = [
+    ["actions", /^(GPT-Live delega|Acción |Backend \(|El backend|La tarea delegada|No se pudo devolver el resultado)/],
+    ["gestures", /^(Gesto |Sin gesto|Catálogo de gestos)/],
+    ["agenda", /agenda|reloj/i],
+  ];
 
   // Los números se muestran como en República Dominicana.
   const LOCALE = "es-DO";
@@ -278,6 +291,7 @@
       "avatar-state", "avatar-edit-btn", "avatar-close-btn", "avatar-reset-btn",
       "guest-avatar-state", "guest-avatar-edit-btn", "guest-avatar-reset-btn",
       "restart-btn", "cache-progress", "cache-text", "cache-btn", "session-facts", "usage-facts", "log",
+      "dev-log", "dev-log-copy-btn", "dev-log-count",
       "toasts", "confirm-dialog", "confirm-title", "confirm-text", "confirm-ok", "away-dialog",
       "away-title", "away-help", "away-text", "away-ok",
       "trivia-state", "trivia-question", "trivia-q", "trivia-opt-a", "trivia-opt-b", "trivia-opt-c",
@@ -292,6 +306,7 @@
     ui.triviaAnswerButtons = Array.from(document.querySelectorAll("[data-trivia-answer]"));
     ui.resetTuningButtons = Array.from(document.querySelectorAll("[data-reset-tuning]"));
     ui.syncNotes = Array.from(document.querySelectorAll("[data-sync-note]"));
+    ui.logFilterButtons = Array.from(document.querySelectorAll("[data-log-filter]"));
     ui.tuningInputs = [];
   }
 
@@ -935,6 +950,7 @@
     app.lastPresence = null;
     resetChat();
     ui.log.replaceChildren();
+    clearDevLog();
     ui.notesInput.value = "";
     ui.voiceSelect.dirty = false;
     voicesKey = "";
@@ -2331,6 +2347,7 @@
   function applyHistory(data) {
     resetChat();
     ui.log.replaceChildren();
+    clearDevLog();
     const messages = Array.isArray(data.messages) ? data.messages : [];
     for (const item of messages) {
       const message = item && item.type === "message" && item.message ? item.message : item;
@@ -2340,6 +2357,7 @@
     for (const entry of logs) appendLog(entry);
     chatScrollToBottom();
     ui.log.scrollTop = ui.log.scrollHeight;
+    ui.devLog.scrollTop = ui.devLog.scrollHeight;
   }
 
   // ------------------------------------------------------------ registro
@@ -2356,12 +2374,108 @@
     box.append(line);
     while (box.childElementCount > MAX_LOG_LINES) box.firstElementChild.remove();
     if (stick) box.scrollTop = box.scrollHeight;
+    appendDevLog(data, level);
+  }
+
+  // ------------------------------------------------------------ registro de Developer
+
+  const devLog = { filter: "all" };
+
+  function logTags(data, text) {
+    if (Array.isArray(data.tags)) return data.tags.filter((tag) => typeof tag === "string");
+    // Lo que dicen el visitante y Sonnia no se etiqueta por su contenido.
+    if (/^(Usuario|Sonia) \(/.test(text)) return [];
+    return LOG_TAG_GUESSES.filter(([, pattern]) => pattern.test(text)).map(([tag]) => tag);
+  }
+
+  function devLogMatches(line) {
+    const filter = devLog.filter;
+    if (filter === "all") return true;
+    if (filter === "problems") return PROBLEM_LEVELS.has(line.dataset.level);
+    return line.dataset.tags.split(" ").includes(filter);
+  }
+
+  function appendDevLog(data, level) {
+    const box = ui.devLog;
+    if (!box) return;
+    const text = String(data.text ?? data.message ?? "");
+    const tags = logTags(data, text);
+    const logger = typeof data.logger === "string" ? data.logger : "";
+    const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    const line = el("p", { class: "log-line", "data-level": level, "data-tags": tags.join(" ") });
+    if (data.time) line.append(el("span", { class: "log-time", text: `${data.time} ` }));
+    if (LOG_LEVELS[level]) line.append(`[${LOG_LEVELS[level]}] `);
+    if (logger) line.append(el("span", { class: "log-logger", text: `${logger} · ` }));
+    line.append(text);
+    line.hidden = !devLogMatches(line);
+    box.append(line);
+    while (box.childElementCount > MAX_DEV_LOG_LINES) box.firstElementChild.remove();
+    if (stick) box.scrollTop = box.scrollHeight;
+    updateDevLogCount();
+  }
+
+  function clearDevLog() {
+    ui.devLog.replaceChildren();
+    updateDevLogCount();
+  }
+
+  function setDevLogFilter(filter) {
+    devLog.filter = filter;
+    for (const button of ui.logFilterButtons) {
+      button.setAttribute("aria-pressed", String(button.dataset.logFilter === filter));
+    }
+    for (const line of ui.devLog.children) line.hidden = !devLogMatches(line);
+    ui.devLog.scrollTop = ui.devLog.scrollHeight;
+    updateDevLogCount();
+  }
+
+  function visibleDevLogLines() {
+    return Array.from(ui.devLog.children).filter((line) => !line.hidden);
+  }
+
+  function updateDevLogCount() {
+    const total = ui.devLog.childElementCount;
+    const shown = devLog.filter === "all" ? total : visibleDevLogLines().length;
+    const text = total === 0
+      ? "Sin líneas todavía."
+      : devLog.filter === "all"
+        ? `${total} ${total === 1 ? "línea" : "líneas"}`
+        : `${shown} de ${total} líneas`;
+    setText(ui.devLogCount, text);
+  }
+
+  async function copyDevLog() {
+    const text = visibleDevLogLines().map((line) => line.textContent).join("\n");
+    if (!text) {
+      showToast("No hay líneas que copiar con este filtro.", "info");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Sin permiso de portapapeles (o sin contexto seguro): el método antiguo.
+      const area = el("textarea", { class: "visually-hidden", value: text, readOnly: true });
+      document.body.append(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      area.remove();
+      if (!ok) {
+        showToast("El navegador no deja copiar: selecciona las líneas a mano.", "error");
+        return;
+      }
+    }
+    const count = text.split("\n").length;
+    showToast(`${count} ${count === 1 ? "línea copiada" : "líneas copiadas"} del registro.`, "ok");
   }
 
   // ------------------------------------------------------------ eventos de la página
 
   function bindEvents() {
     ui.reloadBtn.addEventListener("click", () => location.reload());
+    for (const button of ui.logFilterButtons) {
+      button.addEventListener("click", () => setDevLogFilter(button.dataset.logFilter));
+    }
+    ui.devLogCopyBtn.addEventListener("click", copyDevLog);
     ui.keepOneBtn.addEventListener("click", onKeepOne);
 
     for (const button of ui.modeButtons) button.addEventListener("click", () => onModeClick(button));
