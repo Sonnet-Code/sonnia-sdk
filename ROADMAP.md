@@ -39,7 +39,7 @@ El código está escrito y compila contra las DLL de Unity 6000.6.0f1 (0 errores
 - [ ] Reconexión de Unity estando "Fuera" (se aplica sin animación) y cambios a medias ("Volver" durante la salida y al revés).
 - [ ] `set_volume` a 0,3, 1 y 1,5 con Sonia hablando, y el gesto `greeting` (botón "Saludar ahora").
 - [ ] Subtítulos parciales de Sonia en el HUD (`SoniaDebugUI`) con la voz de GPT-Live.
-- [ ] Recompilar la build (`unity/Build/macOS/Sonnia.app`).
+- [x] Recompilar la build (6 de octubre): `unity/Build/macOS/Sonnia.app` y `unity/Build/Windows/Sonnia.exe`, también en `unity/Build/Sonnia-macOS.zip` y `Sonnia-Windows.zip`.
 
 ## 4. Decisiones pendientes de Jean
 
@@ -54,7 +54,7 @@ Sonia no tiene por qué correr en el Mac de desarrollo. Guía de instalación pa
 - [x] Varias Sonias a la vez (6 de octubre, pedido de Jean): pueden funcionar en sitios distintos y el panel deja elegir cuál se controla y cambiar de una a otra, sin ponerles nombre (`docs/stand.md`, «Varias Sonias a la vez»). En el stand solo habrá una.
 - [ ] Si es Windows (`docs/unity.md`, «Build de Windows»):
   - [x] Build de Unity para Windows desde el Mac (6 de octubre): Mono, porque IL2CPP de Windows solo se compila en Windows, y Vulkan, que Genies exige.
-  - [ ] Orquestador congelado para Windows: workflow «Orquestador para Windows» de GitHub Actions (hay que subir los commits) o `scripts/build_orquestador.sh` en Git Bash en ese equipo. Sin él, la app espera un `uv run sonia run` externo.
+  - [x] Orquestador congelado para Windows (6 de octubre): workflow «Orquestador para Windows» de GitHub Actions (run 37451208301). `Sonnia.exe` lo lleva dentro, con el `.env` y las frases grabadas. Para rehacerlo: `gh workflow run orquestador-windows.yml` o `scripts/build_orquestador.sh` en Git Bash en Windows.
   - [ ] Probar la app en un Windows de verdad: que Genies cargue a Sonia con Vulkan, micrófono a 24 kHz (si no, `LIVE_SAMPLE_RATE=16000`), cámara y panel. Mirar el `Player.log` y `%APPDATA%\Sonia\logs`.
   - [ ] Arranque automático: acceso directo a `Sonnia.exe` en `shell:startup` (con la app todo en uno no hace falta `scripts/kiosk.sh`).
 - [ ] Internet estable todo el día: sin red Sonia no conversa. Plan B: pasar a "Solo saludos" desde el panel local (sigue funcionando con las frases grabadas).
