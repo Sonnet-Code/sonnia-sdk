@@ -18,6 +18,13 @@
 //    cuello, cabeza +5,5° y brazos, cada uno un poco después del anterior).
 //    OnEmphasis avisa en el mismo instante (las cejas suben en
 //    FacialExpressionController).
+//  - Manos al hablar: el set de Genies no trae clips de hablar, así que los
+//    gestos se hacen aquí. Al empezar una frase (y a veces en una tónica), una
+//    mano o las dos suben delante del cuerpo con la palma hacia arriba, como
+//    quien explica; cada acento es un golpe de la mano y, al acabar la frase o
+//    a los pocos segundos, vuelven a su sitio con un respiro antes del
+//    siguiente. Esperan si el cuerpo está ocupado (señalar una imagen, un
+//    baile, caminar, la gorra de la trivia).
 //  - Parpadeo como el de Genies: 0,38 s (cierra rápido en un tercio, abre
 //    despacio en dos), cada 3-5 s más los de la voz y los cambios de mirada
 //    (unos 20 por minuto), dobles en un 18 %, los ojos desfasados unos ms y las
@@ -242,6 +249,74 @@ namespace Sonia
         [Tooltip("Grados que se adelantan los brazos en un acento.")]
         private float accentArmDegrees = 2.5f;
 
+        [Header("Cuerpo: manos al hablar")]
+        [SerializeField]
+        [Tooltip("Gestos de manos al hablar, hechos por código (el set de Genies no trae clips de hablar).")]
+        private bool handGestures = true;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Probabilidad de gesticular al empezar una frase.")]
+        private float handGestureChance = 0.75f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Probabilidad de que el gesto sea con las dos manos (si no, una, más a menudo la derecha).")]
+        private float handBothChance = 0.4f;
+
+        [SerializeField]
+        [Range(-30f, 120f)]
+        [Tooltip("Grados que se dobla el codo: sube la mano delante del cuerpo.")]
+        private float handElbowDegrees = 75f;
+
+        [SerializeField]
+        [Range(-20f, 50f)]
+        [Tooltip("Grados que se adelanta el brazo.")]
+        private float handArmForwardDegrees = 24f;
+
+        [SerializeField]
+        [Range(-20f, 40f)]
+        [Tooltip("Grados que se abre el brazo hacia fuera (separa el codo del cuerpo).")]
+        private float handArmOutDegrees = 12f;
+
+        [SerializeField]
+        [Range(-40f, 60f)]
+        [Tooltip("Grados que gira el brazo hacia dentro: lleva las manos hacia el centro.")]
+        private float handArmInwardDegrees = 6f;
+
+        [SerializeField]
+        [Range(-120f, 120f)]
+        [Tooltip("Grados que gira el antebrazo para enseñar la palma hacia arriba (mitad en el antebrazo, mitad en la muñeca).")]
+        private float handPalmUpDegrees = 75f;
+
+        [SerializeField]
+        [Range(-40f, 40f)]
+        [Tooltip("Grados que se dobla la muñeca sobre la bisagra del codo (positivo sube la mano).")]
+        private float handWristDegrees = 0f;
+
+        [SerializeField]
+        [Range(0f, 30f)]
+        [Tooltip("Grados que baja la mano en cada golpe (acento de la voz).")]
+        private float handBeatDegrees = 9f;
+
+        [SerializeField]
+        [Tooltip("Segundos mínimo y máximo que dura un gesto si la frase sigue.")]
+        private Vector2 handHoldSeconds = new Vector2(1.6f, 3.2f);
+
+        [SerializeField]
+        [Tooltip("Segundos mínimo y máximo de respiro entre gestos.")]
+        private Vector2 handRestSeconds = new Vector2(0.6f, 1.8f);
+
+        [SerializeField]
+        [Range(0.3f, 4f)]
+        [Tooltip("Rapidez con la que sube la mano (Hz del muelle; 1,3 llega en algo más de medio segundo).")]
+        private float handRiseHz = 1.3f;
+
+        [SerializeField]
+        [Range(0.3f, 4f)]
+        [Tooltip("Rapidez con la que vuelve la mano a su sitio.")]
+        private float handFallHz = 0.9f;
+
         [Header("Parpadeo")]
         [SerializeField]
         [Tooltip("Cara del avatar: el parpadeo se escribe en sus canales eyeBlinkLeft y eyeBlinkRight.")]
@@ -294,13 +369,34 @@ namespace Sonia
         private const int BRightShoulder = 5;
         private const int BLeftArm = 6;
         private const int BRightArm = 7;
-        private const int BodyBoneCount = 8;
+        private const int BLeftLowerArm = 8;
+        private const int BRightLowerArm = 9;
+        private const int BLeftHand = 10;
+        private const int BRightHand = 11;
+        private const int BodyBoneCount = 12;
 
         private static readonly HumanBodyBones[] BodyBoneIds =
         {
             HumanBodyBones.Spine, HumanBodyBones.Chest, HumanBodyBones.UpperChest, HumanBodyBones.Neck,
-            HumanBodyBones.LeftShoulder, HumanBodyBones.RightShoulder, HumanBodyBones.LeftUpperArm, HumanBodyBones.RightUpperArm
+            HumanBodyBones.LeftShoulder, HumanBodyBones.RightShoulder, HumanBodyBones.LeftUpperArm, HumanBodyBones.RightUpperArm,
+            HumanBodyBones.LeftLowerArm, HumanBodyBones.RightLowerArm, HumanBodyBones.LeftHand, HumanBodyBones.RightHand
         };
+
+        /// <summary>Una mano en un gesto al hablar: cuánto está arriba y la forma de este gesto.</summary>
+        private sealed class HandGesture
+        {
+            /// <summary>0 en su sitio, 1 arriba del todo.</summary>
+            public Spring Weight;
+            public float Target;
+            // Variación de este gesto (multiplica los grados de la escena).
+            public float Elbow = 1f;
+            public float Forward = 1f;
+            public float Palm = 1f;
+            public float Inward = 1f;
+            public float BeatStart = -10f;
+            public float BeatGain;
+            public float NoiseSeed;
+        }
 
         /// <summary>Un acento en marcha: cuándo empezó y con qué fuerza (0..1).</summary>
         private struct Accent
@@ -358,6 +454,16 @@ namespace Sonia
         private readonly List<Accent> _accents = new List<Accent>(4);
         private float _lastAccent = -10f;
         private float _accentHeadPitch;
+
+        // Manos al hablar.
+        private readonly HandGesture _leftHand = new HandGesture { NoiseSeed = 11.3f };
+        private readonly HandGesture _rightHand = new HandGesture { NoiseSeed = 47.9f };
+        private bool _handsUp;
+        private float _handsDownAt;
+        private float _handsRestUntil;
+        private bool _handsFree;
+        private TriviaHat _triviaHat;
+        private float _nextHatLookup;
 
         // Ajuste «Movimiento en reposo» (1 = tal cual).
         private float _breathTuning = 1f;
@@ -579,6 +685,7 @@ namespace Sonia
                 _poseYaw = 0f;
                 _posePitch = 0f;
                 _poseRoll = 0f;
+                LowerHands(false);
             }
 
             if (UnityEngine.Random.value < blinkOnSpeechChance + 0.15f)
@@ -649,8 +756,14 @@ namespace Sonia
                         TriggerBlink();
                     }
 
+                    if (UnityEngine.Random.value < handGestureChance)
+                    {
+                        RaiseHands();
+                    }
+
                     break;
                 case SpeechAnalyzer.EventKind.PhraseEnd:
+                    LowerHands(true);
                     Nod(stressNodDegrees * 0.6f);
                     _poseYaw *= 0.4f;
                     _poseRoll *= 0.4f;
@@ -662,6 +775,7 @@ namespace Sonia
 
                     break;
                 case SpeechAnalyzer.EventKind.Syllable:
+                    HandBeat(e.Strength);
                     if (accents)
                     {
                         if (e.Strength >= accentThreshold && now - _lastAccent >= accentMinGap
@@ -798,6 +912,8 @@ namespace Sonia
             // del invitado, el apretón de manos).
             bool armsFree = !_lookOverride
                             && (choreographer == null || (!choreographer.IsPresenting && !choreographer.IsSuspended));
+            _handsFree = armsFree && (choreographer == null || !choreographer.IsPlayingOneShot) && !HatBusy();
+            UpdateHands(dt);
             for (int i = 0; i < _accents.Count; i++)
             {
                 float t = now - _accents[i].Start;
@@ -836,6 +952,8 @@ namespace Sonia
             LiftShoulder(BRightShoulder, BRightArm, forward, shoulders);
             RotateBone(BLeftArm, right, arms);
             RotateBone(BRightArm, right, arms);
+            ApplyHand(_leftHand, BLeftArm, BLeftLowerArm, BLeftHand, frame, now);
+            ApplyHand(_rightHand, BRightArm, BRightLowerArm, BRightHand, frame, now);
 
             for (int i = 0; i < BodyBoneCount; i++)
             {
@@ -931,6 +1049,207 @@ namespace Sonia
             }
 
             bone.rotation = Quaternion.AngleAxis(degrees, axis) * bone.rotation;
+        }
+
+        // ------------------------------------------------------------------
+        // Manos al hablar
+        // ------------------------------------------------------------------
+
+        /// <summary>Empieza un gesto: una mano o las dos suben delante del cuerpo.</summary>
+        private void RaiseHands()
+        {
+            float now = Time.time;
+            if (!handGestures || _state != AvatarState.Speaking || !_handsFree || _handsUp || now < _handsRestUntil)
+            {
+                return;
+            }
+
+            bool both = UnityEngine.Random.value < handBothChance;
+            bool right = both || UnityEngine.Random.value < 0.6f;
+            bool left = both || !right;
+            ShapeHand(_rightHand, right, both);
+            ShapeHand(_leftHand, left, both);
+            _handsUp = true;
+            float min = Mathf.Max(0.5f, Mathf.Min(handHoldSeconds.x, handHoldSeconds.y));
+            float max = Mathf.Max(min, Mathf.Max(handHoldSeconds.x, handHoldSeconds.y));
+            _handsDownAt = now + UnityEngine.Random.Range(min, max);
+        }
+
+        /// <summary>Forma de una mano en este gesto: cada uno sale algo distinto.</summary>
+        private static void ShapeHand(HandGesture hand, bool up, bool both)
+        {
+            hand.Target = up ? 1f : 0f;
+            if (!up)
+            {
+                return;
+            }
+
+            // Con las dos manos, algo menos de codo y más hacia dentro: las manos
+            // se acercan como si sujetaran una idea.
+            hand.Elbow = UnityEngine.Random.Range(0.85f, 1.05f) * (both ? 0.95f : 1f);
+            hand.Forward = UnityEngine.Random.Range(0.7f, 1.2f);
+            hand.Palm = UnityEngine.Random.Range(0.7f, 1.15f);
+            hand.Inward = UnityEngine.Random.Range(0.6f, 1.1f) * (both ? 1.2f : 1f);
+        }
+
+        /// <summary>Las manos vuelven a su sitio; con <paramref name="rest"/>, respiro antes del siguiente gesto.</summary>
+        private void LowerHands(bool rest)
+        {
+            if (_handsUp && rest)
+            {
+                float min = Mathf.Max(0f, Mathf.Min(handRestSeconds.x, handRestSeconds.y));
+                float max = Mathf.Max(min, Mathf.Max(handRestSeconds.x, handRestSeconds.y));
+                _handsRestUntil = Time.time + UnityEngine.Random.Range(min, max);
+            }
+
+            _handsUp = false;
+            _leftHand.Target = 0f;
+            _rightHand.Target = 0f;
+        }
+
+        /// <summary>Acento de la voz: golpe de las manos que están arriba, o un gesto nuevo si toca.</summary>
+        private void HandBeat(float strength)
+        {
+            if (!handGestures || _state != AvatarState.Speaking || strength < accentThreshold)
+            {
+                return;
+            }
+
+            float now = Time.time;
+            if (!_handsUp)
+            {
+                // A media frase larga, alguna tónica también levanta la mano.
+                if (UnityEngine.Random.value < handGestureChance * 0.35f)
+                {
+                    RaiseHands();
+                }
+
+                return;
+            }
+
+            float gain = Mathf.Lerp(0.6f, 1f, Mathf.InverseLerp(accentThreshold, 1f, strength));
+            Beat(_leftHand, now, gain);
+            Beat(_rightHand, now, gain);
+        }
+
+        private static void Beat(HandGesture hand, float now, float gain)
+        {
+            if (hand.Target > 0f && now - hand.BeatStart > 0.35f)
+            {
+                hand.BeatStart = now;
+                hand.BeatGain = gain;
+            }
+        }
+
+        /// <summary>Avanza los pesos: suben y bajan con muelle, y nunca con el cuerpo ocupado.</summary>
+        private void UpdateHands(float dt)
+        {
+            if (_handsUp && (!handGestures || _state != AvatarState.Speaking || !_handsFree || Time.time >= _handsDownAt))
+            {
+                LowerHands(true);
+            }
+
+            // Con el cuerpo ocupado (un baile, señalar, la gorra) bajan deprisa.
+            float fall = _handsFree ? handFallHz : Mathf.Max(handFallHz, 2.5f);
+            _leftHand.Weight.Step(_leftHand.Target, handRiseHz, fall, dt);
+            _rightHand.Weight.Step(_rightHand.Target, handRiseHz, fall, dt);
+        }
+
+        /// <summary>¿Están las manos poniendo o quitando la gorra de la trivia?</summary>
+        private bool HatBusy()
+        {
+            if (_triviaHat == null && Time.time >= _nextHatLookup)
+            {
+                // La gorra se añade en tiempo de ejecución al empezar la primera trivia.
+                _nextHatLookup = Time.time + 1f;
+                _triviaHat = GetComponentInParent<TriviaHat>(true);
+            }
+
+            return _triviaHat != null && _triviaHat.IsMoving;
+        }
+
+        /// <summary>
+        /// Lleva una mano a su gesto según su peso: brazo adelante y abierto, codo
+        /// doblado, brazo girado hacia dentro, palma hacia arriba y muñeca atrás,
+        /// más el golpe de los acentos y un ruido lento para que no se congele.
+        /// </summary>
+        private void ApplyHand(HandGesture hand, int arm, int lowerArm, int wrist, Transform frame, float now)
+        {
+            float w = Mathf.Clamp01(hand.Weight.Value);
+            Transform upper = _bodyBones[arm];
+            Transform fore = _bodyBones[lowerArm];
+            Transform palm = _bodyBones[wrist];
+            if (w < 0.001f || upper == null || fore == null)
+            {
+                return;
+            }
+
+            float scale = Mathf.Clamp(_accentTuning, 0f, 1.3f);
+            w *= scale;
+            if (w < 0.001f)
+            {
+                return;
+            }
+
+            Vector3 right = frame.right;
+            Vector3 forward = frame.forward;
+            // +1 el brazo derecho del avatar, -1 el izquierdo.
+            float side = Mathf.Sign(Vector3.Dot(upper.position - frame.position, right));
+            float beat = hand.BeatGain * Pulse(now - hand.BeatStart, 0f, 0.42f);
+            float t = now * 0.45f;
+            float n1 = Mathf.PerlinNoise(hand.NoiseSeed, t) * 2f - 1f;
+            float n2 = Mathf.PerlinNoise(hand.NoiseSeed + 3.1f, t * 0.8f) * 2f - 1f;
+            float n3 = Mathf.PerlinNoise(hand.NoiseSeed + 7.7f, t * 1.2f) * 2f - 1f;
+
+            float armForward = w * (handArmForwardDegrees * hand.Forward + 3f * n2);
+            float armOut = w * handArmOutDegrees;
+            float elbow = w * (handElbowDegrees * hand.Elbow + 5f * n1 - handBeatDegrees * beat);
+            float inward = w * handArmInwardDegrees * hand.Inward;
+            float palmUp = w * (handPalmUpDegrees * hand.Palm + 6f * n3 + handBeatDegrees * 0.6f * beat);
+            float wristBack = w * handWristDegrees;
+
+            // 1. Brazo: adelante (sobre "derecha", negativo adelanta) y abierto
+            //    (sobre "delante", el derecho abre con positivo).
+            RotateBone(arm, right, -armForward);
+            RotateBone(arm, forward, armOut * side);
+
+            // 2. Codo: la bisagra es perpendicular al brazo y a "delante"; con
+            //    ángulo positivo la mano sube por delante.
+            Vector3 upperDir = fore.position - upper.position;
+            Vector3 hinge = Vector3.Cross(upperDir, forward);
+            if (hinge.sqrMagnitude < 1e-8f)
+            {
+                hinge = -right;
+            }
+
+            hinge.Normalize();
+            fore.rotation = Quaternion.AngleAxis(elbow, hinge) * fore.rotation;
+
+            // 3. Brazo girado sobre su eje: el antebrazo, ya doblado, va hacia el centro.
+            if (upperDir.sqrMagnitude > 1e-8f)
+            {
+                upper.rotation = Quaternion.AngleAxis(inward * side, upperDir.normalized) * upper.rotation;
+            }
+
+            // 4. Palma arriba: giro sobre el eje del antebrazo, repartido entre
+            //    antebrazo y muñeca para que la piel no se retuerza en un solo punto.
+            if (palm != null)
+            {
+                Vector3 foreDir = palm.position - fore.position;
+                if (foreDir.sqrMagnitude > 1e-8f)
+                {
+                    foreDir.Normalize();
+                    float supination = -palmUp * side;
+                    fore.rotation = Quaternion.AngleAxis(supination * 0.5f, foreDir) * fore.rotation;
+                    palm.rotation = Quaternion.AngleAxis(supination * 0.5f, foreDir) * palm.rotation;
+                }
+
+                // 5. Muñeca: sobre la misma bisagra que el codo (positivo sube la mano).
+                if (Mathf.Abs(wristBack) > 0.001f)
+                {
+                    palm.rotation = Quaternion.AngleAxis(wristBack, hinge) * palm.rotation;
+                }
+            }
         }
 
         /// <summary>Sube un hombro <paramref name="degrees"/> (hacia la oreja), sea el izquierdo o el derecho.</summary>

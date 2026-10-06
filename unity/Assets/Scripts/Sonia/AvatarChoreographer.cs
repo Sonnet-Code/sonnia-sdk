@@ -218,6 +218,16 @@ namespace Sonia
             get { return _suspended; }
         }
 
+        /// <summary>
+        /// Cierto mientras suena un clip de una sola vez sobre el cuerpo (gesto,
+        /// saludo, baile, reacción o variación) en lugar del bucle base: los gestos
+        /// de manos al hablar (AvatarStateController) esperan a que acabe.
+        /// </summary>
+        public bool IsPlayingOneShot
+        {
+            get { return !_suspended && _phase != Phase.Base; }
+        }
+
         /// <summary>Segundos en idle desde la última conversación: con poco, alguien sigue delante.</summary>
         public float QuietSeconds
         {
