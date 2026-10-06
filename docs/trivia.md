@@ -17,9 +17,9 @@ GPT-Live lleva la conversación de la trivia y el orquestador guarda la clave de
 
 | Quién | Qué hace |
 |---|---|
-| GPT-Live | Lee cada pregunta y sus opciones. Entiende lo que contesta el visitante («la B», «Kotlin», «la segunda», «dos mil doce», «la A… no, la C»), lo pasa a su letra y delega `trivia_answer`. Reacciona al resultado. Si alguien no sabe qué preguntar, puede proponer la trivia. |
-| Backend Responses | Llama a las acciones `start_trivia`, `trivia_answer`, `restart_trivia` y `stop_trivia` con la letra que le da GPT-Live. Si no le llega la letra, no la adivina. |
-| Orquestador | Saca 5 preguntas al azar del banco y baraja las opciones. Guarda la clave y cuenta los aciertos. Manda la pantalla a Unity (`trivia_*`, ver `docs/protocolo.md`) y escribe el guion de cada paso: la pregunta, el veredicto con un dato curioso, y la siguiente pregunta o el final. |
+| GPT-Live | Pregunta el nivel (fácil, intermedio o difícil) y si ya sigue a Sonnet Code en Instagram y LinkedIn, sin comprobarlo. Lee solo cada pregunta: las opciones están en la pantalla y no las lee. Explica cada respuesta y pregunta si pasa a la siguiente; cuando el visitante dice que sí, delega `trivia_next`. Entiende lo que contesta el visitante («la B», «Kotlin», «la segunda», «dos mil doce», «la A… no, la C»), lo pasa a su letra y delega `trivia_answer`. Reacciona al resultado. Si alguien no sabe qué preguntar, puede proponer la trivia. |
+| Backend Responses | Llama a las acciones `start_trivia`, `trivia_answer`, `trivia_next`, `restart_trivia` y `stop_trivia` con la letra que le da GPT-Live. Si no le llega la letra, no la adivina. |
+| Orquestador | Saca 5 preguntas al azar del banco, del nivel elegido (y, si no llegan, del más cercano), y baraja las opciones. Guarda la clave y cuenta los aciertos. Manda la pantalla a Unity (`trivia_*`, ver `docs/protocolo.md`) y escribe el guion de cada paso: la pregunta, el veredicto con su explicación y un dato, o el final con el premio. Nada avanza solo: la siguiente pregunta sale con `trivia_next`. |
 | Unity | Muestra la tarjeta, el acierto o el fallo, el confeti, el marcador y la pantalla final. Hace el gorro y las reacciones de Sonia (`TriviaController`, `TriviaHat`). |
 
 GPT-Live no conoce la respuesta correcta hasta que el resultado de `trivia_answer` se la dice, así que no puede revelarla antes de tiempo. La que vale siempre es la de la pantalla.
@@ -35,16 +35,18 @@ Al empezar, las reglas de la trivia entran en la sesión con `session.instructio
 
 | Acción | Cuándo la usa | Qué devuelve |
 |---|---|---|
-| `start_trivia` | El visitante quiere jugar. | El guion de arranque con la pregunta 1. |
-| `trivia_answer` (`option`: `A`, `B`, `C` o `no_lo_sabe`) | El visitante elige. | El veredicto, un dato y la siguiente pregunta o el final. |
-| `restart_trivia` | El visitante quiere empezar otra desde cero. | Corta la partida en curso, si la hay, y devuelve la pregunta 1 de una nueva. |
+| `start_trivia` (`nivel` opcional) | El visitante quiere jugar. | El guion de arranque con la pregunta 1 (para leer solo la pregunta). |
+| `trivia_answer` (`option`: `A`, `B`, `C` o `no_lo_sabe`) | El visitante elige. | El veredicto con su explicación y, si no era la última, que pregunte si pasa a la siguiente; en la última, el final y el premio. Si llega con el resultado aún en pantalla, se le dice que primero pida la siguiente. |
+| `trivia_next` | El visitante pide la siguiente. | La siguiente pregunta en pantalla y su guion. |
+| `restart_trivia` (`nivel` opcional) | El visitante quiere empezar otra desde cero. | Corta la partida en curso, si la hay, y devuelve la pregunta 1 de una nueva. |
 | `stop_trivia` | El visitante ya no quiere jugar. | La partida se cancela. |
 
 ## Mientras dura la partida
 
-- **Recordatorio:** sin respuesta durante `TRIVIA_REMIND_SECONDS` (25 s), Sonia repite las opciones una vez.
+- **Recordatorio:** sin respuesta durante `TRIVIA_REMIND_SECONDS` (25 s), Sonia anima una vez y, si hace falta, repite la pregunta (nunca las opciones).
 - **Abandono:** sin oír al visitante durante `TRIVIA_ABANDON_SECONDS` (60 s), la partida se cancela; el visitante se ha ido.
-- **Ritmo:** el acierto o el fallo se quedan en pantalla `TRIVIA_REVEAL_SECONDS` (4 s) antes de la siguiente pregunta.
+- **Ritmo:** lo lleva el visitante. El resultado se queda en pantalla hasta que pide la siguiente (`trivia_next`). Antes, con un temporizador, una respuesta dada mientras se veía el resultado se perdía y la cuenta se desfasaba: así se explican las respuestas buenas marcadas como malas y la partida que se quedó en la pregunta 5 en la demo del 6 de octubre. Tras la última, la pantalla final sale cuando Sonia termina de contar el resultado: al menos `TRIVIA_REVEAL_SECONDS` (4 s) y como mucho `TRIVIA_FINAL_WAIT_SECONDS` (20 s).
+- **Niveles y premios:** el nivel lo elige el visitante (`TRIVIA_DEFAULT_LEVEL`, intermedio, si no). Por jugar se lleva `TRIVIA_PRIZE_PARTICIPATION` (un sticker o un pin) y por ganar en difícil, `TRIVIA_PRIZE_HARD_WIN` (una gorra); Sonia lo anuncia y la pantalla final lo muestra. El panel tiene el nivel al lado de «Empezar trivia» y un botón «Siguiente pregunta».
 - **Pausas:** no hay animación de stand, ni renovación de la sesión por inactividad, ni saludo automático con la mano.
 - **Cancelación:** la partida se cancela si cambia el modo, si se cae o se renueva la sesión de GPT-Live, o con «Terminar trivia» o «Reiniciar» en el panel.
 - **Reconexión:** si Unity se reconecta a mitad de partida, el orquestador le repite `trivia_start` y la pregunta en curso.

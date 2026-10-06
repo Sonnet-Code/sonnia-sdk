@@ -27,6 +27,11 @@
 //   6. Todas las apps salen en el panel de Cloudflare (Jean: «necesito que todas
 //      las builds la tengan»): sin PANEL_CLOUD_TOKEN en ese .env la build no
 //      empieza. Solo se mira si la variable tiene valor; nunca se escribe el valor.
+//   7. Lo que fija el tipo de build va en build.env, junto al .env, y manda sobre
+//      él (sonia/paths.py). Las builds de prueba (SoniaBuild.BuildMacTesters y
+//      BuildWindowsTesters) llevan PANEL_CAMERA_STREAM=false: el equipo prueba a
+//      Sonnia en casa sin que el panel pueda ver ni oír su cámara y su micrófono.
+//      Las del stand no llevan build.env.
 
 using System;
 using System.Diagnostics;
@@ -52,6 +57,14 @@ namespace Sonia.EditorTools
 
         /// <summary>Librerías de Genies que usan el llavero de macOS.</summary>
         private static readonly string[] KeychainUsers = { "libGeniesAuthAPI.dylib", "libGeniesTelemetryBridge.dylib" };
+
+        /// <summary>Contenido del build.env de la build en curso; null: sin build.env (las del stand).</summary>
+        public static string BuildEnv;
+
+        /// <summary>build.env de las builds de prueba (ver la cabecera).</summary>
+        public const string TesterBuildEnv =
+            "# Build de prueba: la cámara y el micrófono no se mandan al panel de Cloudflare.\n"
+            + "PANEL_CAMERA_STREAM=false\n";
 
         /// <summary>Después de los de Genies (el suyo, XcodePostProcess, es el 0).</summary>
         public int callbackOrder => 1000;
@@ -343,6 +356,17 @@ namespace Sonia.EditorTools
             {
                 CopyDirectory(voice, bundledVoice);
                 Debug.Log("[Sonia] Frases grabadas de este equipo añadidas al orquestador (" + platform + ").");
+            }
+
+            string buildEnv = Path.Combine(target, "build.env");
+            if (BuildEnv != null)
+            {
+                File.WriteAllText(buildEnv, BuildEnv);
+                Debug.Log("[Sonia] build.env de la build (" + platform + "): " + BuildEnv.Replace("\n", " | "));
+            }
+            else if (File.Exists(buildEnv))
+            {
+                File.Delete(buildEnv);
             }
 
             string env = Path.Combine(RepoRoot, ".env");

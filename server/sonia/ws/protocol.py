@@ -327,9 +327,14 @@ def msg_guest_animation(clip: str) -> dict[str, Any]:
     return {"type": MSG_GUEST_ANIMATION, "clip": str(clip)}
 
 
-def msg_trivia_start(total: int, threshold: int) -> dict[str, Any]:
-    """Empieza una trivia: gorro de fiesta, tema de la trivia y marcador a cero."""
-    return {"type": MSG_TRIVIA_START, "total": int(total), "threshold": int(threshold)}
+def msg_trivia_start(total: int, threshold: int, level: str = "") -> dict[str, Any]:
+    """Empieza una trivia: gorro de fiesta, tema de la trivia, marcador a cero y su nivel."""
+    return {
+        "type": MSG_TRIVIA_START,
+        "total": int(total),
+        "threshold": int(threshold),
+        "level": str(level),
+    }
 
 
 def msg_trivia_question(
@@ -360,14 +365,17 @@ def msg_trivia_answer(
     }
 
 
-def msg_trivia_end(score: int, total: int, *, won: bool, reason: str) -> dict[str, Any]:
-    """Fin de la trivia: ``reason`` es ``finished`` (con ``won``) o ``cancelled``."""
+def msg_trivia_end(
+    score: int, total: int, *, won: bool, reason: str, prize: str = ""
+) -> dict[str, Any]:
+    """Fin de la trivia: ``reason`` es ``finished`` (con ``won`` y el premio) o ``cancelled``."""
     return {
         "type": MSG_TRIVIA_END,
         "score": int(score),
         "total": int(total),
         "won": bool(won),
         "reason": str(reason),
+        "prize": str(prize),
     }
 
 

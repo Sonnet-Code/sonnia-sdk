@@ -170,7 +170,15 @@
           <p class="help">Sonnia entiende la respuesta sola. Si con el ruido no la oye, contesta tú por el visitante.</p>
         </div>
         <div class="row">
+          <label class="trivia-level-label" for="trivia-level">Nivel
+            <select id="trivia-level" data-cap="trivia">
+              <option value="fácil">Fácil</option>
+              <option value="intermedio" selected>Intermedio</option>
+              <option value="difícil">Difícil</option>
+            </select>
+          </label>
           <button type="button" class="btn btn-primary" id="trivia-start-btn" data-cap="trivia" data-off-modes="away greeter" data-extra="trivia_idle">Empezar trivia</button>
+          <button type="button" class="btn btn-primary" id="trivia-next-btn" data-cap="trivia" data-extra="trivia_revealing">Siguiente pregunta</button>
           <button type="button" class="btn" id="trivia-restart-btn" data-cap="trivia" data-off-modes="away greeter" data-extra="trivia_active">Reiniciar</button>
           <button type="button" class="btn" id="trivia-stop-btn" data-cap="trivia" data-extra="trivia_active">Terminar trivia</button>
         </div>

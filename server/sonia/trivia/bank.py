@@ -2,7 +2,9 @@
 
 Cada pregunta es una línea ``## `` seguida de tres opciones en lista, con
 ``- [x]`` en la correcta y ``- [ ]`` en las otras, y opcionalmente una línea
-``> `` con un dato corto para cuando se revela la respuesta. Una pregunta mal
+``> `` con un dato corto para cuando se revela la respuesta. El nivel va al
+principio de la pregunta entre corchetes (``## [difícil] ¿…?``: fácil,
+intermedio o difícil); sin él, intermedio. Una pregunta mal
 formada se salta con un aviso: un error al editar el archivo durante el evento
 no puede dejar a Sonia sin trivia.
 """
@@ -17,13 +19,43 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["OPTION_LETTERS", "TriviaBank", "TriviaQuestion"]
+__all__ = [
+    "DEFAULT_LEVEL",
+    "LEVELS",
+    "OPTION_LETTERS",
+    "TriviaBank",
+    "TriviaQuestion",
+    "normalize_level",
+]
 
 #: Letras de las opciones, en el orden en que salen en pantalla.
 OPTION_LETTERS = ("A", "B", "C")
 
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _OPTION = re.compile(r"^[-*]\s*\[( |x|X)\]\s*(.+)$")
+_LEVEL = re.compile(r"^\[([^\]]+)\]\s*(.+)$")
+
+#: Niveles de la trivia, de menos a más difícil.
+LEVELS = ("fácil", "intermedio", "difícil")
+DEFAULT_LEVEL = "intermedio"
+
+_LEVEL_ALIASES = {
+    "facil": "fácil",
+    "basico": "fácil",
+    "intermedio": "intermedio",
+    "medio": "intermedio",
+    "normal": "intermedio",
+    "dificil": "difícil",
+    "avanzado": "difícil",
+}
+
+
+def normalize_level(value: str | None) -> str | None:
+    """«Fácil», «facil», «básico»… → ``fácil``; ``None`` si no es un nivel."""
+    if not value:
+        return None
+    plain = value.strip().lower().translate(str.maketrans("áéíóú", "aeiou"))
+    return _LEVEL_ALIASES.get(plain)
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,13 +66,14 @@ class TriviaQuestion:
     options: tuple[str, str, str]
     correct: int
     fact: str = ""
+    level: str = DEFAULT_LEVEL
 
     def shuffled(self, rng: random.Random) -> TriviaQuestion:
         """La misma pregunta con las opciones en otro orden."""
         order = [0, 1, 2]
         rng.shuffle(order)
         options = (self.options[order[0]], self.options[order[1]], self.options[order[2]])
-        return TriviaQuestion(self.text, options, order.index(self.correct), self.fact)
+        return TriviaQuestion(self.text, options, order.index(self.correct), self.fact, self.level)
 
 
 class TriviaBank:
@@ -63,10 +96,20 @@ class TriviaBank:
             return cls([])
         return cls(parse_questions(text, source=path.name))
 
-    def draw(self, count: int, rng: random.Random) -> list[TriviaQuestion]:
-        """``count`` preguntas distintas al azar, con las opciones barajadas."""
-        picked = rng.sample(self.questions, min(count, len(self.questions)))
-        return [q.shuffled(rng) for q in picked]
+    def draw(
+        self, count: int, rng: random.Random, level: str | None = None
+    ) -> list[TriviaQuestion]:
+        """``count`` preguntas distintas al azar, con las opciones barajadas.
+
+        Con ``level``, primero las de ese nivel y, si no llegan, las de los niveles
+        más cercanos.
+        """
+        pool = list(self.questions)
+        rng.shuffle(pool)
+        if level in LEVELS:
+            target = LEVELS.index(level)
+            pool.sort(key=lambda q: abs(LEVELS.index(q.level) - target))
+        return [q.shuffled(rng) for q in pool[: min(count, len(pool))]]
 
 
 def parse_questions(text: str, *, source: str = "preguntas.md") -> list[TriviaQuestion]:
@@ -88,7 +131,11 @@ def parse_questions(text: str, *, source: str = "preguntas.md") -> list[TriviaQu
             )
             return
         texts = (options[0][0], options[1][0], options[2][0])
-        questions.append(TriviaQuestion(current, texts, correct[0], " ".join(fact)))
+        text, level = current, DEFAULT_LEVEL
+        tagged = _LEVEL.match(current)
+        if tagged is not None and normalize_level(tagged.group(1)) is not None:
+            text, level = tagged.group(2).strip(), normalize_level(tagged.group(1)) or DEFAULT_LEVEL
+        questions.append(TriviaQuestion(text, texts, correct[0], " ".join(fact), level))
 
     for raw in _COMMENT.sub("", text).splitlines():
         line = raw.strip()

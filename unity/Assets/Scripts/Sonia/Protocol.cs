@@ -264,6 +264,9 @@ namespace Sonia
 
         /// <summary>Aciertos que hacen falta para ganar.</summary>
         [JsonProperty("threshold")] public int Threshold = 3;
+
+        /// <summary>Nivel de la partida (fácil, intermedio o difícil); vacío en orquestadores viejos.</summary>
+        [JsonProperty("level")] public string Level = "";
     }
 
     /// <summary>Una pregunta de la trivia con sus tres opciones (A, B y C, en este orden).</summary>
@@ -311,6 +314,9 @@ namespace Sonia
         [JsonProperty("won")] public bool Won;
 
         [JsonProperty("reason")] public string Reason = "finished";
+
+        /// <summary>Lo que se lleva el visitante (vacío: no se anuncia premio).</summary>
+        [JsonProperty("prize")] public string Prize = "";
     }
 
     /// <summary>Un trozo de la voz del invitado (frame binario "SNGU"), envuelto para la cola del cliente.</summary>

@@ -28,6 +28,8 @@ La caché de voces guarda cada frase fija (saludos, frases y cantos del stand) l
 
 «Ver cámara», en «Acciones rápidas», abre un visor con la cámara del stand en directo y sus estadísticas (fps, kbit/s, tamaño y calidad, ida y vuelta). No hay micro ni secuencia: es solo para ver qué pasa en el stand.
 
+Con `PANEL_CAMERA_STREAM=false` la Sonia no manda ni la cámara ni el micrófono al panel: sin «Ver cámara» ni Modo Jean. Lo llevan las builds de prueba que se reparten al equipo (`build.env`, ver `docs/unity.md`, «Builds de prueba»), para que nadie del panel vea ni oiga a quien la prueba en casa.
+
 - Va por la sala de vídeo de Cloudflare (`/api/guest` con `role=watch`, la misma del Modo Jean), así que solo funciona desde el panel de la nube. En el local lo dice y no muestra nada.
 - El visor pide la sala con la acción `watch_camera` y la renueva cada 10 s mientras está abierto (`keepalive`, que no llena el registro).
 - El orquestador (`RoomSupervisor`, `server/sonia/guest/room.py`) la cierra sola cuando no queda nadie mirando durante 25 s, o 3 s después de pulsar «Cerrar».

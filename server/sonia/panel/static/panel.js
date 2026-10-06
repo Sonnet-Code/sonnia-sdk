@@ -281,7 +281,7 @@
       "toasts", "confirm-dialog", "confirm-title", "confirm-text", "confirm-ok", "away-dialog",
       "away-title", "away-help", "away-text", "away-ok",
       "trivia-state", "trivia-question", "trivia-q", "trivia-opt-a", "trivia-opt-b", "trivia-opt-c",
-      "trivia-start-btn", "trivia-restart-btn", "trivia-stop-btn", "trivia-note",
+      "trivia-start-btn", "trivia-restart-btn", "trivia-stop-btn", "trivia-note", "trivia-next-btn", "trivia-level",
     ];
     for (const id of ids) {
       // "topbar-status" -> ui.topbarStatus
@@ -766,6 +766,7 @@
     trivia_idle: () => triviaInfo().available !== false && !triviaInfo().active && !guestActive(),
     trivia_active: () => Boolean(triviaInfo().active),
     trivia_asking: () => triviaInfo().phase === "asking",
+    trivia_revealing: () => triviaInfo().phase === "revealing",
   };
 
   /** Partida de trivia en curso (`trivia` del estado). */
@@ -1331,8 +1332,9 @@
     let text = "No hay ninguna trivia en marcha.";
     if (playing) {
       const score = `${trivia.score} acierto${trivia.score === 1 ? "" : "s"}`;
-      const phase = trivia.phase === "asking" ? "esperando respuesta" : "mostrando el resultado";
-      text = `Pregunta ${trivia.number} de ${trivia.total} · ${score} · ${phase}`;
+      const phase = trivia.phase === "asking" ? "esperando respuesta" : "resultado en pantalla, esperando que pidan la siguiente";
+      const level = trivia.level ? ` · nivel ${trivia.level}` : "";
+      text = `Pregunta ${trivia.number} de ${trivia.total}${level} · ${score} · ${phase}`;
     } else if (trivia.available === false) {
       text = "No hay preguntas suficientes en assets/trivia/preguntas.md.";
     } else if (trivia.total) {
@@ -2367,10 +2369,13 @@
     ui.stopBtn.addEventListener("click", () => sendAction("stop", {}, { button: ui.stopBtn }));
     ui.greetBtn.addEventListener("click", () => sendAction("greet", {}, { button: ui.greetBtn }));
     ui.triviaStartBtn.addEventListener("click", () =>
-      sendAction("trivia_start", {}, { button: ui.triviaStartBtn }),
+      sendAction("trivia_start", { level: ui.triviaLevel.value }, { button: ui.triviaStartBtn }),
     );
     ui.triviaRestartBtn.addEventListener("click", () =>
-      sendAction("trivia_restart", {}, { button: ui.triviaRestartBtn }),
+      sendAction("trivia_restart", { level: ui.triviaLevel.value }, { button: ui.triviaRestartBtn }),
+    );
+    ui.triviaNextBtn.addEventListener("click", () =>
+      sendAction("trivia_next", {}, { button: ui.triviaNextBtn }),
     );
     ui.triviaStopBtn.addEventListener("click", () =>
       sendAction("trivia_stop", {}, { button: ui.triviaStopBtn }),

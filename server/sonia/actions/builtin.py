@@ -187,11 +187,17 @@ def build_default_registry(
 
     ``include_look`` permite no anunciar ``look`` cuando el modelo configurado
     no soporta imágenes (``LLM_SUPPORTS_VISION=false``) o no hay cámara.
-    ``include_trivia`` anuncia ``start_trivia``, ``trivia_answer``,
+    ``include_trivia`` anuncia ``start_trivia``, ``trivia_answer``, ``trivia_next``,
     ``restart_trivia`` y ``stop_trivia`` cuando hay banco de preguntas
     (``assets/trivia/preguntas.md``).
     """
-    from sonia.actions.trivia import RESTART_TRIVIA, START_TRIVIA, STOP_TRIVIA, TRIVIA_ANSWER
+    from sonia.actions.trivia import (
+        RESTART_TRIVIA,
+        START_TRIVIA,
+        STOP_TRIVIA,
+        TRIVIA_ANSWER,
+        TRIVIA_NEXT,
+    )
 
     registry = ActionRegistry()
     if include_look:
@@ -201,6 +207,7 @@ def build_default_registry(
     if include_trivia:
         registry.register(START_TRIVIA)
         registry.register(TRIVIA_ANSWER)
+        registry.register(TRIVIA_NEXT)
         registry.register(RESTART_TRIVIA)
         registry.register(STOP_TRIVIA)
     return registry

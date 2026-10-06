@@ -1240,6 +1240,7 @@ async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
         rig.settings.trivia.questions = 2
         rig.settings.trivia.win_threshold = 1
         rig.settings.trivia.reveal_seconds = 0.05
+        rig.settings.trivia.final_wait_seconds = 0.2
         conn = await rig.conn()
         backend = conn.start["session"]["delegation"]["responses"]
         assert [t["name"] for t in backend["tools"]] == [
@@ -1247,6 +1248,7 @@ async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
             "hide_image",
             "start_trivia",
             "trivia_answer",
+            "trivia_next",
             "restart_trivia",
             "stop_trivia",
         ]
@@ -1267,6 +1269,7 @@ async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
             "type": "trivia_start",
             "total": 2,
             "threshold": 1,
+            "level": "intermedio",
         }
 
         # El visitante dice «la de...» y GPT-Live registra la letra que entendió.
@@ -1274,9 +1277,14 @@ async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
             "Uno bien" if "Primera" in question["question"] else "Dos bien"
         )
         script = await _backend_call(conn, "c2", "trivia_answer", {"option": "ABC"[right]})
-        assert "CORRECTA" in script and "pregunta 2 de 2" in script
+        assert "CORRECTA" in script and "siguiente pregunta" in script
         await rig.rec.wait_type("trivia_answer")
         assert rig.rec.of_type("trivia_answer")[0]["is_correct"] is True
+        # Nada avanza solo: la siguiente sale cuando el visitante la pide.
+        await asyncio.sleep(0.2)
+        assert len(rig.rec.of_type("trivia_question")) == 1
+        script = await _backend_call(conn, "c2b", "trivia_next", {})
+        assert "pregunta 2 de 2" in script
         await rig.rec.wait_type("trivia_question", count=2)
 
         # Un visitante que se conecta ahora (Unity reiniciada) ve la pregunta en curso.
@@ -1292,6 +1300,7 @@ async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
             "total": 2,
             "won": True,
             "reason": "finished",
+            "prize": "un sticker o un pin de Sonnet Code",
         }
         assert rig.hub.sticky("trivia_question") is None
         assert rig.engine.trivia is not None and not rig.engine.trivia.active

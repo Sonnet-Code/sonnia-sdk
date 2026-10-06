@@ -828,7 +828,7 @@ class StandControl:
             raise _BadRequest("Cierra antes el editor de personaje.")
         if self._hub.client_count == 0:
             raise _BadRequest("La pantalla de Sonnia no está conectada.")
-        ok, message = await trivia.start("panel")
+        ok, message = await trivia.start("panel", _level(params))
         if not ok:
             raise _BadRequest(message)
         return True, message
@@ -843,10 +843,20 @@ class StandControl:
             raise _BadRequest("La trivia necesita a Sonnia conversando: pásala a «Conversando».")
         if self._hub.client_count == 0:
             raise _BadRequest("La pantalla de Sonnia no está conectada.")
-        ok, message = await trivia.restart("panel")
+        ok, message = await trivia.restart("panel", _level(params))
         if not ok:
             raise _BadRequest(message)
         return True, "Trivia reiniciada desde la primera pregunta."
+
+    async def _act_trivia_next(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Siguiente pregunta»: la que pide el visitante cuando ya vio el resultado."""
+        trivia = self._engine.trivia
+        if trivia is None or not trivia.active:
+            raise _BadRequest("No hay ninguna trivia en marcha.")
+        ok, message = await trivia.next("panel")
+        if not ok:
+            raise _BadRequest(message)
+        return True, message
 
     async def _act_trivia_stop(self, params: dict[str, Any]) -> tuple[bool, str]:
         trivia = self._engine.trivia
@@ -1426,3 +1436,11 @@ def _summary(params: dict[str, Any]) -> str:
             ensure_ascii=False,
         )
     return ""
+
+
+def _level(params: dict[str, Any]) -> str | None:
+    """Nivel de la trivia pedido desde el panel (fácil, intermedio o difícil), o ``None``."""
+    from sonia.trivia import normalize_level
+
+    value = params.get("level")
+    return normalize_level(value) if isinstance(value, str) else None

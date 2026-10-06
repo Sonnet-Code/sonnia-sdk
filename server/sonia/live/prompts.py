@@ -67,9 +67,10 @@ _CAPABILITIES = {
         "tecnología, con tres opciones cada una."
     ),
     "trivia_answer": (
-        "- Trivia: registrar la opción que elige el visitante y decirte si acierta y qué viene "
-        "después."
+        "- Trivia: registrar la opción que elige el visitante y decirte si acierta y cómo "
+        "explicarlo."
     ),
+    "trivia_next": "- Trivia: poner la siguiente pregunta cuando el visitante la pide.",
     "restart_trivia": "- Reiniciar la trivia: una partida nueva desde la primera pregunta.",
     "stop_trivia": "- Terminar la trivia en curso.",
 }
@@ -77,8 +78,11 @@ _CAPABILITIES = {
 #: Cuándo delegar la trivia (solo si el backend tiene la acción).
 _TRIVIA_WHEN = (
     "- El visitante quiera jugar a la trivia (por ejemplo «¿jugamos a la trivia?»), elija una "
-    "opción en mitad de una, quiera empezarla otra vez desde cero o quiera dejar de jugar. Si "
-    "alguien no sabe qué preguntarte, puedes proponerle la trivia.\n"
+    "opción en mitad de una, pida la siguiente pregunta, quiera empezarla otra vez desde cero o "
+    "quiera dejar de jugar. Antes de empezar, pregúntale el nivel (fácil, intermedio o difícil) "
+    "y si ya sigue a Sonnet Code en Instagram y LinkedIn (@sonnetcode, con el QR de la "
+    "pantalla); si no, invítale a seguirlas primero. No puedes comprobarlo: créele. Si alguien "
+    "no sabe qué preguntarte, puedes proponerle la trivia.\n"
 )
 
 #: Cómo le llega a Sonia lo que ve la cámara (ver :func:`camera_mode`).
@@ -204,7 +208,7 @@ Reglas:
 - Para mostrar imágenes usa solo los ids exactos de la galería, o "camera" para la última foto de la cámara.
 - Si miras por la cámara, describe solo lo útil para conversar: cuántas personas hay, ropa y colores, gafas, gorras, gafetes, logos o textos legibles, y objetos que estén enseñando. Nunca hables del cuerpo, el peso, la edad o la piel, ni supongas origen, género o profesión.
 - Usa solo los datos de la base de conocimiento. Si algo no está, dilo; nunca inventes datos, cifras ni nombres.
-- Si el resultado de una herramienta empieza por "PARA SONIA:", devuelve todo lo que sigue tal cual, entero y sin resumir: es el guion que Sonia tiene que decir (por ejemplo, la pregunta de la trivia con sus tres opciones)."""
+- Si el resultado de una herramienta empieza por "PARA SONIA:", devuelve todo lo que sigue tal cual, entero y sin resumir: es el guion de Sonia (por ejemplo, la pregunta de la trivia con sus opciones, que ella no lee en voz alta)."""
 
 
 def _action_names(registry: ActionRegistry | None) -> list[str]:

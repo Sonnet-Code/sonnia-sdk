@@ -79,6 +79,37 @@ namespace Sonia.EditorTools
             Build(BuildTarget.StandaloneWindows64, "Windows", "Sonnia.exe");
         }
 
+        /// <summary>
+        /// Build de macOS para que el equipo pruebe a Sonnia en su casa: sin mandar la
+        /// cámara ni el micrófono al panel (PANEL_CAMERA_STREAM=false en su build.env),
+        /// así nadie del panel ve ni oye a quien la prueba. Sale en Build/macOS-pruebas.
+        /// </summary>
+        [MenuItem("Sonia/Build macOS (pruebas, sin cámara en el panel)")]
+        public static void BuildMacTesters()
+        {
+            BuildForTesters(() => Build(BuildTarget.StandaloneOSX, "macOS-pruebas", "Sonnia.app"));
+        }
+
+        /// <summary>Como BuildMacTesters, para Windows (Build/Windows-pruebas).</summary>
+        [MenuItem("Sonia/Build Windows (pruebas, sin cámara en el panel)")]
+        public static void BuildWindowsTesters()
+        {
+            BuildForTesters(() => Build(BuildTarget.StandaloneWindows64, "Windows-pruebas", "Sonnia.exe"));
+        }
+
+        private static void BuildForTesters(System.Action build)
+        {
+            SoniaPlayerBuildFixes.BuildEnv = SoniaPlayerBuildFixes.TesterBuildEnv;
+            try
+            {
+                build();
+            }
+            finally
+            {
+                SoniaPlayerBuildFixes.BuildEnv = null;
+            }
+        }
+
         private static void Build(BuildTarget target, string folder, string fileName,
                                   BuildOptions extraOptions = BuildOptions.None, params string[] defines)
         {

@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
-from sonia.trivia.bank import OPTION_LETTERS, TriviaBank, TriviaQuestion, parse_questions
+from sonia.trivia.bank import (
+    DEFAULT_LEVEL,
+    LEVELS,
+    OPTION_LETTERS,
+    TriviaBank,
+    TriviaQuestion,
+    normalize_level,
+    parse_questions,
+)
 from sonia.trivia.game import PASS, TriviaGame, TriviaHost, TriviaPhase, TriviaScreen
 
 __all__ = [
+    "DEFAULT_LEVEL",
+    "LEVELS",
     "OPTION_LETTERS",
     "PASS",
     "TriviaBank",
@@ -14,5 +24,6 @@ __all__ = [
     "TriviaPhase",
     "TriviaQuestion",
     "TriviaScreen",
+    "normalize_level",
     "parse_questions",
 ]

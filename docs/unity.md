@@ -593,6 +593,19 @@ abierto y de panel, panel de imágenes, telón y luz. El encuadre guardado
 (cámara en (0; 1,201; −1,363), FOV 40) se ajustó con el avatar del SDK; el doble
 mide algo distinto, así que recalcularlo cambia un poco el plano.
 
+### Builds de prueba (para el equipo)
+
+**Sonia > Build macOS (pruebas, sin cámara en el panel)** y **Sonia > Build Windows
+(pruebas, sin cámara en el panel)** (o `SoniaBuild.BuildMacTesters` y
+`BuildWindowsTesters` en modo batch) hacen la misma app que las del stand, pero:
+- salen en `Build/macOS-pruebas` y `Build/Windows-pruebas`, para no confundirlas;
+- llevan, junto al orquestador, un `build.env` con `PANEL_CAMERA_STREAM=false`. Manda
+  sobre el `.env` copiado (`sonia/paths.py`), así que la app no manda ni la cámara ni
+  el micrófono al panel de Cloudflare: quien la prueba en casa no puede ser visto ni
+  oído desde el panel (no hay «Ver cámara» ni Modo Jean).
+
+Las del stand no llevan `build.env`.
+
 ### Camiseta de staff
 
 Sonnia lleva la camiseta de staff del DevFest Santo Domingo 2026 sobre la prenda

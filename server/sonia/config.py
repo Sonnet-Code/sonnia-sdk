@@ -225,8 +225,16 @@ class TriviaSettings(BaseSettings):
     remind_seconds: float = 25.0
     #: Sin oír al visitante durante esto, la partida se cancela (se ha ido).
     abandon_seconds: float = 60.0
-    #: Segundos que la pantalla enseña el acierto o el fallo antes de la siguiente.
+    #: Tras la última respuesta, mínimo que se ve el resultado antes de la pantalla final.
+    #: Entre preguntas no hay tiempo: la siguiente sale cuando el visitante la pide.
     reveal_seconds: float = 4.0
+    #: Tope de espera a que Sonia termine de contar el resultado final antes de la pantalla final.
+    final_wait_seconds: float = 20.0
+    #: Nivel si el visitante no elige: fácil, intermedio o difícil.
+    default_level: str = "intermedio"
+    #: Premio por jugar (vacío: no se anuncia) y el de ganar en difícil.
+    prize_participation: str = "un sticker o un pin de Sonnet Code"
+    prize_hard_win: str = "una gorra de Sonnet Code"
 
 
 class PanelSettings(BaseSettings):
@@ -256,6 +264,11 @@ class PanelSettings(BaseSettings):
     #: Sin ``cloud_token`` no se conecta (solo queda el panel local).
     cloud_url: str = "wss://sonia.sonnetcode.com/agent"
     cloud_token: str = ""
+    #: ``PANEL_CAMERA_STREAM``: mandar la cámara (y el micrófono en el Modo Jean) a la
+    #: sala de vídeo del panel de Cloudflare, para «Ver cámara» y el Modo Jean. Las
+    #: builds de prueba lo traen apagado (``build.env``): así nadie del panel puede ver
+    #: ni oír a quien la está probando.
+    camera_stream: bool = True
     #: Nombre con el que esta Sonia sale en el panel (vacío = nombre del equipo).
     instance_name: str = ""
 

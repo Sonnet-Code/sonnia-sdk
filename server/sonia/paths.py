@@ -47,6 +47,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #: Variables de este equipo que mandan sobre el `.env` (las escribe el backoffice).
 OVERRIDES_FILE = "overrides.env"
 
+#: Variables que fija el tipo de build (las escribe la build de Unity junto al orquestador).
+BUILD_ENV_FILE = "build.env"
+
 #: Lo que la app congelada trae hecho para cada equipo nuevo (ver ``seed_home``).
 SEEDED = ("cache/voice",)
 
@@ -86,12 +89,15 @@ def home() -> Path:
 def env_files() -> list[Path]:
     """Archivos de variables, del que más manda al que menos.
 
-    Primero ``overrides.env`` de ``home()`` (cambios desde el backoffice); después el
-    ``.env`` de la app empaquetada (junto al ejecutable del orquestador) o el del
-    repo al desarrollar.
+    Primero ``overrides.env`` de ``home()`` (cambios desde el backoffice); después,
+    en la app empaquetada, ``build.env`` (lo que fija ese tipo de build, por ejemplo
+    las de prueba sin cámara en el panel) y el ``.env`` junto al ejecutable del
+    orquestador; al desarrollar, el ``.env`` del repo.
     """
-    bundled = Path(sys.executable).resolve().parent / ".env" if frozen() else REPO_ROOT / ".env"
-    return [home() / OVERRIDES_FILE, bundled]
+    if frozen():
+        folder = Path(sys.executable).resolve().parent
+        return [home() / OVERRIDES_FILE, folder / BUILD_ENV_FILE, folder / ".env"]
+    return [home() / OVERRIDES_FILE, REPO_ROOT / ".env"]
 
 
 def seed_home(bundle: Path | None = None, target: Path | None = None) -> int:

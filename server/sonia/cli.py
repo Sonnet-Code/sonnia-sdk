@@ -567,6 +567,12 @@ async def _start_panel(
     link = CloudLink(settings.panel, control, events, identity)
     if link.enabled:
         cloud = asyncio.create_task(link.run(), name="sonia-cloud-panel")
+    if link.enabled and not settings.panel.camera_stream:
+        logger.info(
+            "La cámara y el micrófono no se mandan al panel (PANEL_CAMERA_STREAM=false): "
+            "sin «Ver cámara» ni Modo Jean"
+        )
+    elif link.enabled:
         # Sala de vídeo (Modo Jean y «Ver cámara»): solo abierta mientras alguien la necesita.
         from sonia.guest.link import GuestLink
         from sonia.guest.mode import GuestMode

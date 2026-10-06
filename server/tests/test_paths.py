@@ -68,7 +68,30 @@ def test_en_la_app_el_env_va_junto_al_ejecutable(
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(exe))
     monkeypatch.setenv("SONIA_HOME", str(tmp_path / "home"))
-    assert paths.env_files() == [tmp_path / "home" / "overrides.env", exe.parent / ".env"]
+    assert paths.env_files() == [
+        tmp_path / "home" / "overrides.env",
+        exe.parent / "build.env",
+        exe.parent / ".env",
+    ]
+
+
+def test_el_build_env_de_las_pruebas_apaga_la_camara_del_panel(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from sonia import config
+
+    folder = tmp_path / "orquestador"
+    folder.mkdir()
+    (folder / "build.env").write_text("PANEL_CAMERA_STREAM=false\n", encoding="utf-8")
+    (folder / ".env").write_text("PANEL_CAMERA_STREAM=true\n", encoding="utf-8")
+    home = tmp_path / "home"
+    monkeypatch.setattr(
+        config, "env_files", lambda: [home / "overrides.env", folder / "build.env", folder / ".env"]
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PANEL_CAMERA_STREAM", "")
+    monkeypatch.delenv("PANEL_CAMERA_STREAM")
+    assert config.load_settings().panel.camera_stream is False
 
 
 def test_overrides_manda_al_cargar(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

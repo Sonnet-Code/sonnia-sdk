@@ -190,6 +190,9 @@ namespace Sonia
         private Image _cardGlow;
         private TextMeshProUGUI _eyebrow;
         private TextMeshProUGUI _counter;
+
+        /// <summary>Nivel de la partida para el contador («PREGUNTA 2 DE 5 · DIFÍCIL»).</summary>
+        private string _level = string.Empty;
         private TextMeshProUGUI _question;
         private readonly List<Image> _dots = new List<Image>();
         private readonly List<DotState> _dotStates = new List<DotState>();
@@ -350,6 +353,7 @@ namespace Sonia
             bool replay = _active && !_ending;
             _total = Mathf.Clamp(message.Total, 1, 20);
             _threshold = Mathf.Clamp(message.Threshold, 1, _total);
+            _level = (message.Level ?? string.Empty).Trim();
             if (replay)
             {
                 return;
@@ -447,7 +451,8 @@ namespace Sonia
                 }
             }
 
-            _counter.text = "PREGUNTA " + _number + " DE " + _total;
+            _counter.text = "PREGUNTA " + _number + " DE " + _total
+                            + (_level.Length > 0 ? " · " + _level.ToUpperInvariant() : string.Empty);
             _question.text = message.Question ?? string.Empty;
             for (int i = 0; i < _options.Length; i++)
             {
@@ -568,7 +573,7 @@ namespace Sonia
 
             _score = Mathf.Clamp(message.Score, 0, Mathf.Max(1, message.Total));
             _total = Mathf.Max(1, message.Total);
-            ShowResult(message.Won);
+            ShowResult(message.Won, message.Prize);
             _ending = true;
             _endAt = _clock + endScreenSeconds;
             if (message.Won)
@@ -1043,7 +1048,7 @@ namespace Sonia
             LayoutRebuilder.ForceRebuildLayoutImmediate(_banner);
         }
 
-        private void ShowResult(bool won)
+        private void ShowResult(bool won, string prize = "")
         {
             Build();
             if (_result == null)
@@ -1056,9 +1061,12 @@ namespace Sonia
                 ? new VertexGradient(new Color(1f, 0.93f, 0.55f), new Color(1f, 0.93f, 0.55f), Yellow, new Color(1f, 0.62f, 0.1f))
                 : new VertexGradient(Color.white, Color.white, new Color(0.75f, 0.85f, 1f), new Color(0.75f, 0.85f, 1f));
             _resultScore.text = _score + " de " + _total + (_score == 1 ? " acierto" : " aciertos");
-            _resultLine.text = won
+            _resultLine.text = (won
                 ? "¡Eres un crack del DevFest!"
-                : "Hacían falta " + _threshold + ". ¡Pídeme otra trivia y lo intentas otra vez!";
+                : "Hacían falta " + _threshold + ". ¡Pídeme otra trivia y lo intentas otra vez!")
+                + (string.IsNullOrWhiteSpace(prize)
+                    ? string.Empty
+                    : "\nTe llevas " + prize.Trim() + ": recógelo con el staff del stand.");
             for (int i = 0; i < _resultStars.Count; i++)
             {
                 bool lit = i < _score;
