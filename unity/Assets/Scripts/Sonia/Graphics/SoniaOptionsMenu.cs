@@ -186,12 +186,12 @@ namespace Sonia
 
             AddItem(panel.transform, "Calidad gráfica",
                 "Resolución, sombras, efectos y fotogramas por segundo de este equipo.", OpenGraphics);
-            AddItem(panel.transform, "Editar a Sonia",
-                "Abre el editor de personaje. Al guardar, el nuevo aspecto llega a todas las Sonias.", OpenSoniaEditor);
+            AddItem(panel.transform, "Editar a Sonnia",
+                "Abre el editor de personaje. Al guardar, el nuevo aspecto llega a todas las Sonnias.", OpenSoniaEditor);
             AddItem(panel.transform, "Cerrar", null, () => SetOpen(false));
 
             Text keys = SoniaUiKit.MakeText(panel.transform, "Teclas",
-                "Esc cierra · ↑↓ elige · Intro abre · 1 calidad gráfica · 2 editar a Sonia",
+                "Esc cierra · ↑↓ elige · Intro abre · 1 calidad gráfica · 2 editar a Sonnia",
                 22, TextAnchor.MiddleLeft);
             keys.color = MutedText;
             keys.GetComponent<LayoutElement>().preferredHeight = 40f;

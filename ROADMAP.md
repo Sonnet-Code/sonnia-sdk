@@ -39,7 +39,7 @@ El código está escrito y compila contra las DLL de Unity 6000.6.0f1 (0 errores
 - [ ] Reconexión de Unity estando "Fuera" (se aplica sin animación) y cambios a medias ("Volver" durante la salida y al revés).
 - [ ] `set_volume` a 0,3, 1 y 1,5 con Sonia hablando, y el gesto `greeting` (botón "Saludar ahora").
 - [ ] Subtítulos parciales de Sonia en el HUD (`SoniaDebugUI`) con la voz de GPT-Live.
-- [ ] Recompilar la build (`unity/Build/macOS/Sonia.app`).
+- [ ] Recompilar la build (`unity/Build/macOS/Sonnia.app`).
 
 ## 4. Decisiones pendientes de Jean
 
@@ -56,7 +56,7 @@ Sonia no tiene por qué correr en el Mac de desarrollo. Guía de instalación pa
   - [x] Build de Unity para Windows desde el Mac (6 de octubre): Mono, porque IL2CPP de Windows solo se compila en Windows, y Vulkan, que Genies exige.
   - [ ] Orquestador congelado para Windows: workflow «Orquestador para Windows» de GitHub Actions (hay que subir los commits) o `scripts/build_orquestador.sh` en Git Bash en ese equipo. Sin él, la app espera un `uv run sonia run` externo.
   - [ ] Probar la app en un Windows de verdad: que Genies cargue a Sonia con Vulkan, micrófono a 24 kHz (si no, `LIVE_SAMPLE_RATE=16000`), cámara y panel. Mirar el `Player.log` y `%APPDATA%\Sonia\logs`.
-  - [ ] Arranque automático: acceso directo a `Sonia.exe` en `shell:startup` (con la app todo en uno no hace falta `scripts/kiosk.sh`).
+  - [ ] Arranque automático: acceso directo a `Sonnia.exe` en `shell:startup` (con la app todo en uno no hace falta `scripts/kiosk.sh`).
 - [ ] Internet estable todo el día: sin red Sonia no conversa. Plan B: pasar a "Solo saludos" desde el panel local (sigue funcionando con las frases grabadas).
 - [ ] Prueba completa con micrófono, cámara y Unity en el equipo del stand.
 

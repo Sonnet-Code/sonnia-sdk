@@ -4,14 +4,14 @@ Fases: ``off → intro → entering → live → leaving → off``.
 
 1. ``intro``: GPT-Live se cierra (lo hace ``StandControl`` al ver el modo activo),
    la sala de Cloudflare se abre con audio (``RoomSupervisor.hold_guest``) para
-   que Jean ya vea y oiga el stand, y Sonia dice una frase grabada de
+   que Jean ya vea y oiga el stand, y Sonnia dice una frase grabada de
    ``assets/showcase/invitado.md`` (sin gastar).
 2. ``entering``: Unity recibe ``guest_mode`` {``phase``: ``enter``}: entra el
-   avatar de Jean, se dan la mano y Sonia sale. Unity avisa con
+   avatar de Jean, se dan la mano y Sonnia sale. Unity avisa con
    ``guest_state`` {``phase``: ``live``}.
 3. ``live``: la voz de Jean suena en el stand con su avatar.
 4. ``leaving``: ``guest_mode`` {``phase``: ``leave``}; Unity despide a Jean,
-   trae a Sonia y avisa con ``guest_state`` {``phase``: ``off``}.
+   trae a Sonnia y avisa con ``guest_state`` {``phase``: ``off``}.
 
 Nada se queda colgado: si Unity no contesta (app antigua o cerrada), cada paso
 sigue igual pasado su tiempo límite. ``guest_mode`` es un mensaje fijo, así que
@@ -41,9 +41,9 @@ logger = logging.getLogger(__name__)
 
 GuestPhase = Literal["off", "intro", "entering", "live", "leaving"]
 
-#: Respiro tras la frase de Sonia antes de que entre el invitado.
+#: Respiro tras la frase de Sonnia antes de que entre el invitado.
 INTRO_TAIL_S = 0.4
-#: Lo que se espera a que Unity confirme la entrada (caminar, mano, salida de Sonia).
+#: Lo que se espera a que Unity confirme la entrada (caminar, mano, salida de Sonnia).
 ENTER_TIMEOUT_S = 25.0
 #: Y la salida.
 LEAVE_TIMEOUT_S = 20.0
@@ -110,14 +110,14 @@ class GuestMode:
         if not self._room.available:
             return (
                 False,
-                "Esta Sonia no está conectada a la nube: el Modo Jean necesita PANEL_CLOUD_TOKEN.",
+                "Esta Sonnia no está conectada a la nube: el Modo Jean necesita PANEL_CLOUD_TOKEN.",
             )
         self._phase = "intro"
         logger.info("Modo Jean: empieza (invitado %s)", self._name)
         await self._on_change()
         self._room.hold_guest()
         self._sequence = asyncio.create_task(self._enter(), name="guest-enter")
-        return True, f"Sonia presenta a {self._name}: en unos segundos el stand te oye."
+        return True, f"Sonnia presenta a {self._name}: en unos segundos el stand te oye."
 
     async def stop(self) -> tuple[bool, str]:
         if self._phase == "off":
@@ -184,7 +184,7 @@ class GuestMode:
                 async with asyncio.timeout(LEAVE_TIMEOUT_S):
                     await self._unity_off.wait()
             except TimeoutError:
-                logger.warning("Modo Jean: Unity no confirmó la salida; Sonia vuelve igual")
+                logger.warning("Modo Jean: Unity no confirmó la salida; Sonnia vuelve igual")
         except asyncio.CancelledError:
             raise
         except Exception:

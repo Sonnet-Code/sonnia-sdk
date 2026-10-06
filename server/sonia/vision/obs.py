@@ -225,7 +225,7 @@ async def prepare_meeting(
                     update["type"] = 1
                 await obs.request("SetInputSettings", inputName=source, inputSettings=update)
         if _is_meeting_window(names.get(chosen, "")):
-            report.append(f"Sonia ve la ventana «{names[chosen]}».")
+            report.append(f"Sonnia ve la ventana «{names[chosen]}».")
 
         # Activa (en la escena en programa) pero fuera del lienzo y bloqueada.
         video = await obs.request("GetVideoSettings")

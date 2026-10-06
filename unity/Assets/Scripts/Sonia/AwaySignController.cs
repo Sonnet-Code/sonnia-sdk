@@ -9,7 +9,7 @@
 //
 // Diseño para el monitor vertical (1080x1920 de referencia, legible a varios
 // metros): una tarjeta navy de 900 px con borde fino y halo en el azul de la
-// marca, la etiqueta "SONIA" espaciada, el mensaje en blanco y en negrita a 80
+// marca, la etiqueta "SONNIA" espaciada, el mensaje en blanco y en negrita a 80
 // px (unos 2,5 cm de altura de letra en un monitor de 43"), tres puntos que
 // laten (vuelve enseguida) y una línea discreta con Sonnet Code. El logo ya está
 // arriba a la izquierda del HUD y no se repite. Aparece subiendo y fundiéndose,
@@ -33,7 +33,7 @@ namespace Sonia
         [Header("Texto")]
         [SerializeField]
         [Tooltip("Etiqueta pequeña sobre el mensaje.")]
-        private string eyebrow = "SONIA";
+        private string eyebrow = "SONNIA";
 
         [SerializeField]
         [Tooltip("Línea discreta bajo el mensaje. Vacía: no se muestra.")]

@@ -1,8 +1,8 @@
 /**
- * Worker `sonia-panel`: panel de control de Sonia en Cloudflare.
+ * Worker `sonia-panel`: panel de control de Sonnia en Cloudflare.
  *
- * - `/agent`: WebSocket de cada Sonia, solo con `AGENT_TOKEN`.
- * - `/guest/agent`: WebSocket del Modo Jean de cada Sonia (cámara, micro y voz
+ * - `/agent`: WebSocket de cada Sonnia, solo con `AGENT_TOKEN`.
+ * - `/guest/agent`: WebSocket del Modo Jean de cada Sonnia (cámara, micro y voz
  *   del invitado), también con `AGENT_TOKEN`; el navegador entra por `/api/guest`.
  * - `/login`, `/logout`: entrada con la contraseña del panel.
  * - Todo lo demás (página, estáticos, API y WebSocket del navegador) exige un
@@ -23,7 +23,7 @@ export { GuestRoom } from "./guest-room";
 const PUBLIC_PATHS = new Set(["/static/sonnet-code-logo.svg", "/static/favicon.svg", "/favicon.ico"]);
 /** Tamaño máximo del cuerpo de `POST /api/action`. */
 const MAX_ACTION_BYTES = 64 * 1024;
-/** Ids de Sonia válidos (el agente los manda en `[a-z0-9-]`; se admite algo más). */
+/** Ids de Sonnia válidos (el agente los manda en `[a-z0-9-]`; se admite algo más). */
 const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 
 export default {
@@ -87,7 +87,7 @@ function unauthorized(request: Request, url: URL): Response {
   return redirect(login, 302);
 }
 
-// ------------------------------------------------------------ Sonias (agentes)
+// ------------------------------------------------------------ Sonnias (agentes)
 
 /** Decodifica texto codificado como URL; si está mal codificado, lo deja tal cual. */
 function decodeHeader(value: string | null): string {
@@ -99,7 +99,7 @@ function decodeHeader(value: string | null): string {
   }
 }
 
-/** Comprueba el WebSocket de una Sonia (token e id). Devuelve su id y nombre, o la respuesta de error. */
+/** Comprueba el WebSocket de una Sonnia (token e id). Devuelve su id y nombre, o la respuesta de error. */
 async function checkAgent(request: Request, env: Env): Promise<{ id: string; name: string } | Response> {
   if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
     return text("Se esperaba un WebSocket.", 426);
@@ -108,7 +108,7 @@ async function checkAgent(request: Request, env: Env): Promise<{ id: string; nam
   const token = /^Bearer\s+(.+)$/i.exec(header)?.[1]?.trim() ?? "";
   const expected = env.AGENT_TOKEN ?? "";
   if (!expected) {
-    console.warn("Conexión de una Sonia rechazada: falta el secreto AGENT_TOKEN.");
+    console.warn("Conexión de una Sonnia rechazada: falta el secreto AGENT_TOKEN.");
     return text("Token no válido.", 401);
   }
   if (!token || !(await constantTimeEqual(token, expected))) return text("Token no válido.", 401);
@@ -134,7 +134,7 @@ async function handleAgent(request: Request, env: Env): Promise<Response> {
   return controlRoom(env).fetch(target.toString(), { headers: { upgrade: "websocket" } });
 }
 
-/** Modo Jean: la Sonia sube cámara y micro y baja la voz del invitado. */
+/** Modo Jean: la Sonnia sube cámara y micro y baja la voz del invitado. */
 async function handleGuestAgent(request: Request, env: Env): Promise<Response> {
   const agent = await checkAgent(request, env);
   if (agent instanceof Response) return agent;
@@ -176,7 +176,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const { instances } = await controlRoom(env).getInstances();
       instance = instances.find((item) => item.connected)?.id ?? null;
     }
-    if (!instance) return json({ ok: false, message: "No hay ninguna Sonia conectada." }, 503);
+    if (!instance) return json({ ok: false, message: "No hay ninguna Sonnia conectada." }, 503);
     const viewer = url.searchParams.get("role") === "watch" ? "https://guest/viewer?role=watch" : "https://guest/viewer";
     return guestRoom(env, instance).fetch(viewer, { headers: { upgrade: "websocket" } });
   }
@@ -256,7 +256,7 @@ async function galleryMap(request: Request, env: Env): Promise<Record<string, st
 
 async function handleGallery(request: Request, env: Env, url: URL): Promise<Response> {
   const map = await galleryMap(request, env);
-  // Los ids que mandó esa Sonia; si todavía no se saben, los de la galería desplegada.
+  // Los ids que mandó esa Sonnia; si todavía no se saben, los de la galería desplegada.
   const ids = (await controlRoom(env).getGalleryIds(instanceParam(url))) ?? Object.keys(map).sort();
   const images = ids.map((id) => ({
     id,

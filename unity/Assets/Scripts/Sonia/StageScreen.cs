@@ -47,7 +47,7 @@ namespace Sonia
 
         [SerializeField]
         [Tooltip("Quién habla en el bocadillo.")]
-        private string invitationSpeaker = "SONIA";
+        private string invitationSpeaker = "SONNIA";
 
         [SerializeField]
         [Tooltip("Frase bajo el QR. El logo ya dice Sonnet Code: aquí basta la invitación.")]

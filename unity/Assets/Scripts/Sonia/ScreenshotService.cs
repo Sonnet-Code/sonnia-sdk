@@ -2,7 +2,7 @@
 //
 // Se activa solo por línea de comandos:
 //
-//   Sonia.app/Contents/MacOS/Sonia -capture-dir /ruta -capture-every 5
+//   Sonnia.app/Contents/MacOS/Sonnia -capture-dir /ruta -capture-every 5
 //
 // Guarda un PNG numerado en la carpeta cada N segundos (por defecto 5). Sin
 // -capture-dir no hace nada, así que en el stand no cuesta ni un frame.

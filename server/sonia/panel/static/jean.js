@@ -11,7 +11,7 @@
  *   - reproduce el micro del stand y manda el de Jean (AudioWorklet en
  *     jean-worklet.js), con micro abierto o pulsar para hablar;
  *   - lanza animaciones del avatar de Jean (acción guest_animation);
- *   - pasa la pantalla de Sonia al editor del personaje de Jean (acción
+ *   - pasa la pantalla de Sonnia al editor del personaje de Jean (acción
  *     open_avatar_editor con target "guest"), antes de activar el modo.
  * Formato de los frames y decisiones en docs/modo-jean.md.
  */
@@ -26,8 +26,8 @@
   const WATCH_KEEPALIVE_MS = 10000; // renovación de la sala mientras el modal está abierto
 
   const PHASES = {
-    off: "Sonia está sola en el stand.",
-    intro: "Sonia anuncia al invitado sorpresa…",
+    off: "Sonnia está sola en el stand.",
+    intro: "Sonnia anuncia al invitado sorpresa…",
     entering: "Tu avatar está entrando…",
     live: "En directo: el stand te oye.",
     leaving: "Te estás despidiendo…",
@@ -103,14 +103,14 @@
         el("h3", { id: "jean-block-title", text: "Modo Jean" }),
         el("p", {
           class: "help",
-          text: "Jean entra en el stand como invitado sorpresa: Sonia lo presenta, se dan la mano y le deja hablar. Desde aquí ves la cámara del stand, hablas por tu micro y lanzas tus gestos.",
+          text: "Jean entra en el stand como invitado sorpresa: Sonnia lo presenta, se dan la mano y le deja hablar. Desde aquí ves la cámara del stand, hablas por tu micro y lanzas tus gestos.",
         }),
         openButton,
         el("p", {
           class: "cap-note",
           "data-cap-note": "guest_mode",
           hidden: true,
-          text: "Esta Sonia no tiene aún el Modo Jean: hay que actualizar el orquestador.",
+          text: "Esta Sonnia no tiene aún el Modo Jean: hay que actualizar el orquestador.",
         }),
       ),
     );
@@ -185,7 +185,7 @@
             el("h3", { text: "Tu avatar" }),
             el("p", {
               class: "help",
-              text: "Se edita en la pantalla de Sonia, con su ratón, con el Modo Jean apagado. Al guardar queda en la nube para todas las Sonias.",
+              text: "Se edita en la pantalla de Sonnia, con su ratón, con el Modo Jean apagado. Al guardar queda en la nube para todas las Sonnias.",
             }),
             ui.avatarState,
             el("div", { class: "button-row" }, ui.avatarEdit, ui.avatarClose),
@@ -304,7 +304,7 @@
     if (state.audio) state.audio.player.port.postMessage({ reset: true });
   }
 
-  // ------------------------------------------------------------ estado de Sonia
+  // ------------------------------------------------------------ estado de Sonnia
 
   async function pollStatus() {
     if (!state.open) return;
@@ -345,8 +345,8 @@
     const editing = Boolean(avatar.editor_open);
     const editingMine = editing && avatar.editor_target === "guest";
     let text = objectOf(status.guest_avatar).custom ? "Tu personaje, guardado en la nube." : "Avatar de prueba de la app.";
-    if (editingMine) text = "Editando tu personaje en la pantalla de Sonia…";
-    else if (editing) text = "La pantalla de Sonia está en el editor del personaje de Sonia.";
+    if (editingMine) text = "Editando tu personaje en la pantalla de Sonnia…";
+    else if (editing) text = "La pantalla de Sonnia está en el editor del personaje de Sonia.";
     setText(ui.avatarState, text);
     ui.avatarState.dataset.state = editing ? "editing" : "idle";
     const supported = caps.has("guest_avatar_editor");
@@ -365,7 +365,7 @@
     if (key === state.animationsKey) return;
     state.animationsKey = key;
     if (clips.length === 0) {
-      ui.animations.replaceChildren(el("p", { class: "muted", text: "La app de Sonia no ha mandado su lista de animaciones." }));
+      ui.animations.replaceChildren(el("p", { class: "muted", text: "La app de Sonnia no ha mandado su lista de animaciones." }));
       return;
     }
     ui.animations.replaceChildren(

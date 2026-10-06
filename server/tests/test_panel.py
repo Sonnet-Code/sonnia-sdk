@@ -494,7 +494,7 @@ async def test_el_editor_de_personaje_pausa_gpt_live_y_guarda_el_avatar(tmp_path
         await rig.rec.wait_type("set_avatar")
         assert rig.rec.of_type("set_avatar")[-1] == {"type": "set_avatar", "definition": None}
         ok, message = await rig.control.act("open_avatar_editor", {})
-        assert ok and "editor del personaje de Sonia" in message
+        assert ok and "editor del personaje de Sonnia" in message
         await rig.rec.wait_type("open_avatar_editor")
         # Unity avisa de que ya está en la escena del editor: GPT-Live se cierra.
         await rig.client.send(json.dumps({"type": "avatar_editor", "open": True}))
@@ -770,7 +770,7 @@ async def test_el_websocket_manda_historial_estado_y_mensajes(tmp_path: Path) ->
                     item = json.loads(await ws.recv())
                     message = item.get("message") or {}
                     if message.get("type") == "transcript" and message.get("role") == "user":
-                        assert "Hola Sonia" in message["text"]
+                        assert "Hola Sonnia" in message["text"]
                         break
 
 

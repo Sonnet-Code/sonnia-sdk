@@ -1,18 +1,18 @@
-"""Control de Sonia desde el panel: modos, acciones y estado en lenguaje llano.
+"""Control de Sonnia desde el panel: modos, acciones y estado en lenguaje llano.
 
-Es la capa entre el panel web y el motor. Sabe en qué modo está Sonia
+Es la capa entre el panel web y el motor. Sabe en qué modo está Sonnia
 (conversando, solo saludos o fuera), lo aplica al motor y a Unity, guarda lo
 que el equipo cambia para que sobreviva a un reinicio y traduce el estado
-técnico a frases que entiende cualquiera del stand ("La pantalla de Sonia no
+técnico a frases que entiende cualquiera del stand ("La pantalla de Sonnia no
 está conectada: abre la app").
 
 Los ajustes (letrero, avisos, volumen, voz, subtítulos, animaciones,
-Developer...) son de Sonia, no de un equipo: se guardan en la nube y valen
-para todas las Sonias (``SHARED_SETTINGS``). Se cambien desde el panel de
+Developer...) son de Sonnia, no de un equipo: se guardan en la nube y valen
+para todas las Sonnias (``SHARED_SETTINGS``). Se cambien desde el panel de
 Cloudflare o desde el local, quedan apuntados como pendientes hasta que la
 nube los confirma (``CloudLink``), así que un cambio hecho sin internet sube
 en cuanto vuelve la conexión. El modo, el modo debug y el gasto son de cada
-Sonia: con varias encendidas a la vez, cada una sigue en el suyo y el panel
+Sonnia: con varias encendidas a la vez, cada una sigue en el suyo y el panel
 deja elegir cuál se controla.
 
 """
@@ -95,7 +95,7 @@ CAPABILITIES = [
     "guest_avatar_editor",
 ]
 
-#: Ajustes que se guardan en la nube y comparten todas las Sonias. El modo, el
+#: Ajustes que se guardan en la nube y comparten todas las Sonnias. El modo, el
 #: modo debug y el gasto no están: son de cada equipo.
 SHARED_SETTINGS: tuple[str, ...] = (
     "away_message",
@@ -208,7 +208,7 @@ class PanelState:
     showcase: bool | None = None
     #: Subtítulos en la pantalla de Unity.
     subtitles: bool = True
-    #: Clips que Sonia no usa por su cuenta (bloque «Animaciones»).
+    #: Clips que Sonnia no usa por su cuenta (bloque «Animaciones»).
     disabled_animations: list[str] = field(default_factory=list)
     #: Ajustes de «Developer»: boca, cámara y movimiento en reposo (ver ``TUNING_LIMITS``).
     tuning: dict[str, dict[str, float]] = field(default_factory=default_tuning)
@@ -217,7 +217,7 @@ class PanelState:
     avatar: str | None = None
     #: Lo mismo para el invitado del Modo Jean; ``None``: su avatar de prueba.
     guest_avatar: str | None = None
-    #: Modo debug: Sonia quieta (sin GPT-Live ni nada automático) para pruebas visuales.
+    #: Modo debug: Sonnia quieta (sin GPT-Live ni nada automático) para pruebas visuales.
     debug: bool = False
     #: Gasto del día: segundos de sesión de GPT-Live acumulados en ``usage_date``
     #: (sobrevive a los reinicios del orquestador).
@@ -290,7 +290,7 @@ class _Material:
     greetings: list[str] = field(default_factory=list)
     phrases: list[str] = field(default_factory=list)
     songs: list[str] = field(default_factory=list)
-    #: Lo que dice Sonia al presentar al invitado sorpresa (Modo Jean).
+    #: Lo que dice Sonnia al presentar al invitado sorpresa (Modo Jean).
     guest_intros: list[str] = field(default_factory=list)
 
     @classmethod
@@ -351,7 +351,7 @@ class StandControl:
         self._animations: list[dict[str, str]] = []
         #: Clip del catálogo que suena ahora en Unity (``animation_playing``).
         self._current_animation: str | None = None
-        #: ¿Está la pantalla de Sonia en la escena de editar personaje?
+        #: ¿Está la pantalla de Sonnia en la escena de editar personaje?
         self._avatar_editor_open = False
         #: De quién es el personaje que se edita: "sonia" o "guest" (Jean).
         self._avatar_editor_target = "sonia"
@@ -393,7 +393,7 @@ class StandControl:
 
     @property
     def guest_intro_lines(self) -> list[str]:
-        """Frases con las que Sonia presenta al invitado (se graban con «Preparar voces»)."""
+        """Frases con las que Sonnia presenta al invitado (se graban con «Preparar voces»)."""
         return self._material.guest_intros
 
     @property
@@ -427,9 +427,9 @@ class StandControl:
         await self._hub.set_sticky("guest_avatar", p.msg_set_guest_avatar(state.guest_avatar))
         await self._apply_mode(state.mode, announce=False)
         if state.debug:
-            logger.info("El panel dejó a Sonia en modo debug: quieta y sin GPT-Live")
+            logger.info("El panel dejó a Sonnia en modo debug: quieta y sin GPT-Live")
         elif state.mode != "conversation":
-            logger.info("El panel dejó a Sonia en modo %s: no se abre GPT-Live", state.mode)
+            logger.info("El panel dejó a Sonnia en modo %s: no se abre GPT-Live", state.mode)
         self._loop_task = asyncio.create_task(self._loop(), name="sonia-panel-loop")
         if self._voice_cache is not None and self._settings.live.api_key and not state.debug:
             self._spawn(self._prepare_voices(delay=VOICE_WARMUP_DELAY_S), "voice-warmup")
@@ -493,7 +493,7 @@ class StandControl:
             await asyncio.sleep(1.0)
             try:
                 if self._avatar_editor_open and self._hub.client_count == 0:
-                    # La pantalla se cerró con el editor abierto: Sonia vuelve a su modo.
+                    # La pantalla se cerró con el editor abierto: Sonnia vuelve a su modo.
                     await self._set_avatar_editor_open(False)
                 if time.monotonic() - self._last_usage_save >= USAGE_SAVE_S:
                     self._save_usage()
@@ -538,23 +538,23 @@ class StandControl:
     async def greet(self, kind: str | None = None) -> tuple[bool, str]:
         """Un saludo con frase grabada (o solo el gesto si aún no está grabada)."""
         if self.state.mode == "away":
-            return False, "Sonia está fuera. Tráela de vuelta para que salude."
+            return False, "Sonnia está fuera. Tráela de vuelta para que salude."
         bit = self._next_bit(kind)
         if bit is None:
             await self._hub.broadcast_json(p.msg_attention("greeting"))
-            return True, "Sonia saluda con la mano."
+            return True, "Sonnia saluda con la mano."
         pcm = self._voice_cache.get(bit.text) if self._voice_cache is not None else None
         if pcm is None:
             if bit.gesture:
                 await self._hub.broadcast_json(p.msg_attention(bit.gesture))
             return (
                 True,
-                "Sonia saluda con un gesto (la frase aún no está grabada: usa «Preparar voces»).",
+                "Sonnia saluda con un gesto (la frase aún no está grabada: usa «Preparar voces»).",
             )
         played = await self._engine.play_clip(pcm, bit.text, attention=bit.gesture)
         if not played:
-            return False, "Sonia está hablando ahora; prueba en un momento."
-        return True, f"Sonia dice: «{bit.text}»"
+            return False, "Sonnia está hablando ahora; prueba en un momento."
+        return True, f"Sonnia dice: «{bit.text}»"
 
     # -- voces grabadas -------------------------------------------------------
 
@@ -598,25 +598,25 @@ class StandControl:
 
     def _need_present(self) -> None:
         if self.state.mode == "away":
-            raise _BadRequest("Sonia está fuera. Tráela de vuelta primero.")
+            raise _BadRequest("Sonnia está fuera. Tráela de vuelta primero.")
 
     def _need_sonia_on_stage(self) -> None:
-        """Lo que hace o dice Sonia: ni fuera ni con el invitado del Modo Jean en su sitio."""
+        """Lo que hace o dice Sonnia: ni fuera ni con el invitado del Modo Jean en su sitio."""
         self._need_present()
         if self._guest_active:
-            raise _BadRequest("Sonia le ha dejado el sitio a Jean: termina antes el Modo Jean.")
+            raise _BadRequest("Sonnia le ha dejado el sitio a Jean: termina antes el Modo Jean.")
 
     async def _act_set_mode(self, params: dict[str, Any]) -> tuple[bool, str]:
         mode = params.get("mode")
         if mode not in MODES:
             raise _BadRequest("Modo no válido.")
         if self._guest_active and mode != self.state.mode:
-            raise _BadRequest("Termina antes el Modo Jean: Sonia no está en el stand.")
+            raise _BadRequest("Termina antes el Modo Jean: Sonnia no está en el stand.")
         await self.set_mode(mode)
         return True, {
-            "conversation": "Sonia vuelve a conversar.",
-            "greeter": "Sonia solo saluda: no conversa ni gasta.",
-            "away": "Sonia se va de la pantalla y deja el letrero.",
+            "conversation": "Sonnia vuelve a conversar.",
+            "greeter": "Sonnia solo saluda: no conversa ni gasta.",
+            "away": "Sonnia se va de la pantalla y deja el letrero.",
         }[mode]
 
     async def _act_set_away_message(self, params: dict[str, Any]) -> tuple[bool, str]:
@@ -629,8 +629,8 @@ class StandControl:
         self._need_sonia_on_stage()
         if self.state.mode == "conversation":
             if not await self._engine.announce(text):
-                raise _BadRequest("Sonia no está conectada ahora mismo; prueba en unos segundos.")
-            return True, "Sonia lo dirá en un momento."
+                raise _BadRequest("Sonnia no está conectada ahora mismo; prueba en unos segundos.")
+            return True, "Sonnia lo dirá en un momento."
         # Solo saludos: se graba con su voz (una sesión corta) y se reproduce.
         if self._voice_cache is None or not self._settings.live.api_key:
             raise _BadRequest("No se puede grabar la frase: falta la clave de GPT-Live.")
@@ -652,27 +652,27 @@ class StandControl:
     async def _act_ask(self, params: dict[str, Any]) -> tuple[bool, str]:
         text = _text(params, "text", max_len=400, required=True)
         if self.state.mode != "conversation":
-            raise _BadRequest("Sonia no está conversando. Pásala a «Conversando» primero.")
+            raise _BadRequest("Sonnia no está conversando. Pásala a «Conversando» primero.")
         await self._engine.submit_text(text)
-        return True, "Enviado. Sonia responderá en voz alta."
+        return True, "Enviado. Sonnia responderá en voz alta."
 
     async def _act_stop(self, params: dict[str, Any]) -> tuple[bool, str]:
         await self._engine.interrupt()
-        return True, "Sonia se calla."
+        return True, "Sonnia se calla."
 
     async def _act_mute(self, params: dict[str, Any]) -> tuple[bool, str]:
         engine = self._engine
         muted = _flag(params, "muted")
         engine.set_mic_muted(muted)
-        return True, "Micrófono silenciado: Sonia no oye." if muted else "Micrófono activado."
+        return True, "Micrófono silenciado: Sonnia no oye." if muted else "Micrófono activado."
 
     async def _act_restart(self, params: dict[str, Any]) -> tuple[bool, str]:
         engine = self._engine
         if self.state.mode != "conversation":
-            raise _BadRequest("Sonia no está conversando; no hay conversación que reiniciar.")
+            raise _BadRequest("Sonnia no está conversando; no hay conversación que reiniciar.")
         if not await engine.restart_session("pedido desde el panel"):
             raise _BadRequest("Ya se está conectando; espera unos segundos.")
-        return True, "Conversación nueva: Sonia olvida lo hablado y empieza de cero."
+        return True, "Conversación nueva: Sonnia olvida lo hablado y empieza de cero."
 
     async def _act_show_image(self, params: dict[str, Any]) -> tuple[bool, str]:
         self._need_present()
@@ -705,15 +705,15 @@ class StandControl:
         self._need_sonia_on_stage()
         clip = _text(params, "clip", max_len=80, required=True)
         if self._hub.client_count == 0:
-            raise _BadRequest("La pantalla de Sonia no está conectada.")
+            raise _BadRequest("La pantalla de Sonnia no está conectada.")
         if not self._animations:
             raise _BadRequest(
-                "La app de Sonia no ha mandado su lista de animaciones: actualízala o ábrela otra vez."
+                "La app de Sonnia no ha mandado su lista de animaciones: actualízala o ábrela otra vez."
             )
         if clip not in {a["clip"] for a in self._animations}:
             raise _BadRequest("Esa animación no está en la app de Sonia.")
         await self._hub.broadcast_json(p.msg_play_animation(clip))
-        return True, f"Sonia hace «{clip}»."
+        return True, f"Sonnia hace «{clip}»."
 
     async def _act_set_animation_enabled(self, params: dict[str, Any]) -> tuple[bool, str]:
         clip = _text(params, "clip", max_len=80, required=True)
@@ -728,44 +728,44 @@ class StandControl:
             disabled.add(clip)
         await self._set_shared("disabled_animations", sorted(disabled))
         return True, (
-            f"Sonia vuelve a usar «{clip}» por su cuenta."
+            f"Sonnia vuelve a usar «{clip}» por su cuenta."
             if enabled
-            else f"Sonia ya no hará «{clip}» por su cuenta (sigue disponible en su botón)."
+            else f"Sonnia ya no hará «{clip}» por su cuenta (sigue disponible en su botón)."
         )
 
     async def _act_open_avatar_editor(self, params: dict[str, Any]) -> tuple[bool, str]:
         target = params.get("target", "sonia")
         if target not in p.AVATAR_TARGETS:
-            raise _BadRequest("¿De quién es el personaje: de Sonia o de Jean?")
+            raise _BadRequest("¿De quién es el personaje: de Sonnia o de Jean?")
         self._need_present()
         if self._hub.client_count == 0:
-            raise _BadRequest("La pantalla de Sonia no está conectada.")
+            raise _BadRequest("La pantalla de Sonnia no está conectada.")
         if self._guest_active:
             raise _BadRequest("Termina antes el Modo Jean.")
         self._avatar_editor_target = str(target)
         await self._hub.broadcast_json(p.msg_open_avatar_editor(str(target)))
-        who = "de Jean" if target == "guest" else "de Sonia"
+        who = "de Jean" if target == "guest" else "de Sonnia"
         return True, (
-            f"La pantalla de Sonia pasa al editor del personaje {who}: edítalo allí con el ratón y "
-            "pulsa Guardar. Mientras tanto Sonia no conversa."
+            f"La pantalla de Sonnia pasa al editor del personaje {who}: edítalo allí con el ratón y "
+            "pulsa Guardar. Mientras tanto Sonnia no conversa."
         )
 
     async def _act_close_avatar_editor(self, params: dict[str, Any]) -> tuple[bool, str]:
         await self._hub.broadcast_json(p.msg_close_avatar_editor())
-        return True, "Editor de personaje cerrado sin guardar: Sonia vuelve."
+        return True, "Editor de personaje cerrado sin guardar: Sonnia vuelve."
 
     async def _act_set_guest_mode(self, params: dict[str, Any]) -> tuple[bool, str]:
         active = _flag(params, "active")
         guest = self._guest
         if guest is None:
             raise _BadRequest(
-                "Esta Sonia no tiene el Modo Jean: hace falta conectarla a la nube "
+                "Esta Sonnia no tiene el Modo Jean: hace falta conectarla a la nube "
                 "(PANEL_CLOUD_TOKEN)."
             )
         if active:
             self._need_present()
             if self._hub.client_count == 0:
-                raise _BadRequest("La pantalla de Sonia no está conectada.")
+                raise _BadRequest("La pantalla de Sonnia no está conectada.")
             if self._avatar_editor_open:
                 raise _BadRequest("Cierra antes el editor de personaje.")
             ok, message = await guest.start()
@@ -781,7 +781,7 @@ class StandControl:
         room = self._room
         if room is None or not room.can_watch:
             raise _BadRequest(
-                "Esta Sonia no puede enseñar la cámara: hace falta conectarla a la nube "
+                "Esta Sonnia no puede enseñar la cámara: hace falta conectarla a la nube "
                 "(PANEL_CLOUD_TOKEN) y tener cámara."
             )
         if not active:
@@ -803,31 +803,31 @@ class StandControl:
     async def _act_reset_avatar(self, params: dict[str, Any]) -> tuple[bool, str]:
         target = params.get("target", "sonia")
         if target not in p.AVATAR_TARGETS:
-            raise _BadRequest("¿De quién es el personaje: de Sonia o de Jean?")
+            raise _BadRequest("¿De quién es el personaje: de Sonnia o de Jean?")
         if target == "guest":
             if self.state.guest_avatar is None:
                 return True, "Jean ya tiene el avatar de prueba de la app."
             await self._set_shared("guest_avatar", None)
-            return True, "Jean vuelve al avatar de prueba de la app (en todas las Sonias)."
+            return True, "Jean vuelve al avatar de prueba de la app (en todas las Sonnias)."
         if self.state.avatar is None:
-            return True, "Sonia ya tiene el personaje de la app."
+            return True, "Sonnia ya tiene el personaje de la app."
         await self._set_shared("avatar", None)
-        return True, "Sonia vuelve al personaje que trae la app (en todas las Sonias)."
+        return True, "Sonnia vuelve al personaje que trae la app (en todas las Sonnias)."
 
     async def _act_trivia_start(self, params: dict[str, Any]) -> tuple[bool, str]:
         """«Empezar trivia»: la misma partida que pide un visitante por voz."""
         trivia = self._engine.trivia
         if trivia is None:
-            raise _BadRequest("La trivia está desactivada en esta Sonia (TRIVIA_ENABLED).")
+            raise _BadRequest("La trivia está desactivada en esta Sonnia (TRIVIA_ENABLED).")
         self._need_sonia_on_stage()
         if self.state.mode != "conversation":
-            raise _BadRequest("La trivia necesita a Sonia conversando: pásala a «Conversando».")
+            raise _BadRequest("La trivia necesita a Sonnia conversando: pásala a «Conversando».")
         if self.state.debug:
-            raise _BadRequest("En modo debug Sonia no conversa: desactívalo antes.")
+            raise _BadRequest("En modo debug Sonnia no conversa: desactívalo antes.")
         if self._avatar_editor_open:
             raise _BadRequest("Cierra antes el editor de personaje.")
         if self._hub.client_count == 0:
-            raise _BadRequest("La pantalla de Sonia no está conectada.")
+            raise _BadRequest("La pantalla de Sonnia no está conectada.")
         ok, message = await trivia.start("panel")
         if not ok:
             raise _BadRequest(message)
@@ -837,12 +837,12 @@ class StandControl:
         """«Reiniciar trivia»: una partida nueva desde la primera pregunta."""
         trivia = self._engine.trivia
         if trivia is None:
-            raise _BadRequest("La trivia está desactivada en esta Sonia (TRIVIA_ENABLED).")
+            raise _BadRequest("La trivia está desactivada en esta Sonnia (TRIVIA_ENABLED).")
         self._need_sonia_on_stage()
         if self.state.mode != "conversation":
-            raise _BadRequest("La trivia necesita a Sonia conversando: pásala a «Conversando».")
+            raise _BadRequest("La trivia necesita a Sonnia conversando: pásala a «Conversando».")
         if self._hub.client_count == 0:
-            raise _BadRequest("La pantalla de Sonia no está conectada.")
+            raise _BadRequest("La pantalla de Sonnia no está conectada.")
         ok, message = await trivia.restart("panel")
         if not ok:
             raise _BadRequest(message)
@@ -877,9 +877,9 @@ class StandControl:
         enabled = _flag(params, "enabled")
         await self._set_shared("showcase", enabled)
         return True, (
-            "Sonia dirá frases y bailará sola cuando no haya nadie."
+            "Sonnia dirá frases y bailará sola cuando no haya nadie."
             if enabled
-            else "Sonia ya no dirá frases ni bailará sola."
+            else "Sonnia ya no dirá frases ni bailará sola."
         )
 
     async def _act_set_debug(self, params: dict[str, Any]) -> tuple[bool, str]:
@@ -890,15 +890,15 @@ class StandControl:
         self._save()
         await self._hub.set_sticky("debug", p.msg_set_debug(enabled))
         if enabled:
-            logger.info("Panel: modo debug activado; GPT-Live apagada y Sonia quieta")
+            logger.info("Panel: modo debug activado; GPT-Live apagada y Sonnia quieta")
             await self._set_live(False)
             return True, (
-                "Modo debug: Sonia se queda quieta y desconectada de OpenAI. "
+                "Modo debug: Sonnia se queda quieta y desconectada de OpenAI. "
                 "Los botones del panel siguen funcionando."
             )
         logger.info("Panel: modo debug desactivado; vuelve el modo %s", self.state.mode)
         await self._apply_mode(self.state.mode, announce=False)
-        return True, "Modo debug desactivado: Sonia vuelve a su modo normal."
+        return True, "Modo debug desactivado: Sonnia vuelve a su modo normal."
 
     async def _act_set_subtitles(self, params: dict[str, Any]) -> tuple[bool, str]:
         enabled = _flag(params, "enabled")
@@ -918,7 +918,7 @@ class StandControl:
         value = _number(params, "value", 0.0, 0.2)
         await self._set_shared("mic_gate", value)
         if value <= 0:
-            return True, "Filtro de ruido apagado: Sonia oye todo."
+            return True, "Filtro de ruido apagado: Sonnia oye todo."
         return True, "Filtro de ruido ajustado."
 
     async def _act_set_voice(self, params: dict[str, Any]) -> tuple[bool, str]:
@@ -933,7 +933,7 @@ class StandControl:
     async def _act_set_notes(self, params: dict[str, Any]) -> tuple[bool, str]:
         text = _text(params, "text", max_len=NOTES_MAX_LEN)
         await self._set_shared("notes", text)
-        return True, "Avisos guardados. Sonia ya los conoce." if text else "Avisos borrados."
+        return True, "Avisos guardados. Sonnia ya los conoce." if text else "Avisos borrados."
 
     async def _act_set_tuning(self, params: dict[str, Any]) -> tuple[bool, str]:
         changes = {group: params[group] for group in TUNING_LIMITS if group in params}
@@ -1121,7 +1121,7 @@ class StandControl:
             await self._set_avatar_editor_open(open_)
 
     async def _set_avatar_editor_open(self, open_: bool) -> None:
-        """Con el editor de personaje en pantalla Sonia no conversa; al salir vuelve a su modo."""
+        """Con el editor de personaje en pantalla Sonnia no conversa; al salir vuelve a su modo."""
         if open_ == self._avatar_editor_open:
             return
         self._avatar_editor_open = open_
@@ -1145,7 +1145,7 @@ class StandControl:
         await self._set_shared("guest_avatar" if guest else "avatar", definition)
         logger.info(
             "Personaje nuevo %s guardado desde el editor (%d caracteres)",
-            "de Jean" if guest else "de Sonia",
+            "de Jean" if guest else "de Sonnia",
             len(definition),
         )
 
@@ -1214,8 +1214,8 @@ class StandControl:
             if self._hub.client_count > 0
             else _health(
                 False,
-                "La pantalla de Sonia no está conectada",
-                "Abre la app de Sonia en el ordenador del stand (o ciérrala y ábrela otra vez).",
+                "La pantalla de Sonnia no está conectada",
+                "Abre la app de Sonnia en el ordenador del stand (o ciérrala y ábrela otra vez).",
             )
         )
         if self.state.debug:
@@ -1245,13 +1245,13 @@ class StandControl:
             mic = _health(
                 False,
                 "Micrófono silenciado desde el panel",
-                "Pulsa «Activar micrófono» para que Sonia vuelva a oír.",
+                "Pulsa «Activar micrófono» para que Sonnia vuelva a oír.",
             )
         elif mic_age is None or mic_age > MIC_STALE_S:
             mic = _health(
                 False,
                 "El micrófono no envía audio",
-                "Revisa que esté enchufado; Sonia lo vuelve a intentar sola cada pocos segundos.",
+                "Revisa que esté enchufado; Sonnia lo vuelve a intentar sola cada pocos segundos.",
             )
         elif sound_age is None or sound_age > MIC_DEAF_S:
             mic = _health(
@@ -1270,7 +1270,7 @@ class StandControl:
             camera = _health(
                 False,
                 "La cámara no responde",
-                "Revisa el cable USB. Sonia sigue conversando, pero sin ver.",
+                "Revisa el cable USB. Sonnia sigue conversando, pero sin ver.",
             )
         else:
             camera = _health(True, "Cámara lista")

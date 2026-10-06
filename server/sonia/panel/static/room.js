@@ -41,7 +41,7 @@
     return /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname) && location.port === "8780";
   }
 
-  /** Manda una acción a la Sonia elegida. Devuelve {ok, message}; nunca lanza. */
+  /** Manda una acción a la Sonnia elegida. Devuelve {ok, message}; nunca lanza. */
   async function action(name, params = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ACTION_TIMEOUT_MS);
@@ -136,7 +136,7 @@
         opened = true;
         state.retryMs = RETRY_MIN_MS;
         state.failedConnects = 0;
-        setConn(state.agentConnected ? "live" : "waiting", state.agentConnected ? "Conectado al stand." : "Esperando a que Sonia se conecte…");
+        setConn(state.agentConnected ? "live" : "waiting", state.agentConnected ? "Conectado al stand." : "Esperando a que Sonnia se conecte…");
       });
       ws.addEventListener("message", (event) => onMessage(ws, event.data));
       ws.addEventListener("close", () => {
@@ -150,7 +150,7 @@
         setConn(
           "retry",
           state.failedConnects >= 3 && !opened
-            ? "No hay sala de vídeo aquí. La cámara en directo va desde sonia.sonnetcode.com con la Sonia conectada."
+            ? "No hay sala de vídeo aquí. La cámara en directo va desde sonia.sonnetcode.com con la Sonnia conectada."
             : `Conexión cortada. Reintento en ${Math.round(delay / 1000)} s…`,
         );
         state.retryTimer = setTimeout(connect, delay);
@@ -168,7 +168,7 @@
         if (!message || typeof message !== "object") return;
         if (message.type === "agent") {
           state.agentConnected = message.connected === true;
-          setConn(state.agentConnected ? "live" : "waiting", state.agentConnected ? "Conectado al stand." : "La Sonia del stand no está conectada a la sala.");
+          setConn(state.agentConnected ? "live" : "waiting", state.agentConnected ? "Conectado al stand." : "La Sonnia del stand no está conectada a la sala.");
         } else if (message.type === "stats") {
           state.remoteStats = message;
           if (!state.agentConnected) {

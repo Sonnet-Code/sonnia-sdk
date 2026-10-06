@@ -538,7 +538,7 @@ async def test_la_voz_llega_a_unity_como_una_frase_con_subtitulos(tmp_path: Path
         assert transcripts[-1] == {
             "type": "transcript",
             "role": "assistant",
-            "text": "Hola, soy Sonia.",
+            "text": "Hola, soy Sonnia.",
             "final": True,
         }
         assert any(not t["final"] for t in transcripts)
@@ -634,10 +634,20 @@ async def test_text_input_llega_como_commentary(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_en_los_subtitulos_el_nombre_se_escribe_sonnia() -> None:
+    # Se dice «Sonia»; se escribe «Sonnia», como Sonnet Code.
+    from sonia.live.engine import clean_transcript
+
+    assert clean_transcript("Hola, soy Sonia") == "Hola, soy Sonnia"
+    assert clean_transcript("SONIA") == "SONNIA"
+    assert clean_transcript("sonía") == "sonnia"
+    assert clean_transcript("Sonnia ya estaba bien") == "Sonnia ya estaba bien"
+
+
 def test_las_marcas_de_sonido_no_salen_en_la_transcripcion() -> None:
     from sonia.live.engine import clean_transcript
 
-    assert clean_transcript("[laugh] Hola Sonia [sigh] ¿me oyes?") == "Hola Sonia ¿me oyes?"
+    assert clean_transcript("[laugh] Hola Sonia [sigh] ¿me oyes?") == "Hola Sonnia ¿me oyes?"
     assert clean_transcript("[sigh") == ""
     assert clean_transcript("] Audita todo") == "Audita todo"
     assert clean_transcript("laugh] Y qué opinas") == "Y qué opinas"

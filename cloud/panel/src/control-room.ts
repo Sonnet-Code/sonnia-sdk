@@ -1,25 +1,25 @@
 /**
  * Durable Object `ControlRoom`: una única instancia (`idFromName("control")`)
- * que conoce a todas las Sonias conectadas y a todos los navegadores del panel.
+ * que conoce a todas las Sonnias conectadas y a todos los navegadores del panel.
  *
- * - Cada Sonia (agente) mantiene un WebSocket saliente hacia `/agent`. Manda
+ * - Cada Sonnia (agente) mantiene un WebSocket saliente hacia `/agent`. Manda
  *   `hello`, `status`, `message`, `log`, `result` y `settings`; recibe
  *   `action`, `viewers`, `sync` y `settings` (ver `docs/panel.md`).
- * - Guarda los ajustes compartidos de todas las Sonias (letrero, avisos,
- *   volumen, voz, Developer...): los cambia cualquier Sonia (desde el panel de
+ * - Guarda los ajustes compartidos de todas las Sonnias (letrero, avisos,
+ *   volumen, voz, Developer...): los cambia cualquier Sonnia (desde el panel de
  *   aquí o desde su panel local) y se reparten a las demás. El modo de cada una
- *   no está ahí: con dos Sonias a la vez, cada una sigue en el suyo.
+ *   no está ahí: con dos Sonnias a la vez, cada una sigue en el suyo.
  * - Cada navegador abre `/api/events` y recibe `instances`, `history`,
- *   `status`, `message` y `log` de la Sonia que mira; puede mandar `select`.
+ *   `status`, `message` y `log` de la Sonnia que mira; puede mandar `select`.
  * - La API HTTP del navegador llega por RPC desde el Worker (`getInstances`,
  *   `getStatus`, `getGalleryIds`, `runAction`).
  *
  * Consumo (plan free): todo usa la API de hibernación de WebSockets; no hay
  * `setInterval` ni alarmas, así que el objeto duerme en cuanto nadie le habla.
  * Al hibernar se pierde lo que hay en memoria (estado, conversación y
- * registro de cada Sonia); se pide de nuevo con `sync` solo cuando algún
+ * registro de cada Sonnia); se pide de nuevo con `sync` solo cuando algún
  * navegador lo necesita. En el almacenamiento (SQLite, API kv) solo se guarda
- * un resumen pequeño de cada Sonia, con pocas escrituras, para que las
+ * un resumen pequeño de cada Sonnia, con pocas escrituras, para que las
  * desconectadas de las últimas 2 horas sobrevivan a la hibernación.
  */
 
@@ -35,11 +35,11 @@ const KEEP_DISCONNECTED_MS = 2 * 60 * 60 * 1000;
 /** Tiempo máximo de espera del `result` de una acción. */
 const ACTION_TIMEOUT_MS = 15_000;
 /**
- * Sin ningún mensaje de una Sonia en este tiempo, su conexión se da por
+ * Sin ningún mensaje de una Sonnia en este tiempo, su conexión se da por
  * muerta (manda `status` al menos cada 15 s).
  */
 const AGENT_STALE_MS = 75_000;
-/** No repetir `sync` a la misma Sonia antes de este tiempo. */
+/** No repetir `sync` a la misma Sonnia antes de este tiempo. */
 const SYNC_RETRY_MS = 10_000;
 /** `GET /api/status` espera como mucho esto a que llegue el estado tras un `sync`. */
 const STATUS_WAIT_MS = 3_000;
@@ -64,7 +64,7 @@ const WS_OPEN = 1;
 
 type Json = Record<string, unknown>;
 
-/** Resumen de una Sonia, como sale en `GET /api/instances`. */
+/** Resumen de una Sonnia, como sale en `GET /api/instances`. */
 export interface InstanceSummary {
   id: string;
   name: string;
@@ -101,7 +101,7 @@ function toResponse(result: ApiResult): ApiResponse {
   return { status: result.status, body: JSON.stringify(result.body) };
 }
 
-/** Lo que se guarda de cada Sonia (sobrevive a la hibernación). */
+/** Lo que se guarda de cada Sonnia (sobrevive a la hibernación). */
 interface StoredInstance {
   id: string;
   name: string;
@@ -117,13 +117,13 @@ interface StoredInstance {
   last_seen: number;
 }
 
-/** Ajustes compartidos por todas las Sonias (sobreviven a la hibernación). */
+/** Ajustes compartidos por todas las Sonnias (sobreviven a la hibernación). */
 interface StoredSettings {
   values: Json;
   /** Sube con cada cambio. */
   rev: number;
   updated_at: number;
-  /** Id de la Sonia que hizo el último cambio. */
+  /** Id de la Sonnia que hizo el último cambio. */
   updated_by: string;
 }
 
@@ -147,7 +147,7 @@ interface AgentAttachment {
   /** Último `viewers` mandado (-1: ninguno todavía). */
   viewersSent: number;
   /**
-   * Número del último cambio de ajustes de esta Sonia que ya está guardado
+   * Número del último cambio de ajustes de esta Sonnia que ya está guardado
    * (`ack` de `settings`). Falta en conexiones anteriores a los ajustes.
    */
   settingsSeq?: number;
@@ -155,7 +155,7 @@ interface AgentAttachment {
 
 interface BrowserAttachment {
   kind: "browser";
-  /** Sonia que mira este navegador (o ninguna si no hay). */
+  /** Sonnia que mira este navegador (o ninguna si no hay). */
   instance: string | null;
   /** ¿La eligió el navegador? Si no, sigue a la primera conectada. */
   explicit: boolean;
@@ -223,7 +223,7 @@ function persistSignature(record: StoredInstance): string {
 }
 
 export class ControlRoom extends DurableObject<Env> {
-  /** Resumen de cada Sonia conocida (memoria + almacenamiento). */
+  /** Resumen de cada Sonnia conocida (memoria + almacenamiento). */
   private readonly known = new Map<string, StoredInstance>();
   /** Estado en memoria de cada Sonia. */
   private readonly live = new Map<string, LiveState>();
@@ -233,7 +233,7 @@ export class ControlRoom extends DurableObject<Env> {
   private readonly pending = new Map<string, PendingAction>();
   /** Última lista de instancias repartida a los navegadores (para no repetirla). */
   private lastInstancesSignature = "";
-  /** Ajustes compartidos (null hasta que la primera Sonia los siembra). */
+  /** Ajustes compartidos (null hasta que la primera Sonnia los siembra). */
   private settings: StoredSettings | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -279,7 +279,7 @@ export class ControlRoom extends DurableObject<Env> {
     const server = pair[1];
     const now = Date.now();
 
-    // Una conexión anterior con el mismo id es la misma Sonia reconectando.
+    // Una conexión anterior con el mismo id es la misma Sonnia reconectando.
     for (const old of this.ctx.getWebSockets(agentTag(id))) {
       try {
         old.close(4000, "Reemplazada por una conexión nueva");
@@ -287,7 +287,7 @@ export class ControlRoom extends DurableObject<Env> {
         // Ya estaba cerrada.
       }
     }
-    this.failPending(id, 503, "Sonia se reconectó antes de responder. Inténtalo de nuevo.");
+    this.failPending(id, 503, "Sonnia se reconectó antes de responder. Inténtalo de nuevo.");
 
     this.ctx.acceptWebSocket(server, [AGENT_TAG, agentTag(id)]);
     const attachment: AgentAttachment = {
@@ -305,7 +305,7 @@ export class ControlRoom extends DurableObject<Env> {
     record.last_seen = now;
     this.known.set(id, record);
     this.persist(id, true);
-    // Lo de antes en memoria ya no vale: el `hello` que la Sonia manda al
+    // Lo de antes en memoria ya no vale: el `hello` que la Sonnia manda al
     // conectar trae el historial nuevo, así que no hace falta pedir `sync`.
     const live = this.newLive();
     live.syncRequestedAt = now;
@@ -418,7 +418,7 @@ export class ControlRoom extends DurableObject<Env> {
     }
     this.persist(id);
 
-    // Si alguien mira esta Sonia y no tenemos su historial, se le pide.
+    // Si alguien mira esta Sonnia y no tenemos su historial, se le pide.
     if (!live.synced && this.viewerCount(id) > 0) this.requestSync(ws, live);
   }
 
@@ -515,13 +515,13 @@ export class ControlRoom extends DurableObject<Env> {
     const pending = this.pending.get(requestId);
     if (!pending || pending.instance !== id) return;
     const ok = message.ok === true;
-    const text = str(message.message) ?? (ok ? "Listo." : "Sonia no pudo hacerlo.");
+    const text = str(message.message) ?? (ok ? "Listo." : "Sonnia no pudo hacerlo.");
     pending.finish({ status: ok ? 200 : 400, body: { ok, message: text } });
   }
 
   private onAgentGone(ws: WebSocket, attachment: AgentAttachment): void {
     const id = attachment.id;
-    // Si ya hay otra conexión más nueva de la misma Sonia, no se ha ido.
+    // Si ya hay otra conexión más nueva de la misma Sonnia, no se ha ido.
     if (this.agentSocket(id, ws)) return;
     const record = this.known.get(id);
     if (record) {
@@ -530,9 +530,9 @@ export class ControlRoom extends DurableObject<Env> {
       record.last_seen = Math.min(Date.now(), attachment.lastSeen + AGENT_STALE_MS);
       this.persist(id, true);
     }
-    this.failPending(id, 503, "Sonia se desconectó antes de responder.");
+    this.failPending(id, 503, "Sonnia se desconectó antes de responder.");
 
-    // Los navegadores que no eligieron Sonia pasan a otra conectada, si la hay.
+    // Los navegadores que no eligieron Sonnia pasan a otra conectada, si la hay.
     const fallback = this.firstConnected(ws);
     for (const browser of this.browsers()) {
       const browserAttachment = browser.deserializeAttachment() as BrowserAttachment;
@@ -550,7 +550,7 @@ export class ControlRoom extends DurableObject<Env> {
     this.broadcastInstances(true, ws);
   }
 
-  /** Pide a la Sonia que repita su `hello` (sin repetirlo demasiado). */
+  /** Pide a la Sonnia que repita su `hello` (sin repetirlo demasiado). */
   private requestSync(ws: WebSocket, live: LiveState): void {
     const now = Date.now();
     if (now - live.syncRequestedAt < SYNC_RETRY_MS) return;
@@ -559,10 +559,10 @@ export class ControlRoom extends DurableObject<Env> {
   }
 
   /**
-   * El WebSocket abierto de una Sonia (el más reciente), o `null`.
+   * El WebSocket abierto de una Sonnia (el más reciente), o `null`.
    *
    * Si lleva demasiado sin decir nada, su conexión se da por muerta y se
-   * cierra (la Sonia, si sigue viva, reconecta sola).
+   * cierra (la Sonnia, si sigue viva, reconecta sola).
    */
   private agentSocket(id: string, exclude?: WebSocket): WebSocket | null {
     let best: WebSocket | null = null;
@@ -575,7 +575,7 @@ export class ControlRoom extends DurableObject<Env> {
       const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
       if (now - Math.max(attachment.lastSeen, pinged) > AGENT_STALE_MS) {
         try {
-          ws.close(4001, "Sin noticias de esta Sonia");
+          ws.close(4001, "Sin noticias de esta Sonnia");
         } catch {
           // Ya cerrada.
         }
@@ -594,12 +594,12 @@ export class ControlRoom extends DurableObject<Env> {
     return ws ? (ws.deserializeAttachment() as AgentAttachment) : null;
   }
 
-  /** Id de la primera Sonia conectada (la que lleva más tiempo). */
+  /** Id de la primera Sonnia conectada (la que lleva más tiempo). */
   private firstConnected(exclude?: WebSocket): string | null {
     return this.list(exclude).instances.find((item) => item.connected)?.id ?? null;
   }
 
-  /** Sonia por defecto: la primera conectada o, si no hay, la última vista. */
+  /** Sonnia por defecto: la primera conectada o, si no hay, la última vista. */
   private defaultInstance(exclude?: WebSocket): string | null {
     const { instances } = this.list(exclude);
     return (instances.find((item) => item.connected) ?? instances[0])?.id ?? null;
@@ -614,14 +614,14 @@ export class ControlRoom extends DurableObject<Env> {
   // ================================================================ ajustes compartidos
 
   /**
-   * `settings` del `hello`: `values` (todos los ajustes de esa Sonia),
+   * `settings` del `hello`: `values` (todos los ajustes de esa Sonnia),
    * `pending` (los que cambió sin conexión) y `seq` (su último cambio). Si la
-   * nube aún no tiene ajustes, esa Sonia los siembra; si no, solo mandan sus
+   * nube aún no tiene ajustes, esa Sonnia los siembra; si no, solo mandan sus
    * pendientes. Siempre se le contesta con los ajustes de la nube.
    */
   private onHelloSettings(ws: WebSocket, attachment: AgentAttachment, message: Json): void {
     const incoming = message.settings;
-    if (!isObject(incoming)) return; // Sonia anterior a los ajustes en la nube
+    if (!isObject(incoming)) return; // Sonnia anterior a los ajustes en la nube
     const values = isObject(incoming.values) ? incoming.values : {};
     const pending = Array.isArray(incoming.pending)
       ? incoming.pending.filter((key): key is string => typeof key === "string")
@@ -632,7 +632,7 @@ export class ControlRoom extends DurableObject<Env> {
     if (changed) this.broadcastSettings(ws);
   }
 
-  /** `settings` de una Sonia: `changes` (ajustes cambiados en ella) y `seq`. */
+  /** `settings` de una Sonnia: `changes` (ajustes cambiados en ella) y `seq`. */
   private onSettingsChanges(ws: WebSocket, attachment: AgentAttachment, message: Json): void {
     const changes = isObject(message.changes) ? message.changes : {};
     const changed = this.mergeSettings(changes, Object.keys(changes), attachment.id);
@@ -664,7 +664,7 @@ export class ControlRoom extends DurableObject<Env> {
     return true;
   }
 
-  /** Los ajustes de la nube a una Sonia, con el último cambio suyo que ya incluyen. */
+  /** Los ajustes de la nube a una Sonnia, con el último cambio suyo que ya incluyen. */
   private sendSettings(ws: WebSocket, attachment: AgentAttachment): void {
     if (!this.settings) return;
     this.send(
@@ -678,7 +678,7 @@ export class ControlRoom extends DurableObject<Env> {
     );
   }
 
-  /** Ajustes nuevos a las demás Sonias conectadas. */
+  /** Ajustes nuevos a las demás Sonnias conectadas. */
   private broadcastSettings(origin: WebSocket): void {
     for (const ws of this.ctx.getWebSockets(AGENT_TAG)) {
       if (ws === origin || ws.readyState !== WS_OPEN) continue;
@@ -718,7 +718,7 @@ export class ControlRoom extends DurableObject<Env> {
     return this.browsersWatching(id).length;
   }
 
-  /** Navegadores que no miraban ninguna Sonia (no había) pasan a la primera conectada. */
+  /** Navegadores que no miraban ninguna Sonnia (no había) pasan a la primera conectada. */
   private adoptOrphanBrowsers(): void {
     const target = this.firstConnected();
     if (!target) return;
@@ -737,7 +737,7 @@ export class ControlRoom extends DurableObject<Env> {
     }
   }
 
-  /** Manda `viewers` a cada Sonia cuyo número de navegadores mirándola ha cambiado. */
+  /** Manda `viewers` a cada Sonnia cuyo número de navegadores mirándola ha cambiado. */
   private updateViewers(excludeBrowser?: WebSocket, excludeAgent?: WebSocket): void {
     const counts = new Map<string, number>();
     for (const ws of this.browsers(excludeBrowser)) {
@@ -752,7 +752,7 @@ export class ControlRoom extends DurableObject<Env> {
       attachment.viewersSent = count;
       ws.serializeAttachment(attachment);
       this.send(ws, JSON.stringify({ type: "viewers", count }));
-      // Alguien empieza a mirar una Sonia de la que no tenemos historial.
+      // Alguien empieza a mirar una Sonnia de la que no tenemos historial.
       const live = this.live.get(attachment.id);
       if (count > 0 && (!live || !live.synced)) {
         const state = live ?? this.newLive();
@@ -770,9 +770,9 @@ export class ControlRoom extends DurableObject<Env> {
   }
 
   /**
-   * Historial y último estado de una Sonia para un navegador.
+   * Historial y último estado de una Sonnia para un navegador.
    *
-   * Siempre va un `history` (vacío si no hay nada, por ejemplo una Sonia
+   * Siempre va un `history` (vacío si no hay nada, por ejemplo una Sonnia
    * desconectada tras hibernar) y después su `status` si lo tenemos. Si está
    * conectada pero no tenemos su historial (el objeto hibernó), se le pide
    * `sync`: su `hello` volverá a mandar `history` y `status` a quien la mire.
@@ -865,7 +865,7 @@ export class ControlRoom extends DurableObject<Env> {
   }
 
   /**
-   * Guarda el resumen de una Sonia, con pocas escrituras: al conectar y
+   * Guarda el resumen de una Sonnia, con pocas escrituras: al conectar y
    * desconectar (`force`), si cambia algo importante (como mucho cada 10 s) y
    * al menos cada minuto para que `last_seen` no quede muy atrás.
    */
@@ -904,7 +904,7 @@ export class ControlRoom extends DurableObject<Env> {
     };
   }
 
-  /** La instantánea de `/api/status` de una Sonia, con `instance`. */
+  /** La instantánea de `/api/status` de una Sonnia, con `instance`. */
   private statusFor(id: string, exclude?: WebSocket): Json {
     const instance = this.summary(id, exclude);
     const status = this.live.get(id)?.status;
@@ -926,7 +926,7 @@ export class ControlRoom extends DurableObject<Env> {
     for (const wake of waiters) wake();
   }
 
-  /** Lista de Sonias: conectadas primero (la más antigua delante) y luego desconectadas recientes. */
+  /** Lista de Sonnias: conectadas primero (la más antigua delante) y luego desconectadas recientes. */
   private list(exclude?: WebSocket): InstancesPayload {
     const now = Date.now();
     const connected: Array<{ summary: InstanceSummary; since: number }> = [];
@@ -968,7 +968,7 @@ export class ControlRoom extends DurableObject<Env> {
     return this.list();
   }
 
-  /** Resuelve el parámetro `instance` (si falta, la Sonia por defecto). */
+  /** Resuelve el parámetro `instance` (si falta, la Sonnia por defecto). */
   private resolveInstance(instance: string | null): string | null {
     return instance || this.defaultInstance();
   }
@@ -979,7 +979,7 @@ export class ControlRoom extends DurableObject<Env> {
 
   private async statusResult(instance: string | null): Promise<ApiResult> {
     const id = this.resolveInstance(instance);
-    if (!id) return { status: 404, body: { ok: false, message: "No hay ninguna Sonia conectada." } };
+    if (!id) return { status: 404, body: { ok: false, message: "No hay ninguna Sonnia conectada." } };
     if (!this.list().instances.some((item) => item.id === id)) {
       return { status: 404, body: { ok: false, message: "No conozco esa Sonia." } };
     }
@@ -1003,14 +1003,14 @@ export class ControlRoom extends DurableObject<Env> {
       if (!state.status) {
         return {
           status: 503,
-          body: { ok: false, message: "Sonia todavía no ha mandado su estado. Inténtalo en unos segundos." },
+          body: { ok: false, message: "Sonnia todavía no ha mandado su estado. Inténtalo en unos segundos." },
         };
       }
     }
     return { status: 200, body: this.statusFor(id) };
   }
 
-  /** Ids de la galería que mandó esa Sonia (`null` si no se sabe). */
+  /** Ids de la galería que mandó esa Sonnia (`null` si no se sabe). */
   async getGalleryIds(instance: string | null): Promise<string[] | null> {
     const id = this.resolveInstance(instance);
     if (!id) return null;
@@ -1023,18 +1023,18 @@ export class ControlRoom extends DurableObject<Env> {
 
   private async actionResult(instance: string | null, action: string, params: Json): Promise<ApiResult> {
     const id = this.resolveInstance(instance);
-    if (!id) return { status: 503, body: { ok: false, message: "No hay ninguna Sonia conectada." } };
+    if (!id) return { status: 503, body: { ok: false, message: "No hay ninguna Sonnia conectada." } };
     if (!this.known.has(id)) return { status: 404, body: { ok: false, message: "No conozco esa Sonia." } };
     const ws = this.agentSocket(id);
     if (!ws) {
-      return { status: 503, body: { ok: false, message: "Esa Sonia no está conectada ahora mismo." } };
+      return { status: 503, body: { ok: false, message: "Esa Sonnia no está conectada ahora mismo." } };
     }
     const requestId = crypto.randomUUID();
     return new Promise<ApiResult>((resolve) => {
       const timer = setTimeout(() => {
         finish({
           status: 504,
-          body: { ok: false, message: "Sonia no contestó a tiempo. Mira si lo hizo antes de repetirlo." },
+          body: { ok: false, message: "Sonnia no contestó a tiempo. Mira si lo hizo antes de repetirlo." },
         });
       }, ACTION_TIMEOUT_MS);
       const finish = (result: ApiResult): void => {
@@ -1046,7 +1046,7 @@ export class ControlRoom extends DurableObject<Env> {
       try {
         ws.send(JSON.stringify({ type: "action", request_id: requestId, action, params }));
       } catch {
-        finish({ status: 503, body: { ok: false, message: "Esa Sonia no está conectada ahora mismo." } });
+        finish({ status: 503, body: { ok: false, message: "Esa Sonnia no está conectada ahora mismo." } });
       }
     });
   }

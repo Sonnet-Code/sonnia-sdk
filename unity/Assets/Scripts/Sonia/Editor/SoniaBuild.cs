@@ -5,7 +5,7 @@
 //   Unity -batchmode -quit -projectPath unity \
 //         -executeMethod Sonia.EditorTools.SoniaBuild.BuildMac -logFile build.log
 //
-// El resultado va a unity/Build/<plataforma>/Sonia.app, carpeta ignorada por git.
+// El resultado va a unity/Build/<plataforma>/Sonnia.app, carpeta ignorada por git.
 // SoniaPlayerBuildFixes la retoca (en macOS: NAF sin precarga y sin llavero; en
 // las dos: el orquestador empaquetado con su .env). En macOS se compila con
 // Mono: Genies pide IL2CPP, pero este Mac no tiene el módulo IL2CPP de macOS y
@@ -60,7 +60,7 @@ namespace Sonia.EditorTools
         [MenuItem("Sonia/Build macOS")]
         public static void BuildMac()
         {
-            Build(BuildTarget.StandaloneOSX, "macOS", "Sonia.app");
+            Build(BuildTarget.StandaloneOSX, "macOS", "Sonnia.app");
         }
 
         /// <summary>
@@ -70,13 +70,13 @@ namespace Sonia.EditorTools
         [MenuItem("Sonia/Build macOS (desarrollo, registro de Genies)")]
         public static void BuildMacDevelopment()
         {
-            Build(BuildTarget.StandaloneOSX, "macOS-dev", "Sonia.app", BuildOptions.Development, "FORCE_LOGS");
+            Build(BuildTarget.StandaloneOSX, "macOS-dev", "Sonnia.app", BuildOptions.Development, "FORCE_LOGS");
         }
 
         [MenuItem("Sonia/Build Windows")]
         public static void BuildWindows()
         {
-            Build(BuildTarget.StandaloneWindows64, "Windows", "Sonia.exe");
+            Build(BuildTarget.StandaloneWindows64, "Windows", "Sonnia.exe");
         }
 
         private static void Build(BuildTarget target, string folder, string fileName,

@@ -100,7 +100,7 @@ dispositivo.
    «…Meet…»» y «Foto de prueba de «Reunión»: …, se ve bien». Si dice que no
    encuentra la ventana, se elige a mano en OBS (doble clic en «Reunión» >
    Ventana) o se vuelve a lanzar con Meet ya abierto.
-3. **Unity** en Play o la app de Sonia (`Sonia.app`), en otra pantalla. La app,
+3. **Unity** en Play o la app de Sonia (`Sonnia.app`), en otra pantalla. La app,
    siempre después del paso 2: usa el orquestador que ya esté escuchando y, si
    se abre antes, lanza el suyo sin modo reunión.
 4. **OBS**: la escena en emisión tiene que tener la ventana de Unity (la de

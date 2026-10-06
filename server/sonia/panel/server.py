@@ -8,7 +8,7 @@ Cloudflare tiene que traer también un JWT de Access válido para la aplicación
 configurada (``PANEL_ACCESS_TEAM_DOMAIN`` y ``PANEL_ACCESS_AUD``); si no, se
 rechaza. Las acciones exigen la cabecera ``X-Sonia-Panel`` y el
 WebSocket comprueba el ``Origin``, para que ninguna otra web pueda manejar a
-Sonia con la sesión del operador.
+Sonnia con la sesión del operador.
 
 ``starlette``, ``uvicorn`` y ``jwt`` se importan de forma perezosa (extra
 ``panel``): el paquete se puede importar sin ellos.
@@ -220,13 +220,13 @@ def build_app(
     async def index(request: Request) -> Response:
         page = static_dir / "index.html"
         if not page.is_file():
-            return HTMLResponse("<h1>Panel de Sonia</h1><p>Falta la página del panel.</p>")
+            return HTMLResponse("<h1>Panel de Sonnia</h1><p>Falta la página del panel.</p>")
         return FileResponse(page, headers={"Cache-Control": "no-store"})
 
-    me = identity or InstanceIdentity(id="local", name="Sonia", host="local")
+    me = identity or InstanceIdentity(id="local", name="Sonnia", host="local")
 
     def instances() -> dict[str, Any]:
-        # En local solo existe esta Sonia; el parámetro ``instance`` se ignora.
+        # En local solo existe esta Sonnia; el parámetro ``instance`` se ignora.
         summary = summarize(me, control.status())
         return {
             "type": "instances",

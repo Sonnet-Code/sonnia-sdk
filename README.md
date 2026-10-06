@@ -1,6 +1,6 @@
-# Sonia
+# Sonnia
 
-**Asistente de IA por voz en tiempo real con avatar 3D.**
+**Asistente de IA por voz en tiempo real con avatar 3D.** Se escribe «Sonnia», con doble n como Sonnet Code, y se pronuncia «Sonia».
 
 Sonia es una demo interactiva al estilo de los avatares de Grok: hablas con ella por el micrófono, te responde con voz natural y un avatar 3D femenino que se anima y sincroniza los labios mientras habla. Además puede verte a través de una cámara y mostrarte imágenes dentro de su propia escena 3D. La voz y la conversación las pone GPT-Live de OpenAI, un modelo voz a voz en tiempo real; la cámara la describe un modelo con visión; el avatar corre en Unity en el equipo del stand.
 

@@ -171,7 +171,7 @@ quiere el icono al día:
 3. Salir de Play: en ese momento se pone como icono del Player (lo que se
    cambia del Player en Play se pierde, por eso espera).
 4. Hacer la build de nuevo. Si Finder sigue enseñando el icono viejo:
-   `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f unity/Build/macOS/Sonia.app`.
+   `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f unity/Build/macOS/Sonnia.app`.
 
 Encuadre y colores están en `Editor/SoniaAppIcon.cs` (`Make`: altura de la cara
 sobre el hueso de la cabeza, alto del encuadre y campo de visión).
@@ -180,7 +180,7 @@ Para probarla en ventana y no a pantalla completa, y para verificarla sin
 editor, la app admite estos argumentos:
 
 ```bash
-unity/Build/macOS/Sonia.app/Contents/MacOS/Sonia \
+unity/Build/macOS/Sonnia.app/Contents/MacOS/Sonnia \
   -screen-fullscreen 0 -screen-width 540 -screen-height 960 \
   -capture-dir /tmp/capturas -capture-every 5 -logFile player.log
 ```
@@ -207,8 +207,8 @@ arranca sola: un doble clic y ya está Sonia entera.
    build no empieza (solo se mira si tiene valor; el valor no se escribe en
    ningún sitio). Sin orquestador congelado la build avisa y la app espera uno
    externo, como antes.
-   - macOS: `Sonia.app/Contents/Resources/orquestador/sonia-orquestador/`
-   - Windows: `Sonia_Data/orquestador/sonia-orquestador/`
+   - macOS: `Sonnia.app/Contents/Resources/orquestador/sonia-orquestador/`
+   - Windows: `Sonnia_Data/orquestador/sonia-orquestador/`
 3. Al abrir la app, `OrchestratorProcess` lo lanza si nadie escucha en el
    8765 (si ya hay uno, por ejemplo el de desarrollo, manda ese), lo relanza si
    se cae (2, 4, 8… hasta 30 s) y lo cierra al salir (con SIGINT en macOS, que
@@ -276,7 +276,7 @@ el invitado) pidiendo sesión a la vez, el segundo
 acababa en `NullReferenceException`. `GeniesSession` hace que todos (los
 cargadores y el editor de personaje) esperen al mismo intento.
 
-NAF guarda su caché de piezas en `cache/`, junto a `Sonia.app` (la carpeta de
+NAF guarda su caché de piezas en `cache/`, junto a `Sonnia.app` (la carpeta de
 trabajo de la app): la carpeta de la app tiene que poder escribirse. La primera
 vez descarga las piezas de Sonia, del invitado y de la gorra de referencia de la
 trivia (unos 90 MB con las texturas de alta resolución); después arranca sin
@@ -302,7 +302,7 @@ avatar. En el aparcamiento: …», con objetos, mallas y texturas).
 
 Se puede compilar en Windows o desde un Mac. **Sonia > Build Windows** (o
 `SoniaBuild.BuildWindows` en modo batch, ver más abajo) deja la carpeta
-`unity/Build/Windows/` (`Sonia.exe`, `Sonia_Data`, `UnityPlayer.dll`…), que
+`unity/Build/Windows/` (`Sonnia.exe`, `Sonnia_Data`, `UnityPlayer.dll`…), que
 se copia entera al equipo.
 
 - **Vulkan como única API gráfica.** Genies lo exige en Windows: NAF entrega las
@@ -331,7 +331,7 @@ se copia entera al equipo.
   lado de Windows de Genies no lleva los arreglos de macOS (llavero y rutas): su
   librería de sesión usa DPAPI y no hace falta tocarla. Al probarla por primera
   vez, mirar el `Player.log`
-  (`%USERPROFILE%\AppData\LocalLow\DefaultCompany\sonia\Player.log`) y
+  (`%USERPROFILE%\AppData\LocalLow\DefaultCompany\Sonnia\Player.log`) y
   `%APPDATA%\Sonia\logs`.
 
 Desde un Mac, en modo batch y con el editor cerrado (tarda unos minutos la

@@ -2,8 +2,8 @@
 //
 // La build lleva el orquestador congelado (scripts/build_orquestador.sh) con el
 // .env del repo al lado del ejecutable (lo copia SoniaPlayerBuildFixes):
-//   macOS    Sonia.app/Contents/Resources/orquestador/sonia-orquestador/sonia-orquestador
-//   Windows  Sonia_Data/orquestador/sonia-orquestador/sonia-orquestador.exe
+//   macOS    Sonnia.app/Contents/Resources/orquestador/sonia-orquestador/sonia-orquestador
+//   Windows  Sonnia_Data/orquestador/sonia-orquestador/sonia-orquestador.exe
 //
 // Al abrir la app se lanza si nadie escucha ya en el puerto del orquestador (así
 // manda uno que ya esté corriendo, como el de desarrollo), se relanza si se cae

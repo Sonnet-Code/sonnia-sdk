@@ -1453,8 +1453,24 @@ _TAG_TAIL = re.compile(r"\[[^\[\]]*$")
 _TAG_HEAD = re.compile(r"^[^\[\]]*\]")
 
 
+#: Cómo se escribe su nombre: «Sonnia», con doble n como Sonnet Code, aunque se
+#: diga «Sonia». La transcripción trae lo que se oye; los subtítulos y el panel,
+#: lo que se lee.
+WRITTEN_NAME = "Sonnia"
+_SPOKEN_NAME = re.compile(r"\bson[ií]a\b", re.IGNORECASE)
+
+
+def _written_name(match: re.Match[str]) -> str:
+    word = match.group(0)
+    if word.isupper():
+        return WRITTEN_NAME.upper()
+    return WRITTEN_NAME if word[0].isupper() else WRITTEN_NAME.lower()
+
+
 def clean_transcript(text: str) -> str:
-    """Texto legible de una transcripción: sin marcas de sonido ni espacios de más."""
+    """Texto legible de una transcripción: sin marcas de sonido ni espacios de más, y
+    con el nombre de Sonnia bien escrito."""
+    text = _SPOKEN_NAME.sub(_written_name, text)
     text = _TAG.sub(" ", text)
     text = _TAG_TAIL.sub(" ", text)
     if "[" not in text:

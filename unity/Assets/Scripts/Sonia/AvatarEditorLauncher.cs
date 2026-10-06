@@ -442,7 +442,7 @@ namespace Sonia
 
         private static string Who(AvatarRole role)
         {
-            return role == AvatarRole.Guest ? "de Jean" : "de Sonia";
+            return role == AvatarRole.Guest ? "de Jean" : "de Sonnia";
         }
 
         private void HandleCloseMessage(CloseAvatarEditorMessage message)

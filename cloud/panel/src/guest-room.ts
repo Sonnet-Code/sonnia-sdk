@@ -1,6 +1,6 @@
 /**
- * Durable Object `GuestRoom`: la sala de vídeo de una Sonia (una por id de
- * Sonia, `idFromName(<id>)`), para el Modo Jean y para «Ver cámara». Solo
+ * Durable Object `GuestRoom`: la sala de vídeo de una Sonnia (una por id de
+ * Sonnia, `idFromName(<id>)`), para el Modo Jean y para «Ver cámara». Solo
  * reenvía media entre el orquestador del stand (el agente, `/guest/agent`) y
  * los navegadores que miran (`/api/guest`). Hay dos clases de navegador:
  *
@@ -65,7 +65,7 @@ export class GuestRoom extends DurableObject<Env> {
     const client = pair[0];
     const server = pair[1];
     if (tag === AGENT_TAG) {
-      // Un agente nuevo de la misma Sonia es ella reconectando: fuera el viejo.
+      // Un agente nuevo de la misma Sonnia es ella reconectando: fuera el viejo.
       for (const old of this.ctx.getWebSockets(AGENT_TAG)) {
         try {
           old.close(4000, "Reemplazada por una conexión nueva");

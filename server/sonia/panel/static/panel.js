@@ -1,15 +1,15 @@
 /*
- * Panel de control de Sonia: lógica de la página.
+ * Panel de control de Sonnia: lógica de la página.
  *
  * Sin dependencias ni paso de compilación. La misma página la sirve el
- * orquestador en local (una sola Sonia) y el Worker de Cloudflare (todas las
- * Sonias conectadas). Contrato completo en docs/panel.md:
- *   GET  /api/instances  Sonias conocidas y conflictos (duplicados)
- *   GET  /api/status     instantánea completa de la Sonia elegida (?instance=)
- *   GET  /api/gallery    imágenes que esa Sonia puede mostrar (?instance=)
+ * orquestador en local (una sola Sonnia) y el Worker de Cloudflare (todas las
+ * Sonnias conectadas). Contrato completo en docs/panel.md:
+ *   GET  /api/instances  Sonnias conocidas y conflictos (duplicados)
+ *   GET  /api/status     instantánea completa de la Sonnia elegida (?instance=)
+ *   GET  /api/gallery    imágenes que esa Sonnia puede mostrar (?instance=)
  *   POST /api/action     acciones (cabecera X-Sonia-Panel: 1 e "instance" en el cuerpo)
- *   WS   /api/events     estado, mensajes para Unity, registro y lista de Sonias;
- *                        {"type": "select"} cambia de Sonia sin reconectar
+ *   WS   /api/events     estado, mensajes para Unity, registro y lista de Sonnias;
+ *                        {"type": "select"} cambia de Sonnia sin reconectar
  *
  * Si el WebSocket se cae, se reintenta con espera creciente y mientras tanto
  * se sondea /api/status para que la página no se quede congelada. Un 401 de
@@ -38,9 +38,9 @@
   const RETRY_MIN_MS = 1000;
   const RETRY_MAX_MS = 15000;
   const STARTUP_GRACE_MS = 4000; // no alarmar mientras la página arranca
-  const INSTANCES_REFRESH_MS = 10000; // lista de Sonias cuando no llega por el WebSocket
+  const INSTANCES_REFRESH_MS = 10000; // lista de Sonnias cuando no llega por el WebSocket
   const INSTANCES_TIMEOUT_MS = 4000; // al arrancar no se espera más a la lista
-  const SELECT_HISTORY_TIMEOUT_MS = 3000; // tras cambiar de Sonia, espera su historial
+  const SELECT_HISTORY_TIMEOUT_MS = 3000; // tras cambiar de Sonnia, espera su historial
   const ACTION_TIMEOUT_MS = 15000;
   const CONTROL_LOCK_MS = 2500; // tras tocar un control, el estado del servidor no lo pisa
   const PARTIAL_LINE_STALE_MS = 20000;
@@ -74,9 +74,9 @@
   };
 
   const MODES = {
-    conversation: { short: "Conversando", sentence: "Sonia está conversando", already: "Sonia ya está conversando." },
-    greeter: { short: "Solo saludos", sentence: "Sonia solo saluda", already: "Sonia ya está en «Solo saludos»." },
-    away: { short: "Fuera", sentence: "Sonia está fuera", already: "Sonia ya está fuera." },
+    conversation: { short: "Conversando", sentence: "Sonnia está conversando", already: "Sonnia ya está conversando." },
+    greeter: { short: "Solo saludos", sentence: "Sonnia solo saluda", already: "Sonnia ya está en «Solo saludos»." },
+    away: { short: "Fuera", sentence: "Sonnia está fuera", already: "Sonnia ya está fuera." },
   };
 
   const STATE_TEXT = {
@@ -180,7 +180,7 @@
     return typeof time === "string" ? time.slice(0, 5) : "";
   }
 
-  // La Sonia elegida se recuerda en este navegador. El almacenamiento puede no
+  // La Sonnia elegida se recuerda en este navegador. El almacenamiento puede no
   // existir (modo privado, bloqueado): entonces simplemente no se recuerda.
   function loadStoredInstance() {
     try {
@@ -233,10 +233,10 @@
     lastContactAt: 0, // última respuesta del panel (WebSocket o HTTP)
     lastWsMessageAt: 0,
     startedAt: Date.now(),
-    instances: [], // Sonias que conoce el panel (en local, solo una)
+    instances: [], // Sonnias que conoce el panel (en local, solo una)
     conflicts: { connected: [], conversing: [] },
     instancesFetchedAt: 0,
-    instanceId: null, // la Sonia que se controla
+    instanceId: null, // la Sonnia que se controla
     preferredId: loadStoredInstance(), // la que eligió este navegador la última vez
     awaitingHistoryUntil: 0, // tras "select", lo que llegue antes del historial es de la anterior
     redirecting: false,
@@ -351,7 +351,7 @@
     location.assign(LOGIN_URL);
   }
 
-  /** Añade ?instance=<id> de la Sonia elegida (el panel local lo ignora). */
+  /** Añade ?instance=<id> de la Sonnia elegida (el panel local lo ignora). */
   function withInstance(url, id = app.instanceId) {
     if (!id) return url;
     return `${url}${url.includes("?") ? "&" : "?"}instance=${encodeURIComponent(id)}`;
@@ -376,14 +376,14 @@
 
   /** Mensaje para el operador cuando la respuesta no trae uno propio. */
   function defaultActionError(status) {
-    if (status === 503) return "Esa Sonia no está conectada al panel ahora mismo.";
-    if (status === 504) return "Sonia no contestó a tiempo. Mira si lo hizo antes de repetirlo.";
+    if (status === 503) return "Esa Sonnia no está conectada al panel ahora mismo.";
+    if (status === 504) return "Sonnia no contestó a tiempo. Mira si lo hizo antes de repetirlo.";
     if (status === 401) return "Tu sesión del panel caducó. Vuelve a entrar.";
     return `El panel respondió con un error (código ${status}). Inténtalo de nuevo.`;
   }
 
   /**
-   * Manda una acción a una Sonia (por defecto, la elegida) y enseña su
+   * Manda una acción a una Sonnia (por defecto, la elegida) y enseña su
    * respuesta al operador. Devuelve {ok, message}. Con quiet solo avisa si
    * falla; con silent no avisa nunca (quien llama junta los resultados).
    */
@@ -422,7 +422,7 @@
     } catch (error) {
       const message =
         error && error.name === "AbortError"
-          ? "Sonia tardó demasiado en responder. Mira si lo hizo antes de repetirlo."
+          ? "Sonnia tardó demasiado en responder. Mira si lo hizo antes de repetirlo."
           : "No se pudo enviar: no hay conexión con el panel. Inténtalo de nuevo en unos segundos.";
       notify(message, "error");
       return { ok: false, message };
@@ -464,12 +464,12 @@
       return;
     }
     app.ws = ws;
-    ws.instanceId = app.instanceId; // la Sonia con la que se abrió
+    ws.instanceId = app.instanceId; // la Sonnia con la que se abrió
     app.wsCreatedAt = Date.now();
     ws.addEventListener("open", () => {
       if (app.ws !== ws) return;
       app.wsOpenedAt = Date.now();
-      // Si se cambió de Sonia mientras conectaba, se pide la buena.
+      // Si se cambió de Sonnia mientras conectaba, se pide la buena.
       if (app.instanceId && ws.instanceId !== app.instanceId) sendSelect(ws);
     });
     ws.addEventListener("message", (event) => {
@@ -482,7 +482,7 @@
     updateConnectionUi();
   }
 
-  /** Pide por el WebSocket abierto la Sonia elegida y descarta lo que llegue antes de su historial. */
+  /** Pide por el WebSocket abierto la Sonnia elegida y descarta lo que llegue antes de su historial. */
   function sendSelect(ws) {
     try {
       ws.send(JSON.stringify({ type: "select", instance: app.instanceId }));
@@ -534,7 +534,7 @@
     pollStatus();
   }
 
-  /** ¿Este estado es de la Sonia elegida? (en Cloudflare trae "instance"; en local, no). */
+  /** ¿Este estado es de la Sonnia elegida? (en Cloudflare trae "instance"; en local, no). */
   function statusIsForSelected(status) {
     const id = status && status.instance && status.instance.id;
     return !id || !app.instanceId || id === app.instanceId;
@@ -555,7 +555,7 @@
       app.retryDelay = RETRY_MIN_MS;
       stopPolling();
     }
-    // Tras cambiar de Sonia, lo que llegue antes de su historial es de la anterior.
+    // Tras cambiar de Sonnia, lo que llegue antes de su historial es de la anterior.
     const switching = app.awaitingHistoryUntil > Date.now();
     switch (data.type) {
       case "instances":
@@ -592,8 +592,8 @@
   }
 
   /**
-   * Pide la lista de Sonias. Devuelve "ok", "unsupported" (servidor sin varias
-   * Sonias: se sigue como antes) o "error" (sin conexión).
+   * Pide la lista de Sonnias. Devuelve "ok", "unsupported" (servidor sin varias
+   * Sonnias: se sigue como antes) o "error" (sin conexión).
    */
   async function fetchInstances({ timeout = ACTION_TIMEOUT_MS } = {}) {
     const controller = new AbortController();
@@ -619,7 +619,7 @@
     }
   }
 
-  /** Sondeo mientras no hay WebSocket: lista de Sonias (cada poco) y estado de la elegida. */
+  /** Sondeo mientras no hay WebSocket: lista de Sonnias (cada poco) y estado de la elegida. */
   async function pollStatus() {
     if (app.polling || app.redirecting) return;
     app.polling = true;
@@ -635,7 +635,7 @@
         // El servidor ha vuelto: no esperes al siguiente reintento del WebSocket.
         if (wasOffline && !app.ws) connectWs();
       } else if (response.status === 404) {
-        // Esa Sonia ya no existe para el panel: al pedir la lista se elige otra.
+        // Esa Sonnia ya no existe para el panel: al pedir la lista se elige otra.
         app.pollOk = true;
         markContact();
         app.instancesFetchedAt = 0;
@@ -657,11 +657,11 @@
     if (ws) {
       const stuckConnecting = ws.readyState === WebSocket.CONNECTING && now - app.wsCreatedAt > WS_CONNECT_TIMEOUT_MS;
       const silentAfterOpen = !app.wsLive && app.wsOpenedAt && now - app.wsOpenedAt > STATUS_STALE_MS;
-      // Si la Sonia elegida está desconectada no llega su estado: el silencio no prueba nada.
+      // Si la Sonnia elegida está desconectada no llega su estado: el silencio no prueba nada.
       const staleLive = app.wsLive && selectedConnected() && now - app.lastWsMessageAt > STATUS_STALE_MS;
       if (stuckConnecting || silentAfterOpen || staleLive) dropWs();
     }
-    // Con la Sonia elegida desconectada el WebSocket puede estar callado: la
+    // Con la Sonnia elegida desconectada el WebSocket puede estar callado: la
     // lista se pide de vez en cuando para saber si vuelve y si el panel responde.
     if (app.wsLive && !selectedConnected() && now - app.instancesFetchedAt > INSTANCES_REFRESH_MS) {
       app.instancesFetchedAt = now;
@@ -700,7 +700,7 @@
       if (app.lastContactAt) parts.push(`Último dato hace ${formatAgo(Date.now() - app.lastContactAt)}.`);
       parts.push(
         isLocalPanel
-          ? "Comprueba que Sonia sigue abierta en este equipo."
+          ? "Comprueba que Sonnia sigue abierta en este equipo."
           : "Comprueba la conexión a internet de este móvil o portátil.",
       );
       setText(ui.offlineDetail, parts.join(" "));
@@ -761,7 +761,7 @@
     avatar_open: () => Boolean(avatarInfo().editor_open),
     avatar_custom: () => Boolean(avatarInfo().custom) && !avatarInfo().editor_open,
     guest_avatar_custom: () => Boolean(guestAvatarInfo().custom) && !avatarInfo().editor_open,
-    // Con el Modo Jean, Sonia ha dejado su sitio al invitado: ni habla ni hace gestos.
+    // Con el Modo Jean, Sonnia ha dejado su sitio al invitado: ni habla ni hace gestos.
     sonia_here: () => !guestActive(),
     trivia_idle: () => triviaInfo().available !== false && !triviaInfo().active && !guestActive(),
     trivia_active: () => Boolean(triviaInfo().active),
@@ -796,7 +796,7 @@
    */
   function refreshControls() {
     const mode = app.status ? currentMode() : null;
-    // Sin estado de la Sonia elegida, o con ella desconectada, las acciones no llegarían.
+    // Sin estado de la Sonnia elegida, o con ella desconectada, las acciones no llegarían.
     const reachable = Boolean(app.status) && selectedConnected();
     for (const node of document.querySelectorAll("[data-cap]")) {
       const capOk = !app.capsKnown || hasCap(node.dataset.cap);
@@ -816,7 +816,7 @@
     }
   }
 
-  // ------------------------------------------------------------ varias Sonias
+  // ------------------------------------------------------------ varias Sonnias
 
   function findInstance(id) {
     return app.instances.find((instance) => instance.id === id) || null;
@@ -826,7 +826,7 @@
     return findInstance(app.instanceId);
   }
 
-  /** ¿La Sonia elegida está conectada al panel? Si no se sabe, se da por buena. */
+  /** ¿La Sonnia elegida está conectada al panel? Si no se sabe, se da por buena. */
   function selectedConnected() {
     const instance = selectedInstance();
     return !instance || instance.connected !== false;
@@ -846,7 +846,7 @@
    * final de su id (los 6 caracteres aleatorios de cache/instance_id).
    */
   function instanceName(instance) {
-    if (!instance) return "Sonia";
+    if (!instance) return "Sonnia";
     const name = baseName(instance);
     const key = name.toLowerCase();
     const repeated = app.instances.some(
@@ -871,7 +871,7 @@
     return Array.isArray(value) ? value.filter((id) => typeof id === "string") : [];
   }
 
-  /** Llega la lista de Sonias (al conectar, al cambiar algo o por sondeo). */
+  /** Llega la lista de Sonnias (al conectar, al cambiar algo o por sondeo). */
   function applyInstances(data) {
     const list = (Array.isArray(data.instances) ? data.instances : []).filter(
       (instance) => instance && typeof instance.id === "string" && instance.id,
@@ -903,7 +903,7 @@
   }
 
   /**
-   * Cambia la Sonia que se controla: limpia lo de la anterior y pide la nueva
+   * Cambia la Sonnia que se controla: limpia lo de la anterior y pide la nueva
    * (por el WebSocket si está abierto; si no, por sondeo).
    */
   function switchInstance(id, { remember = true } = {}) {
@@ -917,7 +917,7 @@
     clearInstanceView();
     const ws = app.ws;
     if (ws && ws.readyState === WebSocket.OPEN && (!first || ws.instanceId !== id)) sendSelect(ws);
-    // Durante el arranque, init() pide el estado y la galería con la Sonia ya elegida.
+    // Durante el arranque, init() pide el estado y la galería con la Sonnia ya elegida.
     if (app.started) {
       if (!app.wsLive) pollStatus();
       loadGallery();
@@ -925,7 +925,7 @@
     renderInstances();
   }
 
-  /** Borra estado, conversación y registro de la Sonia anterior. */
+  /** Borra estado, conversación y registro de la Sonnia anterior. */
   function clearInstanceView() {
     app.status = null;
     app.caps = new Set();
@@ -961,7 +961,7 @@
     updateConnectionUi();
   }
 
-  // Botones de cada Sonia, por id, para actualizarlos sin rehacerlos (un
+  // Botones de cada Sonnia, por id, para actualizarlos sin rehacerlos (un
   // botón rehecho bajo el dedo puede perder la pulsación).
   const instanceButtons = new Map();
 
@@ -1049,7 +1049,7 @@
   }
 
   /**
-   * Nota (informativa, no un error) cuando varias Sonias conversan a la vez:
+   * Nota (informativa, no un error) cuando varias Sonnias conversan a la vez:
    * puede haber una en el stand y otra en otro sitio. Cada una gasta lo suyo y,
    * si dos están en la misma sala, se contestarían entre ellas.
    */
@@ -1059,7 +1059,7 @@
 
     setHidden(ui.dupConversing, !several);
     if (several) {
-      setText(ui.dupConversingTitle, `${conversing.length} Sonias conversando a la vez`);
+      setText(ui.dupConversingTitle, `${conversing.length} Sonnias conversando a la vez`);
       const selected = selectedInstance();
       const keepable = selected && conversing.includes(selected.id);
       setText(
@@ -1078,7 +1078,7 @@
     showToast(`Ahora controlas «${nameOf(id)}».`, "info");
   }
 
-  /** Manda a "Fuera" a las demás Sonias que están conversando (una acción por Sonia). */
+  /** Manda a "Fuera" a las demás Sonnias que están conversando (una acción por Sonnia). */
   async function onKeepOne() {
     const keep = selectedInstance();
     if (!keep) return;
@@ -1112,7 +1112,7 @@
     if (!app.wsLive) fetchInstances();
   }
 
-  /** La Sonia elegida está desconectada: aviso en gris y controles deshabilitados. */
+  /** La Sonnia elegida está desconectada: aviso en gris y controles deshabilitados. */
   function renderDisconnected() {
     const instance = selectedInstance();
     const disconnected = Boolean(instance) && instance.connected === false;
@@ -1120,7 +1120,7 @@
     if (ui.hero.dataset.disconnected !== value) ui.hero.dataset.disconnected = value;
     setHidden(ui.heroDisconnected, !disconnected);
     if (disconnected) {
-      const name = hasSeveralInstances() ? `«${instanceName(instance)}»` : "Esta Sonia";
+      const name = hasSeveralInstances() ? `«${instanceName(instance)}»` : "Esta Sonnia";
       const since = lastSeenText(instance);
       setText(
         ui.heroDisconnected,
@@ -1180,8 +1180,8 @@
     const connected = selectedConnected();
     if (ui.hero.dataset.mode !== mode) ui.hero.dataset.mode = mode;
     // Desconectada, el estado que se ve es el último conocido: se dice así.
-    const sentence = status.debug === true ? "Sonia en modo debug" : MODES[mode].sentence;
-    setText(ui.heroMode, connected ? sentence : "Sonia desconectada");
+    const sentence = status.debug === true ? "Sonnia en modo debug" : MODES[mode].sentence;
+    setText(ui.heroMode, connected ? sentence : "Sonnia desconectada");
     setText(ui.heroActivity, connected ? activityText(status) : `Lo último que se supo: ${MODES[mode].short.toLowerCase()}`);
     const state = activityState(status);
     if (ui.activityDot.dataset.state !== state) ui.activityDot.dataset.state = state;
@@ -1213,7 +1213,7 @@
     if (level === "offline" || level === "auth") {
       text = "Sin datos: no hay conexión";
     } else if (!selectedConnected()) {
-      text = "Sin datos: Sonia desconectada";
+      text = "Sin datos: Sonnia desconectada";
     } else if (app.status) {
       const problems = healthEntries(app.status).filter(([, item]) => item.ok === false);
       if (problems.length === 0) {
@@ -1303,9 +1303,9 @@
       return Promise.resolve(text === null ? null : text.trim() || DEFAULT_AWAY_MESSAGE);
     }
     const going = kind === "go";
-    ui.awayTitle.textContent = going ? "¿Mandar a Sonia fuera?" : "Cambiar el letrero";
+    ui.awayTitle.textContent = going ? "¿Mandar a Sonnia fuera?" : "Cambiar el letrero";
     ui.awayHelp.textContent = going
-      ? "Sonia saldrá caminando de la pantalla y dejará este letrero. No conversará ni saludará hasta que la traigas de vuelta."
+      ? "Sonnia saldrá caminando de la pantalla y dejará este letrero. No conversará ni saludará hasta que la traigas de vuelta."
       : "Escribe lo que quieres que diga el letrero que se ve en la pantalla.";
     ui.awayOk.textContent = going ? "Sí, mandarla fuera" : "Guardar letrero";
     ui.awayOk.className = going ? "btn btn-warning" : "btn btn-primary";
@@ -1383,7 +1383,7 @@
     } catch {
       state = "error";
     }
-    // Si mientras tanto se cambió de Sonia, esta respuesta ya no vale.
+    // Si mientras tanto se cambió de Sonnia, esta respuesta ya no vale.
     if (requested !== app.instanceId) return;
     app.gallery = gallery;
     app.galleryState = state;
@@ -1518,7 +1518,7 @@
     renderNotesState();
   }
 
-  // ------------------------------------------------------------ que Sonia diga
+  // ------------------------------------------------------------ que Sonnia diga
 
   async function onSaySubmit(event) {
     event.preventDefault();
@@ -1607,7 +1607,7 @@
     if (mic.muted) caption = "Micrófono silenciado: no llega sonido.";
     else if (level !== null) {
       caption = `Nivel del micrófono: ${formatNumber(level, 3)}. `;
-      caption += level < gate ? "Por debajo de la raya: Sonia no lo oye." : "Por encima de la raya: Sonia lo oye.";
+      caption += level < gate ? "Por debajo de la raya: Sonnia no lo oye." : "Por encima de la raya: Sonnia lo oye.";
     }
     setText(ui.gateMeterCaption, caption);
   }
@@ -1742,7 +1742,7 @@
     }
     if (list.length === 0) {
       ui.animGroups.replaceChildren(
-        el("p", { class: "muted", text: "La pantalla de Sonia no ha mandado su lista de animaciones. Ábrela (o actualízala) y aparecerán aquí." }),
+        el("p", { class: "muted", text: "La pantalla de Sonnia no ha mandado su lista de animaciones. Ábrela (o actualízala) y aparecerán aquí." }),
       );
       return;
     }
@@ -1775,7 +1775,7 @@
     const item = el("div", { class: "anim-item" }, button);
     let toggle = null;
     if (toggles) {
-      toggle = el("input", { type: "checkbox", "data-cap": "animation_toggles", "aria-label": `Sonia usa «${prettyClipName(clip)}» por su cuenta` });
+      toggle = el("input", { type: "checkbox", "data-cap": "animation_toggles", "aria-label": `Sonnia usa «${prettyClipName(clip)}» por su cuenta` });
       toggle.checked = true;
       toggle.addEventListener("change", () => onAnimationToggle(clip, toggle));
       item.append(el("label", { class: "anim-toggle" }, toggle, el("span", { text: "La usa" })));
@@ -1784,7 +1784,7 @@
     return item;
   }
 
-  /** Marca la que está sonando y las que Sonia no usa por su cuenta. */
+  /** Marca la que está sonando y las que Sonnia no usa por su cuenta. */
   function updateAnimationTiles(status) {
     const disabled = new Set(Array.isArray(status.disabled_animations) ? status.disabled_animations : []);
     const playing = typeof status.current_animation === "string" ? status.current_animation : null;
@@ -1987,13 +1987,13 @@
     const avatar = avatarInfo();
     const editingGuest = Boolean(avatar.editor_open) && avatar.editor_target === "guest";
     const editingSonia = Boolean(avatar.editor_open) && !editingGuest;
-    let text = avatar.custom ? "Sonia: personaje propio, guardado en la nube." : "Sonia: personaje de la app.";
-    if (editingSonia) text = "Editando el personaje de Sonia en su pantalla…";
+    let text = avatar.custom ? "Sonnia: personaje propio, guardado en la nube." : "Sonnia: personaje de la app.";
+    if (editingSonia) text = "Editando el personaje de Sonnia en su pantalla…";
     setAvatarState(ui.avatarState, text, editingSonia);
     let guestText = guestAvatarInfo().custom
       ? "Jean: personaje propio, guardado en la nube."
       : "Jean: avatar de prueba de la app.";
-    if (editingGuest) guestText = "Editando el personaje de Jean en la pantalla de Sonia…";
+    if (editingGuest) guestText = "Editando el personaje de Jean en la pantalla de Sonnia…";
     setAvatarState(ui.guestAvatarState, guestText, editingGuest);
     setHidden(ui.guestAvatarState, !hasCap("guest_avatar_editor"));
   }
@@ -2029,7 +2029,7 @@
   async function onResetAvatar() {
     const ok = await confirmAction({
       title: "¿Volver al personaje de la app?",
-      text: "Sonia dejará el aspecto guardado en el editor, en todas las Sonias.",
+      text: "Sonnia dejará el aspecto guardado en el editor, en todas las Sonnias.",
       confirmLabel: "Sí, volver",
     });
     if (ok) await sendAction("reset_avatar", {}, { button: ui.avatarResetBtn });
@@ -2038,7 +2038,7 @@
   async function onResetGuestAvatar() {
     const ok = await confirmAction({
       title: "¿Volver al avatar de prueba de Jean?",
-      text: "El avatar de Jean del Modo Jean dejará el aspecto guardado en el editor, en todas las Sonias.",
+      text: "El avatar de Jean del Modo Jean dejará el aspecto guardado en el editor, en todas las Sonnias.",
       confirmLabel: "Sí, volver",
     });
     if (ok) await sendAction("reset_avatar", { target: "guest" }, { button: ui.guestAvatarResetBtn });
@@ -2053,7 +2053,7 @@
     if (sync.cloud === "off") {
       return {
         state: "info",
-        text: "Esta Sonia no está conectada a la nube (le falta PANEL_CLOUD_TOKEN): los ajustes se guardan solo en su equipo.",
+        text: "Esta Sonnia no está conectada a la nube (le falta PANEL_CLOUD_TOKEN): los ajustes se guardan solo en su equipo.",
       };
     }
     if (sync.cloud === "offline") {
@@ -2061,13 +2061,13 @@
       return {
         state: "warn",
         text: pending
-          ? `Sin conexión con la nube: ${what} en el equipo de Sonia, se subirán al volver.`
-          : "Sin conexión con la nube: lo que cambies se guarda en el equipo de Sonia y se sube al volver.",
+          ? `Sin conexión con la nube: ${what} en el equipo de Sonnia, se subirán al volver.`
+          : "Sin conexión con la nube: lo que cambies se guarda en el equipo de Sonnia y se sube al volver.",
       };
     }
     if (pending) return { state: "info", text: "Guardando en la nube…" };
     if (!sync.synced) return { state: "info", text: "Conectando con la nube…" };
-    return { state: "ok", text: "Ajustes guardados en la nube: valen para todas las Sonias." };
+    return { state: "ok", text: "Ajustes guardados en la nube: valen para todas las Sonnias." };
   }
 
   function renderSyncNotes(status) {
@@ -2085,7 +2085,7 @@
     if (!voice) return;
     const ok = await confirmAction({
       title: `¿Cambiar a la voz ${capitalize(voice)}?`,
-      text: "Sonia empezará una conversación nueva y olvidará lo que estaba hablando.",
+      text: "Sonnia empezará una conversación nueva y olvidará lo que estaba hablando.",
       confirmLabel: "Sí, cambiar la voz",
     });
     if (!ok) return;
@@ -2114,7 +2114,7 @@
   async function onRestart() {
     const ok = await confirmAction({
       title: "¿Empezar una conversación nueva?",
-      text: "Sonia olvidará todo lo que se ha hablado hasta ahora.",
+      text: "Sonnia olvidará todo lo que se ha hablado hasta ahora.",
       confirmLabel: "Sí, empezar de cero",
     });
     if (ok) sendAction("restart", {}, { button: ui.restartBtn });
@@ -2155,7 +2155,7 @@
 
   function speakerName(line) {
     if (line.role === "user") return "Visitante";
-    return line.ambient ? "Sonia (sola)" : "Sonia";
+    return line.ambient ? "Sonnia (sola)" : "Sonnia";
   }
 
   function addSpeechLine({ role, text, final, ambient = false, time = "" }) {
@@ -2225,7 +2225,7 @@
     closeAmbient();
     const text = typeof message.text === "string" ? message.text.trim() : "";
     // Algunos motores mandan el transcript de la frase justo antes de su
-    // speech_start: esa línea se convierte en la de "Sonia (sola)" en vez de repetirla.
+    // speech_start: esa línea se convierte en la de "Sonnia (sola)" en vez de repetirla.
     const last = chat.lines[chat.lines.length - 1];
     if (
       last && last.role === "assistant" && !last.ambient && text && last.text === text &&
@@ -2253,7 +2253,7 @@
     }
   }
 
-  /** Sonia se calla: lo que estuviera diciendo queda cerrado tal cual. */
+  /** Sonnia se calla: lo que estuviera diciendo queda cerrado tal cual. */
   function closeSoniaLines() {
     const line = chat.open.assistant;
     if (line) {
@@ -2279,7 +2279,7 @@
         break;
       case "stop_speaking":
         closeSoniaLines();
-        addSystemLine("Sonia se calló", "", message.time);
+        addSystemLine("Sonnia se calló", "", message.time);
         break;
       case "show_image": {
         const id = message.image_id || (message.source === "camera" ? "camera" : "");
@@ -2295,7 +2295,7 @@
         break;
       case "presence":
         if (app.lastPresence !== null && app.lastPresence !== message.present) {
-          addSystemLine(message.present ? "Sonia volvió a la pantalla" : "Sonia salió de la pantalla", "", message.time);
+          addSystemLine(message.present ? "Sonnia volvió a la pantalla" : "Sonnia salió de la pantalla", "", message.time);
         }
         app.lastPresence = Boolean(message.present);
         break;
@@ -2473,7 +2473,7 @@
     renderGateControl();
     refreshControls();
     setInterval(watchdog, 1000);
-    // Primero la lista de Sonias, para abrir el WebSocket ya con la elegida
+    // Primero la lista de Sonnias, para abrir el WebSocket ya con la elegida
     // (sin esperar más de unos segundos: si falla, se sigue igual).
     await fetchInstances({ timeout: INSTANCES_TIMEOUT_MS });
     app.started = true;

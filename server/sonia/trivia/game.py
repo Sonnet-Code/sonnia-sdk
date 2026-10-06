@@ -243,7 +243,7 @@ class TriviaGame:
         if self.active:
             return False, "Ya hay una trivia en marcha."
         if not self._host.connected:
-            return False, "Sonia no está conectada a GPT-Live ahora mismo."
+            return False, "Sonnia no está conectada a GPT-Live ahora mismo."
         # Se relee el banco: se puede editar durante el evento sin reiniciar.
         bank = TriviaBank.from_file(self._bank_file)
         if len(bank) >= self._total:

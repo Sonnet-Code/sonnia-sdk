@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#142752">
   <meta name="robots" content="noindex, nofollow">
-  <title>Panel de Sonia</title>
+  <title>Panel de Sonnia</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/panel.css">
   <link rel="stylesheet" href="/static/jean.css">
@@ -20,7 +20,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <img class="brand-logo" src="/static/sonnet-code-logo.svg" alt="Sonnet Code" width="146" height="22">
-      <span class="topbar-title">Panel de Sonia</span>
+      <span class="topbar-title">Panel de Sonnia</span>
       <!-- La cámara del stand sale en directo (alguien la mira desde el panel) -->
       <span class="topbar-live" id="topbar-live" role="status" hidden>
         <span class="live-dot" aria-hidden="true"></span>
@@ -53,9 +53,9 @@
   </header>
 
   <main class="layout" id="layout">
-    <!-- ===== Varias Sonias (p. ej. el stand y la oficina): cuál se controla (oculta si solo hay una) ===== -->
+    <!-- ===== Varias Sonnias (p. ej. el stand y la oficina): cuál se controla (oculta si solo hay una) ===== -->
     <section class="card instances" id="instances" aria-labelledby="instances-title" hidden>
-      <h2 id="instances-title">¿Qué Sonia estás controlando?</h2>
+      <h2 id="instances-title">¿Qué Sonnia estás controlando?</h2>
       <p class="help">Toca una para controlarla y cambia cuando quieras. Todo lo que hagas abajo se aplica solo a la marcada; las demás siguen a lo suyo.</p>
       <div class="instance-list" id="instance-list" role="group" aria-labelledby="instances-title"></div>
       <div class="dup-alert dup-alert--info" id="dup-conversing" role="status" hidden>
@@ -70,17 +70,17 @@
       <div class="hero-status">
         <p class="kicker" id="hero-kicker">Ahora mismo</p>
         <p class="hero-disconnected" id="hero-disconnected" role="status" hidden></p>
-        <h1 class="hero-mode" id="hero-mode">Conectando con Sonia…</h1>
+        <h1 class="hero-mode" id="hero-mode">Conectando con Sonnia…</h1>
         <p class="hero-activity">
           <span class="activity-dot" id="activity-dot" aria-hidden="true"></span>
           <span id="hero-activity">Esperando datos</span>
         </p>
         <a class="hero-health" id="hero-health" href="#salud" data-level="unknown">Comprobando…</a>
         <p class="hero-warning" id="hero-muted" hidden>
-          Micrófono silenciado: Sonia no oye a nadie.
+          Micrófono silenciado: Sonnia no oye a nadie.
         </p>
         <p class="hero-warning" id="hero-debug" hidden>
-          Modo debug: Sonia está quieta y desconectada de OpenAI. Se quita en «Avanzado».
+          Modo debug: Sonnia está quieta y desconectada de OpenAI. Se quita en «Avanzado».
         </p>
         <div class="away-sign" id="away-sign" hidden>
           <span class="away-sign-label">Letrero en pantalla:</span>
@@ -90,8 +90,8 @@
       </div>
 
       <div class="hero-modes">
-        <h2 class="visually-hidden">Cambiar el modo de Sonia</h2>
-        <div class="mode-buttons" role="group" aria-label="Modo de Sonia">
+        <h2 class="visually-hidden">Cambiar el modo de Sonnia</h2>
+        <div class="mode-buttons" role="group" aria-label="Modo de Sonnia">
           <button type="button" class="mode-btn" data-set-mode="conversation" data-cap="modes" aria-pressed="false">
             <span class="mode-name">Conversando</span>
             <span class="mode-desc">Escucha, mira y habla con la gente. Conectada a OpenAI: gasta.</span>
@@ -109,7 +109,7 @@
           </button>
         </div>
         <p class="cap-note" data-cap-note="modes" hidden>
-          Con el motor de voz actual Sonia siempre está conversando: los modos no se pueden cambiar.
+          Con el motor de voz actual Sonnia siempre está conversando: los modos no se pueden cambiar.
         </p>
       </div>
     </section>
@@ -121,7 +121,7 @@
         <div class="quick-grid">
           <button type="button" class="btn btn-danger quick-wide" id="stop-btn" data-cap="stop">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg>
-            Callar a Sonia
+            Callar a Sonnia
           </button>
           <button type="button" class="btn" id="greet-btn" data-cap="greet" data-off-modes="away" data-extra="sonia_here">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-6 4z"/></svg>
@@ -148,10 +148,10 @@
             <span id="camera-label">Ver cámara</span>
           </button>
         </div>
-        <p class="note" data-mode-note="away" hidden>Sonia está fuera: tráela de vuelta con «Conversando» o «Solo saludos» para que salude, baile o enseñe imágenes.</p>
+        <p class="note" data-mode-note="away" hidden>Sonnia está fuera: tráela de vuelta con «Conversando» o «Solo saludos» para que salude, baile o enseñe imágenes.</p>
         <p class="cap-note" data-cap-note="greet" hidden>«Saludar ahora» no está disponible con el motor de voz actual.</p>
         <p class="cap-note" data-cap-note="mute" hidden>Silenciar el micrófono no está disponible con el motor de voz actual.</p>
-        <p class="cap-note" data-cap-note="camera_watch" hidden>«Ver cámara» necesita que esta Sonia esté conectada a la nube y tenga cámara.</p>
+        <p class="cap-note" data-cap-note="camera_watch" hidden>«Ver cámara» necesita que esta Sonnia esté conectada a la nube y tenga cámara.</p>
       </section>
 
       <!-- ===== Trivia ===== -->
@@ -167,15 +167,15 @@
             <button type="button" class="btn trivia-opt" data-trivia-answer="C" data-cap="trivia" data-extra="trivia_asking"><b>C</b><span id="trivia-opt-c"></span></button>
             <button type="button" class="btn btn-small" data-trivia-answer="pass" data-cap="trivia" data-extra="trivia_asking">No lo sabe</button>
           </div>
-          <p class="help">Sonia entiende la respuesta sola. Si con el ruido no la oye, contesta tú por el visitante.</p>
+          <p class="help">Sonnia entiende la respuesta sola. Si con el ruido no la oye, contesta tú por el visitante.</p>
         </div>
         <div class="row">
           <button type="button" class="btn btn-primary" id="trivia-start-btn" data-cap="trivia" data-off-modes="away greeter" data-extra="trivia_idle">Empezar trivia</button>
           <button type="button" class="btn" id="trivia-restart-btn" data-cap="trivia" data-off-modes="away greeter" data-extra="trivia_active">Reiniciar</button>
           <button type="button" class="btn" id="trivia-stop-btn" data-cap="trivia" data-extra="trivia_active">Terminar trivia</button>
         </div>
-        <p class="note" id="trivia-note" hidden>La trivia necesita a Sonia en «Conversando».</p>
-        <p class="cap-note" data-cap-note="trivia" hidden>Esta Sonia no tiene trivia: actualiza su orquestador o revisa assets/trivia/preguntas.md.</p>
+        <p class="note" id="trivia-note" hidden>La trivia necesita a Sonnia en «Conversando».</p>
+        <p class="cap-note" data-cap-note="trivia" hidden>Esta Sonnia no tiene trivia: actualiza su orquestador o revisa assets/trivia/preguntas.md.</p>
       </section>
 
       <!-- ===== Imágenes de la galería ===== -->
@@ -195,12 +195,12 @@
     </div>
 
     <div class="col col-2">
-      <!-- ===== Que Sonia diga… ===== -->
+      <!-- ===== Que Sonnia diga… ===== -->
       <section class="card" id="decir" aria-labelledby="decir-title">
-        <h2 id="decir-title">Que Sonia diga…</h2>
-        <p class="help">Escribe un aviso o anuncio y Sonia lo dirá en voz alta tal cual.</p>
+        <h2 id="decir-title">Que Sonnia diga…</h2>
+        <p class="help">Escribe un aviso o anuncio y Sonnia lo dirá en voz alta tal cual.</p>
         <form class="stack" id="say-form">
-          <label class="visually-hidden" for="say-input">Texto que dirá Sonia</label>
+          <label class="visually-hidden" for="say-input">Texto que dirá Sonnia</label>
           <textarea id="say-input" rows="3" maxlength="600" data-cap="say" placeholder="Por ejemplo: En diez minutos empieza la charla de Flutter en la sala principal."></textarea>
           <button type="submit" class="btn btn-primary" id="say-btn" data-cap="say" data-extra="sonia_here">Decirlo ahora</button>
         </form>
@@ -209,8 +209,8 @@
 
       <!-- ===== Avisos del día ===== -->
       <section class="card" id="avisos" aria-labelledby="avisos-title">
-        <h2 id="avisos-title">Avisos de hoy para Sonia</h2>
-        <p class="help">Sonia tiene en cuenta lo que escribas aquí cuando la gente le pregunte. No lo dice en voz alta por sí sola.</p>
+        <h2 id="avisos-title">Avisos de hoy para Sonnia</h2>
+        <p class="help">Sonnia tiene en cuenta lo que escribas aquí cuando la gente le pregunte. No lo dice en voz alta por sí sola.</p>
         <form class="stack" id="notes-form">
           <label class="visually-hidden" for="notes-input">Avisos de hoy</label>
           <textarea id="notes-input" rows="5" maxlength="4000" data-cap="notes" placeholder="Por ejemplo: La charla de IA se movió a la sala B."></textarea>
@@ -241,7 +241,7 @@
             <label for="gate-input" class="control-label">Ruido del pasillo</label>
             <output class="control-value" id="gate-value" for="gate-input">Apagado</output>
           </div>
-          <p class="help">Si Sonia contesta al ruido del pasillo o a gente que habla lejos, sube este control. Todo lo que quede por debajo de la raya, Sonia no lo oye. Habla cerca del micrófono para comprobar que tu voz pasa la raya.</p>
+          <p class="help">Si Sonnia contesta al ruido del pasillo o a gente que habla lejos, sube este control. Todo lo que quede por debajo de la raya, Sonnia no lo oye. Habla cerca del micrófono para comprobar que tu voz pasa la raya.</p>
           <div class="meter meter--big" id="gate-meter" aria-hidden="true">
             <div class="meter-fill" id="gate-meter-fill"></div>
             <div class="meter-mark" id="gate-meter-mark"></div>
@@ -286,10 +286,10 @@
           <label class="switch">
             <input type="checkbox" role="switch" id="debug-input" data-cap="debug">
             <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Sonia quieta para pruebas visuales</span>
+            <span class="switch-text">Sonnia quieta para pruebas visuales</span>
           </label>
           <p class="help">Sin GPT-Live (no gasta), sin saludos, frases ni bailes automáticos, y en pantalla sin gestos por su cuenta. Los botones del panel siguen funcionando.</p>
-          <p class="cap-note" data-cap-note="debug" hidden>Esta Sonia no tiene aún el modo debug: hay que actualizar el orquestador.</p>
+          <p class="cap-note" data-cap-note="debug" hidden>Esta Sonnia no tiene aún el modo debug: hay que actualizar el orquestador.</p>
         </section>
 
         <section class="adv-block" aria-labelledby="adv-subtitles-title">
@@ -297,14 +297,14 @@
           <label class="switch">
             <input type="checkbox" role="switch" id="subtitles-input" data-cap="subtitles">
             <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Mostrar en pantalla lo que dicen el visitante y Sonia</span>
+            <span class="switch-text">Mostrar en pantalla lo que dicen el visitante y Sonnia</span>
           </label>
-          <p class="cap-note" data-cap-note="subtitles" hidden>Esta Sonia no tiene aún este interruptor: hay que actualizar el orquestador.</p>
+          <p class="cap-note" data-cap-note="subtitles" hidden>Esta Sonnia no tiene aún este interruptor: hay que actualizar el orquestador.</p>
         </section>
 
         <section class="adv-block" aria-labelledby="adv-voice-title">
-          <h3 id="adv-voice-title">Voz de Sonia</h3>
-          <p class="help warn-text">Cambiar la voz empieza una conversación nueva: Sonia olvida lo que estaba hablando.</p>
+          <h3 id="adv-voice-title">Voz de Sonnia</h3>
+          <p class="help warn-text">Cambiar la voz empieza una conversación nueva: Sonnia olvida lo que estaba hablando.</p>
           <div class="row">
             <label class="visually-hidden" for="voice-select">Voz</label>
             <select id="voice-select" data-cap="voice"></select>
@@ -318,14 +318,14 @@
           <label class="switch">
             <input type="checkbox" role="switch" id="showcase-input" data-cap="showcase">
             <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Cuando no hay nadie, Sonia dice frases y baila sola</span>
+            <span class="switch-text">Cuando no hay nadie, Sonnia dice frases y baila sola</span>
           </label>
           <p class="cap-note" data-cap-note="showcase" hidden>No disponible con el motor de voz actual.</p>
         </section>
 
         <section class="adv-block" aria-labelledby="adv-gestures-title">
           <h3 id="adv-gestures-title">Gestos</h3>
-          <p class="help">Solo se ven cuando Sonia no está hablando.</p>
+          <p class="help">Solo se ven cuando Sonnia no está hablando.</p>
           <div class="button-row">
             <button type="button" class="btn" data-gesture="greeting" data-cap="gestures" data-off-modes="away" data-extra="sonia_here">Saludar con la mano</button>
             <button type="button" class="btn" data-gesture="soft" data-cap="gestures" data-off-modes="away" data-extra="sonia_here">Gesto suave</button>
@@ -337,14 +337,14 @@
 
         <section class="adv-block adv-wide" aria-labelledby="adv-anim-title">
           <h3 id="adv-anim-title">Animaciones</h3>
-          <p class="help">Cada botón hace una animación concreta; la que está sonando se ve en azul. Si Sonia está hablando, corta sus gestos un momento y luego sigue. Desmarca «La usa» para que Sonia no la haga por su cuenta (con el botón sigue saliendo).</p>
+          <p class="help">Cada botón hace una animación concreta; la que está sonando se ve en azul. Si Sonnia está hablando, corta sus gestos un momento y luego sigue. Desmarca «La usa» para que Sonnia no la haga por su cuenta (con el botón sigue saliendo).</p>
           <div class="anim-groups" id="anim-groups"></div>
-          <p class="cap-note" data-cap-note="animations" hidden>Esta Sonia no tiene aún las animaciones: hay que actualizar el orquestador.</p>
+          <p class="cap-note" data-cap-note="animations" hidden>Esta Sonnia no tiene aún las animaciones: hay que actualizar el orquestador.</p>
         </section>
 
         <section class="adv-block" aria-labelledby="adv-ask-title">
           <h3 id="adv-ask-title">Preguntar como visitante</h3>
-          <p class="help">Sonia contesta en voz alta como si un visitante se lo hubiera dicho. Sirve para probarla.</p>
+          <p class="help">Sonnia contesta en voz alta como si un visitante se lo hubiera dicho. Sirve para probarla.</p>
           <form class="row" id="ask-form">
             <label class="visually-hidden" for="ask-input">Pregunta</label>
             <input type="text" id="ask-input" maxlength="400" autocomplete="off" data-cap="ask" placeholder="¿Qué hace Sonnet Code?">
@@ -355,14 +355,14 @@
 
         <section class="adv-block" aria-labelledby="adv-restart-title">
           <h3 id="adv-restart-title">Conversación nueva</h3>
-          <p class="help">Sonia olvida todo lo hablado y empieza de cero. Útil si se queda rara o repite cosas.</p>
+          <p class="help">Sonnia olvida todo lo hablado y empieza de cero. Útil si se queda rara o repite cosas.</p>
           <button type="button" class="btn" id="restart-btn" data-cap="restart">Empezar conversación nueva</button>
           <p class="cap-note" data-cap-note="restart" hidden>No disponible con el motor de voz actual.</p>
         </section>
 
         <section class="adv-block" aria-labelledby="adv-cache-title">
           <h3 id="adv-cache-title">Voces del modo saludos</h3>
-          <p class="help">Graba con la voz de Sonia las frases fijas que usa en «Solo saludos». Necesita internet.</p>
+          <p class="help">Graba con la voz de Sonnia las frases fijas que usa en «Solo saludos». Necesita internet.</p>
           <progress id="cache-progress" max="1" value="0"></progress>
           <p class="cache-text" id="cache-text">Sin datos</p>
           <p class="cache-error" id="cache-error" hidden></p>
@@ -396,8 +396,8 @@
       <div class="adv-grid">
         <section class="adv-block" aria-labelledby="dev-avatar-title">
           <h3 id="dev-avatar-title">Personaje</h3>
-          <p class="help">Pone la pantalla de Sonia en el editor de personaje de Genies, para Sonia o para el avatar de Jean del Modo Jean. Se edita allí, con el ratón; al guardar, el aspecto nuevo queda en la nube y lo usan todas las Sonias. Mientras tanto Sonia no conversa.</p>
-          <p class="avatar-state" id="avatar-state">Sonia: personaje de la app.</p>
+          <p class="help">Pone la pantalla de Sonnia en el editor de personaje de Genies, para Sonnia o para el avatar de Jean del Modo Jean. Se edita allí, con el ratón; al guardar, el aspecto nuevo queda en la nube y lo usan todas las Sonnias. Mientras tanto Sonnia no conversa.</p>
+          <p class="avatar-state" id="avatar-state">Sonnia: personaje de la app.</p>
           <p class="avatar-state" id="guest-avatar-state" hidden>Jean: avatar de prueba de la app.</p>
           <div class="button-row">
             <button type="button" class="btn btn-primary" id="avatar-edit-btn" data-cap="avatar_editor" data-off-modes="away" data-extra="avatar_closed">Editar personaje</button>
@@ -408,31 +408,31 @@
             <button type="button" class="btn btn-small" id="avatar-reset-btn" data-cap="avatar_editor" data-extra="avatar_custom">Volver al personaje de la app</button>
             <button type="button" class="btn btn-small" id="guest-avatar-reset-btn" data-cap="guest_avatar_editor" data-extra="guest_avatar_custom">Volver al avatar de prueba de Jean</button>
           </div>
-          <p class="cap-note" data-cap-note="avatar_editor" hidden>Esta Sonia no tiene aún el editor de personaje: hay que actualizar el orquestador.</p>
+          <p class="cap-note" data-cap-note="avatar_editor" hidden>Esta Sonnia no tiene aún el editor de personaje: hay que actualizar el orquestador.</p>
         </section>
 
         <section class="adv-block" aria-labelledby="dev-mouth-title">
           <h3 id="dev-mouth-title">Boca</h3>
-          <p class="help">Se nota al momento mientras Sonia habla: prueba con «Saludar ahora», que no gasta.</p>
+          <p class="help">Se nota al momento mientras Sonnia habla: prueba con «Saludar ahora», que no gasta.</p>
           <div class="tune-list" id="tune-mouth"></div>
           <button type="button" class="btn btn-small tune-reset" data-reset-tuning="mouth" data-cap="tuning">Restablecer la boca</button>
         </section>
 
         <section class="adv-block" aria-labelledby="dev-camera-title">
           <h3 id="dev-camera-title">Cámara</h3>
-          <p class="help">Mueve el encuadre de siempre, el de Sonia hablando. La cámara llega suave, sin saltos.</p>
+          <p class="help">Mueve el encuadre de siempre, el de Sonnia hablando. La cámara llega suave, sin saltos.</p>
           <div class="tune-list" id="tune-camera"></div>
           <button type="button" class="btn btn-small tune-reset" data-reset-tuning="camera" data-cap="tuning">Restablecer la cámara</button>
         </section>
 
         <section class="adv-block" aria-labelledby="dev-idle-title">
           <h3 id="dev-idle-title">Movimiento en reposo</h3>
-          <p class="help">La respiración y el vaivén de Sonia cuando no gesticula, y los acentos del cuerpo al hablar. Se nota en unos segundos; los acentos, mientras habla.</p>
+          <p class="help">La respiración y el vaivén de Sonnia cuando no gesticula, y los acentos del cuerpo al hablar. Se nota en unos segundos; los acentos, mientras habla.</p>
           <div class="tune-list" id="tune-idle"></div>
           <button type="button" class="btn btn-small tune-reset" data-reset-tuning="idle" data-cap="tuning">Restablecer el movimiento</button>
         </section>
       </div>
-      <p class="cap-note dev-cap-note" data-cap-note="tuning" hidden>Esta Sonia no tiene aún los ajustes de Developer: hay que actualizar el orquestador.</p>
+      <p class="cap-note dev-cap-note" data-cap-note="tuning" hidden>Esta Sonnia no tiene aún los ajustes de Developer: hay que actualizar el orquestador.</p>
     </details>
   </main>
 
@@ -451,11 +451,11 @@
     </form>
   </dialog>
 
-  <!-- Mandar a Sonia fuera o cambiar el letrero -->
+  <!-- Mandar a Sonnia fuera o cambiar el letrero -->
   <dialog class="dialog" id="away-dialog" aria-labelledby="away-title">
     <form method="dialog">
-      <h2 id="away-title">¿Mandar a Sonia fuera?</h2>
-      <p id="away-help">Sonia saldrá caminando de la pantalla y dejará este letrero. No conversará ni saludará hasta que la traigas de vuelta.</p>
+      <h2 id="away-title">¿Mandar a Sonnia fuera?</h2>
+      <p id="away-help">Sonnia saldrá caminando de la pantalla y dejará este letrero. No conversará ni saludará hasta que la traigas de vuelta.</p>
       <label class="field">
         <span class="field-label">Texto del letrero</span>
         <textarea id="away-text" rows="3" maxlength="200"></textarea>

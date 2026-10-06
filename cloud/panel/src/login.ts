@@ -100,7 +100,7 @@ ${extraHead}<style>${STYLE}</style>
 ${body}
 </div>
 </main>
-<p class="foot">Sonia · stand de Sonnet Code · DevFest Santo Domingo</p>
+<p class="foot">Sonnia · stand de Sonnet Code · DevFest Santo Domingo</p>
 </body>
 </html>`;
 }
@@ -114,8 +114,8 @@ function noticeHtml(notice: Notice): string {
 function loginPage(env: Env, next: string, notice: Notice): string {
   if (passwordConfigured(env)) {
     return page(
-      "Entrar · Panel de Sonia",
-      `<h1>Panel de Sonia</h1>
+      "Entrar · Panel de Sonnia",
+      `<h1>Panel de Sonnia</h1>
 <p class="lead">Escribe la contraseña del panel para entrar.</p>
 ${noticeHtml(notice)}<form method="post" action="/login">
 <input type="hidden" name="next" value="${escapeHtml(next)}">
@@ -128,16 +128,16 @@ ${noticeHtml(notice)}<form method="post" action="/login">
   }
   if (accessConfigured(env)) {
     return page(
-      "Entrar · Panel de Sonia",
-      `<h1>Panel de Sonia</h1>
+      "Entrar · Panel de Sonnia",
+      `<h1>Panel de Sonnia</h1>
 ${noticeHtml(notice)}<p class="lead">Este panel se abre con tu cuenta autorizada. Si ves esta página, tu acceso no se pudo comprobar.</p>
 <p><a class="link" href="/">Volver a intentarlo</a></p>
 <p class="help">Si sigue sin funcionar, pide ayuda a la persona responsable del stand de Sonnet Code.</p>`,
     );
   }
   return page(
-    "Panel de Sonia",
-    `<h1>Panel de Sonia</h1>
+    "Panel de Sonnia",
+    `<h1>Panel de Sonnia</h1>
 <p class="lead">El panel todavía no tiene ningún acceso configurado, así que nadie puede entrar.</p>
 <p class="help">Avisa a la persona que administra el panel: falta configurar la contraseña.</p>`,
   );
@@ -153,8 +153,8 @@ export function bouncePage(target: string): Response {
   const safe = escapeHtml(target);
   return html(
     page(
-      "Abriendo el panel de Sonia",
-      `<h1>Panel de Sonia</h1>
+      "Abriendo el panel de Sonnia",
+      `<h1>Panel de Sonnia</h1>
 <p class="lead">Abriendo el panel…</p>
 <p><a class="link" href="${safe}">Si no se abre solo, toca aquí.</a></p>`,
       `<meta http-equiv="refresh" content="0;url=${safe}">\n`,
