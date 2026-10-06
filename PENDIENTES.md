@@ -64,7 +64,8 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
     - `sonia check` y la elección de Gemini con el prompt real.
   - Los gestos de manos por código (5fdd48f) quedan solo de respaldo para un set sin gestos.
   - [ ] Probar una conversación real con GPT-Live (`sonia run --no-mic` + texto) y mirar el ritmo de los gestos.
-  - [ ] Recompilar las builds de stand y pruebas (macOS y Windows) con los gestos.
+  - [x] Recompilar las builds de stand y pruebas (macOS y Windows) con los gestos. **Hecho (7 de octubre, 00:19), a03b382: cuerpo entero de Sage (reposo, acciones y relleno al hablar), encuadre más arriba con las manos a la vista, sin la sombra de abajo y con Jean sin colarse junto a Sonnia. La de macOS, probada en silencio con el orquestador falso: reposo, acciones y gestos de Sage, sin excepciones.**
+    - [ ] 🐞 El orquestador de Windows sigue siendo el del 6 de octubre (069352f), sin el director de gestos: Unity gesticula igual con el relleno, pero sin gestos elegidos. Para ponerlo al día hace falta push y el workflow `orquestador-windows.yml`.
   - [ ] Desplegar el panel de la nube para ver la etiqueta del grupo `sage` (`npx wrangler deploy` en `cloud/panel/`).
   - [ ] Verificarlo con capturas 9:16 por fotogramas.
 - [x] ✨ **Bailes y animaciones por voz.** Hoy solo desde el panel (`_act_animation` en `server/sonia/panel/control.py`). **Hecho (6 de octubre): acción `play_animation` (`server/sonia/actions/moves.py`) con bailar, saludar, paz, saludo militar, pulgares arriba, celebrar, lamentarse y pensar; busca el clip en el catálogo de Unity y lo lanza entero (`whole`) aunque Sonnia hable. Visto en la app compilada, en silencio: el baile suena entero mientras habla. Falta probarlo con GPT-Live de verdad.**
