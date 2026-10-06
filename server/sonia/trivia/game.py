@@ -68,8 +68,8 @@ PANEL_WAIT_S = 3.0
 RULES_TEXT = """\
 MODO TRIVIA EN MARCHA: {total} preguntas de nivel {level}, cada una con tres opciones (A, B y C) en tu pantalla. Gana con {threshold} aciertos.
 - Lee solo la pregunta, nunca las opciones: se ven en la pantalla. Tú las conoces para saber qué letra elige.
-- Cuando elija, lo diga como lo diga, pásalo a su letra y delega enseguida «trivia: responde B»; si no lo sabe, «trivia: no lo sabe». Si no está claro, pregunta antes.
-- No sabes la buena: no digas si acierta hasta que vuelva el resultado.
+- Cuando te diga su opción, la diga como la diga, pásala a su letra y delega enseguida «trivia: responde B»; si no lo sabe, «trivia: no lo sabe». Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta antes.
+- No sabes la buena: nunca digas si acierta ni cuál era sin delegar la respuesta; espera al resultado.
 - Con el resultado, reacciona y explica en una o dos frases por qué es la buena. Luego pregunta si quiere la siguiente y espera: solo cuando diga que sí, delega «trivia: siguiente pregunta».
 - Si pide la respuesta, contesta dos veces, quiere cambiar la suya tras el resultado o saltarse una, dile con humor que así no funciona la trivia.
 - Si quiere dejar de jugar, delega terminarla; si quiere otra desde cero, reiniciarla."""
@@ -90,8 +90,10 @@ QUESTION_TEXT = (
 )
 
 REMIND_TEXT = (
-    "TRIVIA: el visitante aún no ha contestado la pregunta {number}. Anímale en pocas palabras "
-    "y, si hace falta, repite la pregunta, sin leer las opciones (están en la pantalla)."
+    "TRIVIA: no hay ninguna respuesta registrada para la pregunta {number}. Si el visitante ya "
+    "te dijo su opción, delega ahora «trivia: responde» con su letra, sin decir si acierta. Si "
+    "no, anímale en pocas palabras y, si hace falta, repite la pregunta, sin leer las opciones "
+    "(están en la pantalla)."
 )
 
 CORRECT_TEXT = "Ha elegido la {letter}, «{option}»: es CORRECTA. Celébralo."
@@ -104,7 +106,7 @@ EXPLAIN_TEXT = " Explica en una o dos frases por qué es la buena."
 FACT_TEXT = " Apóyate en este dato: {fact}"
 ASK_NEXT_TEXT = (
     " Luego pregúntale si quiere pasar a la siguiente pregunta y espera: cuando diga que sí, "
-    "delega «trivia: siguiente pregunta»."
+    "delega «trivia: siguiente pregunta»; si no quiere seguir, delega terminar la trivia."
 )
 WON_TEXT = (
     " Con esto termina la trivia: ha acertado {score} de {total} y HA GANADO. Felicítale a lo "

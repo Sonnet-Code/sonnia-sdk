@@ -43,10 +43,17 @@ Al empezar, las reglas de la trivia entran en la sesión con `session.instructio
 
 ## Mientras dura la partida
 
-- **Recordatorio:** sin respuesta durante `TRIVIA_REMIND_SECONDS` (25 s), Sonia anima una vez y, si hace falta, repite la pregunta (nunca las opciones).
+- **Recordatorio:** sin respuesta registrada durante `TRIVIA_REMIND_SECONDS` (25 s), se le recuerda a Sonia una sola vez. Si el visitante ya dijo su opción y ella no la delegó, la registra ahora sin decir si acierta. Si no, le anima y, si hace falta, repite la pregunta (nunca las opciones).
 - **Abandono:** sin oír al visitante durante `TRIVIA_ABANDON_SECONDS` (60 s), la partida se cancela; el visitante se ha ido.
-- **Ritmo:** lo lleva el visitante. El resultado se queda en pantalla hasta que pide la siguiente (`trivia_next`). Antes, con un temporizador, una respuesta dada mientras se veía el resultado se perdía y la cuenta se desfasaba: así se explican las respuestas buenas marcadas como malas y la partida que se quedó en la pregunta 5 en la demo del 6 de octubre. Tras la última, la pantalla final sale cuando Sonia termina de contar el resultado: al menos `TRIVIA_REVEAL_SECONDS` (4 s) y como mucho `TRIVIA_FINAL_WAIT_SECONDS` (20 s).
+- **Ritmo:** lo lleva el visitante. El resultado se queda en pantalla hasta que pide la siguiente (`trivia_next`). Antes pasaba sola a la siguiente a los 4 s. Tras la última, la pantalla final sale cuando Sonia termina de contar el resultado: al menos `TRIVIA_REVEAL_SECONDS` (4 s) y como mucho `TRIVIA_FINAL_WAIT_SECONDS` (20 s).
 - **Niveles y premios:** el nivel lo elige el visitante (`TRIVIA_DEFAULT_LEVEL`, intermedio, si no). Por jugar se lleva `TRIVIA_PRIZE_PARTICIPATION` (un sticker o un pin) y por ganar en difícil, `TRIVIA_PRIZE_HARD_WIN` (una gorra); Sonia lo anuncia y la pantalla final lo muestra. El panel tiene el nivel al lado de «Empezar trivia» y un botón «Siguiente pregunta».
+- **Lo que pasó en la demo del 6 de octubre** (sacado del registro):
+  - **Pregunta 4, «respuesta buena marcada como mala»:** nadie había elegido. GPT-Live registró una «B» a partir de la charla del equipo.
+  - **Pregunta 5, «congelada»:** la visitante dijo «La C». Sonia la dio por buena ella sola, sin delegar la respuesta, y la pantalla siguió esperando.
+  - **Arreglos:**
+    - Las reglas dicen que lo que hablan entre ellos no es una respuesta.
+    - Las reglas también dicen que nunca diga si acierta ni cuál era sin delegar la respuesta.
+    - El recordatorio de arriba recoge la respuesta que no se registró.
 - **Pausas:** no hay animación de stand, ni renovación de la sesión por inactividad, ni saludo automático con la mano.
 - **Cancelación:** la partida se cancela si cambia el modo, si se cae o se renueva la sesión de GPT-Live, o con «Terminar trivia» o «Reiniciar» en el panel.
 - **Reconexión:** si Unity se reconecta a mitad de partida, el orquestador le repite `trivia_start` y la pregunta en curso.

@@ -171,6 +171,10 @@ def test_las_reglas_caben_en_una_instruccion() -> None:
     assert (
         len(RULES_TEXT.format(total=10, threshold=10, level="intermedio")) < APPEND_MAX_CHARS - 50
     )
+    # Lo que pasó en la demo del 6 de octubre: una «B» sacada de la charla del equipo y una
+    # respuesta que Sonia dio por buena sin registrarla (la pantalla se quedó en la 5).
+    assert "Lo que hablan entre ellos no es una respuesta" in RULES_TEXT
+    assert "nunca digas si acierta ni cuál era sin delegar" in RULES_TEXT
 
 
 def test_sin_banco_no_hay_trivia(tmp_path: Path) -> None:
@@ -236,6 +240,7 @@ async def test_partida_ganada_por_voz(tmp_path: Path) -> None:
         if number < 3:
             # Nada avanza solo: pregunta si quiere la siguiente y espera.
             assert "siguiente pregunta" in script and "pregunta 2" not in script
+            assert "si no quiere seguir, delega terminar la trivia" in script
             await settle()
             assert game.phase is TriviaPhase.REVEALING
             assert current(screen)["number"] == number
@@ -456,6 +461,8 @@ async def test_recuerda_la_pregunta_y_luego_la_da_por_abandonada(tmp_path: Path)
     await settle()
     assert len(host.spoken) == 1 and "repite la pregunta" in host.spoken[0]
     assert "sin leer las opciones" in host.spoken[0]
+    # Si ya contestó y Sonia no lo registró, el recordatorio le pide registrarlo.
+    assert "ya te dijo su opción, delega ahora" in host.spoken[0]
     await game.tick(start + 30)
     await settle()
     assert len(host.spoken) == 1  # una sola vez por pregunta
