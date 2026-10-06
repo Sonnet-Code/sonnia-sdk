@@ -91,7 +91,7 @@ retomarlo.
 | Integración (coreógrafo, gestos por código) | Sin empezar. |
 
 **Nota sobre el MCP de Unity:** en este subagente no estaban las herramientas `mcp__unity-mcp__*`.
-- Se usó el relay directamente: `scratchpad/herramientas/umcp.py` lanza `relay_mac_arm64 --mcp` y habla JSON-RPC.
+- Se usó el relay directamente: `cache/gestos-genies/herramientas/umcp.py` lanza `relay_mac_arm64 --mcp` y habla JSON-RPC.
 - No pidió aprobación y cada llamada cierra su proceso.
 - Los avisos `JobTempAlloc` de `Step()` hacen que el MCP marque el comando como fallido aunque haya terminado bien.
 
@@ -112,7 +112,7 @@ retomarlo.
 **En el repositorio, commiteado con este informe:**
 - `scripts/gestos_genies/captura.js`: script de captura para la consola de la página. Es la misma lógica que se ejecutó; la lista de gestos va en `window.__gestosGenies`.
 
-**En el scratchpad** (`/private/tmp/claude-501/-Users-jeanc-calderon-Documents-git-sonia/ec28b4d1-06d5-4c08-95e5-fc8360f58eb3/scratchpad/`, temporal, se pierde al cerrar la sesión):
+**En `cache/gestos-genies/`** (copia local del scratchpad de la sesión, que era temporal; `cache/` está ignorada por git, así que solo existe en el Mac de Jean):
 
 | Ruta | Contenido |
 |---|---|
@@ -122,6 +122,7 @@ retomarlo.
 | `gestos/bundles/*.js`, `gestos/wasm/NAFWebGL.wasm`, `strings.txt` | Bundles del SDK web y el WASM, para consulta. |
 | `gestos/hojas/` y `gestos/poses/` | Hoja de contactos y vistas de la primera prueba (piernas rotas). |
 | `herramientas/umcp.py`, `runlog.sh` y los `.cs` de `RunCommand` | `bind.cs`, `hd.cs`, `binds.cs`, `units.cs`, `bake.cs`, `preview.cs`, `pose.cs`, `ikmeasure*.cs`. |
+| `prueba-silencio/hub_manos.py`, `prueba_manos.sh` | Orquestador falso que hace hablar a Sonnia con frases de `cache/voice` a volumen 0, y la prueba de la app compilada con capturas cada 0,4 s (se ejecuta desde `server/`). |
 
 **Candidatos sin capturar** (36, de la lista `Cheerleader(IDset)`):
 - **Habla y referencias:** `emphasize`, `3rdPersonPoised02/04/05`, `3rdPersonHandPoised03`, `3rdPrsnHandPoised01/04`, `3rdPrsnHandCute01/03/04`, `2ndPersonPoised04`, `refUser03Quick`, `refUser04Quick`, `1stPersonGesture03`, `1stPersonGesture01Quick`, `refSelf02Quick`, `refFuture`, `refFuture02`, `referenceThere01`, `refOptions02Quick`, `uncertainOptions`, `listingGesture02`.
@@ -131,11 +132,11 @@ Jean mencionó `cheerleader.html` en la raíz del repo, pero no estaba al cerrar
 
 ## 4. Cómo retomarlo
 
-1. **Volver a capturar** si el scratchpad ya no está:
+1. **Volver a capturar** si falta `cache/gestos-genies/gestos/capturas/` o para sacar los 36 que faltan:
    1. Abrir `/chat/existentialcheerleader` en una pestaña propia.
    2. Poner la lista en `window.__gestosGenies` (tandas de 12) y ejecutar `captura.js`.
    3. **Recargar la página antes de cada tanda**: Chrome solo deja pasar la primera descarga por carga.
-   4. Mover los JSON de `~/Downloads` a una carpeta del scratchpad.
+   4. Mover los JSON de `~/Downloads` a `cache/gestos-genies/gestos/capturas/`.
 2. **Probar el arreglo de la IK:**
    1. Entrar en Play y esperar al avatar.
    2. Llamar a `BakeFile` dos veces: la primera pausa, la segunda hornea.
