@@ -1066,7 +1066,7 @@ namespace Sonia
                 : "Hacían falta " + _threshold + ". ¡Pídeme otra trivia y lo intentas otra vez!")
                 + (string.IsNullOrWhiteSpace(prize)
                     ? string.Empty
-                    : "\nTe llevas " + prize.Trim() + ": recógelo con el staff del stand.");
+                    : "\nTu premio: " + prize.Trim() + ". ¡Recógelo con el staff del stand!");
             for (int i = 0; i < _resultStars.Count; i++)
             {
                 bool lit = i < _score;
