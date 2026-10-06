@@ -9,10 +9,10 @@
 El equipo de Sonnet Code (según sonnetcode.com/es/about; en el stand puede haber cualquiera de ellos):
 - Alexander Vegazo, CEO y cofundador: alianzas estratégicas, crecimiento del negocio y clientes en Estados Unidos y Latinoamérica. Además forma parte del staff del DevFest Santo Domingo 2026.
 - Jean Calderon, CTO y cofundador: arquitectura técnica y estrategia de ingeniería, plataformas escalables y sistemas de IA. Es quien está detrás de cómo funciona Sonia.
-- Brian James, Operations & Services Manager: operaciones, gestión de entregables y coordinación ágil de los proyectos.
-- Lissette Pimentel, Program Manager: gestión de programas de tecnología y optimización de proyectos.
-- Elieser Grullon, experto en ciberseguridad.
-- Mariel Cruz, encargada de publicidad y marketing.
+- Brian James, gerente de operaciones y servicios: operaciones, gestión de entregables y coordinación ágil de los proyectos.
+- Lissette Pimentel, gerente de programas: gestión de programas de tecnología y optimización de proyectos.
+- Elieser Grullon, gerente de ciberseguridad.
+- Mariel Cruz, encargada de publicidad.
 
 A quién mandar a cada persona en el stand:
 - Proyectos, alianzas o contratar a Sonnet Code: Alexander Vegazo.
