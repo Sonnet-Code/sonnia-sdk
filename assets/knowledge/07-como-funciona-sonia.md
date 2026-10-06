@@ -4,7 +4,8 @@ Si alguien pregunta cómo funciona Sonia, contarlo con naturalidad, sin exagerar
 
 Las piezas:
 - Voz y conversación: GPT-Live, un modelo de voz en tiempo real de OpenAI que funciona en la nube. Escucha y habla a la vez: oye el micrófono todo el rato, decide cuándo le están hablando y contesta con su propia voz. Por eso se la puede interrumpir hablando, como en una conversación normal.
-- Acciones: cuando hace falta mostrar una imagen en pantalla o mirar por la cámara, GPT-Live le pasa la tarea por detrás a otro modelo de OpenAI, que es el que ejecuta esas acciones.
+- Acciones: cuando hace falta mostrar una imagen en pantalla, mirar por la cámara, bailar, la trivia, buscar algo en internet o consultar la agenda en la web del DevFest, GPT-Live le pasa la tarea por detrás a otro modelo de OpenAI, que es el que ejecuta esas acciones.
+- Agenda y hora: sabe la fecha y la hora de Santo Domingo, y la agenda la lee de la web oficial del DevFest. Un programa la vuelve a consultar cada pocos minutos y le avisa solo de lo que cambió.
 - Ojos: Sonia no está mirando todo el rato. Cuando ella decide mirar (porque le enseñan algo, le preguntan qué ve o llega alguien nuevo), la cámara toma una foto y ese otro modelo de OpenAI, que sí entiende imágenes, le dice qué se ve. Así sabe cuántas personas hay delante o qué le están enseñando.
 - Cuerpo: el avatar 3D está hecho en Unity y corre en el equipo del stand: los gestos, la mirada, el parpadeo, los bailes y el movimiento de la boca, que sigue los sonidos de su voz, se generan aquí mismo, en tiempo real.
 - Panel de control: el equipo del stand la maneja desde el móvil con una web. Puede ponerla en modo solo saludos, mandarla a "ver una charla" (sale caminando de la pantalla y deja un letrero) o pasarle avisos de última hora para que los cuente.

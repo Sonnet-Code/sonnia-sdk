@@ -22,6 +22,7 @@ from sonia.persona import SYSTEM_PROMPT, KnowledgeSource, host_of, is_local_host
 
 __all__ = [
     "CAMERA_NOTE_PREFIX",
+    "CLOCK_NOTE_PREFIX",
     "LIVE_RULES",
     "build_backend_instructions",
     "build_live_instructions",
@@ -34,26 +35,39 @@ __all__ = [
 #: Prefijo de las notas silenciosas con lo que ve la cámara.
 CAMERA_NOTE_PREFIX = "[Cámara]"
 
+#: Prefijo de las notas silenciosas con la hora (al empezar a hablar alguien).
+CLOCK_NOTE_PREFIX = "[Reloj]"
+
 LIVE_RULES = """\
 CÓMO FUNCIONAS (voz a voz en tiempo real):
 - Oyes directamente al visitante y hablas con tu propia voz. Habla siempre en español, con registro caribeño natural, salvo que te pidan otro idioma.
 - Pronuncia "Sonnet Code" como en inglés (sónet cóud) y "DevFest" como "dev fest".
 {setting_rule}
-- Usa asentimientos breves ("ajá", "claro") con moderación y sin pisar al visitante. Si te interrumpe, para enseguida y escucha.
+- Sabes la fecha y la hora: te las da la sección "FECHA Y HORA" y, después, las notas internas "[Reloj]" (manda la más reciente). Úsalas si te preguntan qué día o qué hora es, cuánto falta para el DevFest o qué charla toca; no supongas que hoy es un día del evento sin mirar la fecha. No leas las notas en voz alta ni digas que te llegan.
 - Si un nombre, una fecha o un dato importante no se entendió bien, pregunta justo esa parte.
 {camera_rule}
 - Si te indican que un visitante te ha escrito algo en la pantalla, respóndele en voz alta igual que si te lo hubiera dicho.
+{trivia_rule}
+Backchannel policy: Usa asentimientos breves ("ajá", "claro") con moderación, sin pisar al visitante ni competir con tu respuesta.
 
-Política de delegación:
-Tu backend tiene estas capacidades:
+Interruption policy: Si el visitante te interrumpe, para enseguida y escucha lo que te diga.
+
+Delegation policy:
+Backend tools:
 {capabilities}
-Delega en el backend cuando:
-- Quieras mostrar o retirar una imagen en tu pantalla. Cuando hables de Sonnet Code, enseña su logo; cuando cambies de tema, retíralo.
-{look_when}{moves_when}{trivia_when}- La pregunta necesite razonar con cuidado y la respuesta no esté clara en tu base de conocimiento.
-No delegues cuando:
+
+Delegate to the backend when:
+- Quieras enseñar o retirar una imagen en tu pantalla. Cuando hables de Sonnet Code, enseña su logo; cuando cambies de tema, retíralo.
+{look_when}{moves_when}{trivia_when}{agenda_when}{search_when}- La pregunta necesite razonar con cuidado y la respuesta no esté clara en tu base de conocimiento.
+- Una corrección cambie lo que ya le pediste al backend.
+
+Do not delegate to the backend when:
 {no_delegate_chat}
-- Solo hace falta una aclaración breve.
-Mientras el backend trabaja, di algo breve y natural ("mira, te lo enseño", "déjame ver") y no inventes el resultado."""
+- Puedas responder con la conversación o con un resultado del backend que siga valiendo.
+- Solo haga falta una aclaración breve para entender lo que piden.
+
+Delegate before giving an answer that depends on backend work.
+Do not guess the result while waiting. Mientras el backend trabaja, di algo breve y natural ("mira, te lo enseño", "déjame ver")."""
 
 _CAPABILITIES = {
     "show_image": (
@@ -77,25 +91,54 @@ _CAPABILITIES = {
     "trivia_next": "- Trivia: poner la siguiente pregunta cuando el visitante la pide.",
     "restart_trivia": "- Reiniciar la trivia: una partida nueva desde la primera pregunta.",
     "stop_trivia": "- Terminar la trivia en curso.",
+    "check_agenda": (
+        "- Agenda: consultar ahora la agenda oficial en la web del DevFest y decirte qué ha "
+        "cambiado, qué hay ahora y qué viene."
+    ),
 }
+
+#: La búsqueda en internet no es una acción del registro: es la herramienta
+#: ``web_search`` de la API Responses, que ejecuta OpenAI.
+_SEARCH_CAPABILITY = (
+    "- Buscar en internet: consultar en la web algo que no está en tu base de conocimiento."
+)
 
 #: Cuándo delegar un movimiento (``play_animation``).
 _MOVES_WHEN = (
-    "- Te pidan que bailes, saludes o hagas un gesto («¡baila!», «haz la de la paz»). Hazlo "
-    "con gusto y acompáñalo con una frase corta; no lo describas. No te muevas por tu cuenta "
-    "a cada rato: solo cuando te lo pidan o al celebrar algo.\n"
+    "- Te pidan bailar, saludar o hacer un gesto («¡baila!», «hazme un bailecito», «haz la de "
+    "la paz»): delégalo en ese mismo turno, sin preguntar, y acompáñalo con una frase corta. "
+    "No te muevas por tu cuenta a cada rato: solo cuando te lo pidan o al celebrar algo.\n"
 )
 
-#: Cuándo delegar la trivia (solo si el backend tiene la acción).
+#: Cómo va la trivia (solo si el backend tiene la acción). Es conversación, no delegación.
+_TRIVIA_RULE = (
+    "- Trivia: para jugar hay que seguir a Sonnet Code en Instagram y LinkedIn (@sonnetcode). "
+    "Si alguien quiere jugar, pregúntale si ya las sigue (si no, que escanee el QR de la "
+    "pantalla, que se esconde durante la trivia; no puedes comprobarlo: créele) y qué nivel "
+    "quiere: fácil, intermedio o difícil. Las preguntas, sus opciones y la tarjeta de la "
+    "pantalla salen del backend: nunca te inventes ni digas una pregunta que no te haya dado. "
+    "Si alguien no sabe qué preguntarte, puedes proponerle la trivia.\n"
+)
+
+#: Cuándo delegar la trivia.
 _TRIVIA_WHEN = (
-    "- El visitante quiera jugar a la trivia (por ejemplo «¿jugamos a la trivia?»), elija una "
-    "opción en mitad de una, pida la siguiente pregunta, quiera empezarla otra vez desde cero o "
-    "quiera dejar de jugar. Para participar hay que seguir a Sonnet Code en Instagram y "
-    "LinkedIn (@sonnetcode): es el requisito. Antes de empezar, pregúntale si ya las sigue; si "
-    "no, pídele que escanee el QR de la pantalla y las siga, y empieza cuando te diga que ya "
-    "está (el QR se esconde durante la trivia). No puedes comprobarlo: créele. Pregúntale "
-    "también el nivel (fácil, intermedio o difícil). Si alguien no sabe qué preguntarte, puedes "
-    "proponerle la trivia.\n"
+    "- El visitante ya te dijo que sigue a Sonnet Code y el nivel: empieza la trivia con ese "
+    "nivel. También cuando elija una opción («la B», «Kotlin»), pida la siguiente pregunta, "
+    "quiera empezar otra desde cero o quiera dejar de jugar.\n"
+)
+
+#: Cuándo consultar la agenda en la web (``check_agenda``).
+_AGENDA_WHEN = (
+    "- Te pregunten si ha cambiado algo de la agenda, quieran confirmar una charla, una hora o "
+    "una sala, o no tengas claro qué hay ahora o qué viene.\n"
+)
+
+#: Cuándo buscar en internet (``web_search`` del backend).
+_SEARCH_WHEN = (
+    "- Te pregunten algo que no está en tu base de conocimiento y se puede buscar en internet "
+    "(una noticia, el tiempo, un dato de una empresa, una tecnología, un evento o una persona "
+    "pública): búscalo antes de decir que no lo sabes. Nunca busques datos de visitantes ni de "
+    "particulares.\n"
 )
 
 #: Cómo le llega a Sonia lo que ve la cámara (ver :func:`camera_mode`).
@@ -220,7 +263,7 @@ Reglas:
 - No saludes ni te presentes: Sonia ya está hablando con el visitante.
 - Para mostrar imágenes usa solo los ids exactos de la galería, o "camera" para la última foto de la cámara.
 - Si miras por la cámara, describe solo lo útil para conversar: cuántas personas hay, ropa y colores, gafas, gorras, gafetes, logos o textos legibles, y objetos que estén enseñando. Nunca hables del cuerpo, el peso, la edad o la piel, ni supongas origen, género o profesión.
-- Usa solo los datos de la base de conocimiento. Si algo no está, dilo; nunca inventes datos, cifras ni nombres.
+- Usa solo los datos de la base de conocimiento y de tus herramientas. Si algo no está, dilo; nunca inventes datos, cifras ni nombres.
 - Si el resultado de una herramienta empieza por "PARA SONIA:", devuelve todo lo que sigue tal cual, entero y sin resumir: es el guion de Sonia (por ejemplo, la pregunta de la trivia con sus opciones, que ella no lee en voz alta)."""
 
 
@@ -261,6 +304,11 @@ def describe_live_stack(settings: Settings, *, action_names: list[str] | None = 
             f"Ojos: {origin}; cuando alguien empieza a hablarte, el modelo {settings.llm.model} "
             f"({where}) describe la foto y te llega como nota [Cámara]. Las fotos no se guardan."
         )
+    if live.backend_web_search:
+        lines.append(
+            f"Búsqueda en internet: tu backend ({live.backend_model}) puede buscar en la web "
+            "con la búsqueda de OpenAI cuando le pides un dato que no sabes."
+        )
     lines.append("Cuerpo: un avatar 3D en Unity que corre en el equipo del stand.")
     machine = f"{platform.system()} {platform.machine()}".strip()
     lines.append(f"Equipo: {machine}, nombre {platform.node() or 'desconocido'}.")
@@ -280,6 +328,60 @@ def describe_live_stack(settings: Settings, *, action_names: list[str] | None = 
     )
 
 
+def _clock_section(clock_text: str) -> str:
+    return (
+        f'FECHA Y HORA (al empezar esta conversación): {clock_text}. Las notas "[Reloj]" '
+        "te la actualizan."
+    )
+
+
+#: Lo que el backend solo hace si se le delega, con su nombre para el recordatorio.
+_BACKEND_DOES = {
+    "show_image": "enseñar o retirar imágenes",
+    "look": "mirar por la cámara",
+    "play_animation": "bailar o hacer un gesto",
+    "start_trivia": "la trivia (empezarla, registrar respuestas y pasar de pregunta)",
+    "check_agenda": "consultar la agenda en la web",
+}
+
+
+def _reminder_section(names: list[str], *, web_search: bool) -> str:
+    """Recordatorio de delegación al final de todo, que es lo que el modelo lee más cerca.
+
+    Con instrucciones largas (persona, conocimiento, agenda), GPT-Live se quedaba
+    en decir «¡ahí va el bailecito!» o en inventarse la pregunta de la trivia sin
+    delegar nada (registro del 7 de octubre de 2026).
+    """
+    things = [text for name, text in _BACKEND_DOES.items() if name in names]
+    if web_search:
+        things.append("buscar en internet")
+    if not things:
+        return ""
+    listed = ", ".join(things[:-1]) + f" y {things[-1]}" if len(things) > 1 else things[0]
+    lines = [
+        "ANTES DE CADA RESPUESTA, RECUERDA (manda sobre todo lo anterior):",
+        f"- Esto solo pasa si lo delegas en tu backend: {listed}. Delega primero y habla "
+        "después. Nunca digas que ya lo haces, que está hecho o «ahí va» sin haberlo delegado: "
+        "si no delegas, en la pantalla no pasa nada.",
+    ]
+    if "play_animation" in names:
+        lines.append(
+            "- Si te piden bailar o un gesto, delégalo en ese mismo turno. Si te dicen que no "
+            "lo hiciste, es que no lo delegaste: delégalo ahora."
+        )
+    if "start_trivia" in names:
+        lines.append(
+            "- En la trivia nunca digas preguntas ni opciones de tu cabeza: empiézala delegando "
+            "y lee la pregunta que te devuelva el backend."
+        )
+    if web_search:
+        lines.append(
+            "- Si no sabes algo y se puede buscar en internet, delega la búsqueda antes de "
+            "decir que no lo sabes."
+        )
+    return "\n".join(lines)
+
+
 def _notes_section(notes: str) -> str:
     return (
         "AVISOS DE HOY DEL EQUIPO DEL STAND (son más recientes que tu base de conocimiento; "
@@ -294,15 +396,21 @@ def build_live_instructions(
     gallery_ids: list[str],
     knowledge_dir: KnowledgeSource = None,
     notes: str = "",
+    agenda: str = "",
+    clock_text: str = "",
 ) -> str:
-    """``instructions`` de la sesión: persona, reglas de este modo, conocimiento y stack."""
+    """``instructions`` de la sesión: persona, reglas, conocimiento, agenda, stack y recordatorio."""
     names = _action_names(registry)
     mode = camera_mode(settings, names)
     meeting = in_meeting(settings) and mode != "none"
+    web_search = settings.live.backend_web_search
     capabilities = "\n".join(
-        _MEETING_LOOK_CAPABILITY if meeting and n == "look" else _CAPABILITIES[n]
-        for n in names
-        if n in _CAPABILITIES
+        [
+            _MEETING_LOOK_CAPABILITY if meeting and n == "look" else _CAPABILITIES[n]
+            for n in names
+            if n in _CAPABILITIES
+        ]
+        + ([_SEARCH_CAPABILITY] if web_search else [])
     )
     camera_rule = _CAMERA_RULE[mode]
     look_when = _LOOK_WHEN[mode]
@@ -316,10 +424,15 @@ def build_live_instructions(
         camera_rule=camera_rule,
         look_when=look_when if "look" in names else "",
         moves_when=_MOVES_WHEN if "play_animation" in names else "",
+        trivia_rule=_TRIVIA_RULE if "start_trivia" in names else "",
         trivia_when=_TRIVIA_WHEN if "start_trivia" in names else "",
+        agenda_when=_AGENDA_WHEN if "check_agenda" in names else "",
+        search_when=_SEARCH_WHEN if web_search else "",
         no_delegate_chat=_NO_DELEGATE_CHAT[mode],
     )
     parts = [SYSTEM_PROMPT, rules]
+    if clock_text:
+        parts.append(_clock_section(clock_text))
     if in_meeting(settings):
         parts.append(MEETING_SECTION)
     knowledge = load_knowledge(knowledge_dir)
@@ -328,6 +441,8 @@ def build_live_instructions(
             "BASE DE CONOCIMIENTO (son tus únicos datos verificados; lo que no esté aquí, "
             "no lo afirmes):\n\n" + knowledge
         )
+    if agenda.strip():
+        parts.append(agenda.strip())
     if notes.strip():
         parts.append(_notes_section(notes))
     if gallery_ids:
@@ -335,7 +450,21 @@ def build_live_instructions(
             "Imágenes que el backend puede mostrar en tu pantalla: " + ", ".join(gallery_ids)
         )
     parts.append(describe_live_stack(settings, action_names=names))
+    reminder = _reminder_section(names, web_search=web_search)
+    if reminder:
+        parts.append(reminder)
     return "\n\n".join(parts)
+
+
+#: Reglas del backend para buscar en internet (``web_search``).
+_BACKEND_SEARCH_RULE = (
+    "- Puedes buscar en internet cuando Sonia te pida un dato que no está en la base de "
+    "conocimiento (noticias, el tiempo, empresas, tecnologías, eventos, personas públicas). "
+    "Busca lo justo y responde con el dato en una o dos frases, diciendo de dónde sale (por "
+    "ejemplo «según la web de la ONAMET»), sin leer direcciones web. Para lo del DevFest manda "
+    "la base de conocimiento y la agenda. No busques datos personales de visitantes ni de "
+    "particulares: di que eso no lo buscas."
+)
 
 
 def build_backend_instructions(
@@ -344,16 +473,47 @@ def build_backend_instructions(
     knowledge_dir: KnowledgeSource = None,
     notes: str = "",
     meeting: bool = False,
+    agenda: str = "",
+    clock_text: str = "",
+    web_search: bool = False,
 ) -> str:
-    """Instrucciones del backend Responses: reglas, galería y conocimiento."""
-    parts = [BACKEND_PROMPT + ("\n" + _MEETING_BACKEND_RULE if meeting else "")]
+    """Instrucciones del backend Responses: reglas, galería, conocimiento y agenda."""
+    rules = BACKEND_PROMPT
+    if meeting:
+        rules += "\n" + _MEETING_BACKEND_RULE
+    if web_search:
+        rules += "\n" + _BACKEND_SEARCH_RULE
+    parts = [rules]
+    if clock_text:
+        parts.append(
+            f"Fecha y hora al empezar la conversación: {clock_text}. Si la tarea trae una hora "
+            "más reciente, manda esa."
+        )
     parts.append("Imágenes de la galería (ids exactos): " + (", ".join(gallery_ids) or "ninguna"))
     knowledge = load_knowledge(knowledge_dir)
     if knowledge:
         parts.append("BASE DE CONOCIMIENTO:\n\n" + knowledge)
+    if agenda.strip():
+        parts.append(agenda.strip())
     if notes.strip():
         parts.append(_notes_section(notes))
     return "\n\n".join(parts)
+
+
+def _web_search_tool(settings: Settings) -> dict[str, Any]:
+    """La herramienta ``web_search`` de la API Responses, situada en el stand."""
+    live = settings.live
+    location: dict[str, Any] = {"type": "approximate"}
+    if live.backend_web_search_country.strip():
+        location["country"] = live.backend_web_search_country.strip().upper()
+    if live.backend_web_search_city.strip():
+        location["city"] = live.backend_web_search_city.strip()
+    if settings.timezone.strip():
+        location["timezone"] = settings.timezone.strip()
+    tool: dict[str, Any] = {"type": "web_search", "user_location": location}
+    if live.backend_web_search_context.strip() in ("low", "medium", "high"):
+        tool["search_context_size"] = live.backend_web_search_context.strip()
+    return tool
 
 
 def build_session_config(
@@ -363,6 +523,8 @@ def build_session_config(
     gallery_ids: list[str],
     knowledge_dir: KnowledgeSource = None,
     notes: str = "",
+    agenda: str = "",
+    clock_text: str = "",
 ) -> dict[str, Any]:
     """El objeto ``session`` de ``session.start``.
 
@@ -377,10 +539,15 @@ def build_session_config(
             knowledge_dir=knowledge_dir,
             notes=notes,
             meeting=in_meeting(settings),
+            agenda=agenda,
+            clock_text=clock_text,
+            web_search=live.backend_web_search,
         ),
         "max_output_tokens": max(16, live.backend_max_output_tokens),
     }
     tools = registry.to_responses_tools() if registry is not None and len(registry) else []
+    if live.backend_web_search:
+        tools.append(_web_search_tool(settings))
     if tools:
         responses["tools"] = tools
         responses["tool_choice"] = "auto"
@@ -399,6 +566,8 @@ def build_session_config(
             gallery_ids=gallery_ids,
             knowledge_dir=knowledge_dir,
             notes=notes,
+            agenda=agenda,
+            clock_text=clock_text,
         ),
         "audio": {
             "format": {"type": "audio/pcm", "rate": int(live.sample_rate)},

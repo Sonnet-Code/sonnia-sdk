@@ -24,6 +24,8 @@ import pytest
 import sonia.live.engine as engine_module
 import sonia.live.oneshot as oneshot_module
 from sonia.actions import build_default_registry
+from sonia.agenda import AgendaBook
+from sonia.clock import Clock
 from sonia.config import (
     AudioSettings,
     LiveSettings,
@@ -51,6 +53,11 @@ RATE = 24_000
 # ---------------------------------------------------------------------------
 # Servidor GPT-Live falso
 # ---------------------------------------------------------------------------
+
+
+def tool_names(tools: list[dict[str, Any]]) -> list[str]:
+    """Nombres de las herramientas del backend (las integradas, como ``web_search``, por tipo)."""
+    return [str(t.get("name") or t["type"]) for t in tools]
 
 
 def pcm(samples: int, value: int = 1000) -> bytes:
@@ -319,6 +326,8 @@ async def make_rig(
     showcase: Showcase | None = None,
     trivia: bool = False,
     gestures: Callable[[Hub], GestureDirector] | None = None,
+    agenda: AgendaBook | None = None,
+    clock: Clock | None = None,
     **settings_overrides: Any,
 ) -> AsyncIterator[LiveRig]:
     from websockets.asyncio.client import connect
@@ -329,7 +338,9 @@ async def make_rig(
     knowledge.mkdir(exist_ok=True)
     (knowledge / "01-evento.md").write_text("El DevFest es el 9 y 10 de octubre.", encoding="utf-8")
     policy = VisionPolicy(settings.vision, settings.llm.supports_vision)
-    registry = build_default_registry(include_look=policy.enabled, include_trivia=trivia)
+    registry = build_default_registry(
+        include_look=policy.enabled, include_trivia=trivia, include_agenda=agenda is not None
+    )
     hub = Hub(settings.ws, sample_rate=settings.live.sample_rate)
     async with running(server) as live_connect, hub:
         engine = LiveEngine(
@@ -343,6 +354,8 @@ async def make_rig(
             connect=live_connect,
             knowledge_dir=knowledge,
             gestures=gestures(hub) if gestures is not None else None,
+            agenda=agenda,
+            clock=clock,
             tick_s=0.02,
         )
         async with connect(f"ws://127.0.0.1:{hub.port}/") as client:
@@ -393,12 +406,14 @@ async def test_session_start_lleva_modelo_voz_formato_y_acciones(tmp_path: Path)
         assert backend["reasoning"] == {"effort": "low"}
         assert "service_tier" not in backend
         # Sin cámara no se anuncia ``look``; las funciones van planas (API Responses).
-        assert [t["name"] for t in backend["tools"]] == [
+        assert tool_names(backend["tools"]) == [
             "show_image",
             "hide_image",
             "play_animation",
+            "web_search",
         ]
-        assert all(t["type"] == "function" and "function" not in t for t in backend["tools"])
+        functions = [t for t in backend["tools"] if t["type"] == "function"]
+        assert all("function" not in t for t in functions) and len(functions) == 3
         instructions = session["instructions"]
         assert "Eres Sonia" in instructions
         assert "CÓMO FUNCIONAS (voz a voz en tiempo real)" in instructions
@@ -423,11 +438,12 @@ def test_session_config_respeta_los_opcionales(tmp_path: Path) -> None:
     assert backend["parallel_tool_calls"] is False
     assert "logo-sonnet" in backend["instructions"]
     assert config["audio"]["output"]["voice"] == "cedar"
-    assert [t["name"] for t in backend["tools"]] == [
+    assert tool_names(backend["tools"]) == [
         "look",
         "show_image",
         "hide_image",
         "play_animation",
+        "web_search",
     ]
     assert "Mirar: tomar una foto nueva" in config["instructions"]
 
@@ -472,7 +488,7 @@ def test_las_reglas_piden_parar_si_la_interrumpen(tmp_path: Path) -> None:
     instructions = build_session_config(make_settings(tmp_path), registry=registry, gallery_ids=[])[
         "instructions"
     ]
-    assert "Si te interrumpe, para enseguida" in instructions
+    assert "Interruption policy: Si el visitante te interrumpe, para enseguida" in instructions
 
 
 def test_el_stack_de_live_dice_que_la_voz_va_en_la_nube(tmp_path: Path) -> None:
@@ -789,7 +805,7 @@ async def test_look_devuelve_la_foto_al_backend(tmp_path: Path) -> None:
     async with make_rig(tmp_path, camera=camera, vision_source="opencv") as rig:
         conn = await rig.conn()
         tools = conn.start["session"]["delegation"]["responses"]["tools"]
-        assert "look" in [t["name"] for t in tools]
+        assert "look" in tool_names(tools)
         await conn.response_event(
             {
                 "type": "response.output_item.done",
@@ -894,9 +910,10 @@ async def test_por_defecto_solo_mira_cuando_sonia_lo_decide(
         )
         await asyncio.sleep(0.2)
         assert camera.captures == 0
-        assert conn.of_type("session.thinking.append") == []
+        notes = [m["content"] for m in conn.of_type("session.thinking.append")]
+        assert not [n for n in notes if n.startswith("[Cámara]")]
         instructions = conn.start["session"]["instructions"]
-        tools = [tool["name"] for tool in conn.start["session"]["delegation"]["responses"]["tools"]]
+        tools = tool_names(conn.start["session"]["delegation"]["responses"]["tools"])
     assert "look" in tools
     assert "No ves nada por tu cuenta" in instructions
     assert "notas internas que empiezan por" not in instructions
@@ -1255,7 +1272,7 @@ async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
         rig.settings.trivia.final_wait_seconds = 0.2
         conn = await rig.conn()
         backend = conn.start["session"]["delegation"]["responses"]
-        assert [t["name"] for t in backend["tools"]] == [
+        assert tool_names(backend["tools"]) == [
             "show_image",
             "hide_image",
             "play_animation",
@@ -1264,9 +1281,10 @@ async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
             "trivia_next",
             "restart_trivia",
             "stop_trivia",
+            "web_search",
         ]
         assert "PARA SONIA:" in backend["instructions"]
-        assert "jugar a la trivia" in conn.start["session"]["instructions"]
+        assert "Trivia: para jugar hay que seguir" in conn.start["session"]["instructions"]
 
         # «¿Jugamos a la trivia?»: GPT-Live delega y el backend llama a start_trivia.
         script = await _backend_call(conn, "c1", "start_trivia", {})
@@ -1341,7 +1359,7 @@ async def test_la_trivia_se_cancela_si_se_cae_la_sesion(tmp_path: Path) -> None:
 async def test_baila_cuando_se_lo_piden(tmp_path: Path) -> None:
     async with make_rig(tmp_path) as rig:
         conn = await rig.conn()
-        assert "Te pidan que bailes" in conn.start["session"]["instructions"]
+        assert "Te pidan bailar" in conn.start["session"]["instructions"]
         # Antes de que Unity mande su catálogo no hay movimientos.
         script = await _backend_call(conn, "m1", "play_animation", {"movimiento": "bailar"})
         assert "no puedes moverte" in script

@@ -6,7 +6,7 @@
 - Lugar: Biblioteca Nacional Pedro Henríquez Ureña, calle César Nicolás Penson número 91, Plaza de la Cultura, Santo Domingo, Distrito Nacional.
 - Temas principales: conferencias de tecnología, inteligencia artificial, Google Cloud, desarrollo móvil y web, y comunidad.
 - Entradas: se compran en festiva.do (buscar "devfest"). Hay tres tipos: Regular (acceso a los dos días y swag del evento), VIP (acceso a los dos días, kit de swag premium, prioridad de networking con reclutadores, acceso al pre-party y al after-party, y prioridad en los talleres) y Estudiante (beneficios de Regular presentando carné de estudiante vigente). Los precios exactos están por confirmar: Sonia debe remitir a festiva.do o al punto de registro.
-- Convocatoria de ponentes (call for speakers): se hizo a través de paperdeck.io. La agenda de charlas, workshops y ponentes está en el archivo «Agenda del DevFest Santo Domingo 2026» de esta base de conocimiento y en devfest.gdgsantodomingo.org/schedule; si cambia algo a última hora, manda lo que digan en el punto de registro.
+- Convocatoria de ponentes (call for speakers): se hizo a través de paperdeck.io. La agenda de charlas, workshops y ponentes está en la sección «AGENDA DEL DEVFEST», sacada de devfest.gdgsantodomingo.org/schedule; si cambia algo a última hora, manda lo que digan en el punto de registro.
 - Organizadores del GDG Santo Domingo: Alberto Castillo Aroca (organizador del GDG, ingeniero de despliegue), Eury Pérez (desarrollador Android senior) y Juana Casique (formadora técnica de Google Cloud e inteligencia artificial).
 - Redes: Instagram @gdgsantodomingo y la página de GDG Santo Domingo en LinkedIn.
 - Sonnet Code participa con un stand, que es donde está Sonia.

@@ -1,5 +1,7 @@
 """Acciones integradas: `look`, `show_image`, `hide_image` y `play_animation`.
 
+Las de la trivia y `check_agenda` viven en sus módulos y se registran aquí.
+
 Los textos que devuelven vuelven al modelo como resultado de la tool call, así
 que son cortos y en español: el modelo los usa para decidir qué decir en voz.
 Ninguna acción lanza; los problemas se cuentan en el texto.
@@ -181,7 +183,7 @@ HIDE_IMAGE = ActionSpec(
 
 
 def build_default_registry(
-    *, include_look: bool = True, include_trivia: bool = False
+    *, include_look: bool = True, include_trivia: bool = False, include_agenda: bool = False
 ) -> ActionRegistry:
     """Registro con las acciones integradas.
 
@@ -190,8 +192,10 @@ def build_default_registry(
     ``play_animation`` (bailes y gestos por voz, :mod:`sonia.actions.moves`) va siempre.
     ``include_trivia`` anuncia ``start_trivia``, ``trivia_answer``, ``trivia_next``,
     ``restart_trivia`` y ``stop_trivia`` cuando hay banco de preguntas
-    (``assets/trivia/preguntas.md``).
+    (``assets/trivia/preguntas.md``). ``include_agenda`` anuncia ``check_agenda``
+    (:mod:`sonia.actions.agenda`) cuando hay agenda del evento.
     """
+    from sonia.actions.agenda import CHECK_AGENDA
     from sonia.actions.moves import PLAY_ANIMATION
     from sonia.actions.trivia import (
         RESTART_TRIVIA,
@@ -213,4 +217,6 @@ def build_default_registry(
         registry.register(TRIVIA_NEXT)
         registry.register(RESTART_TRIVIA)
         registry.register(STOP_TRIVIA)
+    if include_agenda:
+        registry.register(CHECK_AGENDA)
     return registry

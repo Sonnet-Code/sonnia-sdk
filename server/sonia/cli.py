@@ -33,7 +33,9 @@ from typing import Any
 from sonia import __version__
 from sonia.actions import Gallery, build_default_registry
 from sonia.actions.registry import ActionRegistry
+from sonia.agenda import AgendaBook
 from sonia.audio.capture import list_input_devices, resolve_input_device
+from sonia.clock import resolve_timezone
 from sonia.config import Settings, is_gemini_url, is_openai_url, load_settings
 from sonia.gestures.director import GestureDirector
 from sonia.guest.link import FrameGrabber
@@ -316,6 +318,8 @@ class Components:
     #: Modelo que elige los gestos al hablar (``GESTURE_*``) y el director que lo usa.
     gesture_llm: LLMClient | None = None
     gestures: GestureDirector | None = None
+    #: Agenda del evento leída de su web (``sonia.agenda``), si hay de dónde sacarla.
+    agenda: AgendaBook | None = None
 
     def action_context(self) -> ActionContext:
         return ActionContext(
@@ -345,8 +349,11 @@ def build_components(
         vision = vision.model_copy(update={"source": "none"})
     camera = build_camera(vision, request_frame, has_clients=lambda: hub.client_count > 0)
     policy = VisionPolicy(vision, _vision_model_ready(settings))
+    agenda = build_agenda(settings)
     registry = build_default_registry(
-        include_look=policy.enabled, include_trivia=_trivia_ready(settings)
+        include_look=policy.enabled,
+        include_trivia=_trivia_ready(settings),
+        include_agenda=agenda is not None,
     )
     llm = LLMClient(settings.llm) if policy.enabled else None
     gesture_llm: LLMClient | None = None
@@ -369,6 +376,20 @@ def build_components(
         narrator=VisionNarrator(llm) if llm is not None else None,
         gesture_llm=gesture_llm,
         gestures=gestures,
+        agenda=agenda,
+    )
+
+
+def build_agenda(settings: Settings) -> AgendaBook | None:
+    """La agenda en vivo (docs/agenda.md): la web, la última guardada o la copia de la app."""
+    cfg = settings.agenda
+    saved = Path(cfg.cache_file).is_file() or settings.agenda_fallback_file.is_file()
+    if not cfg.enabled and not saved:
+        return None
+    return AgendaBook(
+        cfg,
+        tz=resolve_timezone(settings.timezone),
+        fallback_file=settings.agenda_fallback_file,
     )
 
 
@@ -689,6 +710,7 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
         voice_cache=voice_cache,
         knowledge_dir=settings.knowledge_dirs,
         gestures=components.gestures,
+        agenda=components.agenda,
     )
 
     tasks: list[asyncio.Task[None]] = []
@@ -746,6 +768,7 @@ async def cmd_chat(settings: Settings, *, speak: bool = False) -> int:
         vision_policy=components.policy,
         narrator=None,
         knowledge_dir=settings.knowledge_dirs,
+        agenda=components.agenda,
     )
     tap.playback_done = engine.notify_playback_done
 

@@ -1,0 +1,742 @@
+{
+ "fetched_at": "2026-10-06T19:05:00-04:00",
+ "url": "https://devfest.gdgsantodomingo.org/schedule",
+ "rooms": [
+  {
+   "name": "Salón Principal",
+   "track": "Track 1",
+   "kind": "talks"
+  },
+  {
+   "name": "Salón B",
+   "track": "Track 2",
+   "kind": "talks"
+  },
+  {
+   "name": "Laboratorio",
+   "track": "Workshops",
+   "kind": "workshops"
+  }
+ ],
+ "talks": [
+  {
+   "id": "42b72450-6ee3-4c29-9cbf-1067fbdb3bee",
+   "title": "APERTURA",
+   "starts_at": "2026-10-09T13:15:00+00:00",
+   "ends_at": "2026-10-09T13:35:00+00:00",
+   "kind": "break",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [],
+   "language": "es",
+   "icon": ""
+  },
+  {
+   "id": "4b304903-f157-463a-8471-1ae3e892ef57",
+   "title": "KEYNOTE",
+   "starts_at": "2026-10-09T13:35:00+00:00",
+   "ends_at": "2026-10-09T14:20:00+00:00",
+   "kind": "keynote",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [],
+   "language": "es",
+   "icon": ""
+  },
+  {
+   "id": "4dac2336-7ba6-4cb8-86e9-56cdbb0f4f1d",
+   "title": "BREAK",
+   "starts_at": "2026-10-09T14:20:00+00:00",
+   "ends_at": "2026-10-09T14:35:00+00:00",
+   "kind": "break",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [],
+   "language": "es",
+   "icon": "☕"
+  },
+  {
+   "id": "19e2ec25-2357-434b-b0cb-a7aa2eb24e07",
+   "title": "Como correr una Infrastructura global de blockchain sin perder la cabeza ni tu presupuesto",
+   "starts_at": "2026-10-09T14:40:00+00:00",
+   "ends_at": "2026-10-09T15:20:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Lowell Abbott",
+   "speaker_title": "Co-Founder nodefleet.net",
+   "topics": [
+    "Cloud",
+    "Blockchain",
+    "DevOps"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "8fad6158-2f9b-43dc-ab5a-c6e3d5529fb8",
+   "title": "La interfaz es opcional: construyendo automatizaciones empresariales con agentes de IA",
+   "starts_at": "2026-10-09T14:40:00+00:00",
+   "ends_at": "2026-10-09T15:20:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Wagner Luciano",
+   "speaker_title": "CEO | Founder | Software Architect | AI & Logistics Technology Strategist",
+   "topics": [
+    "AI/ML",
+    "Producto & Startups"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "f7b8c9ab-72ba-471e-bf27-eacc801ee900",
+   "title": "Gemma 4 & the Open-Source AI Revolution",
+   "starts_at": "2026-10-09T14:40:00+00:00",
+   "ends_at": "2026-10-09T16:05:00+00:00",
+   "kind": "workshop",
+   "plenary": false,
+   "room": "Laboratorio",
+   "speaker": "Carlos Alarcón",
+   "speaker_title": "CTO en Quix | GDE | MVP | Youtuber",
+   "topics": [
+    "AI/ML"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "bc2af853-9e27-4de6-828e-ffc50b222b86",
+   "title": "Compilando tu StartUp: De la Terminal al Cierre de Negocios",
+   "starts_at": "2026-10-09T15:25:00+00:00",
+   "ends_at": "2026-10-09T16:05:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "José Aquino Cepeda",
+   "speaker_title": "José M. Aquino, MSc",
+   "topics": [
+    "Producto & Startups",
+    "Carrera"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "edcdf879-bf72-4d6d-a089-4d5be21bd080",
+   "title": "Testing basado en Principios",
+   "starts_at": "2026-10-09T15:25:00+00:00",
+   "ends_at": "2026-10-09T16:05:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Victor Leonardo",
+   "speaker_title": "Director Operaciones @ Smart Testing | Especialista y Docente de Software Testing",
+   "topics": [
+    "Testing / QA"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "f96078a9-b377-460f-a0e2-6071496e6628",
+   "title": "COMIDA",
+   "starts_at": "2026-10-09T16:05:00+00:00",
+   "ends_at": "2026-10-09T17:00:00+00:00",
+   "kind": "break",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [],
+   "language": "es",
+   "icon": "🍽"
+  },
+  {
+   "id": "00543371-d2d1-45f0-90e6-cfacd4be332a",
+   "title": "De Operadora a Dev: Exportando mi Cerebro Cómo convertí 15 años de experiencia comercial en sistemas de IA.",
+   "starts_at": "2026-10-09T17:05:00+00:00",
+   "ends_at": "2026-10-09T17:45:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Maria Shrayber",
+   "speaker_title": "Founder, GTM, RevOps, Partnerships, Ecosystems",
+   "topics": [
+    "Carrera",
+    "AI/ML"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "b7d986d4-a37f-4e3f-bf06-831b1e9cf4c5",
+   "title": "Multi-Agente vs. Workflow Loops: cómo elegir el patrón de orquestación correcto en Google ADK",
+   "starts_at": "2026-10-09T17:05:00+00:00",
+   "ends_at": "2026-10-09T17:45:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Julio Quinteros P.",
+   "speaker_title": "Google Developer Expert | Especialista en IA y GCP",
+   "topics": [
+    "AI/ML"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "5c637ce6-5873-45af-90cf-ad69da95fcc7",
+   "title": "UX after the AI Apocalypse",
+   "starts_at": "2026-10-09T17:05:00+00:00",
+   "ends_at": "2026-10-09T18:30:00+00:00",
+   "kind": "workshop",
+   "plenary": false,
+   "room": "Laboratorio",
+   "speaker": "Claudio Henriquez",
+   "speaker_title": "CoFounder @ thraive.do",
+   "topics": [
+    "AI/ML",
+    "UI/UX"
+   ],
+   "language": "Inglés",
+   "icon": ""
+  },
+  {
+   "id": "58c72036-a557-48d3-ab97-d2b91c884487",
+   "title": "Full stack founder: Como la inteligencia artificial hace posible crear compañías de una persona",
+   "starts_at": "2026-10-09T17:50:00+00:00",
+   "ends_at": "2026-10-09T18:30:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Leonardo Jimenez",
+   "speaker_title": "Founder Enrankeo/Rektora",
+   "topics": [
+    "AI/ML",
+    "Producto & Startups"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "5585dbd8-cecd-4b73-b4a6-e15b76b18cf0",
+   "title": "KMP sin humo - Qué compartir, qué no, y cómo diseñar una arquitectura escalable para no morir en el intento",
+   "starts_at": "2026-10-09T17:50:00+00:00",
+   "ends_at": "2026-10-09T18:30:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Aneudy Vargas Almanzar",
+   "speaker_title": "Senior Mobile Developer",
+   "topics": [
+    "Mobile"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "bb265309-f526-4594-8d49-f8b260b8c546",
+   "title": "BREAK",
+   "starts_at": "2026-10-09T18:30:00+00:00",
+   "ends_at": "2026-10-09T18:45:00+00:00",
+   "kind": "break",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [],
+   "language": "es",
+   "icon": "☕"
+  },
+  {
+   "id": "51a62ff0-62f1-48ce-97bc-24f7b9c0c5e9",
+   "title": "Panel",
+   "starts_at": "2026-10-09T18:50:00+00:00",
+   "ends_at": "2026-10-09T19:30:00+00:00",
+   "kind": "panel",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [],
+   "language": "es",
+   "icon": ""
+  },
+  {
+   "id": "597e980c-14a4-45d7-b41f-fdb81ffbe3b6",
+   "title": "La tecnología detrás de Dominicana Tech Week",
+   "starts_at": "2026-10-09T19:35:00+00:00",
+   "ends_at": "2026-10-09T20:15:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Jorge Vargas",
+   "speaker_title": "Managing Partner Venture.do",
+   "topics": [
+    "AI/ML",
+    "Comunidad"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "aae4489a-ff4c-4831-9920-80eabe168ad3",
+   "title": "Marketing para tu SaaS - 101",
+   "starts_at": "2026-10-09T19:35:00+00:00",
+   "ends_at": "2026-10-09T20:15:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Yuri Santana",
+   "speaker_title": "Developer Relations/Engineering/Product @ Clerk",
+   "topics": [
+    "Marketing",
+    "Producto & Startups"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "0ea7b54b-7b46-4ee7-a949-3a8f1eeaa591",
+   "title": "Creando Orquestación de Agentes con Google Agent Development Kit",
+   "starts_at": "2026-10-09T19:35:00+00:00",
+   "ends_at": "2026-10-09T21:00:00+00:00",
+   "kind": "workshop",
+   "plenary": false,
+   "room": "Laboratorio",
+   "speaker": "Carmelo Cueto",
+   "speaker_title": "Arquitecto de Sistemas",
+   "topics": [
+    "AI/ML"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "293db3f0-9123-4b88-b01e-d0aeb0bea3c9",
+   "title": "Agents in Your Pipeline",
+   "starts_at": "2026-10-09T20:20:00+00:00",
+   "ends_at": "2026-10-09T21:00:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Adrian Catalan",
+   "speaker_title": "GDE y Director Innovation Lab",
+   "topics": [
+    "AI/ML",
+    "DevOps"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "dd5e210f-f363-4f9f-9210-627e8ddaa5ea",
+   "title": "Your Reputation Is Your Best Framework: Personal Branding for Tech Professionals",
+   "starts_at": "2026-10-09T20:20:00+00:00",
+   "ends_at": "2026-10-09T21:00:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Xiara Mahovy Paulino Frías",
+   "speaker_title": "Social Communication & Digital Media Specialist | Strategy & Reputation",
+   "topics": [
+    "Carrera",
+    "Comunidad"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "11f81001-4bea-418a-9a58-571a9438191e",
+   "title": "La ilusión de velocidad.",
+   "starts_at": "2026-10-10T13:00:00+00:00",
+   "ends_at": "2026-10-10T13:45:00+00:00",
+   "kind": "keynote",
+   "plenary": true,
+   "room": "",
+   "speaker": "Noe Branagan",
+   "speaker_title": "AI Babysitter",
+   "topics": [
+    "Carrera",
+    "AI/ML"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "f1e79670-8b55-4663-9a96-91b6c4d1ea86",
+   "title": "Docker AI & Go: Guía de Arquitectura para Agentes de IA (ADK)",
+   "starts_at": "2026-10-10T13:50:00+00:00",
+   "ends_at": "2026-10-10T14:30:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Victor S. Recio",
+   "speaker_title": "KubeAstronaut 🚀 | Docker Captain 🐳 | Microsoft MVP 🏆 | ☁️ Cloud & Software Architect | 🏢 ex-Microsoft | 🎓Educator & Speaker 📢",
+   "topics": [
+    "AI/ML",
+    "Cloud",
+    "DevOps"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "a8a32f63-41b3-4274-8325-267babe1c7fa",
+   "title": "Mercados de Predicción en Vivo: Desplegando un Oráculo de IA con CI/CD en Google Cloud",
+   "starts_at": "2026-10-10T13:50:00+00:00",
+   "ends_at": "2026-10-10T14:30:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Ayesha Yege",
+   "speaker_title": "Scale and Optimize Engineer - Palo Alto Networks",
+   "topics": [
+    "AI/ML",
+    "DevOps",
+    "Blockchain"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "daf92202-6157-4a0c-99a6-23608d11da4e",
+   "title": "Código que Salva Vidas: Entendiendo Google Crisis Resilience",
+   "starts_at": "2026-10-10T13:50:00+00:00",
+   "ends_at": "2026-10-10T14:30:00+00:00",
+   "kind": "workshop",
+   "plenary": false,
+   "room": "Laboratorio",
+   "speaker": "Alberto Castillo",
+   "speaker_title": "Tech Lead en Contextos de Crisis | Organizador GDG | Google Gen AI Alumni & AWS AI Early Adopter",
+   "topics": [
+    "Cloud",
+    "Comunidad",
+    "AI/ML",
+    "Data"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "7fdd2ea5-5a60-45c7-87b5-4d17a6b412e9",
+   "title": "BREAK",
+   "starts_at": "2026-10-10T14:30:00+00:00",
+   "ends_at": "2026-10-10T14:45:00+00:00",
+   "kind": "break",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [],
+   "language": "es",
+   "icon": "☕"
+  },
+  {
+   "id": "e0e4dbdb-bcea-41d1-9968-fc5056af5140",
+   "title": "Vibe Coding en producción: arquitectura, deuda técnica y escalabilidad con IA",
+   "starts_at": "2026-10-10T14:45:00+00:00",
+   "ends_at": "2026-10-10T15:25:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Edgar Garcia",
+   "speaker_title": "CTO @backsource.ai & @Caribium.ai",
+   "topics": [
+    "AI/ML",
+    "DevOps"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "6ac59e2a-4361-4b54-bc40-5b5fcebe3d74",
+   "title": "The Horse, the Harness & the Hay: AI Agents in the Real World",
+   "starts_at": "2026-10-10T14:45:00+00:00",
+   "ends_at": "2026-10-10T15:25:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Hector Terrero",
+   "speaker_title": "CEO & Co-Founder @ heva",
+   "topics": [
+    "AI/ML",
+    "Producto & Startups"
+   ],
+   "language": "Inglés",
+   "icon": ""
+  },
+  {
+   "id": "5a7d10b6-40a0-46c8-9f2f-ab398ed274a5",
+   "title": "Hack the App: Break It, Fix It, Secure It",
+   "starts_at": "2026-10-10T14:45:00+00:00",
+   "ends_at": "2026-10-10T16:10:00+00:00",
+   "kind": "workshop",
+   "plenary": false,
+   "room": "Laboratorio",
+   "speaker": "Karla Aquino",
+   "speaker_title": "Cybersecurity Manager @ Financial Sector",
+   "topics": [
+    "Seguridad",
+    "DevOps",
+    "Web"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "7dac4efa-3c83-4406-b4c3-8ff17de174fb",
+   "title": "EL CÓDIGO YA NO ES EL CUELLO DE BOTELLA Spec-Driven Development: el próximo salto de Business Agility",
+   "starts_at": "2026-10-10T15:30:00+00:00",
+   "ends_at": "2026-10-10T16:10:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Carlos Paulino",
+   "speaker_title": "CCTO & founder cobalto consulting / EraNova technologies",
+   "topics": [
+    "AI/ML",
+    "Producto & Startups"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "7501dfe7-979f-450a-9397-620101132b97",
+   "title": "Marketing as a Pipeline: Del deploy al cliente. Audiencias, funnels, ads e IA",
+   "starts_at": "2026-10-10T15:30:00+00:00",
+   "ends_at": "2026-10-10T16:10:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Daviana Nuñez",
+   "speaker_title": "Estratega de Marketing Digital / Especialista en Paid Media  @Couplemedia.marketing",
+   "topics": [
+    "Marketing",
+    "Data"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "ec5c3784-7306-4033-b2c1-3447863b0b07",
+   "title": "COMIDA",
+   "starts_at": "2026-10-10T16:10:00+00:00",
+   "ends_at": "2026-10-10T17:00:00+00:00",
+   "kind": "break",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [],
+   "language": "es",
+   "icon": "🍽"
+  },
+  {
+   "id": "169ed48b-9c30-430d-ae0e-4bc28947e9b6",
+   "title": "Engineering the Future: From Building Software to Shaping Outcomes That Matter",
+   "starts_at": "2026-10-10T17:00:00+00:00",
+   "ends_at": "2026-10-10T17:40:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Wilson Reyes",
+   "speaker_title": "Co-Founder: Caribium.ai & StriveUp.ai",
+   "topics": [
+    "Carrera",
+    "Producto & Startups"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "ff325ea8-8293-40fc-b28c-5e194e8123f0",
+   "title": "IA Local, Home Labs y Tokens “Infinitos”",
+   "starts_at": "2026-10-10T17:00:00+00:00",
+   "ends_at": "2026-10-10T17:40:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Harys Vizcaino",
+   "speaker_title": "Ingeniero en software y creador de contenido sobre IA y tecnología @harysvizcaino",
+   "topics": [
+    "AI/ML",
+    "DevOps"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "0c28268c-8de2-4fcf-9057-a553ed0dbf87",
+   "title": "MAD Skills + On-Device AI: Construyendo Apps Android Reactivas con Gemini Nano y Jetpack Compose",
+   "starts_at": "2026-10-10T17:00:00+00:00",
+   "ends_at": "2026-10-10T17:40:00+00:00",
+   "kind": "workshop",
+   "plenary": false,
+   "room": "Laboratorio",
+   "speaker": "Edgardo Panchana",
+   "speaker_title": "Desarrollo de aplicaciones móviles",
+   "topics": [
+    "Mobile",
+    "AI/ML"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "64c3ed91-ae8e-4e0b-bd7f-0d2e16bece14",
+   "title": "Una Odisea Más Allá de la IA",
+   "starts_at": "2026-10-10T17:45:00+00:00",
+   "ends_at": "2026-10-10T18:25:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Jose Elias",
+   "speaker_title": "Divulgador científico, AI Developer, empresario internacional",
+   "topics": [
+    "AI/ML"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "d23a732b-5a82-4afe-bb7f-5d71276c36b5",
+   "title": "IA rápida, UI fluida",
+   "starts_at": "2026-10-10T17:45:00+00:00",
+   "ends_at": "2026-10-10T18:25:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Vanessa Marely Aristizabal Angel",
+   "speaker_title": "Google Developer Expert en Angular y Tecnologías Web",
+   "topics": [
+    "AI/ML",
+    "UI/UX",
+    "Web"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "5fd03c21-9215-44c2-824f-91cc485df80c",
+   "title": "El Reto IA para no techies: una idea, un prototipo y tres minutos para convencer",
+   "starts_at": "2026-10-10T17:45:00+00:00",
+   "ends_at": "2026-10-10T18:35:00+00:00",
+   "kind": "workshop",
+   "plenary": false,
+   "room": "Laboratorio",
+   "speaker": "Leomaris Reyes",
+   "speaker_title": "Android Dev",
+   "topics": [
+    "AI/ML",
+    "Producto & Startups"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "fd46dbd8-1bf1-4224-a34e-82630b87257b",
+   "title": "BREAK",
+   "starts_at": "2026-10-10T18:25:00+00:00",
+   "ends_at": "2026-10-10T18:40:00+00:00",
+   "kind": "break",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [],
+   "language": "es",
+   "icon": "☕"
+  },
+  {
+   "id": "19d33bca-858d-48ca-a159-f87b1f6c2d92",
+   "title": "Tu stack humano: networking estratégico para convertir conversaciones en oportunidades reales",
+   "starts_at": "2026-10-10T18:40:00+00:00",
+   "ends_at": "2026-10-10T19:10:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón Principal",
+   "speaker": "Abel López",
+   "speaker_title": "Fundador @ Envision Innovation Labs | Estrategia, innovación y articulación de ecosistemas",
+   "topics": [
+    "Carrera",
+    "Comunidad"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "1046b6a0-bb77-4194-b2a3-dc39098345ad",
+   "title": "Building Secure AI Agents: Cómo evitar que tu LLM haga más de lo que debería",
+   "starts_at": "2026-10-10T18:40:00+00:00",
+   "ends_at": "2026-10-10T19:10:00+00:00",
+   "kind": "talk",
+   "plenary": false,
+   "room": "Salón B",
+   "speaker": "Angel Jose",
+   "speaker_title": "Cybersecurity & AI Security",
+   "topics": [
+    "AI/ML",
+    "Seguridad"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "b85fec70-74de-4af1-afc8-699add24f082",
+   "title": "Secure by Design: Piensa como un Hacker, Programa como un Ingeniero",
+   "starts_at": "2026-10-10T18:40:00+00:00",
+   "ends_at": "2026-10-10T19:10:00+00:00",
+   "kind": "workshop",
+   "plenary": false,
+   "room": "Laboratorio",
+   "speaker": "Inés María Montero Concepción",
+   "speaker_title": "Ingeniera en Sistemas | Full Stack Web Developer | Banking & Payment Systems",
+   "topics": [
+    "Seguridad",
+    "Web",
+    "DevOps"
+   ],
+   "language": "Español",
+   "icon": ""
+  },
+  {
+   "id": "2114966f-c8f0-4a57-87e1-25249be17bc7",
+   "title": "PANEL - AI",
+   "starts_at": "2026-10-10T19:15:00+00:00",
+   "ends_at": "2026-10-10T19:55:00+00:00",
+   "kind": "panel",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [
+    "AI/ML"
+   ],
+   "language": "es",
+   "icon": ""
+  },
+  {
+   "id": "876e530f-98f5-4462-b71e-8ae7399d3240",
+   "title": "CIERRE",
+   "starts_at": "2026-10-10T20:00:00+00:00",
+   "ends_at": "2026-10-10T21:00:00+00:00",
+   "kind": "break",
+   "plenary": true,
+   "room": "",
+   "speaker": "",
+   "speaker_title": "",
+   "topics": [],
+   "language": "es",
+   "icon": ""
+  }
+ ]
+}

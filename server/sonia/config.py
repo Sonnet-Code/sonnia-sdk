@@ -326,6 +326,15 @@ class LiveSettings(BaseSettings):
     backend_max_output_tokens: int = 400
     #: Rondas de acciones que se le permiten al backend por tarea delegada.
     backend_max_tool_rounds: int = 3
+    #: ``LIVE_BACKEND_WEB_SEARCH``: el backend puede buscar en internet (herramienta
+    #: ``web_search`` de la API Responses, la ejecuta OpenAI) para responder lo que no
+    #: está en la base de conocimiento. Cada búsqueda cobra aparte.
+    backend_web_search: bool = True
+    #: Cuánto contexto de la web lee cada búsqueda: ``low`` (más rápido), ``medium`` o ``high``.
+    backend_web_search_context: str = "low"
+    #: Dónde está Sonia, para que la búsqueda dé resultados locales (país ISO y ciudad).
+    backend_web_search_country: str = "DO"
+    backend_web_search_city: str = "Santo Domingo"
     #: Silencio en la voz de Sonia que cierra una frase hacia Unity.
     segment_gap_ms: int = 800
     #: Silencio en lo que transcribe del visitante que da su turno por cerrado.
@@ -400,6 +409,30 @@ class TriviaSettings(BaseSettings):
     prize_hard_win: str = "una gorra de Sonnet Code"
 
 
+class AgendaSettings(BaseSettings):
+    """Agenda del DevFest leída de su web (``sonia/agenda``, docs/agenda.md).
+
+    Se descarga al arrancar y cada ``refresh_minutes``; el código compara cada
+    versión con la anterior y le pasa a Sonia solo lo que cambió. Sin red se usa
+    la última que se bajó (``cache/agenda.json``) o la copia que trae la app.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="AGENDA_", extra="ignore", env_ignore_empty=True)
+
+    #: Página de la agenda. ``AGENDA_URL=off`` no la consulta (solo caché y copia de la app).
+    url: str = "https://devfest.gdgsantodomingo.org/schedule"
+    #: Cada cuánto se vuelve a mirar si cambió (0 = solo al arrancar y cuando Sonia lo pide).
+    refresh_minutes: float = 10.0
+    #: Tope de cada descarga: Sonia espera esto como mucho cuando la consulta ella.
+    timeout_seconds: float = 6.0
+    #: Última agenda descargada, para arrancar sin red.
+    cache_file: str = str(_HOME / "cache" / "agenda.json")
+
+    @property
+    def enabled(self) -> bool:
+        return self.url.strip().lower() not in ("", "off", "false", "0", "no")
+
+
 class PanelSettings(BaseSettings):
     """Panel de control web para el personal del stand (``docs/panel.md``)."""
 
@@ -454,9 +487,12 @@ class Settings(BaseSettings):
     showcase: ShowcaseSettings = Field(default_factory=ShowcaseSettings)
     trivia: TriviaSettings = Field(default_factory=TriviaSettings)
     panel: PanelSettings = Field(default_factory=PanelSettings)
+    agenda: AgendaSettings = Field(default_factory=AgendaSettings)
 
     assets_dir: str = str(BUNDLE_ROOT / "assets")
     log_level: str = "INFO"
+    #: ``TIMEZONE``: la hora que Sonia sabe y dice (la del stand, no la del equipo).
+    timezone: str = "America/Santo_Domingo"
     #: Reiniciar la conversación tras N segundos sin actividad (modo kiosco).
     idle_reset_seconds: float = 120.0
     #: Retirar sola una imagen mostrada tras N segundos (0 = nunca). El modelo
@@ -506,6 +542,11 @@ class Settings(BaseSettings):
         """La del stand y, si se pide, la extra (``KNOWLEDGE_EXTRA_DIR``)."""
         extra = [Path(self.knowledge_extra_dir)] if self.knowledge_extra_dir.strip() else []
         return [self.knowledge_dir, *extra]
+
+    @property
+    def agenda_fallback_file(self) -> Path:
+        """Copia de la agenda que trae la app, para cuando no hay red ni caché."""
+        return Path(self.assets_dir) / "agenda" / "agenda.json"
 
     @property
     def trivia_file(self) -> Path:

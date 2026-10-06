@@ -43,11 +43,18 @@ import numpy as np
 from sonia.actions.gallery import Gallery
 from sonia.actions.moves import MoveCatalog
 from sonia.actions.registry import ActionRegistry
+from sonia.agenda import AgendaBook, Schedule
+from sonia.clock import Clock, clock_for, place_of, resolve_timezone, spoken_now
 from sonia.config import Settings
 from sonia.gestures.director import GestureDirector
 from sonia.live.audio import NoiseGate, pcm16_from_float, rms
-from sonia.live.client import LiveClient, WsConnect, describe_error
-from sonia.live.prompts import CAMERA_NOTE_PREFIX, build_session_config, in_meeting
+from sonia.live.client import APPEND_MAX_CHARS, LiveClient, WsConnect, describe_error
+from sonia.live.prompts import (
+    CAMERA_NOTE_PREFIX,
+    CLOCK_NOTE_PREFIX,
+    build_session_config,
+    in_meeting,
+)
 from sonia.live.vision import VisionNarrator
 from sonia.live.voicecache import VoiceCache
 from sonia.persona import KnowledgeSource
@@ -126,6 +133,13 @@ NOTES_TEMPLATE = (
     "si chocan, mandan estos): {text}"
 )
 NOTES_CLEARED_TEXT = "El equipo del stand ha retirado los avisos de hoy: ya no aplican."
+
+#: Cómo se pasan los cambios de la agenda detectados durante una sesión.
+AGENDA_CHANGED_TEMPLATE = (
+    "La agenda oficial del DevFest acaba de cambiar en su web (mandan estos cambios sobre la "
+    "agenda que tienes): {changes}"
+)
+AGENDA_MORE_TEXT = " Hay más cambios: si te preguntan por otra charla, consulta la agenda."
 
 #: Nivel RMS (0..1) a partir del cual un trozo de la voz de GPT-Live es voz.
 #: GPT-Live manda audio sin parar, también cuando calla (silencio digital, 0):
@@ -221,6 +235,8 @@ class LiveEngine:
         knowledge_dir: KnowledgeSource = None,
         voice_cache: VoiceCache | None = None,
         gestures: GestureDirector | None = None,
+        agenda: AgendaBook | None = None,
+        clock: Clock | None = None,
         tick_s: float = 0.05,
     ) -> None:
         self._settings = settings
@@ -327,6 +343,18 @@ class LiveEngine:
             else None
         )
 
+        # Fecha y hora del stand (``TIMEZONE``) y agenda del evento en vivo (``sonia.agenda``).
+        tz = resolve_timezone(settings.timezone)
+        self._place = place_of(settings.timezone)
+        self._now: Clock = clock or clock_for(tz)
+        #: Última nota ``[Reloj]`` que tiene la sesión (la hora de las instrucciones al abrirla).
+        self._clock_said = ""
+        self._agenda = agenda
+        #: La agenda que se puso en las instrucciones de la sesión abierta.
+        self._session_agenda: Schedule | None = None
+        if agenda is not None:
+            agenda.on_change(self._on_agenda_change)
+
         # Movimientos por voz (``play_animation``): el catálogo lo manda Unity al conectar.
         self._moves = MoveCatalog(hub.broadcast_json)
         hub.on(p.MSG_ANIMATIONS, self._moves.update)
@@ -430,6 +458,7 @@ class LiveEngine:
             logger.warning("Texto ignorado: GPT-Live no está conectado")
             await self._hub.broadcast_json(p.msg_error("GPT-Live no está conectado"))
             return
+        await self._clock_note()
         try:
             # ``instructions.append`` no la hace hablar; ``commentary`` sí.
             await client.append_commentary(TEXT_INPUT_TEMPLATE.format(text=text))
@@ -484,6 +513,11 @@ class LiveEngine:
         )
         await self._hub.broadcast_json(p.msg_state(self._state))
         ticker = asyncio.create_task(self._tick_loop(), name="sonia-live-tick")
+        watcher: asyncio.Task[None] | None = None
+        if self._agenda is not None:
+            # La guardada entra ya en la primera sesión; la de la web, cuando llegue.
+            await self._agenda.load()
+            watcher = asyncio.create_task(self._agenda.watch(), name="sonia-agenda")
         delay = live.reconnect_min_seconds
         try:
             while True:
@@ -512,19 +546,27 @@ class LiveEngine:
                 delay = min(max(delay * 2, live.reconnect_min_seconds), live.reconnect_max_seconds)
         finally:
             ticker.cancel()
-            await asyncio.gather(ticker, return_exceptions=True)
+            if watcher is not None:
+                watcher.cancel()
+            await asyncio.gather(ticker, *([watcher] if watcher else []), return_exceptions=True)
             await self._shutdown()
 
     async def _run_session(self) -> bool:
         """Una sesión de principio a fin. Devuelve si terminó porque el motor la renovó."""
         client = LiveClient(self._live, connect=self._connect)
+        clock_text = spoken_now(self._now(), self._place)
+        agenda = self._agenda
         config = build_session_config(
             self._settings,
             registry=self._registry,
             gallery_ids=Gallery(self._settings.gallery_dir).ids(),
             knowledge_dir=self._knowledge_dir,
             notes=self._notes,
+            agenda=agenda.text() if agenda is not None else "",
+            clock_text=clock_text,
         )
+        self._session_agenda = agenda.schedule if agenda is not None else None
+        self._clock_said = clock_text
         if len(config["instructions"]) > INSTRUCTIONS_WARN_CHARS:
             logger.warning(
                 "Las instrucciones de GPT-Live ocupan %d caracteres: pueden pasar del límite de "
@@ -756,6 +798,7 @@ class LiveEngine:
             # Alguien habla: lo próximo que diga Sonia es una respuesta.
             self._ambient_expected_until = 0.0
             self._maybe_look(turn_start=True)
+            await self._clock_note()
         self._user_parts.append(delta)
         self._last_input_at = now
         self._touch()
@@ -914,7 +957,12 @@ class LiveEngine:
             avatar=self._hub,
             gallery_dir=str(self._settings.gallery_dir),
             last_frame=self._last_frame,
-            extra={"trivia": self._trivia, "moves": self._moves},
+            extra={
+                "trivia": self._trivia,
+                "moves": self._moves,
+                "agenda": self._agenda,
+                "agenda_baseline": self._session_agenda,
+            },
         )
         if self._registry is None:
             result = ActionResult(text="Error: no hay acciones disponibles.")
@@ -1375,6 +1423,52 @@ class LiveEngine:
     def touch(self) -> None:
         """Hay actividad: retrasa la animación de stand y la sesión nueva por inactividad."""
         self._touch()
+
+    async def _clock_note(self) -> None:
+        """Nota ``[Reloj]`` con la hora (y qué hay en la agenda) al empezar un turno.
+
+        Solo si cambió desde la última que tiene la sesión: como mucho una por
+        minuto y nunca con nadie callado. Va por ``thinking``: no la hace hablar.
+        """
+        client = self._client
+        if client is None:
+            return
+        clock_text = spoken_now(self._now(), self._place)
+        if clock_text == self._clock_said:
+            return
+        self._clock_said = clock_text
+        note = f"{CLOCK_NOTE_PREFIX} Ahora: {clock_text}."
+        if self._agenda is not None:
+            happening = self._agenda.happening()
+            if happening:
+                note += " " + happening
+        try:
+            await client.append_thinking(note)
+        except Exception as exc:  # noqa: BLE001 - la sesión se reconecta sola
+            logger.debug("No se pudo pasar la hora a GPT-Live: %s", exc)
+            return
+        logger.info("Nota de reloj: %s", note)
+
+    async def _on_agenda_change(self, changes: list[str]) -> None:
+        """La agenda cambió en la web: se le cuenta a la sesión abierta (las nuevas ya la traen)."""
+        client = self._client
+        if client is None or not changes:
+            return
+        budget = APPEND_MAX_CHARS - len(AGENDA_CHANGED_TEMPLATE) - len(AGENDA_MORE_TEXT)
+        shown: list[str] = []
+        for change in changes:
+            if sum(len(c) + 1 for c in shown) + len(change) > budget:
+                break
+            shown.append(change)
+        text = AGENDA_CHANGED_TEMPLATE.format(changes=" ".join(shown))
+        if len(shown) < len(changes):
+            text += AGENDA_MORE_TEXT
+        try:
+            await client.append_instructions(text)
+        except Exception as exc:  # noqa: BLE001
+            _log_stage_failure("No se pudo pasar el cambio de agenda a GPT-Live: %s", exc)
+            return
+        logger.info("Cambios de agenda pasados a GPT-Live (%d de %d)", len(shown), len(changes))
 
     async def set_notes(self, text: str) -> None:
         """Avisos del día: entran ya en la sesión y en las instrucciones de las siguientes."""

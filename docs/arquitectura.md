@@ -31,7 +31,7 @@ Comprobado con la API real el 4 de octubre de 2026; el motor depende de ello:
 ### `sonia/live`
 
 - `client.py`: `LiveClient`, WebSocket crudo contra `wss://api.openai.com/v1/live/sessions` (sin SDK). `start()` manda `session.start` y espera `session.started`; `events()` entrega los eventos del servidor; `append_audio`, `append_instructions`, `append_thinking`, `append_commentary`, `create_item` y `create_response` son los comandos; `expires_at` dice cuándo caduca la sesión; `close()` hace el cierre ordenado.
-- `prompts.py`: `build_session_config()` construye el `session` de `session.start`: modelo, voz, `audio.format`, instrucciones de la voz (la persona de `persona.py` más las reglas de este modo, la base de conocimiento de `assets/knowledge`, los avisos del día y `describe_live_stack()`, que le dice a Sonia la verdad sobre cómo funciona) y la delegación en el backend Responses con las herramientas de `ActionRegistry.to_responses_tools()`.
+- `prompts.py`: `build_session_config()` construye el `session` de `session.start`: modelo, voz, `audio.format`, instrucciones de la voz (la persona de `persona.py` más las reglas de este modo con los encabezados de la plantilla de GPT-Live, la fecha y la hora, la base de conocimiento de `assets/knowledge`, la agenda en vivo, los avisos del día, `describe_live_stack()`, que le dice a Sonia la verdad sobre cómo funciona, y un recordatorio final de delegación) y la delegación en el backend Responses con las herramientas de `ActionRegistry.to_responses_tools()` más `web_search`.
 - `engine.py`: `LiveEngine`. Reenvía el micrófono (con la puerta de ruido), convierte la voz de GPT-Live en frases para Unity (`speech_start`, frames binarios, `speech_end`, cerradas por un silencio de `LIVE_SEGMENT_GAP_MS`), reenvía las transcripciones como `transcript`, deduce los estados del avatar, ejecuta las acciones delegadas y devuelve sus resultados (`function_call_output`, la foto de `look` como `input_image`, `response.create`), describe la cámara al empezar cada turno, atiende `text_input` e `interrupt`, lanza la animación de stand, reconecta con espera creciente y renueva la sesión (caducidad, inactividad, contexto lleno). Expone a `panel` lo que necesita: activar o apagar la sesión según el modo, reproducir una frase grabada, avisos, puerta de ruido, silenciar el micro, reiniciar.
 - `vision.py`: `VisionNarrator`, una petición al modelo de visión de `LLM_*` que describe la foto en una o dos frases sin rasgos personales.
 - `audio.py`: conversión a PCM, nivel RMS, puerta de ruido (`LIVE_GATE_RMS`, con `LIVE_GATE_HOLD_MS` de cola) y silencio a tiempo real cuando no hay micrófono.
@@ -60,12 +60,20 @@ El director de gestos (`docs/gestos.md`). Un modelo de texto ligero (`GESTURE_*`
 ### `sonia/actions`
 
 - `registry.py`: `ActionRegistry` con `register(spec)`, `get(name)`, `to_responses_tools()` (las herramientas del backend Responses) y `async execute(name, args, ctx) -> ActionResult`, que valida argumentos contra el JSON Schema de forma básica (campos requeridos y tipos primitivos) y captura excepciones devolviendo un `ActionResult` con el error en texto.
-- `builtin.py`: `look`, `show_image`, `hide_image`, y `build_default_registry(include_look=..., include_trivia=...)`, que añade siempre `play_animation` y, con banco de preguntas, las acciones de la trivia (`trivia.py`).
+- `builtin.py`: `look`, `show_image`, `hide_image`, y `build_default_registry(include_look=..., include_trivia=..., include_agenda=...)`, que añade siempre `play_animation`, con banco de preguntas las acciones de la trivia (`trivia.py`) y, con agenda, `check_agenda` (`agenda.py`).
+- `agenda.py`: `check_agenda()` vuelve a leer la agenda de la web y devuelve los cambios respecto a la de la sesión y qué hay ahora (ver `sonia/agenda` y docs/agenda.md).
   - `look`: captura con `ctx.camera`; guarda en `ctx.last_frame`; devuelve `ActionResult(text="Captura tomada.", image=frame)`.
   - `show_image(image_id: str, caption?: str)`: `image_id` es un nombre de archivo sin extensión de `assets/gallery` (png/jpg) o `camera` para `ctx.last_frame`. Llama a `ctx.avatar.show_image(...)`. El motor la retira sola a los `IMAGE_AUTO_HIDE_SECONDS`.
   - `hide_image()`.
 - `moves.py`: `play_animation(movimiento)` para bailar o hacer un gesto cuando se lo piden (bailar, saludar, paz, saludo militar, pulgares arriba, celebrar, lamentarse, pensar). `MoveCatalog` guarda el catálogo que manda Unity (mensaje `animations`), elige un clip del movimiento y lo manda con `play_animation` y `whole: true`, para que suene entero aunque Sonia hable. El motor lo deja en `ctx.extra["moves"]`.
 - `gallery.py`: lista los ids disponibles y carga una imagen por id de forma segura (sin path traversal).
+
+### `sonia/agenda` y `sonia/clock.py`
+
+- `clock.py`: la hora del stand (`TIMEZONE`) y cómo se dice («19:05 (las 7:05 de la noche)»), con respaldo de UTC-4 fijo para Santo Domingo en Windows.
+- `agenda/source.py`: saca `talkRows` y `trackRows` del flujo RSC de la página de la agenda.
+- `agenda/schedule.py`: `Schedule` y `Talk`, el texto para las instrucciones (`render_agenda`), los cambios entre dos versiones en frases (`diff_agenda`) y qué hay ahora (`happening`).
+- `agenda/book.py`: `AgendaBook`, la agenda actual con su caché en disco, la consulta a la web al arrancar y cada `AGENDA_REFRESH_MINUTES` y los oyentes de cambios. El motor la arranca en `run()` y le pasa los cambios a la sesión abierta.
 
 ### `sonia/vision`
 
