@@ -55,12 +55,14 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
 
 ## 3. Sonnia
 
-- [ ] ✨ **Más gestos con las manos al hablar.** Hoy apenas mueve las manos: el set de Genies no tiene clips de hablar.
+- [ ] ✨ **Más gestos con las manos al hablar.** Hoy apenas mueve las manos: el set de Genies no tiene clips de hablar. **En pausa (6 de octubre), por decisión de Jean: se retoma después.**
+  - Respaldo ya activo (5fdd48f): gestos de manos por código en `AvatarStateController` (`handGestures`). Al empezar algunas frases, las manos suben delante del cuerpo, abiertas y con golpes en los acentos. Verificado en silencio con capturas 9:16 en la app compilada.
+  - Los gestos de verdad del chat de Genies están a medias: `docs/informe-gestos-genies.md` (12 de 48 capturados y el horneado con las piernas rotas). Los datos están en `cache/gestos-genies/`.
   - [ ] Buscar o hacer clips de hablar con manos abiertas y sin atravesar el cuerpo, y pasarlos por **Sonia > Comprobar animaciones (en Play)**.
   - [ ] Que `AvatarChoreographer` los encadene mientras habla.
   - [ ] Verificarlo con capturas 9:16 por fotogramas.
-- [x] ✨ **Bailes y animaciones por voz.** Hoy solo desde el panel (`_act_animation` en `server/sonia/panel/control.py`). **Hecho (6 de octubre): acción `play_animation` (`server/sonia/actions/moves.py`) con bailar, saludar, paz, saludo militar, pulgares arriba, celebrar, lamentarse y pensar; busca el clip en el catálogo de Unity y lo lanza entero (`whole`) aunque Sonnia hable. Falta verlo en pantalla con una conversación real.**
-  - [ ] Acción del backend, por ejemplo `play_animation`, con la lista de animaciones que manda Unity, para «¡baila!» o «saluda». Registro, handler, protocolo y Unity en el mismo commit (`CLAUDE.md`).
+- [x] ✨ **Bailes y animaciones por voz.** Hoy solo desde el panel (`_act_animation` en `server/sonia/panel/control.py`). **Hecho (6 de octubre): acción `play_animation` (`server/sonia/actions/moves.py`) con bailar, saludar, paz, saludo militar, pulgares arriba, celebrar, lamentarse y pensar; busca el clip en el catálogo de Unity y lo lanza entero (`whole`) aunque Sonnia hable. Visto en la app compilada, en silencio: el baile suena entero mientras habla. Falta probarlo con GPT-Live de verdad.**
+  - [x] Acción del backend, por ejemplo `play_animation`, con la lista de animaciones que manda Unity, para «¡baila!» o «saluda». Registro, handler, protocolo y Unity en el mismo commit (`CLAUDE.md`).
 - [x] ✨ **El staff de Sonnet Code en sus instrucciones:** Bryan (desarrollo), Mariel y Angie (diseño y marketing); Carlos no estará disponible. **Hecho (6 de octubre): equipo de sonnetcode.com/es/about más Elieser Grullon (ciberseguridad) y Mariel Cruz (publicidad), con a quién mandar a cada visitante.**
   - [ ] 🗒️ Confirmar apellidos y cargos exactos.
   - [ ] Archivo nuevo `assets/knowledge/08-equipo-sonnet-code.md`: quién es quién en el stand y a quién mandar a la gente según lo que pregunten.
@@ -72,11 +74,13 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
 
 ## 4. Builds y reparto 📦
 
-- [ ] **Recompilar todo tras los arreglos de arriba.** Las de `unity/Build/` son anteriores al arreglo de la manga y solo llevan la camiseta azul.
-  - [ ] macOS (Apple Silicon).
-  - [ ] Windows: antes, el orquestador congelado con `gh workflow run orquestador-windows.yml` y descargar el artefacto (docs/unity.md, «Build de Windows»).
-  - [ ] Mac Intel (ver bugs).
-  - [ ] Rehacer los zips de `unity/Build/`.
+- [x] **Recompilar todo tras los arreglos de arriba.** **Hecho (6 de octubre, 21:28): stand y pruebas, macOS y Windows, con los orquestadores congelados de nuevo (bailes por voz, descripción física, gestos por código, trivia arreglada, agenda y equipo reales, último avatar guardado).**
+  - [x] macOS (Apple Silicon): `unity/Build/Sonnia-macOS.zip` y `Sonnia-pruebas-macOS.zip`. Probada en silencio con el orquestador falso.
+  - [x] Windows: `unity/Build/Sonnia-Windows.zip` y `Sonnia-pruebas-Windows.zip`, con el orquestador del workflow `orquestador-windows.yml`. Sin probar en un PC de verdad.
+  - [x] Mac Intel: no se puede (ver bugs).
+  - [x] Rehacer los zips de `unity/Build/`. Las de pruebas llevan `build.env` con `PANEL_CAMERA_STREAM=false`.
+  - [ ] 🗒️ Probar la build de Windows en un PC con Windows (Jean o el equipo).
+  - [ ] 🗒️ Repartir las de pruebas por un canal privado: llevan la clave de OpenAI en el `.env`.
 
 ## Hecho el 6 de octubre
 
