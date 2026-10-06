@@ -311,6 +311,10 @@ namespace Sonia
         private bool _hidden;
         private Vector3 _restLocalPosition;
         private Quaternion _restLocalRotation = Quaternion.identity;
+        // Padre del avatar cuando se tomó su sitio: los avatares que llegan
+        // después bajo el mismo padre van a ese sitio (ver Initialize).
+        private Transform _restParent;
+        private bool _hasRest;
 
         // Eje lateral (mundo, horizontal) hacia el lado de salida, y dirección
         // horizontal hacia la cámara, que es hacia donde mira Sonia en reposo.
@@ -538,8 +542,21 @@ namespace Sonia
             }
 
             _avatar = animator.transform;
-            _restLocalPosition = _avatar.localPosition;
-            _restLocalRotation = _avatar.localRotation;
+            if (_hasRest && _avatar.parent == _restParent)
+            {
+                // Cambio de avatar: su sitio es el de siempre, no donde lo dejó el
+                // anterior. Si el anterior estaba fuera de cuadro, el nuevo copiaba
+                // esa posición como reposo y, al volver, se paraba fuera de cámara.
+                _avatar.localPosition = _restLocalPosition;
+                _avatar.localRotation = _restLocalRotation;
+            }
+            else
+            {
+                _restLocalPosition = _avatar.localPosition;
+                _restLocalRotation = _avatar.localRotation;
+                _restParent = _avatar.parent;
+                _hasRest = true;
+            }
 
             Camera view = ViewCamera();
             Vector3 cameraRight = view != null ? view.transform.right : Vector3.right;
@@ -593,6 +610,11 @@ namespace Sonia
                 _probeBones = new[] { _avatar };
             }
 
+            // Si estaba oculta (fuera) con el avatar anterior, se le devuelve la
+            // visibilidad antes de cambiar de renderers. Si no, el nuevo heredaba
+            // _hidden sin haber guardado sus estados y, al volver, se le apagaban
+            // todos: Sonia volvía a su sitio invisible (avatar cambiado estando Fuera).
+            SetHidden(false);
             _renderers = _avatar.GetComponentsInChildren<Renderer>(true);
             _rendererStates = new bool[_renderers.Length];
 
@@ -608,10 +630,13 @@ namespace Sonia
 
         private void OnDisable()
         {
-            // Si el componente se apaga a medias, Sonia vuelve a su sitio.
-            if (_initialized && _avatar != null && _phase != Phase.Present)
+            // Si el componente se apaga a medias volviendo, Sonia termina en su
+            // sitio. Si debía estar fuera, se queda como está (oculta o saliendo):
+            // antes volvía siempre a su sitio, y una recarga de scripts en Play
+            // (que apaga y enciende todos los componentes) plantaba al invitado
+            // del Modo Jean, que está fuera casi siempre, al lado de Sonia.
+            if (_initialized && _avatar != null && _phase != Phase.Present && _targetPresent)
             {
-                _targetPresent = true;
                 Settle("componente desactivado");
             }
         }
@@ -666,6 +691,83 @@ namespace Sonia
             {
                 GoAway(instant);
             }
+        }
+
+        /// <summary>
+        /// Dónde estaría un punto del avatar (por ejemplo, su cabeza) con Sonia en
+        /// su sitio, aunque ahora esté fuera de cuadro o girada hacia la salida. La
+        /// cámara encuadra con esto: si llega un avatar nuevo estando fuera, la
+        /// cabeza está a metro y medio de su sitio, y el plano de conversación
+        /// salía centrado en el hueco (al volver, Sonia quedaba fuera de cámara).
+        /// </summary>
+        public Vector3 AtHome(Vector3 worldPoint)
+        {
+            if (_avatar == null || !_hasRest)
+            {
+                return worldPoint;
+            }
+
+            Transform parent = _avatar.parent;
+            Vector3 home = parent != null ? parent.TransformPoint(_restLocalPosition) : _restLocalPosition;
+            Quaternion homeRotation = parent != null ? parent.rotation * _restLocalRotation : _restLocalRotation;
+            Vector3 local = Quaternion.Inverse(_avatar.rotation) * (worldPoint - _avatar.position);
+            return home + (homeRotation * local);
+        }
+
+        /// <summary>
+        /// Fuera de cuadro y oculto ya, sin animación ni letrero nuevo, pase lo que
+        /// haya pasado: red de seguridad del invitado del Modo Jean, que solo se ve
+        /// durante el modo. Corrige un avatar que volvió a su sitio, renderers que
+        /// alguien volvió a encender y piezas nuevas del avatar que aún no se habían
+        /// ocultado. Devuelve cierto si tuvo que corregir algo.
+        /// </summary>
+        public bool EnsureAway()
+        {
+            Initialize();
+            if (_guestHold)
+            {
+                return false;
+            }
+
+            if (_targetPresent || _phase != Phase.Away)
+            {
+                _targetPresent = false;
+                GoAway(true);
+                return true;
+            }
+
+            if (!hideRenderersWhenAway || _avatar == null)
+            {
+                return false;
+            }
+
+            bool fixedSomething = false;
+            Renderer[] current = _avatar.GetComponentsInChildren<Renderer>(true);
+            if (current.Length != _renderers.Length)
+            {
+                // Piezas que llegaron después de esconderlo: se vuelven a reunir.
+                SetHidden(false);
+                _renderers = current;
+                _rendererStates = new bool[_renderers.Length];
+                fixedSomething = true;
+            }
+
+            if (!_hidden)
+            {
+                SetHidden(true);
+                return true;
+            }
+
+            for (int i = 0; i < _renderers.Length; i++)
+            {
+                if (_renderers[i] != null && _renderers[i].enabled)
+                {
+                    _renderers[i].enabled = false;
+                    fixedSomething = true;
+                }
+            }
+
+            return fixedSomething;
         }
 
         /// <summary>Alterna entre fuera y presente con animación (botón de pruebas).</summary>

@@ -431,7 +431,14 @@ namespace Sonia
 
             forward.Normalize();
             float tangentHalf = Mathf.Tan(_capturedFieldOfView * 0.5f * Mathf.Deg2Rad);
-            Vector3 subject = head.position;
+            // La cabeza en su sitio: si el avatar llega con Sonia fuera de cuadro, la
+            // cabeza está lejos y el plano saldría centrado en el hueco.
+            if (presence == null)
+            {
+                presence = GetComponentInChildren<PresenceController>(true);
+            }
+
+            Vector3 subject = presence != null ? presence.AtHome(head.position) : head.position;
             float eyesY = subject.y + eyesAboveHeadBone;
             Vector3 conversation = StageShot(subject, eyesY, conversationHeight, conversationEyeLine, forward, tangentHalf);
             Vector3 idle = StageShot(subject, eyesY, idleHeight, idleEyeLine, forward, tangentHalf);

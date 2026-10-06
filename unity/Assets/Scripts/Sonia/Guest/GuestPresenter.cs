@@ -149,6 +149,7 @@ namespace Sonia
 
         private Vector3 _soniaHeadRest;
         private bool _haveSoniaHeadRest;
+        private float _nextHiddenCheck;
 
         /// <summary>Paso de la secuencia: off, entering, live o leaving.</summary>
         public string StageName
@@ -497,6 +498,18 @@ namespace Sonia
                 _guestModeSinceHello = true;
                 Log("tras el hello no llegó guest_mode: el invitado se despide");
                 Leave(false);
+            }
+
+            // Sin Modo Jean, el invitado no se ve nunca. Si algo lo trajo de vuelta
+            // (una recarga de scripts, un cambio de avatar a destiempo, renderers
+            // encendidos por otro), se esconde al momento.
+            if (_stage == Stage.Off && guestPresence != null && Time.unscaledTime >= _nextHiddenCheck)
+            {
+                _nextHiddenCheck = Time.unscaledTime + 0.5f;
+                if (guestPresence.EnsureAway())
+                {
+                    Debug.LogWarning("[Sonia] Modo Jean apagado y el invitado se veía: se esconde.", this);
+                }
             }
 
             // Red de seguridad: una secuencia que se queda a medias se termina sin animación.
