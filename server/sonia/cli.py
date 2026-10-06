@@ -20,6 +20,7 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import os
 import signal
 import sys
 import time
@@ -812,23 +813,26 @@ async def check_camera(settings: Settings) -> CheckResult:
     if source == "unity":
         return CheckResult("Cámara", True, "la envía Unity por WebSocket (no se comprueba)", False)
     camera = build_camera(settings.vision)
+    if source == "obs":
+        which = f"OBS, fuente «{settings.vision.obs_source}» (modo reunión)"
+    elif source == "screen":
+        which = f"pantalla {settings.vision.screen_monitor} (modo reunión)"
+    else:
+        which = f"índice {settings.vision.camera_index}"
     try:
         started = time.monotonic()
         frame = await asyncio.wait_for(camera.capture(), timeout=10.0)
         elapsed = time.monotonic() - started
     except Exception as exc:
-        return CheckResult("Cámara", False, f"índice {settings.vision.camera_index}: {exc}", False)
+        return CheckResult("Cámara", False, f"{which}: {exc}", False)
     finally:
         await _aclose(camera)
     if frame is None:
-        return CheckResult(
-            "Cámara", False, f"índice {settings.vision.camera_index}: sin imagen", False
-        )
+        return CheckResult("Cámara", False, f"{which}: sin imagen", False)
     return CheckResult(
         "Cámara",
         True,
-        f"índice {settings.vision.camera_index}: {frame.width}x{frame.height}, "
-        f"{len(frame.data)} bytes en {elapsed * 1000:.0f} ms",
+        f"{which}: {frame.width}x{frame.height}, {len(frame.data)} bytes en {elapsed * 1000:.0f} ms",
         False,
     )
 
@@ -957,6 +961,44 @@ async def cmd_check(settings: Settings) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Modo reunión
+# ---------------------------------------------------------------------------
+
+#: Lo que cambia ``sonia reunion`` si no viene ya en el entorno (manda sobre el
+#: ``.env``, que se carga después): Sonia ve la ventana de la reunión por OBS y
+#: la imagen se manda más grande para leer los nombres de los participantes.
+MEETING_DEFAULTS: dict[str, str] = {"VISION_SOURCE": "obs", "VISION_MAX_WIDTH": "1280"}
+if sys.platform == "darwin":
+    # Lo que suena en la reunión (docs/reunion.md, «Cómo va el sonido»).
+    MEETING_DEFAULTS["AUDIO_INPUT_DEVICE"] = "BlackHole 16ch"
+
+
+def apply_meeting_defaults() -> None:
+    for name, value in MEETING_DEFAULTS.items():
+        os.environ.setdefault(name, value)
+
+
+async def cmd_reunion(settings: Settings, *, use_mic: bool = True) -> int:
+    """Prepara OBS (los ojos de Sonia en la videollamada) y arranca como ``run``."""
+    from sonia.vision.obs import prepare_meeting, start_obs
+
+    print("Modo reunión (docs/reunion.md)")
+    print(f"  Oye: {settings.audio.input_device or 'el micrófono por defecto'}")
+    if settings.vision.source == "obs":
+        print(f"  Ve: la fuente «{settings.vision.obs_source}» de OBS")
+        try:
+            for line in await start_obs(settings.vision):
+                print(f"  {line}")
+            for line in await asyncio.wait_for(prepare_meeting(settings.vision), timeout=20.0):
+                print(f"  {line}")
+        except Exception as exc:  # noqa: BLE001 - sin OBS Sonia sigue, pero sin ojos
+            print(f"  No se pudo preparar OBS ({exc}): Sonia conversa, pero no verá la reunión.")
+    else:
+        print(f"  Ve: VISION_SOURCE={settings.vision.source}")
+    return await cmd_run(settings, use_mic=use_mic)
+
+
+# ---------------------------------------------------------------------------
 # argparse
 # ---------------------------------------------------------------------------
 
@@ -981,6 +1023,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="no abrir el micrófono; solo texto desde el panel",
     )
 
+    reunion = commands.add_parser(
+        "reunion",
+        help="Sonia en una videollamada: prepara OBS y arranca como run (docs/reunion.md)",
+    )
+    reunion.add_argument(
+        "--no-mic",
+        action="store_true",
+        help="no abrir el micrófono; solo texto desde el panel",
+    )
+
     chat = commands.add_parser("chat", help="escribir a Sonia desde la consola")
     chat.add_argument("--speak", action="store_true", help="reproducir su voz por el altavoz")
 
@@ -994,12 +1046,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "reunion":
+        apply_meeting_defaults()
     settings = load_settings()
     configure_logging(args.log_level or settings.log_level)
 
     match args.command:
         case "run":
             return _run(cmd_run(settings, use_mic=not args.no_mic))
+        case "reunion":
+            return _run(cmd_reunion(settings, use_mic=not args.no_mic))
         case "chat":
             return _run(cmd_chat(settings, speak=args.speak))
         case "say":

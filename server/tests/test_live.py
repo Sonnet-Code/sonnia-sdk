@@ -420,6 +420,28 @@ def test_session_config_respeta_los_opcionales(tmp_path: Path) -> None:
     assert "Mirar: tomar una foto nueva" in config["instructions"]
 
 
+def test_en_modo_reunion_sonia_sabe_que_esta_en_una_videollamada(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path, vision_source="obs", on_turn_start=False)
+    config = build_session_config(
+        settings, registry=build_default_registry(include_look=True), gallery_ids=[]
+    )
+    instructions = config["instructions"]
+    assert "estás en una videollamada" in instructions
+    assert "Mirar: ver ahora la pantalla de la videollamada" in instructions
+    assert "Mirar: tomar una foto nueva" not in instructions
+    assert "Sonia está en una videollamada" in config["delegation"]["responses"]["instructions"]
+    assert "que captura OBS" in describe_live_stack(settings, action_names=["look"])
+
+
+def test_fuera_del_modo_reunion_no_se_habla_de_videollamadas(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path, vision_source="opencv", on_turn_start=False)
+    config = build_session_config(
+        settings, registry=build_default_registry(include_look=True), gallery_ids=[]
+    )
+    assert "videollamada" not in config["instructions"]
+    assert "videollamada" not in config["delegation"]["responses"]["instructions"]
+
+
 def test_las_reglas_piden_parar_si_la_interrumpen(tmp_path: Path) -> None:
     registry = build_default_registry(include_look=False)
     instructions = build_session_config(make_settings(tmp_path), registry=registry, gallery_ids=[])[

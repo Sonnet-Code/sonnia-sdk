@@ -29,6 +29,7 @@ __all__ = [
     "build_session_config",
     "camera_mode",
     "describe_live_stack",
+    "in_meeting",
 ]
 
 #: Prefijo de las notas silenciosas con lo que ve la cámara.
@@ -122,6 +123,47 @@ _NO_DELEGATE_CHAT: dict[CameraMode, str] = {
 }
 
 
+#: Modo reunión (``VISION_SOURCE=obs`` o ``screen``, docs/reunion.md): Sonia está en una
+#: videollamada y lo que ve es la ventana de la reunión, no una cámara del stand.
+_MEETING_RULE = (
+    "- Ahora mismo estás en una videollamada (Google Meet o similar): te ven y te oyen por la "
+    "reunión. Lo que ves no es una cámara del stand sino la pantalla de la reunión: los "
+    "recuadros de los participantes, sus nombres y lo que compartan."
+)
+
+_MEETING_LOOK_CAPABILITY = (
+    "- Mirar: ver ahora la pantalla de la videollamada (los participantes, sus nombres y lo que "
+    "compartan) y decirte qué se ve."
+)
+
+_MEETING_LOOK_WHEN = (
+    "- Quieras mirar la reunión: te preguntan qué ves, quién está o cuántos son, alguien enseña "
+    "algo a su cámara o comparten pantalla.\n"
+)
+
+_MEETING_BACKEND_RULE = (
+    "- Sonia está en una videollamada: si miras, la foto es la pantalla de la reunión. Describe "
+    "quién está (los nombres que se lean en los recuadros), cuántos son y lo que compartan o "
+    "enseñen a su cámara, con las mismas reglas de respeto."
+)
+
+
+def in_meeting(settings: Settings) -> bool:
+    """¿Está Sonia en el modo reunión (sus ojos son la ventana de una videollamada)?"""
+    return settings.vision.source in ("obs", "screen")
+
+
+def _eyes(settings: Settings) -> str:
+    source = settings.vision.source
+    if source == "unity":
+        return "Unity"
+    if source == "obs":
+        return "la ventana de la videollamada, que captura OBS"
+    if source == "screen":
+        return "la pantalla del equipo, con la videollamada"
+    return "una cámara USB"
+
+
 def camera_mode(settings: Settings, action_names: list[str]) -> CameraMode:
     """Cómo ve Sonia: notas automáticas ``[Cámara]``, solo cuando ella mira (``look``) o nada."""
     vision = settings.vision
@@ -161,21 +203,20 @@ def describe_live_stack(settings: Settings, *, action_names: list[str] | None = 
         f"Acciones y tareas delegadas: {live.backend_model} de OpenAI (API Responses), en la nube.",
     ]
 
-    vision = settings.vision
     mode = camera_mode(settings, action_names or [])
     if mode == "none":
         lines.append(
             "Ojos: sin cámara en este momento; no puedes ver a nadie, no inventes lo que ves."
         )
     elif mode == "look":
-        origin = "Unity" if vision.source == "unity" else "una cámara USB"
+        origin = _eyes(settings)
         lines.append(
             f"Ojos: {origin}; no miras sola: cuando tú lo decides, tu backend "
             f"({live.backend_model}, en la nube) toma una foto y te dice qué se ve. "
             "Las fotos no se guardan."
         )
     else:
-        origin = "Unity" if vision.source == "unity" else "una cámara USB"
+        origin = _eyes(settings)
         host = host_of(settings.llm.base_url)
         where = "en local" if is_local_host(host) else f"en {host}"
         lines.append(
@@ -218,12 +259,23 @@ def build_live_instructions(
 ) -> str:
     """``instructions`` de la sesión: persona, reglas de este modo, conocimiento y stack."""
     names = _action_names(registry)
-    capabilities = "\n".join(_CAPABILITIES[n] for n in names if n in _CAPABILITIES)
     mode = camera_mode(settings, names)
+    meeting = in_meeting(settings) and mode != "none"
+    capabilities = "\n".join(
+        _MEETING_LOOK_CAPABILITY if meeting and n == "look" else _CAPABILITIES[n]
+        for n in names
+        if n in _CAPABILITIES
+    )
+    camera_rule = _CAMERA_RULE[mode]
+    look_when = _LOOK_WHEN[mode]
+    if meeting:
+        camera_rule = _MEETING_RULE + "\n" + camera_rule
+        if mode == "look":
+            look_when = _MEETING_LOOK_WHEN
     rules = LIVE_RULES.format(
         capabilities=capabilities or "- Ninguna en este momento: no delegues.",
-        camera_rule=_CAMERA_RULE[mode],
-        look_when=_LOOK_WHEN[mode] if "look" in names else "",
+        camera_rule=camera_rule,
+        look_when=look_when if "look" in names else "",
         trivia_when=_TRIVIA_WHEN if "start_trivia" in names else "",
         no_delegate_chat=_NO_DELEGATE_CHAT[mode],
     )
@@ -245,10 +297,14 @@ def build_live_instructions(
 
 
 def build_backend_instructions(
-    *, gallery_ids: list[str], knowledge_dir: str | Path | None = None, notes: str = ""
+    *,
+    gallery_ids: list[str],
+    knowledge_dir: str | Path | None = None,
+    notes: str = "",
+    meeting: bool = False,
 ) -> str:
     """Instrucciones del backend Responses: reglas, galería y conocimiento."""
-    parts = [BACKEND_PROMPT]
+    parts = [BACKEND_PROMPT + ("\n" + _MEETING_BACKEND_RULE if meeting else "")]
     parts.append("Imágenes de la galería (ids exactos): " + (", ".join(gallery_ids) or "ninguna"))
     knowledge = load_knowledge(knowledge_dir)
     if knowledge:
@@ -275,7 +331,10 @@ def build_session_config(
     responses: dict[str, Any] = {
         "model": live.backend_model,
         "instructions": build_backend_instructions(
-            gallery_ids=gallery_ids, knowledge_dir=knowledge_dir, notes=notes
+            gallery_ids=gallery_ids,
+            knowledge_dir=knowledge_dir,
+            notes=notes,
+            meeting=in_meeting(settings),
         ),
         "max_output_tokens": max(16, live.backend_max_output_tokens),
     }

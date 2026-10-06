@@ -20,6 +20,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from sonia.types import CameraSource, Frame
+from sonia.vision.obs import ObsConnect, ObsError
 
 if TYPE_CHECKING:
     from sonia.config import VisionSettings
@@ -341,6 +342,189 @@ class UnityCamera:
         return None
 
 
+#: Tope de espera de una foto de OBS (conectar, identificarse y pedirla).
+OBS_TIMEOUT_S = 3.0
+
+
+def _decode_and_encode(data: bytes, max_width: int, quality: int) -> Frame | None:
+    """JPEG o PNG de OBS → ``Frame`` reducido como los de la cámara."""
+    import cv2
+    import numpy as np
+
+    image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+    return encode_frame(image, max_width, quality)
+
+
+class ObsCamera:
+    """Una fuente de OBS como cámara (``VISION_SOURCE=obs``): el modo reunión.
+
+    En una videollamada (``docs/reunion.md``) OBS ya captura la ventana de Unity
+    para la cámara virtual con la que la reunión ve a Sonia. Con otra fuente que
+    capture la ventana de la reunión (``VISION_OBS_SOURCE``), Sonia ve la
+    reunión: cada vez que mira se pide a OBS una foto de esa fuente por
+    obs-websocket (``GetSourceScreenshot``). Nunca vídeo y nada a disco. Una
+    conexión por foto: son pocas y así no hay nada que reabrir si OBS se reinicia.
+    """
+
+    def __init__(self, settings: VisionSettings, *, connect: ObsConnect | None = None) -> None:
+        self._settings = settings
+        self._connect = connect
+        self._lock = asyncio.Lock()
+
+    async def capture(
+        self, *, max_width: int | None = None, quality: int | None = None
+    ) -> Frame | None:
+        width = self._settings.max_width if max_width is None else max_width
+        jpeg_quality = self._settings.jpeg_quality if quality is None else quality
+        from websockets.exceptions import ConnectionClosed
+
+        async with self._lock:
+            try:
+                data = await asyncio.wait_for(self._screenshot(width), timeout=OBS_TIMEOUT_S)
+            except TimeoutError:
+                logger.warning("OBS no dio la foto en %.1f s", OBS_TIMEOUT_S)
+                return None
+            except ConnectionClosed as exc:
+                # 4009: autenticación fallida (VISION_OBS_PASSWORD).
+                logger.warning(
+                    "OBS cerró la conexión (%s): revisa VISION_OBS_PASSWORD", exc.rcvd or exc
+                )
+                return None
+            except OSError as exc:
+                logger.warning(
+                    "No se pudo hablar con OBS en %s (¿está abierto y con el servidor WebSocket "
+                    "activado?): %s",
+                    self._settings.obs_url,
+                    exc,
+                )
+                return None
+            except ObsError as exc:
+                logger.warning("OBS no dio la foto de «%s»: %s", self._settings.obs_source, exc)
+                return None
+            except Exception:  # noqa: BLE001 - la demo sigue aunque OBS falle
+                logger.exception("Fallo pidiendo la foto a OBS")
+                return None
+        return await asyncio.to_thread(_decode_and_encode, data, width, jpeg_quality)
+
+    async def _screenshot(self, width: int) -> bytes:
+        from sonia.vision.obs import obs_session
+
+        request: dict[str, Any] = {
+            "sourceName": self._settings.obs_source,
+            "imageFormat": "jpg",
+            "imageCompressionQuality": 90,
+        }
+        if width > 0:
+            # OBS mantiene la proporción («scale to inner»).
+            request["imageWidth"] = max(8, min(4096, width))
+        async with obs_session(self._settings, self._connect) as obs:
+            response = await obs.request("GetSourceScreenshot", **request)
+        image = str(response.get("imageData") or "")
+        try:
+            return base64.b64decode(image.split(",", 1)[-1], validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ObsError("la foto no venía en base64") from exc
+
+    async def close(self) -> None:
+        return None
+
+
+def _mac_screen_access() -> bool | None:
+    """¿Puede este proceso grabar la pantalla en macOS? ``None`` fuera de macOS o si no se sabe.
+
+    Si no puede, pide el permiso (macOS enseña su aviso una vez); vale al volver a
+    arrancar el proceso.
+    """
+    if sys.platform != "darwin":
+        return None
+    try:
+        import ctypes
+        import ctypes.util
+
+        path = ctypes.util.find_library("CoreGraphics")
+        if not path:
+            return None
+        graphics = ctypes.CDLL(path)
+        graphics.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
+        if graphics.CGPreflightScreenCaptureAccess():
+            return True
+        graphics.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
+        graphics.CGRequestScreenCaptureAccess()
+        return False
+    except Exception:  # noqa: BLE001 - es solo un aviso
+        logger.debug("No se pudo comprobar el permiso de grabación de pantalla", exc_info=True)
+        return None
+
+
+def _grab_monitor(monitor: int) -> Any | None:
+    """Captura una pantalla con mss y la devuelve en BGR, como un frame de OpenCV."""
+    import mss
+    import numpy as np
+
+    with mss.MSS() as screens:
+        monitors = screens.monitors
+        if not 0 <= monitor < len(monitors):
+            logger.warning(
+                "No hay pantalla %d (hay %d); se captura la principal", monitor, len(monitors) - 1
+            )
+            monitor = 1 if len(monitors) > 1 else 0
+        shot = screens.grab(monitors[monitor])
+    # mss da BGRA: sin el canal alfa queda como OpenCV.
+    return np.ascontiguousarray(np.asarray(shot)[:, :, :3])
+
+
+class ScreenCamera:
+    """La pantalla del equipo como cámara (``VISION_SOURCE=screen``): el modo reunión.
+
+    Con Sonia en una videollamada (``docs/reunion.md``), lo que «ve» es la reunión:
+    una captura puntual de la pantalla ``VISION_SCREEN_MONITOR`` cada vez que mira,
+    reducida y en JPEG como las de la cámara. Nunca vídeo y nada a disco. En macOS
+    la app que lanza el orquestador necesita el permiso de Grabación de pantalla;
+    sin él, macOS solo deja ver el fondo de escritorio.
+    """
+
+    def __init__(
+        self, settings: VisionSettings, *, grab: Callable[[int], Any] | None = None
+    ) -> None:
+        self._settings = settings
+        self._grab = grab or _grab_monitor
+        # Con una captura inyectada (pruebas) no se mira el permiso del sistema.
+        self._access_checked = grab is not None
+        self._lock = asyncio.Lock()
+
+    def _read_sync(self, max_width: int, quality: int) -> Frame | None:
+        if not self._access_checked:
+            self._access_checked = True
+            if _mac_screen_access() is False:
+                logger.warning(
+                    "macOS no deja grabar la pantalla a este proceso: Sonia solo verá el fondo "
+                    "de escritorio. Actívalo en Ajustes del Sistema > Privacidad y seguridad > "
+                    "Grabación de pantalla para la app de terminal y vuelve a arrancar Sonia."
+                )
+        return encode_frame(self._grab(self._settings.screen_monitor), max_width, quality)
+
+    async def capture(
+        self, *, max_width: int | None = None, quality: int | None = None
+    ) -> Frame | None:
+        width = self._settings.max_width if max_width is None else max_width
+        jpeg_quality = self._settings.jpeg_quality if quality is None else quality
+        async with self._lock:
+            try:
+                return await asyncio.wait_for(
+                    asyncio.to_thread(self._read_sync, width, jpeg_quality),
+                    timeout=READ_TIMEOUT_S,
+                )
+            except TimeoutError:
+                logger.warning("La captura de pantalla tardó más de %.1f s", READ_TIMEOUT_S)
+                return None
+            except Exception:  # noqa: BLE001 - la demo sigue aunque la captura falle
+                logger.exception("Fallo capturando la pantalla")
+                return None
+
+    async def close(self) -> None:
+        return None
+
+
 def build_camera(
     settings: VisionSettings,
     request_frame: Callable[[], Awaitable[None]] | None = None,
@@ -353,5 +537,9 @@ def build_camera(
             return OpenCVCamera(settings)
         case "unity":
             return UnityCamera(request_frame, has_clients=has_clients)
+        case "obs":
+            return ObsCamera(settings)
+        case "screen":
+            return ScreenCamera(settings)
         case _:
             return NullCamera()

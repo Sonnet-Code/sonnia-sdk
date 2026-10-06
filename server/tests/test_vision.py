@@ -1,13 +1,16 @@
 """Tests de la capa de visión: codificación de frames, cámaras y política.
 
-No se abre ninguna cámara real: `encode_frame` se prueba con un array de numpy
-y `UnityCamera` con un `request_frame` falso.
+No se abre ninguna cámara real: `encode_frame` se prueba con un array de numpy,
+`UnityCamera` con un `request_frame` falso, `ObsCamera` con un OBS falso
+(obs-websocket 5 en un puerto local) y `ScreenCamera` con una captura inyectada.
 """
 
 from __future__ import annotations
 
 import asyncio
 import base64
+import json
+import socket
 import threading
 import time
 from pathlib import Path
@@ -19,7 +22,17 @@ import pytest
 from sonia.config import VisionSettings
 from sonia.types import Frame
 from sonia.vision import camera as camera_module
-from sonia.vision.camera import NullCamera, OpenCVCamera, UnityCamera, build_camera, encode_frame
+from sonia.vision import obs as obs_module
+from sonia.vision.camera import (
+    NullCamera,
+    ObsCamera,
+    OpenCVCamera,
+    ScreenCamera,
+    UnityCamera,
+    build_camera,
+    encode_frame,
+)
+from sonia.vision.obs import obs_auth
 from sonia.vision.policy import VisionPolicy
 
 # ---------------------------------------------------------------------------
@@ -85,6 +98,8 @@ def test_build_camera_segun_source() -> None:
     assert isinstance(build_camera(VisionSettings(source="none")), NullCamera)
     assert isinstance(build_camera(VisionSettings(source="opencv")), OpenCVCamera)
     assert isinstance(build_camera(VisionSettings(source="unity")), UnityCamera)
+    assert isinstance(build_camera(VisionSettings(source="obs")), ObsCamera)
+    assert isinstance(build_camera(VisionSettings(source="screen")), ScreenCamera)
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +306,246 @@ async def test_unity_camera_si_request_frame_falla_no_lanza() -> None:
         raise RuntimeError("Unity desconectado")
 
     camera = UnityCamera(request_frame, timeout=0.01)
+    assert await camera.capture() is None
+
+
+# ---------------------------------------------------------------------------
+# Modo reunión: ObsCamera (obs-websocket 5) y ScreenCamera
+# ---------------------------------------------------------------------------
+
+
+class FakeObs:
+    """OBS falso: Hello con autenticación, Identify, GetSourceScreenshot."""
+
+    salt = "sal"
+    challenge = "reto"
+
+    def __init__(self, *, password: str = "secreto", source: str = "Reunión") -> None:
+        self.password = password
+        self.source = source
+        self.requests: list[dict[str, Any]] = []
+
+    async def handler(self, ws: Any) -> None:
+        import cv2
+
+        auth = {"salt": self.salt, "challenge": self.challenge}
+        await ws.send(json.dumps({"op": 0, "d": {"rpcVersion": 1, "authentication": auth}}))
+        identify = json.loads(await ws.recv())["d"]
+        if identify.get("authentication") != obs_auth(self.password, self.salt, self.challenge):
+            await ws.close(4009, "Authentication failed.")
+            return
+        await ws.send(json.dumps({"op": 2, "d": {"negotiatedRpcVersion": 1}}))
+        request = json.loads(await ws.recv())["d"]
+        self.requests.append(request)
+        reply: dict[str, Any] = {
+            "requestType": request["requestType"],
+            "requestId": request["requestId"],
+        }
+        if request["requestData"]["sourceName"] != self.source:
+            reply["requestStatus"] = {"result": False, "code": 600, "comment": "No source"}
+        else:
+            jpg = cv2.imencode(".jpg", make_bgr(1280, 720))[1].tobytes()
+            reply["requestStatus"] = {"result": True, "code": 100}
+            reply["responseData"] = {
+                "imageData": "data:image/jpg;base64," + base64.b64encode(jpg).decode()
+            }
+        await ws.send(json.dumps({"op": 7, "d": reply}))
+        await ws.wait_closed()
+
+
+async def obs_camera(fake: FakeObs, **vision: Any) -> tuple[ObsCamera, Any]:
+    from websockets.asyncio.server import serve
+
+    server = await serve(fake.handler, "127.0.0.1", 0)
+    port = next(iter(server.sockets)).getsockname()[1]
+    settings = VisionSettings(
+        source="obs", obs_url=f"ws://127.0.0.1:{port}", obs_password="secreto", **vision
+    )
+    return ObsCamera(settings), server
+
+
+async def test_obs_camera_pide_la_foto_de_la_fuente_de_la_reunion() -> None:
+    fake = FakeObs()
+    camera, server = await obs_camera(fake, max_width=640)
+    try:
+        frame = await camera.capture()
+    finally:
+        server.close()
+    assert frame is not None
+    assert (frame.width, frame.height) == (640, 360)
+    assert frame.data[:2] == b"\xff\xd8"  # JPEG
+    request = fake.requests[0]
+    assert request["requestType"] == "GetSourceScreenshot"
+    assert request["requestData"]["sourceName"] == "Reunión"
+    assert request["requestData"]["imageWidth"] == 640
+
+
+async def test_obs_camera_lee_la_contrasena_de_la_configuracion_de_obs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"server_password": "secreto"}), encoding="utf-8")
+    monkeypatch.setattr(obs_module, "obs_websocket_config", lambda: config)
+    camera, server = await obs_camera(FakeObs())
+    camera._settings = camera._settings.model_copy(update={"obs_password": ""})
+    try:
+        assert await camera.capture() is not None
+    finally:
+        server.close()
+
+
+async def test_obs_camera_con_la_contrasena_mala_no_lanza() -> None:
+    camera, server = await obs_camera(FakeObs(password="otra"))
+    try:
+        assert await camera.capture() is None
+    finally:
+        server.close()
+
+
+async def test_obs_camera_con_una_fuente_que_no_existe_no_lanza() -> None:
+    camera, server = await obs_camera(FakeObs(source="Otra"))
+    try:
+        assert await camera.capture() is None
+    finally:
+        server.close()
+
+
+async def test_obs_camera_con_obs_cerrado_no_lanza() -> None:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    camera = ObsCamera(VisionSettings(source="obs", obs_url=f"ws://127.0.0.1:{port}"))
+    assert await camera.capture() is None
+
+
+class FakeObsStudio:
+    """OBS falso con estado para ``prepare_meeting``: escenas, fuentes y ventanas."""
+
+    def __init__(self, windows: list[str]) -> None:
+        self.windows = windows
+        self.inputs: dict[str, dict[str, Any]] = {}
+        self.items: dict[int, dict[str, Any]] = {1: {"source": "Unity", "x": 0.0, "locked": False}}
+        self.virtualcam = False
+        self.calls: list[str] = []
+
+    def handle(self, kind: str, data: dict[str, Any]) -> dict[str, Any] | None:
+        import cv2
+
+        self.calls.append(kind)
+        if kind == "GetCurrentProgramScene":
+            return {"currentProgramSceneName": "Sonia"}
+        if kind == "GetInputList":
+            return {"inputs": [{"inputName": name} for name in self.inputs]}
+        if kind == "CreateInput":
+            self.inputs[data["inputName"]] = dict(data["inputSettings"])
+            self.items[2] = {"source": data["inputName"], "x": 0.0, "locked": False}
+            return {}
+        if kind == "GetSceneItemId":
+            found = [k for k, v in self.items.items() if v["source"] == data["sourceName"]]
+            return {"sceneItemId": found[0]} if found else None
+        if kind == "GetInputSettings":
+            return {"inputSettings": self.inputs[data["inputName"]]}
+        if kind == "GetInputPropertiesListPropertyItems":
+            return {
+                "propertyItems": [
+                    {"itemName": name, "itemValue": index, "itemEnabled": True}
+                    for index, name in enumerate(self.windows, start=10)
+                ]
+            }
+        if kind == "SetInputSettings":
+            self.inputs[data["inputName"]].update(data["inputSettings"])
+            return {}
+        if kind == "GetVideoSettings":
+            return {"baseWidth": 1920, "baseHeight": 1080}
+        if kind == "SetSceneItemTransform":
+            self.items[data["sceneItemId"]]["x"] = data["sceneItemTransform"]["positionX"]
+            return {}
+        if kind == "SetSceneItemLocked":
+            self.items[data["sceneItemId"]]["locked"] = data["sceneItemLocked"]
+            return {}
+        if kind == "SetSceneItemEnabled":
+            return {}
+        if kind == "GetVirtualCamStatus":
+            return {"outputActive": self.virtualcam}
+        if kind == "StartVirtualCam":
+            self.virtualcam = True
+            return {}
+        if kind == "GetSourceScreenshot":
+            if "window" not in self.inputs.get(data["sourceName"], {}):
+                return None  # 702: fuente vacía
+            jpg = cv2.imencode(".jpg", make_bgr(320, 180))[1].tobytes()
+            return {"imageData": "data:image/jpg;base64," + base64.b64encode(jpg).decode()}
+        raise AssertionError(f"petición inesperada: {kind}")
+
+    async def handler(self, ws: Any) -> None:
+        await ws.send(json.dumps({"op": 0, "d": {"rpcVersion": 1}}))
+        await ws.recv()
+        await ws.send(json.dumps({"op": 2, "d": {"negotiatedRpcVersion": 1}}))
+        async for raw in ws:
+            request = json.loads(raw)["d"]
+            response = self.handle(request["requestType"], request.get("requestData") or {})
+            status = {"result": response is not None, "code": 100 if response is not None else 600}
+            reply = {
+                "requestType": request["requestType"],
+                "requestId": request["requestId"],
+                "requestStatus": status,
+                "responseData": response,
+            }
+            await ws.send(json.dumps({"op": 7, "d": reply}))
+
+
+async def run_prepare(fake: FakeObsStudio, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    from websockets.asyncio.server import serve
+
+    monkeypatch.setattr(obs_module, "TEST_SHOT_DELAY_S", 0.0)
+    async with serve(fake.handler, "127.0.0.1", 0) as server:
+        port = next(iter(server.sockets)).getsockname()[1]
+        settings = VisionSettings(source="obs", obs_url=f"ws://127.0.0.1:{port}")
+        return await obs_module.prepare_meeting(settings)
+
+
+async def test_prepare_meeting_crea_la_fuente_fuera_del_lienzo_con_la_ventana_de_meet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeObsStudio(["[Google Chrome] Gmail", "[Google Chrome] Meet - abc-defg-hij"])
+    report = await run_prepare(fake, monkeypatch)
+    assert fake.inputs["Reunión"]["window"] == 11
+    reunion = fake.items[2]
+    assert reunion["x"] > 1920 and reunion["locked"]
+    assert fake.items[1]["x"] == 0.0  # la de Sonia no se toca
+    assert fake.virtualcam
+    assert any("Meet - abc-defg-hij" in line for line in report)
+    assert any("se ve bien" in line for line in report)
+
+
+async def test_prepare_meeting_sin_ventana_de_reunion_lo_dice_y_no_lanza(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeObsStudio(["[Google Chrome] Gmail"])
+    report = await run_prepare(fake, monkeypatch)
+    assert "window" not in fake.inputs["Reunión"]
+    assert any("No encuentro la ventana de la reunión" in line for line in report)
+    assert any("no salió" in line for line in report)
+
+
+async def test_screen_camera_reduce_la_captura_de_la_pantalla() -> None:
+    monitors: list[int] = []
+
+    def grab(monitor: int) -> np.ndarray:
+        monitors.append(monitor)
+        return make_bgr(1920, 1080)
+
+    camera = ScreenCamera(VisionSettings(source="screen", screen_monitor=2), grab=grab)
+    frame = await camera.capture()
+    assert frame is not None and frame.width == 768
+    assert monitors == [2]
+
+
+async def test_screen_camera_si_la_captura_falla_no_lanza() -> None:
+    def grab(monitor: int) -> np.ndarray:
+        raise RuntimeError("sin pantalla")
+
+    camera = ScreenCamera(VisionSettings(source="screen"), grab=grab)
     assert await camera.capture() is None
 
 

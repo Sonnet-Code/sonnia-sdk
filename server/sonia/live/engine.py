@@ -44,7 +44,7 @@ from sonia.actions.registry import ActionRegistry
 from sonia.config import Settings
 from sonia.live.audio import NoiseGate, pcm16_from_float, rms
 from sonia.live.client import LiveClient, WsConnect, describe_error
-from sonia.live.prompts import CAMERA_NOTE_PREFIX, build_session_config
+from sonia.live.prompts import CAMERA_NOTE_PREFIX, build_session_config, in_meeting
 from sonia.live.vision import VisionNarrator
 from sonia.live.voicecache import VoiceCache
 from sonia.showcase import Showcase
@@ -308,7 +308,10 @@ class LiveEngine:
                 gesture_chance=show.gesture_chance,
             )
         self._showcase = showcase if showcase.enabled else None
-        self._showcase_enabled = show.enabled
+        # En una videollamada (modo reunión) no hay animación de stand: en los
+        # silencios de la reunión Sonia se pondría a bailar o a decir frases del stand.
+        self._meeting = in_meeting(settings)
+        self._showcase_enabled = show.enabled and not self._meeting
         self._next_showcase_at = time.monotonic() + max(0.0, show.first_delay_seconds)
         self._ambient_expected_until = 0.0
 
@@ -1372,6 +1375,7 @@ class LiveEngine:
         self._gate = NoiseGate(self._live.gate_rms, self._live.gate_hold_ms)
 
     def set_showcase_enabled(self, enabled: bool) -> None:
+        enabled = enabled and not self._meeting
         self._showcase_enabled = enabled
         if enabled:
             self._next_showcase_at = time.monotonic() + max(

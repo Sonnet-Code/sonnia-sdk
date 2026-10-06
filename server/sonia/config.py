@@ -96,9 +96,20 @@ class AudioSettings(BaseSettings):
 class VisionSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="VISION_", extra="ignore", env_ignore_empty=True)
 
-    #: opencv = captura desde Python; unity = Unity envía frames por WS; none.
-    source: Literal["opencv", "unity", "none"] = "opencv"
+    #: opencv = captura desde Python; unity = Unity envía frames por WS; obs = una fuente
+    #: de OBS (modo reunión: Sonia ve la ventana de la videollamada, docs/reunion.md);
+    #: screen = la pantalla del equipo (plan B del modo reunión sin OBS); none.
+    source: Literal["opencv", "unity", "obs", "screen", "none"] = "opencv"
     camera_index: int = 0
+    #: Con ``source=obs``: servidor WebSocket de OBS (Herramientas > Ajustes del
+    #: servidor WebSocket), su contraseña (vacía si se desactiva la autenticación) y
+    #: el nombre de la fuente o escena que captura la ventana de la reunión.
+    obs_url: str = "ws://127.0.0.1:4455"
+    obs_password: str = ""
+    obs_source: str = "Reunión"
+    #: Con ``source=screen``, qué pantalla se captura: 1 = la principal, 2, 3… las
+    #: demás y 0 = todas juntas (numeración de mss).
+    screen_monitor: int = 1
     max_width: int = 768
     jpeg_quality: int = 80
     #: Describir la cámara cuando el visitante empieza a hablar (nota [Cámara]).
