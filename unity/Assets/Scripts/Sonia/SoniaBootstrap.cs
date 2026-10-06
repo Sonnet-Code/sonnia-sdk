@@ -605,14 +605,23 @@ namespace Sonia
             AnimationCatalog.Entry entry;
             if (!AnimationCatalog.TryFind(FullMotionSet, message.Clip, out entry))
             {
-                Debug.LogWarning("[Sonia] el panel pidió una animación que no está en el set: " + message.Clip, this);
+                Debug.LogWarning("[Sonia] se pidió una animación que no está en el set: " + message.Clip, this);
                 return;
             }
 
-            choreographer.Preview(entry.Clip);
+            if (message.Whole)
+            {
+                choreographer.PlayReaction(entry.Clip);
+            }
+            else
+            {
+                choreographer.Preview(entry.Clip);
+            }
+
             if (logEvents)
             {
-                Debug.Log("[Sonia] animación pedida desde el panel: " + entry.Clip.name, this);
+                Debug.Log("[Sonia] animación pedida (" + (message.Whole ? "por voz" : "panel") + "): "
+                    + entry.Clip.name, this);
             }
         }
 

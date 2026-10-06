@@ -208,9 +208,9 @@ async def test_execute_captura_excepciones_del_handler() -> None:
 
 def test_build_default_registry() -> None:
     registry = build_default_registry()
-    assert registry.names() == ["look", "show_image", "hide_image"]
+    assert registry.names() == ["look", "show_image", "hide_image", "play_animation"]
     sin_look = build_default_registry(include_look=False)
-    assert sin_look.names() == ["show_image", "hide_image"]
+    assert sin_look.names() == ["show_image", "hide_image", "play_animation"]
     assert registry.get("look") is LOOK
     assert registry.get("show_image") is SHOW_IMAGE
     assert registry.get("hide_image") is HIDE_IMAGE

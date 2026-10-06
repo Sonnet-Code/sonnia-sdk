@@ -182,9 +182,17 @@ def msg_attention(category: str, clip: str | None = None) -> dict[str, Any]:
     return msg
 
 
-def msg_play_animation(clip: str) -> dict[str, Any]:
-    """Reproduce un clip concreto del set de animaciones (botones del panel)."""
-    return {"type": MSG_PLAY_ANIMATION, "clip": str(clip)}
+def msg_play_animation(clip: str, *, whole: bool = False) -> dict[str, Any]:
+    """Reproduce un clip concreto del set de animaciones.
+
+    Desde el panel, el clip se corta si Sonia pasa a pensar o a hablar. Con
+    ``whole`` (movimientos pedidos de viva voz, ``play_animation``) suena entero
+    aunque Sonia hable mientras tanto.
+    """
+    msg: dict[str, Any] = {"type": MSG_PLAY_ANIMATION, "clip": str(clip)}
+    if whole:
+        msg["whole"] = True
+    return msg
 
 
 def msg_speech_end(utterance_id: int) -> dict[str, Any]:

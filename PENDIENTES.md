@@ -59,12 +59,12 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
   - [ ] Buscar o hacer clips de hablar con manos abiertas y sin atravesar el cuerpo, y pasarlos por **Sonia > Comprobar animaciones (en Play)**.
   - [ ] Que `AvatarChoreographer` los encadene mientras habla.
   - [ ] Verificarlo con capturas 9:16 por fotogramas.
-- [ ] ✨ **Bailes y animaciones por voz.** Hoy solo desde el panel (`_act_animation` en `server/sonia/panel/control.py`).
+- [x] ✨ **Bailes y animaciones por voz.** Hoy solo desde el panel (`_act_animation` en `server/sonia/panel/control.py`). **Hecho (6 de octubre): acción `play_animation` (`server/sonia/actions/moves.py`) con bailar, saludar, paz, saludo militar, pulgares arriba, celebrar, lamentarse y pensar; busca el clip en el catálogo de Unity y lo lanza entero (`whole`) aunque Sonnia hable. Falta verlo en pantalla con una conversación real.**
   - [ ] Acción del backend, por ejemplo `play_animation`, con la lista de animaciones que manda Unity, para «¡baila!» o «saluda». Registro, handler, protocolo y Unity en el mismo commit (`CLAUDE.md`).
 - [x] ✨ **El staff de Sonnet Code en sus instrucciones:** Bryan (desarrollo), Mariel y Angie (diseño y marketing); Carlos no estará disponible. **Hecho (6 de octubre): equipo de sonnetcode.com/es/about más Elieser Grullon (ciberseguridad) y Mariel Cruz (publicidad), con a quién mandar a cada visitante.**
   - [ ] 🗒️ Confirmar apellidos y cargos exactos.
   - [ ] Archivo nuevo `assets/knowledge/08-equipo-sonnet-code.md`: quién es quién en el stand y a quién mandar a la gente según lo que pregunten.
-- [ ] ✨ **Su propia descripción física:** avatar de Genies, camiseta azul del staff con el lockup del DevFest Santo Domingo, STAFF y Sonnet Code; asistente virtual. Va en `server/sonia/persona.py`.
+- [x] ✨ **Su propia descripción física:** **Hecho (6 de octubre), en `server/sonia/persona.py`; sin el color de la camiseta, porque la variante se elige al arrancar la app.** avatar de Genies, camiseta azul del staff con el lockup del DevFest Santo Domingo, STAFF y Sonnet Code; asistente virtual. Va en `server/sonia/persona.py`.
 - [ ] ✨ **Camiseta igual a la oficial.**
   - [ ] 🗒️ Foto de la camiseta real de staff de este año (Delia o Mariel).
   - [ ] Ajustar color, estampa y patrocinadores en `scripts/camiseta_staff/genera.py` (docs/unity.md, «Camiseta de staff»).

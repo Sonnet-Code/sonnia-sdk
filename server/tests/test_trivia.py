@@ -488,6 +488,7 @@ async def test_acciones_de_la_trivia(tmp_path: Path) -> None:
     assert registry.names() == [
         "show_image",
         "hide_image",
+        "play_animation",
         "start_trivia",
         "trivia_answer",
         "trivia_next",

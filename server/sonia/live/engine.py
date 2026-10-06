@@ -39,6 +39,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from sonia.actions.gallery import Gallery
+from sonia.actions.moves import MoveCatalog
 from sonia.actions.registry import ActionRegistry
 from sonia.config import Settings
 from sonia.live.audio import NoiseGate, pcm16_from_float, rms
@@ -321,6 +322,10 @@ class LiveEngine:
             if settings.trivia.enabled
             else None
         )
+
+        # Movimientos por voz (``play_animation``): el catálogo lo manda Unity al conectar.
+        self._moves = MoveCatalog(hub.broadcast_json)
+        hub.on(p.MSG_ANIMATIONS, self._moves.update)
 
         hub.on(p.MSG_INTERRUPT, lambda msg: self._spawn(self._on_interrupt(), "interrupt"))
         hub.on(p.MSG_PLAYBACK_DONE, self._on_ws_playback_done)
@@ -877,7 +882,7 @@ class LiveEngine:
             avatar=self._hub,
             gallery_dir=str(self._settings.gallery_dir),
             last_frame=self._last_frame,
-            extra={"trivia": self._trivia},
+            extra={"trivia": self._trivia, "moves": self._moves},
         )
         if self._registry is None:
             result = ActionResult(text="Error: no hay acciones disponibles.")

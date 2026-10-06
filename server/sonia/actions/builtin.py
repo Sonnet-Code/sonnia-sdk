@@ -1,4 +1,4 @@
-"""Acciones integradas: `look`, `show_image` y `hide_image`.
+"""Acciones integradas: `look`, `show_image`, `hide_image` y `play_animation`.
 
 Los textos que devuelven vuelven al modelo como resultado de la tool call, así
 que son cortos y en español: el modelo los usa para decidir qué decir en voz.
@@ -187,10 +187,12 @@ def build_default_registry(
 
     ``include_look`` permite no anunciar ``look`` cuando el modelo configurado
     no soporta imágenes (``LLM_SUPPORTS_VISION=false``) o no hay cámara.
+    ``play_animation`` (bailes y gestos por voz, :mod:`sonia.actions.moves`) va siempre.
     ``include_trivia`` anuncia ``start_trivia``, ``trivia_answer``, ``trivia_next``,
     ``restart_trivia`` y ``stop_trivia`` cuando hay banco de preguntas
     (``assets/trivia/preguntas.md``).
     """
+    from sonia.actions.moves import PLAY_ANIMATION
     from sonia.actions.trivia import (
         RESTART_TRIVIA,
         START_TRIVIA,
@@ -204,6 +206,7 @@ def build_default_registry(
         registry.register(LOOK)
     registry.register(SHOW_IMAGE)
     registry.register(HIDE_IMAGE)
+    registry.register(PLAY_ANIMATION)
     if include_trivia:
         registry.register(START_TRIVIA)
         registry.register(TRIVIA_ANSWER)

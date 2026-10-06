@@ -49,7 +49,7 @@ Tu backend tiene estas capacidades:
 {capabilities}
 Delega en el backend cuando:
 - Quieras mostrar o retirar una imagen en tu pantalla. Cuando hables de Sonnet Code, enseña su logo; cuando cambies de tema, retíralo.
-{look_when}{trivia_when}- La pregunta necesite razonar con cuidado y la respuesta no esté clara en tu base de conocimiento.
+{look_when}{moves_when}{trivia_when}- La pregunta necesite razonar con cuidado y la respuesta no esté clara en tu base de conocimiento.
 No delegues cuando:
 {no_delegate_chat}
 - Solo hace falta una aclaración breve.
@@ -61,6 +61,10 @@ _CAPABILITIES = {
         "Sonnet Code) o la última foto de la cámara."
     ),
     "hide_image": "- Retirar la imagen que estás mostrando.",
+    "play_animation": (
+        "- Moverte en la pantalla: bailar, saludar con la mano, la señal de paz, un saludo "
+        "militar, pulgares arriba, celebrar, lamentarte o ponerte pensativa."
+    ),
     "look": "- Mirar: tomar una foto nueva con la cámara del stand y decirte qué se ve.",
     "start_trivia": (
         "- Trivia: empezar en tu pantalla una trivia de preguntas sobre el DevFest y la "
@@ -74,6 +78,13 @@ _CAPABILITIES = {
     "restart_trivia": "- Reiniciar la trivia: una partida nueva desde la primera pregunta.",
     "stop_trivia": "- Terminar la trivia en curso.",
 }
+
+#: Cuándo delegar un movimiento (``play_animation``).
+_MOVES_WHEN = (
+    "- Te pidan que bailes, saludes o hagas un gesto («¡baila!», «haz la de la paz»). Hazlo "
+    "con gusto y acompáñalo con una frase corta; no lo describas. No te muevas por tu cuenta "
+    "a cada rato: solo cuando te lo pidan o al celebrar algo.\n"
+)
 
 #: Cuándo delegar la trivia (solo si el backend tiene la acción).
 _TRIVIA_WHEN = (
@@ -302,6 +313,7 @@ def build_live_instructions(
         setting_rule=_MEETING_SETTING_RULE if in_meeting(settings) else _STAND_RULE,
         camera_rule=camera_rule,
         look_when=look_when if "look" in names else "",
+        moves_when=_MOVES_WHEN if "play_animation" in names else "",
         trivia_when=_TRIVIA_WHEN if "start_trivia" in names else "",
         no_delegate_chat=_NO_DELEGATE_CHAT[mode],
     )

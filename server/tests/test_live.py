@@ -390,7 +390,11 @@ async def test_session_start_lleva_modelo_voz_formato_y_acciones(tmp_path: Path)
         assert backend["reasoning"] == {"effort": "low"}
         assert "service_tier" not in backend
         # Sin cámara no se anuncia ``look``; las funciones van planas (API Responses).
-        assert [t["name"] for t in backend["tools"]] == ["show_image", "hide_image"]
+        assert [t["name"] for t in backend["tools"]] == [
+            "show_image",
+            "hide_image",
+            "play_animation",
+        ]
         assert all(t["type"] == "function" and "function" not in t for t in backend["tools"])
         instructions = session["instructions"]
         assert "Eres Sonia" in instructions
@@ -416,7 +420,12 @@ def test_session_config_respeta_los_opcionales(tmp_path: Path) -> None:
     assert backend["parallel_tool_calls"] is False
     assert "logo-sonnet" in backend["instructions"]
     assert config["audio"]["output"]["voice"] == "cedar"
-    assert [t["name"] for t in backend["tools"]] == ["look", "show_image", "hide_image"]
+    assert [t["name"] for t in backend["tools"]] == [
+        "look",
+        "show_image",
+        "hide_image",
+        "play_animation",
+    ]
     assert "Mirar: tomar una foto nueva" in config["instructions"]
 
 
@@ -1246,6 +1255,7 @@ async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
         assert [t["name"] for t in backend["tools"]] == [
             "show_image",
             "hide_image",
+            "play_animation",
             "start_trivia",
             "trivia_answer",
             "trivia_next",
@@ -1323,3 +1333,33 @@ async def test_la_trivia_se_cancela_si_se_cae_la_sesion(tmp_path: Path) -> None:
         await rig.rec.wait_type("trivia_end")
         assert rig.rec.of_type("trivia_end")[0]["reason"] == "cancelled"
         assert not trivia.active
+
+
+async def test_baila_cuando_se_lo_piden(tmp_path: Path) -> None:
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        assert "Te pidan que bailes" in conn.start["session"]["instructions"]
+        # Antes de que Unity mande su catálogo no hay movimientos.
+        script = await _backend_call(conn, "m1", "play_animation", {"movimiento": "bailar"})
+        assert "no puedes moverte" in script
+        # Unity manda el catálogo al conectar; GPT-Live delega «¡baila!».
+        await rig.client.send(
+            json.dumps(
+                {
+                    "type": "animations",
+                    "animations": [
+                        {"clip": "Wave", "group": "greeting"},
+                        {"clip": "QuickAction_vibe", "group": "dance"},
+                    ],
+                }
+            )
+        )
+        await wait_until(lambda: bool(rig.engine._moves.available()))
+        script = await _backend_call(conn, "m2", "play_animation", {"movimiento": "bailar"})
+        assert script.startswith("Hecho")
+        await rig.rec.wait_type("play_animation")
+        assert rig.rec.of_type("play_animation") == [
+            {"type": "play_animation", "clip": "QuickAction_vibe", "whole": True}
+        ]
+        script = await _backend_call(conn, "m3", "play_animation", {"movimiento": "paz"})
+        assert "no lo tienes" in script and "bailar, saludar" in script

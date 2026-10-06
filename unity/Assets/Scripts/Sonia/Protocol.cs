@@ -162,12 +162,21 @@ namespace Sonia
         [JsonProperty("clip")] public string Clip;
     }
 
-    /// <summary>El panel pide un clip concreto del catálogo que mandó Unity (<see cref="AnimationCatalog"/>).</summary>
+    /// <summary>
+    /// El panel (o un movimiento pedido de viva voz) pide un clip concreto del
+    /// catálogo que mandó Unity (<see cref="AnimationCatalog"/>).
+    /// </summary>
     [Serializable]
     public class PlayAnimationMessage
     {
         /// <summary>Nombre del clip, tal cual va en el mensaje <c>animations</c>.</summary>
         [JsonProperty("clip")] public string Clip;
+
+        /// <summary>
+        /// Que suene entero aunque Sonia pase a pensar o a hablar (movimientos por
+        /// voz). Sin él, como desde el panel, el cambio de estado lo corta.
+        /// </summary>
+        [JsonProperty("whole")] public bool Whole;
     }
 
     /// <summary>Subtítulos en pantalla sí o no (panel, mensaje fijo: se repite tras <c>hello</c>).</summary>

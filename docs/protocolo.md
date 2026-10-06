@@ -114,10 +114,12 @@ envía justo antes de una frase `ambient` para que Sonia cante mientras baila.
 
 ### `play_animation`
 
-Reproduce un clip concreto del catálogo que Unity mandó con `animations` (botones de «Animaciones» en el bloque Avanzado del panel). A diferencia de `attention`, se atiende en cualquier estado: el clip suena una vez sobre el cuerpo y el coreógrafo vuelve después a lo que tocaba (reposo, escuchar, pensar o los gestos al hablar). Con Sonia fuera de pantalla no hace nada. Un nombre que no esté en el set se ignora con un aviso en la consola.
+Reproduce un clip concreto del catálogo que Unity mandó con `animations`: lo mandan los botones de «Animaciones» del bloque Avanzado del panel y la acción `play_animation` que GPT-Live delega cuando le piden a Sonia que baile o haga un gesto (`server/sonia/actions/moves.py`). A diferencia de `attention`, se atiende en cualquier estado: el clip suena una vez sobre el cuerpo y el coreógrafo vuelve después a lo que tocaba (reposo, escuchar, pensar o los gestos al hablar). Con Sonia fuera de pantalla no hace nada. Un nombre que no esté en el set se ignora con un aviso en la consola.
+
+Sin `whole` (el panel), pasar a pensar o a hablar corta el clip. Con `whole: true` (los movimientos por voz) suena entero aunque Sonia hable mientras tanto, como las reacciones de la trivia (`AvatarChoreographer.PlayReaction`); si no, el «¡allá voy!» de Sonia lo cortaría.
 
 ```json
-{"type": "play_animation", "clip": "Dance_HipHop"}
+{"type": "play_animation", "clip": "QuickAction_vibe", "whole": true}
 ```
 
 ### `presence`

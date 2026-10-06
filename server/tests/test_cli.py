@@ -458,7 +458,7 @@ async def test_build_components_sin_camara(tmp_path: Path) -> None:
     try:
         assert components.policy.enabled is False
         assert components.narrator is None and components.llm is None
-        assert components.registry.names() == ["show_image", "hide_image"]
+        assert components.registry.names() == ["show_image", "hide_image", "play_animation"]
         assert components.hub.sample_rate == 24_000
         ctx = components.action_context()
         assert ctx.gallery_dir == str(tmp_path / "gallery")
@@ -476,7 +476,7 @@ async def test_build_components_con_camara_de_unity(tmp_path: Path) -> None:
     components = cli.build_components(settings)
     try:
         assert components.hub.sample_rate == 16_000
-        assert components.registry.names() == ["look", "show_image", "hide_image"]
+        assert components.registry.names() == ["look", "show_image", "hide_image", "play_animation"]
         assert components.narrator is not None
     finally:
         await components.close()
