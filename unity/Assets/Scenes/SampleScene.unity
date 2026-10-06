@@ -7048,11 +7048,11 @@ MonoBehaviour:
   presenceShotFieldOfView: 0
   presenceSmoothTime: 0.75
   stageFraming: 1
-  conversationHeight: 1.16
-  conversationEyeLine: 0.368
+  conversationHeight: 1.24
+  conversationEyeLine: 0.27
   idleShotEnabled: 1
-  idleHeight: 1.32
-  idleEyeLine: 0.327
+  idleHeight: 1.42
+  idleEyeLine: 0.26
   idleShotDelay: 8
   eyesAboveHeadBone: 0.11
   smoothing: 2.5

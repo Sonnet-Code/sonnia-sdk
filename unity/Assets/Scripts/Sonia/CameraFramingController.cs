@@ -140,13 +140,13 @@ namespace Sonia
 
         [SerializeField]
         [Range(0.5f, 2.5f)]
-        [Tooltip("Alto que se ve a la altura de la cabeza al conversar, en metros. 1,16: de cintura para arriba.")]
-        private float conversationHeight = 1.16f;
+        [Tooltip("Alto que se ve a la altura de la cabeza al conversar, en metros. 1,24: de medio muslo para arriba, con las manos de los gestos a la vista.")]
+        private float conversationHeight = 1.24f;
 
         [SerializeField]
         [Range(0.1f, 0.6f)]
         [Tooltip("Dónde quedan los ojos al conversar, en fracción del alto de la pantalla desde arriba.")]
-        private float conversationEyeLine = 0.368f;
+        private float conversationEyeLine = 0.27f;
 
         [SerializeField]
         [Tooltip("Abrir a un plano de rodillas para arriba cuando nadie conversa.")]
@@ -154,13 +154,13 @@ namespace Sonia
 
         [SerializeField]
         [Range(0.5f, 2.5f)]
-        [Tooltip("Alto que se ve a la altura de la cabeza en reposo, en metros. 1,32: de rodillas para arriba.")]
-        private float idleHeight = 1.32f;
+        [Tooltip("Alto que se ve a la altura de la cabeza en reposo, en metros. 1,42: de rodillas para arriba, con la cadera y las manos por encima de la invitación.")]
+        private float idleHeight = 1.42f;
 
         [SerializeField]
         [Range(0.1f, 0.6f)]
         [Tooltip("Dónde quedan los ojos en reposo, en fracción del alto de la pantalla desde arriba.")]
-        private float idleEyeLine = 0.327f;
+        private float idleEyeLine = 0.26f;
 
         [SerializeField]
         [Range(0f, 30f)]

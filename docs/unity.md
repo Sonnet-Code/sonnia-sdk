@@ -741,8 +741,9 @@ escena no cambia y en modo edición se sigue viendo el HUD antiguo:
 | Invitación: bocadillo blanco de Sonia, «SONIA» (Manrope ExtraBold 34, azul de marca) y «¡Acércate y pregúntame lo que quieras!» (Manrope ExtraBold 62, dos líneas), con la colita a la izquierda del centro inclinada hacia ella | Abajo, margen 72 a los lados y 96 abajo; la colita sale a 236 del borde izquierdo del bocadillo | Si Sonia puede conversar (`stage_mode` con `talk`), está en reposo, no hay subtítulos desde hace 7,5 s y no hay imagen, trivia ni modo Fuera |
 | Subtítulos de Sonia: Manrope ExtraBold 64, blancos, centrados, sin caja, con lo que acaba de decir atenuado | Abajo, a 96 del borde, 968 de ancho, como mucho unos 110 caracteres (de una frase larga se ve el final) | Mientras habla y 6 s después |
 | Lo que dijo el visitante: pastilla navy oscura «TÚ …» (sobre el jersey claro una translúcida no se leía) | Encima del texto de Sonia | Con los subtítulos |
-| Sombra navy de abajo (degradado) | Los 760 px de abajo | Siempre |
-| Sombra más alta detrás de los subtítulos, y sombra suave pegada a sus letras | Los 1000 px de abajo | Con los subtítulos |
+| Sombra navy de abajo (degradado) | Los 760 px de abajo | Apagada de momento (`StageScreen.bottomShade`): tapaba las manos de Sonia |
+| Sombra más alta detrás de los subtítulos | Los 1000 px de abajo | Con los subtítulos, si `bottomShade` está encendido |
+| Sombra suave pegada a las letras de los subtítulos | En el propio texto | Con los subtítulos |
 
 Detalles que no son obvios:
 
@@ -790,11 +791,15 @@ Detalles que no son obvios:
 
 **Desde el diseño F** `CameraFramingController` calcula el plano base con los
 huesos del avatar enganchado (el doble al arrancar y el del SDK en cuanto llega)
-en lugar de usar la pose de la cámara en la escena: de cintura para arriba
-(1,16 m de alto a la altura de la cabeza) con los ojos al 36,8 % de la pantalla
-desde arriba, a la altura de los de un adulto si el borde de abajo del monitor
-está a unos 0,9 m del suelo. Cuando nadie conversa (estado `idle` durante 8 s),
-se abre al plano de reposo, de rodillas para arriba (1,32 m, ojos al 32,7 %).
+en lugar de usar la pose de la cámara en la escena: de medio muslo para arriba
+(1,24 m de alto a la altura de la cabeza) con los ojos al 27 % de la pantalla
+desde arriba, para que las manos de los gestos de Sage se vean enteras por
+encima de los subtítulos (hasta el 6 de octubre era de cintura para arriba,
+1,16 m y ojos al 36,8 %, a la altura de los de un adulto si el borde de abajo
+del monitor estaba a unos 0,9 m del suelo; con los ojos más arriba, el monitor
+va algo más bajo). Cuando nadie conversa (estado `idle` durante 8 s), se abre
+al plano de reposo, de rodillas para arriba (1,42 m, ojos al 26 %), con la
+cadera y las manos asomando por encima de la invitación.
 Los ojos se toman 11 cm por encima del hueso de la cabeza. Los ajustes de
 «Developer» del panel se aplican igual sobre los dos, y los planos de panel,
 abierto, de salida y del Modo Jean no cambian. Todo esto se puede apagar con
@@ -1596,7 +1601,7 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `Gestures/GeniesOzzAsset.cs` | Bytes de un `.ozz` importado (`Editor/GeniesOzzImporter.cs`) |
 | `Gestures/GeniesGestureSet.cs` | Gestos de un personaje de Genies (Sage) con su ficha para el director de gestos |
 | `Gestures/GeniesGestureLayer.cs` | Reproduce los gestos de Genies sobre el torso (`enlace · clip`) con fundidos y curvas de cara |
-| `CameraFramingController.cs` | Planos del stand calculados con los huesos del avatar (conversación de cintura para arriba y reposo de rodillas para arriba), plano de panel, abierto para los bailes y travelling a cuerpo entero en el modo Fuera |
+| `CameraFramingController.cs` | Planos del stand calculados con los huesos del avatar (conversación de medio muslo para arriba y reposo de rodillas para arriba), plano de panel, abierto para los bailes y travelling a cuerpo entero en el modo Fuera |
 | `StageScreen.cs` | Pantalla del stand (diseño F), construida por código en Play: fondo de la marca, logo, QR, invitación a hablar (bocadillo de Sonia) y subtítulos tipo karaoke |
 | `PresenceController.cs` | Modo Fuera (`presence`): sale caminando con el root motion del ciclo de caminar, se oculta, y vuelve frenando hasta su marca (sección 6c) |
 | `AwaySignController.cs` | Letrero del modo Fuera en el Canvas del HUD, construido por código, con fundidos |

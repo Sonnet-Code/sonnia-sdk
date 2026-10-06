@@ -62,6 +62,10 @@ namespace Sonia
         [Tooltip("Tinte del fondo. El tonemapping de la escena lo oscurece un poco; por encima de blanco lo compensa.")]
         private Color backdropTint = Color.white;
 
+        [SerializeField]
+        [Tooltip("Degradado azul oscuro en la parte de abajo (la sombra de siempre y la que se enciende con los subtítulos). Apagado de momento: tapaba las manos de Sonia.")]
+        private bool bottomShade;
+
         [Header("Subtítulos")]
         [SerializeField]
         [Range(32f, 96f)]
@@ -127,6 +131,7 @@ namespace Sonia
         private TextMeshProUGUI _visitorText;
         private LayoutElement _visitorTextLayout;
         private TextMeshProUGUI _soniaText;
+        private Image _scrim;
         private Image _conversationScrim;
 
         // Estado de la conversación.
@@ -549,6 +554,8 @@ namespace Sonia
             Fade(_visitorGroup, _visitor.Length > 0 ? 1f : 0f, dt, 6f);
             Fade(_invitationGroup, invitationUp ? 1f : 0f, dt, invitationUp ? 2.5f : 6f);
             _invitationRect.anchoredPosition = new Vector2(0f, InvitationBottom - 24f * (1f - _invitationGroup.alpha));
+            _scrim.enabled = bottomShade;
+            _conversationScrim.enabled = bottomShade;
             _conversationScrim.color = new Color(Dark.r, Dark.g, Dark.b, 0.9f * _subtitleGroup.alpha);
 
             // Al terminar de apagarse, fuera el texto viejo.
@@ -785,8 +792,9 @@ namespace Sonia
         private void BuildScrim(RectTransform stage)
         {
             Sprite scrim = LoadSprite("stage-scrim", Vector4.zero);
-            Image image = NewImage("Sombra", stage, scrim, new Color(Dark.r, Dark.g, Dark.b, 0.92f));
-            RectTransform rect = image.rectTransform;
+            _scrim = NewImage("Sombra", stage, scrim, new Color(Dark.r, Dark.g, Dark.b, 0.92f));
+            _scrim.enabled = bottomShade;
+            RectTransform rect = _scrim.rectTransform;
             rect.anchorMin = new Vector2(0f, 0f);
             rect.anchorMax = new Vector2(1f, 0f);
             rect.pivot = new Vector2(0.5f, 0f);
@@ -985,6 +993,7 @@ namespace Sonia
         {
             Sprite scrim = LoadSprite("stage-scrim", Vector4.zero);
             _conversationScrim = NewImage("SombraConversacion", parent, scrim, new Color(Dark.r, Dark.g, Dark.b, 0f));
+            _conversationScrim.enabled = bottomShade;
             RectTransform rect = _conversationScrim.rectTransform;
             rect.anchorMin = new Vector2(0f, 0f);
             rect.anchorMax = new Vector2(1f, 0f);
