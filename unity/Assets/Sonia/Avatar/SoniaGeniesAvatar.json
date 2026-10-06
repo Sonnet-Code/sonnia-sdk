@@ -3,20 +3,20 @@
   "equippedAssetIds": [
     "AvatarBase/recmDqoKYpEG1TQV",
     "Flair/rec9um61avz6QudeQ",
+    "AvatarMakeup/rec9Zs6eoELRpvlsA",
     "AvatarBase/recmC2JlPphaEjdVf",
     "AvatarEyes/recme09fGV5YIcq1",
     "AvatarBase/recLi0Y5vBmeDqOWC",
     "Flair/recHvjoYZUlrWeA6V",
+    "AvatarMakeup/recCfa7nRn8wj1Th0",
     "AvatarBase/recaG3AZTGON2489j",
     "AvatarBase/recmdZ4C4enmt630",
+    "AvatarMakeup/recBOkwY1zptSGDsQ",
     "WardrobeGear/9e0747efefb53aac",
-    "WardrobeGear/ba7383afc44bfe0d",
     "WardrobeGear/c3a89bc45f9a9ad9",
     "AvatarBase/recAyIbaC69cO2CnN",
     "WardrobeGear/recZfKwDGWgdEWQtb",
-    "AvatarMakeup/recBOkwY1zptSGDsQ",
-    "AvatarMakeup/recaqbhZzZTmUJHrx",
-    "AvatarMakeup/recCfa7nRn8wj1Th0"
+    "WardrobeGear/b6a9fd87ac35514b"
   ],
   "colors": {
     "unified-faceGems1": {
@@ -25,16 +25,10 @@
       "b": 0.5647059,
       "a": 1.0
     },
-    "unified-faceGems2": {
-      "r": 0.8392157,
-      "g": 0.8862745,
-      "b": 0.847058833,
-      "a": 1.0
-    },
-    "unified-faceGems3": {
-      "r": 0.0,
-      "g": 0.0,
-      "b": 0.0,
+    "gear-hairR": {
+      "r": 0.2552174,
+      "g": 0.182969376,
+      "b": 0.1254842,
       "a": 1.0
     },
     "gear-hairB": {
@@ -43,10 +37,16 @@
       "b": 0.234573364,
       "a": 1.0
     },
-    "gear-hairR": {
-      "r": 0.2552174,
-      "g": 0.182969376,
-      "b": 0.1254842,
+    "unified-faceGems3": {
+      "r": 0.0,
+      "g": 0.0,
+      "b": 0.0,
+      "a": 1.0
+    },
+    "unified-faceGems2": {
+      "r": 0.8392157,
+      "g": 0.8862745,
+      "b": 0.847058833,
       "a": 1.0
     },
     "unified-skin": {
@@ -68,9 +68,9 @@
       "a": 1.0
     },
     "unified-lipstick1": {
-      "r": 0.7921569,
-      "g": 0.3764706,
-      "b": 0.356862754,
+      "r": 0.596078455,
+      "g": 0.2,
+      "b": 0.160784319,
       "a": 1.0
     },
     "unified-lipstick3": {
@@ -80,9 +80,9 @@
       "a": 1.0
     },
     "unified-lipstick2": {
-      "r": 0.6509804,
-      "g": 0.294117659,
-      "b": 0.274509817,
+      "r": 0.596078455,
+      "g": 0.2,
+      "b": 0.160784319,
       "a": 1.0
     },
     "unified-blush1": {
