@@ -7,6 +7,7 @@ Sonia hace una trivia de preguntas sobre el DevFest, el GDG, la biblioteca, Sonn
 Las dos vías entran por el mismo `TriviaGame.start` (`server/sonia/trivia/game.py`), así que la partida es la misma la lance quien la lance.
 
 - **Por voz.** El visitante dice «¿jugamos a la trivia?» y GPT-Live delega `start_trivia` en el backend.
+- **Requisito y nivel (7 de octubre de 2026).** GPT-Live delega `start_trivia` en cuanto el visitante quiere jugar, sin preguntar nada antes. Si aún no sabe que sigue a Sonnet Code (`sigue_a_sonnet_code`) o el nivel (`nivel`), la acción no abre la partida y devuelve con «PARA SONIA:» qué preguntarle; con la respuesta, GPT-Live vuelve a delegar. Cuando ese procedimiento estaba en su prompt, se ponía a jugar por su cuenta con preguntas inventadas y decía «la detengo» sin delegar `stop_trivia`. Probado por voz con la API real: empezar (de golpe o en dos pasos), responder y terminar se delegan en el mismo turno.
 - **Desde el panel.** En el local y en sonia.sonnetcode.com: botón «Empezar trivia» de la tarjeta «Trivia».
 
 Solo funciona en «Conversando» y con la pantalla conectada. No funciona con el Modo Jean, el editor de personaje ni el modo debug.

@@ -1285,10 +1285,15 @@ async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
             "web_search",
         ]
         assert "PARA SONIA:" in backend["instructions"]
-        assert "Trivia: para jugar hay que seguir" in conn.start["session"]["instructions"]
+        assert (
+            "Trivia: las preguntas, sus opciones y la tarjeta"
+            in conn.start["session"]["instructions"]
+        )
 
         # «¿Jugamos a la trivia?»: GPT-Live delega y el backend llama a start_trivia.
-        script = await _backend_call(conn, "c1", "start_trivia", {})
+        script = await _backend_call(
+            conn, "c1", "start_trivia", {"nivel": "intermedio", "sigue_a_sonnet_code": True}
+        )
         assert script.startswith("PARA SONIA:")
         await rig.rec.wait_type("trivia_question")
         question = rig.rec.of_type("trivia_question")[0]

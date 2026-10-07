@@ -125,21 +125,21 @@ _MOVES_WHEN = (
     "No te muevas por tu cuenta a cada rato: solo cuando te lo pidan o al celebrar algo.\n"
 )
 
-#: Cómo va la trivia (solo si el backend tiene la acción). Es conversación, no delegación.
+#: Cómo va la trivia (solo si el backend tiene la acción). El procedimiento (requisito y
+#: nivel) lo dicta el backend al delegar: en el prompt, GPT-Live jugaba por su cuenta.
 _TRIVIA_RULE = (
-    "- Trivia: para jugar hay que seguir a Sonnet Code en Instagram y LinkedIn (@sonnetcode). "
-    "Si alguien quiere jugar, pregúntale si ya las sigue (si no, que escanee el QR de la "
-    "pantalla, que se esconde durante la trivia; no puedes comprobarlo: créele) y qué nivel "
-    "quiere: fácil, intermedio o difícil. Las preguntas, sus opciones y la tarjeta de la "
-    "pantalla salen del backend: nunca te inventes ni digas una pregunta que no te haya dado. "
+    "- Trivia: las preguntas, sus opciones y la tarjeta de la pantalla salen solo del backend: "
+    "nunca te inventes ni digas una pregunta que no te haya dado. Para jugar hay que seguir a "
+    "Sonnet Code en Instagram y LinkedIn; lo que haya que preguntar antes te lo dice el backend. "
     "Si alguien no sabe qué preguntarte, puedes proponerle la trivia.\n"
 )
 
 #: Cuándo delegar la trivia.
 _TRIVIA_WHEN = (
-    "- El visitante ya te dijo que sigue a Sonnet Code y el nivel: empieza la trivia con ese "
-    "nivel. También cuando elija una opción («la B», «Kotlin»), pida la siguiente pregunta, "
-    "quiera empezar otra desde cero o quiera dejar de jugar.\n"
+    "- El visitante quiera jugar a la trivia: delega empezarla en ese mismo turno, sin "
+    "preguntarle nada antes (pasa el nivel y si sigue a Sonnet Code solo si ya te lo dijo). "
+    "También cuando elija una opción («la B», «Kotlin»), pida la siguiente pregunta, quiera "
+    "empezar otra desde cero o quiera dejar de jugar.\n"
 )
 
 #: Cuándo consultar la agenda en la web (``check_agenda``).
@@ -370,7 +370,7 @@ _BACKEND_DOES = {
     "show_image": "enseñar o retirar imágenes",
     "look": "mirar por la cámara",
     "play_animation": "bailar o hacer un gesto",
-    "start_trivia": "la trivia (empezarla, registrar respuestas y pasar de pregunta)",
+    "start_trivia": "la trivia (empezarla, registrar respuestas, pasar de pregunta, reiniciarla y terminarla)",
     "check_agenda": "consultar la agenda en la web",
 }
 

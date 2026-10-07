@@ -72,7 +72,8 @@ MODO TRIVIA EN MARCHA: {total} preguntas de nivel {level}, cada una con tres opc
 - No sabes la buena: nunca digas si acierta ni cuál era sin delegar la respuesta; espera al resultado.
 - Con el resultado, reacciona y explica en una o dos frases por qué es la buena. Luego pregunta si quiere la siguiente y espera: solo cuando diga que sí, delega «trivia: siguiente pregunta».
 - Si pide la respuesta, contesta dos veces, quiere cambiar la suya tras el resultado o saltarse una, dile con humor que así no funciona la trivia.
-- Si quiere dejar de jugar, delega terminarla; si quiere otra desde cero, reiniciarla."""
+- Si quiere dejar de jugar, delega terminarla; si quiere otra desde cero, reiniciarla.
+- En la pantalla nada cambia si no lo delegas: nunca digas «ya está», «la marco» o «la detengo» sin haberlo delegado."""
 
 OFF_TEXT = (
     "La trivia ha terminado y ya no hay preguntas en tu pantalla: vuelve a conversar con "

@@ -504,7 +504,16 @@ async def test_acciones_de_la_trivia(tmp_path: Path) -> None:
     ]
     ctx = ActionContext(camera=None, avatar=None, gallery_dir="", extra={"trivia": game})
 
-    result = await registry.execute("start_trivia", {"nivel": "fácil"}, ctx)
+    # Sin saber si sigue a Sonnet Code ni el nivel, no abre nada: dice qué preguntar.
+    result = await registry.execute("start_trivia", {}, ctx)
+    assert result.text.startswith(f"{SCRIPT_PREFIX} Aún no empieza: para jugar hay que seguir")
+    assert "qué nivel quiere" in result.text and not game.active
+    result = await registry.execute("start_trivia", {"sigue_a_sonnet_code": True}, ctx)
+    assert "Aún no empieza: pregúntale qué nivel quiere" in result.text and not game.active
+
+    result = await registry.execute(
+        "start_trivia", {"nivel": "fácil", "sigue_a_sonnet_code": True}, ctx
+    )
     assert result.text.startswith(SCRIPT_PREFIX) and "nivel fácil" in result.text
     assert current(screen)["question"] in result.text
 
