@@ -704,6 +704,8 @@ esa proyección:
 Unos 2 s en este Mac, mientras el avatar sigue aparcado. El registro dice
 «Camiseta de staff puesta en …».
 
+La prenda de Genies es de una sola capa y su material (URP Lit) solo dibuja la cara de fuera (`_Cull` 2): al levantar el brazo, por la boca de la manga se veía el fondo a través de la tela de dentro. `GeniesStaffShirt` pone el material a doble cara (`_Cull` 0) al hornear la camiseta y lo devuelve como estaba al destruirse el avatar (7 de octubre de 2026).
+
 **Para revisarla sin editor** (`Genies/GeniesShirtProbe.cs`):
 
 ```bash

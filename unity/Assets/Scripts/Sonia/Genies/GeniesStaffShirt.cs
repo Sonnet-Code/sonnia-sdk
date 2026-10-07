@@ -59,6 +59,9 @@ namespace Sonia
         /// <summary>Propiedades del color de la tela según el shader (URP Lit, MegaShader, Built-in).</summary>
         private static readonly string[] AlbedoProperties = { "_BaseMap", "_AlbedoTransparency", "_MainTex" };
 
+        /// <summary>Caras que dibuja el shader (URP Lit: 0 las dos, 2 solo la de fuera).</summary>
+        private const string CullProperty = "_Cull";
+
         /// <summary>Texturas originales de los materiales retocados (NAF puede reutilizar un material).</summary>
         private static readonly Dictionary<Material, Texture> Originals = new Dictionary<Material, Texture>();
 
@@ -145,6 +148,15 @@ namespace Sonia
             owner.Material = garment.Material;
             owner.Property = garment.AlbedoProperty;
             owner.Texture = texture;
+            if (garment.Material.HasProperty(CullProperty))
+            {
+                // La prenda de Genies es de una sola capa y solo dibuja su cara de fuera:
+                // al levantar el brazo, por la boca de la manga se veía el fondo a través
+                // de la tela de dentro. Con las dos caras se ve la tela.
+                owner.Cull = garment.Material.GetFloat(CullProperty);
+                garment.Material.SetFloat(CullProperty, (float)UnityEngine.Rendering.CullMode.Off);
+                garment.Material.doubleSidedGI = true;
+            }
             Debug.Log("[Sonia] Camiseta de staff (" + design.Name + ") puesta en «" + garment.Material.name + "» ("
                       + width + "x" + height + ", " + job.PrintedTexels + " texeles estampados, piezas " + job.IslandSummary + ", brazos " + arms + ", "
                       + ((Time.realtimeSinceStartup - started) * 1000f).ToString("F0") + " ms).");
@@ -918,9 +930,15 @@ namespace Sonia
             public Material Material;
             public string Property;
             public Texture2D Texture;
+            public float Cull = -1f;
 
             private void OnDestroy()
             {
+                if (Material != null && Cull >= 0f && Material.HasProperty(CullProperty))
+                {
+                    Material.SetFloat(CullProperty, Cull);
+                }
+
                 if (Material != null && Material.GetTexture(Property) == Texture
                     && Originals.TryGetValue(Material, out Texture original))
                 {
