@@ -97,6 +97,19 @@ namespace Sonia.EditorTools
             BuildForTesters(() => Build(BuildTarget.StandaloneWindows64, "Windows-pruebas-x64", "Sonnia.exe"));
         }
 
+        /// <summary>
+        /// Como la de prueba de Windows, pero de desarrollo y con el registro interno de
+        /// Genies (FORCE_LOGS): para ver en el Player.log de un PC por qué el SDK no monta
+        /// el avatar (7 de octubre de 2026: «NativeGenie» sin mallas en un portátil con AMD
+        /// Ryzen). Sale en Build/Windows-dev-x64.
+        /// </summary>
+        [MenuItem("Sonia/Build Windows (diagnóstico, registro de Genies)")]
+        public static void BuildWindowsDiagnostics()
+        {
+            BuildForTesters(() => Build(BuildTarget.StandaloneWindows64, "Windows-dev-x64", "Sonnia.exe",
+                BuildOptions.Development, "FORCE_LOGS"));
+        }
+
         private static void BuildForTesters(System.Action build)
         {
             SoniaPlayerBuildFixes.BuildEnv = SoniaPlayerBuildFixes.TesterBuildEnv;
