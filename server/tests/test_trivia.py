@@ -584,3 +584,20 @@ async def test_si_el_visitante_habla_y_no_se_delega_nada_se_le_recuerda(tmp_path
     await game.tick(now + 40 + NUDGE_S + 1)
     await settle()
     assert NUDGE_TEXT not in host.spoken[1:]
+
+
+async def test_cada_pregunta_le_pasa_las_opciones_a_gpt_live(tmp_path: Path) -> None:
+    """El backend resumía el guion y se comía las opciones: Sonia no sabía que «Cobol» era la B."""
+    game, host, screen = make_game(tmp_path)
+    await game.start("voice")
+    first = current(screen)
+    options = [i for i in host.instructions if i.startswith("TRIVIA, pregunta 1 de")]
+    assert len(options) == 1
+    assert (
+        f"A: {first['options'][0]}; B: {first['options'][1]}; C: {first['options'][2]}."
+        in options[0]
+    )
+    assert "diga la letra o la respuesta" in options[0]
+    await game.answer(correct_index(game), "voice")
+    await game.next("voice")
+    assert any(i.startswith("TRIVIA, pregunta 2 de") for i in host.instructions)

@@ -90,6 +90,14 @@ QUESTION_TEXT = (
     "No leas las opciones, ya están en la pantalla (para ti: A: {a}; B: {b}; C: {c})."
 )
 
+#: Las opciones de cada pregunta, directas a GPT-Live: el backend resumía el guion y se
+#: las comía, y Sonia no sabía que «Cobol» era la B (7 de octubre de 2026).
+OPTIONS_TEXT = (
+    "TRIVIA, pregunta {number} de {total}: «{question}». Opciones en la pantalla, para que "
+    "sepas qué letra elige el visitante, diga la letra o la respuesta (no las leas): "
+    "A: {a}; B: {b}; C: {c}."
+)
+
 REMIND_TEXT = (
     "TRIVIA: no hay ninguna respuesta registrada para la pregunta {number}. Si el visitante ya "
     "te dijo su opción, delega ahora «trivia: responde» con su letra, sin decir si acierta. Si "
@@ -381,6 +389,13 @@ class TriviaGame:
                 index + 1, self._total, question.text, list(question.options), self._score
             ),
         )
+        a, b, c = question.options
+        with contextlib.suppress(Exception):
+            await self._host.instruct(
+                OPTIONS_TEXT.format(
+                    number=index + 1, total=self._total, question=question.text, a=a, b=b, c=c
+                )
+            )
 
     def _question_text(self, index: int, *, lead: str) -> str:
         question = self._questions[index]
