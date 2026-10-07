@@ -80,6 +80,11 @@ class Talk:
     topics: tuple[str, ...] = ()
     language: str = ""
     icon: str = ""
+    #: Foto del ponente (la de la web) y nivel (``beginner``, ``intermediate``...).
+    photo_url: str = ""
+    level: str = ""
+    #: De qué va (la descripción de la web). No va en las instrucciones: solo en ``show_talk``.
+    description: str = ""
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -95,6 +100,9 @@ class Talk:
             "topics": list(self.topics),
             "language": self.language,
             "icon": self.icon,
+            "photo_url": self.photo_url,
+            "level": self.level,
+            "description": self.description,
         }
 
     @classmethod
@@ -116,6 +124,9 @@ class Talk:
             topics=tuple(str(t) for t in data.get("topics") or ()),
             language=str(data.get("language") or ""),
             icon=str(data.get("icon") or ""),
+            photo_url=str(data.get("photo_url") or ""),
+            level=str(data.get("level") or ""),
+            description=str(data.get("description") or ""),
         )
 
 

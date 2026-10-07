@@ -27,6 +27,7 @@ from typing import Any
 
 import httpx
 
+from sonia.agenda.card import USER_AGENT, PhotoCache
 from sonia.agenda.schedule import Schedule, diff_agenda, happening, render_agenda
 from sonia.agenda.source import AgendaError, parse_schedule_page
 from sonia.clock import Clock, clock_for, spoken_date, spoken_time
@@ -36,7 +37,6 @@ __all__ = ["AgendaBook", "AgendaUpdate"]
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "Sonnia/0.1 (asistente del stand de Sonnet Code, DevFest Santo Domingo)"
 
 #: Con menos de esta parte de las sesiones de antes, la página nueva se toma por rota.
 SUSPICIOUS_SHRINK = 0.5
@@ -79,12 +79,19 @@ class AgendaBook:
         self._lock = asyncio.Lock()
         self._listeners: list[ChangeListener] = []
         self._loaded = False
+        #: Fotos de los ponentes para las tarjetas de ``show_talk``.
+        self.photos = PhotoCache(transport=transport)
 
     # -- estado ---------------------------------------------------------------
 
     @property
     def schedule(self) -> Schedule | None:
         return self._schedule
+
+    @property
+    def tz(self) -> tzinfo:
+        """La zona horaria del stand, con la que se dicen las horas."""
+        return self._tz
 
     @property
     def source(self) -> str:

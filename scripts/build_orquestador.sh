@@ -53,6 +53,7 @@ uv run --no-sync pyinstaller --noconfirm --clean --log-level WARN \
   --add-data "$REPO/assets/showcase${SEP}assets/showcase" \
   --add-data "$REPO/assets/trivia${SEP}assets/trivia" \
   --add-data "$REPO/assets/agenda${SEP}assets/agenda" \
+  --add-data "$REPO/assets/fonts${SEP}assets/fonts" \
   --add-data "$REPO/server/sonia/panel/static${SEP}sonia/panel/static" \
   ${EXTRA[@]+"${EXTRA[@]}"} \
   "$REPO/server/sonia/__main__.py"

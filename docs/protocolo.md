@@ -89,7 +89,7 @@ Interrupción. Unity descarta inmediatamente todo el audio en cola y deja de mov
 
 ### `show_image`
 
-Mostrar una imagen en el panel de la escena (acción `show_image` del backend o botón del panel). `data_base64` lleva la imagen completa. `source` indica de dónde viene: `gallery` o `camera`. Si nadie la retira, el orquestador manda `hide_image` a los `IMAGE_AUTO_HIDE_SECONDS`.
+Mostrar una imagen en el panel de la escena (acción `show_image` del backend o botón del panel). `data_base64` lleva la imagen completa. `source` indica de dónde viene: `gallery`, `camera` o `agenda` (la tarjeta de una charla que dibuja el orquestador con la acción `show_talk`; Unity la trata como cualquier imagen). Si nadie la retira, el orquestador manda `hide_image` a los `IMAGE_AUTO_HIDE_SECONDS`.
 
 ```json
 {"type": "show_image", "image_id": "logo-sonnet", "source": "gallery", "mime": "image/png", "data_base64": "...", "caption": "Sonnet Code"}

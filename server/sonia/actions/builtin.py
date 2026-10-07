@@ -195,7 +195,7 @@ def build_default_registry(
     (``assets/trivia/preguntas.md``). ``include_agenda`` anuncia ``check_agenda``
     (:mod:`sonia.actions.agenda`) cuando hay agenda del evento.
     """
-    from sonia.actions.agenda import CHECK_AGENDA
+    from sonia.actions.agenda import CHECK_AGENDA, SHOW_TALK
     from sonia.actions.moves import PLAY_ANIMATION
     from sonia.actions.trivia import (
         RESTART_TRIVIA,
@@ -219,4 +219,5 @@ def build_default_registry(
         registry.register(STOP_TRIVIA)
     if include_agenda:
         registry.register(CHECK_AGENDA)
+        registry.register(SHOW_TALK)
     return registry

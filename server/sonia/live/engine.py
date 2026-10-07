@@ -996,7 +996,7 @@ class LiveEngine:
         else:
             result = await self._registry.execute(name, arguments, ctx)
         logger.info("Acción %s(%s) -> %s", name, arguments, result.text)
-        if name == "show_image" and result.text.startswith("Mostrando"):
+        if name in ("show_image", "show_talk") and result.text.startswith("Mostrando"):
             self._schedule_image_auto_hide()
         elif name == "hide_image":
             self._cancel_image_auto_hide()

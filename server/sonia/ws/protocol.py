@@ -108,7 +108,7 @@ MAX_AVATAR_DEFINITION = 64 * 1024
 
 
 Role = Literal["user", "assistant"]
-ImageSource = Literal["gallery", "camera"]
+ImageSource = Literal["gallery", "camera", "agenda"]
 
 
 # ---------------------------------------------------------------------------

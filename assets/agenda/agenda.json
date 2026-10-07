@@ -31,7 +31,10 @@
    "speaker_title": "",
    "topics": [],
    "language": "es",
-   "icon": ""
+   "icon": "",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   },
   {
    "id": "4b304903-f157-463a-8471-1ae3e892ef57",
@@ -45,7 +48,10 @@
    "speaker_title": "",
    "topics": [],
    "language": "es",
-   "icon": ""
+   "icon": "",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   },
   {
    "id": "4dac2336-7ba6-4cb8-86e9-56cdbb0f4f1d",
@@ -59,7 +65,10 @@
    "speaker_title": "",
    "topics": [],
    "language": "es",
-   "icon": "☕"
+   "icon": "☕",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   },
   {
    "id": "19e2ec25-2357-434b-b0cb-a7aa2eb24e07",
@@ -77,7 +86,10 @@
     "DevOps"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/ceb2470a-83a0-49dd-bebe-76ebb8946fba/76165482-2d4b-4b33-9a46-9461203b345b.webp?v=1786919599782",
+   "level": "intermediate",
+   "description": "Aprende como construimos una infrastrucctura que soporta 300millones de peticiones diarias en 45 diferentes blockchains en US/EU/Japon con presupuesto eficiente utilizando k8s, haproxy, docker y cloudflare para configurar un DNS global donde cada cambio pasa por un memory brain sin romper nada en el proceso\n\nPuntos clave:\nInfrastructura; AI; Blockchain; Web3; DNS"
   },
   {
    "id": "8fad6158-2f9b-43dc-ab5a-c6e3d5529fb8",
@@ -94,7 +106,10 @@
     "Producto & Startups"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/14740306-adcd-4f33-bba5-e35d25b28144/824b1f4e-f4ca-4689-b64b-74f3eef2bbe6.webp?v=1784239980584",
+   "level": "intermediate",
+   "description": "Esta sesión presenta, de manera práctica, cómo diseñar automatizaciones empresariales capaces de ejecutar procesos completos y reservar la intervención humana para situaciones excepcionales.\n\nUtilizando la operación de un courier dominicano como hilo conductor, aprenderemos a descomponer un proceso en eventos, estados, reglas, fuentes de datos, herramientas y decisiones. Esta separación permitirá determinar qué tareas deben resolverse mediante automatización tradicional y cuáles pueden beneficiarse de la capacidad de interpretación y razonamiento de la inteligencia artificial.\n\nVeremos cómo transformar correos, documentos y mensajes no estructurados en datos confiables; cómo utilizar function calling para conectar modelos de IA con herramientas empresariales; y cómo coordinar workflows modulares mediante n8n, PostgreSQL, APIs y webhooks. También abordaremos el manejo del estado, la validación de transiciones, la idempotencia y la separación entre decisiones probabilísticas y operaciones deterministas.\n\nLa sesión explicará cómo diseñar flujos resistentes a errores mediante reintentos, trazabilidad, observabilidad, permisos mínimos, validaciones y mecanismos de intervención humana. Se mostrará cómo evitar que el modelo realice directamente cálculos financieros o modificaciones críticas sin controles verificables.\n\nDurante la demostración construiremos y ejecutaremos una secuencia representativa que comenzará con un evento externo y finalizará con el registro de una transacción, su facturación, notificación y próxima acción operativa. El objetivo será comprender el patrón arquitectónico, no solamente el caso de negocio utilizado.\n\nAl finalizar, los asistentes tendrán una metodología para identificar procesos automatizables, definir las herramientas disponibles para un agente, establecer límites de autonomía y evolucionar desde asistentes aislados hacia workflows empresariales autónomos. El mismo enfoque podrá aplicarse a logística, ventas, servicio al cliente, finanzas y operaciones administrativas.\n\nLa idea central de la sesión es que, cuando los sistemas pueden comprender eventos, consultar información y ejecutar acciones de forma segura, las interfaces dejan de ser un requisito permanente y se convierten en un mecanismo opcional de supervisión y control."
   },
   {
    "id": "f7b8c9ab-72ba-471e-bf27-eacc801ee900",
@@ -110,7 +125,10 @@
     "AI/ML"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/8833fd60-8a89-4f9a-bedd-c1b4999ee49c/170084a2-7815-46a8-97da-9e9d527a4986.webp?v=1786399258973",
+   "level": "beginner",
+   "description": "Explora lo que Gemma 4 significa para el futuro de la IA de código abierto. En esta sesión desglosaremos sus capacidades, sus casos de uso prácticos y la creciente oportunidad que tienen desarrolladores y organizaciones de construir, personalizar y desplegar sistemas de IA potentes con mayor control, transparencia y accesibilidad.\n\nPuntos clave:\nImportancia del open source, como funciona gemma, ventajas de un modelo local"
   },
   {
    "id": "bc2af853-9e27-4de6-828e-ffc50b222b86",
@@ -127,7 +145,10 @@
     "Carrera"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/987b557e-3fa0-4df2-9f5a-670b8efef355/fc6c5d99-ddd7-487b-aade-5eb3941c8a78.webp?v=1786013263228",
+   "level": "beginner",
+   "description": "Es común ver proyectos tecnológicos brillantes quedarse estancados en su fase beta, no por fallas en el código, sino por la falta de un \"protocolo de conexión humana\". En el ecosistema del emprendimiento, saber programar, analizar datos o configurar servidores es solo la mitad del trabajo; la otra mitad ocurre lejos del teclado, en las mesas de negociación y en los eventos de la industria.\r\n\r\n\"Compilando tu StartUp: De la Terminal al Cierre de Negocios\" aborda directamente el mayor \"bug\" de los fundadores técnicos: el miedo a las ventas y al protocolo comercial. \r\n\r\nDurante esta sesión, desglosaremos el hardware y software humano necesario para emprender con éxito desde cero. \r\n\r\nAprenderás por qué un apretón de manos firme y el uso estratégico de tarjetas de presentación (físicas y digitales) son tan cruciales como un código limpio.\r\n\r\nMás allá de la actitud, la charla proporciona una hoja de ruta operativa. \r\n\r\nExploraremos cómo optimizar tu \"ancho de banda\" mediante la gestión del tiempo, la importancia de proyectar una imagen profesional (*smart casual*) que genere confianza, y por qué dar el paso hacia la formalización legal y fiscal es el verdadero despliegue a producción de tu empresa.\r\n\r\nSi estás listo para salir del IDE (*Integrated Development Environment*), hacer *networking* con impacto y transformar tus ideas en negocios formales, rentables y escalables, esta charla te entregará el algoritmo para lograrlo.\n\nPuntos clave:\nStartups; Emprendimiento; Tech; IT; Entrepreneur"
   },
   {
    "id": "edcdf879-bf72-4d6d-a089-4d5be21bd080",
@@ -143,7 +164,10 @@
     "Testing / QA"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/23259c21-ce9f-402f-b30a-26ecc46fba21/42c0364b-6812-47bf-8381-6e11eb484c46.webp?v=1787009639699",
+   "level": "intermediate",
+   "description": "Las herramientas cambian. Las tecnologías cambian. Los principios permanecen.\r\n\r\nY en una época en la que la IA puede generar casos de prueba, datos, automatizaciones e incluso analizar resultados, el verdadero valor del Tester está cada vez menos en ejecutar pruebas y más en saber qué probar, por qué probarlo, dónde buscar el riesgo y cómo interpretar lo que encuentra.\n\nPuntos clave:\nAplicar los 7 Principios de Testing para tomar mejores decisiones sobre qué, cuándo y cuánto probar.; Priorizar las pruebas según riesgo y contexto, entendiendo por qué el Testing exhaustivo es imposible.; Identificar cómo la automatización puede generar una falsa sensación de seguridad cuando las pruebas no evolucionan junto con el producto.; Integrar IA en las actividades de Testing sin sustituir el pensamiento crítico, el análisis de riesgos y el criterio del Tester.; Evaluar la calidad más allá de “las pruebas pasaron”, considerando las necesidades reales del usuario y el valor para el negocio."
   },
   {
    "id": "f96078a9-b377-460f-a0e2-6071496e6628",
@@ -157,7 +181,10 @@
    "speaker_title": "",
    "topics": [],
    "language": "es",
-   "icon": "🍽"
+   "icon": "🍽",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   },
   {
    "id": "00543371-d2d1-45f0-90e6-cfacd4be332a",
@@ -174,7 +201,10 @@
     "AI/ML"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/a6d7c0a7-f900-4276-9286-b1a5446f299a/34324536-8e0c-45bc-bc72-0c60da1e0cfe.webp?v=1786454142960",
+   "level": "advanced",
+   "description": "¿En quién te conviertes cuando la IA deja de ser un chatbot y se convierte en una extensión de tu cerebro?\r\n¿Qué pasa cuando, de repente, tienes herramientas para exportar los sistemas que durante décadas solo existieron en tu cabeza?\r\nEn esta charla les voy a contar cómo terminé lanzándome —con un tenedor, optimismo y bastante inconsciencia— a la piscina de tiburones que es el mundo de las licitaciones públicas.\r\nCómo construyes un sistema mental para navegar miles de páginas de documentación técnica, negociar con fabricantes al otro lado del mundo, desarrollar inteligencia comercial, ganar casi 40 millones de dólares en contratos... y también perder 2 millones de dólares por un simple formulario, porque en este negocio los errores se pagan muy caro.\r\nPero la verdadera historia no trata sobre licitaciones.\r\nTrata sobre descubrir que aquello que realmente genera valor no son los documentos, ni los correos, ni los Excel. El verdadero activo es el sistema de decisiones que un profesional construye durante años de experiencia.\r\nCuando entendí eso, dejé de preguntarme cómo usar inteligencia artificial.\r\nEmpecé a preguntarme cómo enseñarle a la inteligencia artificial a pensar como yo.\r\nEsa pregunta terminó convirtiéndose en un ecosistema de herramientas que hoy me permiten investigar mercados, construir inteligencia comercial, automatizar procesos y convertir experiencia profesional en productos escalables.\r\nEsta no es una charla sobre prompts.\r\nEs una charla sobre cómo un profesional puede transformar décadas de conocimiento tácito en sistemas medibles, repetibles y escalables.\r\nPorque la IA no sustituye la experiencia.\r\nLa IA multiplica a quienes saben exactamente cómo piensan.\n\nPuntos clave:\nComo identificar valor de tu experiencia; Como convertir procesos mentales en un sistema; Porque IA multiplica pero no sustituye criterio humano; Errores millonarios y como evitar multiplicar el caos"
   },
   {
    "id": "b7d986d4-a37f-4e3f-bf06-831b1e9cf4c5",
@@ -190,7 +220,10 @@
     "AI/ML"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/12572adf-5632-4270-9346-b3650de7640a/36730709-6274-4e35-b028-08e4fb50d8a3.jpg?v=1788958948531",
+   "level": "intermediate",
+   "description": "A medida que la IA agéntica madura, la primera decisión de diseño difícil no es qué modelo usar, sino cómo coordinan tus agentes. El Agent Development Kit (ADK) de Google ofrece dos respuestas muy distintas: ruteo dinámico multi-agente, donde los agentes LLM deciden a quién transferir el control, y workflow loops estructurados (LoopAgent), donde la ejecución sigue una secuencia fija basada en estado compartido.\r\n\r\nUsando un dominio deliberadamente determinista — un evaluador de expresiones matemáticas multi-agente — esta charla hace visibles los trade-offs en vez de dejarlos en el aire. Construimos ambos patrones y luego entramos en tres modos de falla que solo aparecen cuando ya lo pusiste a andar: recursión descontrolada de tool-calls, la precedencia de operadores rompiéndose bajo secuenciación fija, y loops que terminan en silencio sin devolver el resultado. En el camino vemos sub-agentes anidados y fronteras de error (un guard de división por cero) y un timeline de explicabilidad basado en logs para trazar las transiciones entre agentes.\r\n\r\nTe vas con un framework de decisión concreto sobre cuándo la flexibilidad dinámica le gana a la secuenciación determinista — y cuándo te cuesta, calladita, latencia, tokens y cordura.\n\nPuntos clave:\nCuándo elegir ruteo dinámico multi-agente y cuándo un workflow loop (LoopAgent) en Google ADK: un framework de decisión basado en la naturaleza de la tarea, no en la moda.; Por qué la orquestación multi-agente cobra un \"impuesto de coordinación\": cada transferencia de control es una llamada al LLM que no computa nada, y ese costo escala con la complejidad del problema —; Cómo instrumentar agentes ADK para medir latencia, tokens y costo real por corrida, separando el trabajo útil de la sobrecarga de coordinación.; Tres modos de falla que solo aparecen en producción: recursión descontrolada de tool-calls, la precedencia de operadores rompiéndose bajo secuenciación fija, y loops que terminan en silencio sin devol; Por qué la predictibilidad (varianza baja de costo y latencia) muchas veces vale más que el promedio para planificar producción, y qué patrón te la da."
   },
   {
    "id": "5c637ce6-5873-45af-90cf-ad69da95fcc7",
@@ -207,7 +240,10 @@
     "UI/UX"
    ],
    "language": "Inglés",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/fa74a34c-96e8-4268-a23b-414157ddb35d/389236a4-8b0b-4c93-8ab7-93ad6589d06d.jpg?v=1788958948530",
+   "level": "intermediate",
+   "description": "Las herramientas de IA ya cambiaron cómo diseñamos. Lo que casi nadie está discutiendo es cómo van a cambiar qué diseñamos.\n\nEn esta continuación de la charla anterior, vamos más allá del estado actual de las herramientas para hacernos las preguntas incómodas: ¿qué partes del oficio están a punto de dejar de existir? ¿Qué habilidades pasan de ser “nice to have” a ser el diferenciador real entre un diseñador y un operador de Figma? ¿Y cómo se diseña una interfaz cuando el usuario ya no navega, sino que delega?\n\nVamos a hablar de las superficies que hoy no existen y que alguien va a tener que diseñar: interfaces para supervisar agentes, UIs que se generan en tiempo de ejecución, sistemas donde el diseño no es una pantalla sino un comportamiento, y los nuevos problemas de confianza, permisos y trazabilidad que vienen con eso.\n\nSin hype y sin fatalismo. Una lectura honesta del rubro desde la práctica, para diseñadores que quieren seguir siendo relevantes en cinco años."
   },
   {
    "id": "58c72036-a557-48d3-ab97-d2b91c884487",
@@ -224,7 +260,10 @@
     "Producto & Startups"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/75035718-55f5-45ce-9eb0-128a5e21ce43/ae5885d9-d767-4246-8d0d-1c0823f8d495.jpeg?v=1784662742584",
+   "level": "beginner",
+   "description": "Por primera vez en la historia, una sola persona con criterio + IA + herramientas modernas puede construir, distribuir y operar una empresa completa a escala — y eso cambia quién puede emprender y cómo se emprende.\r\n\r\nEn esta charla te voy a compartir mi experiencia y la tesis que tengo sobre cómo el mundo está cambiando.\n\nPuntos clave:\nAI; Emprendimiento"
   },
   {
    "id": "5585dbd8-cecd-4b73-b4a6-e15b76b18cf0",
@@ -240,7 +279,10 @@
     "Mobile"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/33524d98-0270-4623-a311-31bfd35066b5/a96c1a79-2fe8-493a-975a-96a738a38005.webp?v=1783895817634",
+   "level": "intermediate",
+   "description": "KMP promete \"escribe una vez, corre en todos lados\", pero en producción la pregunta real no es si adoptar Kotlin Multiplatform, sino qué compartir y qué no. En esta charla planteamos un enfoque conservador y probado: Kotlin hace el trabajo pesado (dominio, datos, red, estado) y Swift se limita a dibujar la UI, sin renunciar a la experiencia nativa. Veremos cómo estructurar el proyecto con una Clean Architecture familiar para cualquier dev Android (domain, core, data, shared), cómo SKIE convierte Flow y coroutines en algo idiomático para Swift, cuándo usar expect/actual sin abusar de él, y cómo empaquetar y distribuir el build para iOS (XCFramework + Swift Package Manager) sin perder el fin de semana. Cierra con un checklist de 10 buenas prácticas para llevarse directo al próximo proyecto.\n\nPuntos clave:\nQué compartir entre Android e iOS y qué dejar 100% nativo.; Cómo estructurar un proyecto KMP con Clean Architecture (domain, core, data, shared); Por qué adoptar SKIE desde el día uno.; Cuándo usar expect/actual y cuándo evitarlo.; Cómo empaquetar y distribuir el build de iOS sin CocoaPods."
   },
   {
    "id": "bb265309-f526-4594-8d49-f8b260b8c546",
@@ -254,7 +296,10 @@
    "speaker_title": "",
    "topics": [],
    "language": "es",
-   "icon": "☕"
+   "icon": "☕",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   },
   {
    "id": "51a62ff0-62f1-48ce-97bc-24f7b9c0c5e9",
@@ -268,7 +313,10 @@
    "speaker_title": "",
    "topics": [],
    "language": "es",
-   "icon": ""
+   "icon": "",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   },
   {
    "id": "597e980c-14a4-45d7-b41f-fdb81ffbe3b6",
@@ -285,7 +333,10 @@
     "Comunidad"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/b222e6c9-e110-4bb3-a2c9-a2251863b9ab/60bfe569-fe21-479e-bdc0-e390f2e67292.webp?v=1788105211635",
+   "level": "intermediate",
+   "description": "Cómo usamos IA para administrar el backoffice de una unconference distribuida de 70+ sesiones y 2,500+ asistentes en menos de 2 meses y que aprendimos para la siguiente edición."
   },
   {
    "id": "aae4489a-ff4c-4831-9920-80eabe168ad3",
@@ -302,7 +353,10 @@
     "Producto & Startups"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/ac1f04f0-56fc-4bab-885d-b7fe5df487cb/107676c3-a3b0-4c9a-9786-5509e1591f36.jpeg?v=1782147954906",
+   "level": "intermediate",
+   "description": "Muchas SaaS invierten tiempo y dinero en campañas que generan visitas pero no clientes. En esta charla veremos un framework práctico para construir una estrategia de marketing enfocada en activación y retención de usuarios. Con tácticas reales de contenido, comunidad, SEO, partnerships, DevRel y product-led growth que pueden implementarse desde etapas tempranas hasta empresas en crecimiento\n\nPuntos clave:\nCómo identificar el ICP (Ideal Customer Profile) que necesitas; Cómo crear mensajes que conecten con problemas reales y con personas; Qué canales funcionan mejor según la etapa de la SaaS; Cómo medir el funnel completo: awareness, signup, activación y retención; Cómo usar contenido y comunidad para generar demanda sostenible"
   },
   {
    "id": "0ea7b54b-7b46-4ee7-a949-3a8f1eeaa591",
@@ -318,7 +372,10 @@
     "AI/ML"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/7ca448bf-ed35-46a8-a128-74f0190047cf/137f3472-ad13-43eb-9188-2f8de7a88638.jpg?v=1788958948530",
+   "level": "intermediate",
+   "description": "2026, se volvio la era de la orquestación, ya no es suficiente tener un agente. Sino un grupo de agentes que pueda resolver tareas complejas. Este taller mostrará como, organizar sub agentes como Agents as tools. Para atacar problemas complejos.  también veremos el manejo de memoria y las distintas responsabilidades que hacen que una memoria se vuelva una capa de cognición."
   },
   {
    "id": "293db3f0-9123-4b88-b01e-d0aeb0bea3c9",
@@ -335,7 +392,10 @@
     "DevOps"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/48e1db1c-073b-4757-a6c8-2022ba74ac28/2a20110b-ca20-4b4a-a0b6-040660d919a4.webp?v=1785959036180",
+   "level": "intermediate",
+   "description": "¿Qué hace falta para pasar de un prompt aislado a un sistema de agentes que colabora en tu ciclo de desarrollo? En esta charla adoptamos la mentalidad agéntica —descomponer, delegar, revisar y aprobar— y la llevamos a la práctica construyendo con Google ADK un ReviewerAgent que analiza código y produce hallazgos estructurados con Pydantic, para luego encadenarlo con un TestAgent mediante SequentialAgent y formar un pipeline que genera casos de prueba listos para CI/CD. Cerramos con patrones de orquestación, retos reales (predictibilidad, estabilidad, operación) y cómo escalar de dos agentes a N sin reescribir el pipeline.\n\nPuntos clave:\nadk para diseño de agentes en SDLC"
   },
   {
    "id": "dd5e210f-f363-4f9f-9210-627e8ddaa5ea",
@@ -352,7 +412,10 @@
     "Comunidad"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/bdcc80e0-6c06-46b5-a8ef-d5e3a82bfdba/4c0fe6d3-eabb-4cf1-9b26-b996d46f567f.jpeg?v=1786657837065",
+   "level": "intermediate",
+   "description": "Los frameworks cambian, los lenguajes evolucionan y las herramientas se reemplazan, pero la reputación permanece. En un mercado donde miles de profesionales compiten por las mismas oportunidades, la marca personal se ha convertido en un activo estratégico. Esta charla explora cómo construir una reputación profesional auténtica desde dentro del ecosistema tecnológico: qué comunicar, dónde hacerlo, cómo generar confianza y cómo mantener la coherencia entre lo que haces, lo que compartes y cómo te perciben. Veremos errores comunes, estrategias de posicionamiento y ejemplos reales de profesionales tech que convirtieron su visibilidad en oportunidades de trabajo, alianzas, inversión y liderazgo dentro de sus comunidades.\n\nPuntos clave:\nCanales y formatos prácticos para construir visibilidad con constancia; Canales y formatos prácticos para construir visibilidad con constancia; Cómo generar confianza con colegas, reclutadores y comunidades en línea; Errores comunes de marca personal que cometen los profesionales tech"
   },
   {
    "id": "11f81001-4bea-418a-9a58-571a9438191e",
@@ -369,7 +432,10 @@
     "AI/ML"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/6667a718-c779-4c56-88b2-d812206af6ee/ddb23a20-7977-44c3-a58c-b4d4f88e91fb.webp?v=1787107242860",
+   "level": "beginner",
+   "description": "\"Speed illusion\", \"No eres más rápido, eres más productivo en cosas que no importan\".\r\n\r\nHay algo peor que la velocidad. El instinto para oler que algo está mal en un código lo construiste escribiendo código, revisándolo y equivocándote. Si dejaste de hacer las tres cosas, ese instinto se te está atrofiando ahora mismo y no hay métrica que te avise. El 44% de los desarrolladores escribe menos del 10% de su código a mano. Solo el 48% verifica consistentemente lo que la IA le entrega antes de commitear.\r\n\r\nEsta charla es sobre cómo medir tu velocidad real en vez de sentirla, qué habilidades se te están oxidando, y qué se practica deliberadamente para no despertar en dos años siendo alguien que aprueba código que ya no entiende.\n\nPuntos clave:\nQué practicar deliberadamente para no perder el instinto, y cada cuánto."
   },
   {
    "id": "f1e79670-8b55-4663-9a96-91b6c4d1ea86",
@@ -387,7 +453,10 @@
     "DevOps"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/57c52f12-07dd-4a43-b3e5-28df1575928a/615c9c93-6a6e-49e4-90b9-f2b7b2bb81af.webp?v=1783618924433",
+   "level": "intermediate",
+   "description": "El verdadero reto de la Inteligencia Artificial hoy no es escribir un buen prompt, sino construir sistemas autónomos que ejecuten código, interactúen con bases de datos y tomen decisiones de forma segura, predecible y escalable. En esta sesión técnica llevaremos la teoría a la práctica real. Analizaremos cómo diseñar la arquitectura de un ecosistema de agentes autónomos utilizando Go, aprovechando su alto rendimiento y concurrencia, junto con el Agent Development Kit (ADK).\r\n\r\nNo nos quedaremos en diapositivas conceptuales. Construiremos agentes reales en vivo, los empaquetaremos en contenedores y utilizaremos las capacidades de Docker AI para el aislamiento de entornos, la orquestación segura del contexto y la gobernanza del ciclo de vida de las cargas de trabajo de IA. Si quieres mover tus iniciativas de IA desde simples scripts locales hacia infraestructuras empresariales listas para producción, esta sesión te dará el blueprint definitivo.\n\nPuntos clave:\nGo; Containers; Agentes IA; Gobierno de IA; Arquitectura de IA"
   },
   {
    "id": "a8a32f63-41b3-4274-8325-267babe1c7fa",
@@ -405,7 +474,10 @@
     "Blockchain"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/6fd3d4c2-e6d2-4427-aa45-86137feae527/b4689039-f53f-4c98-b923-7486bb40262d.webp?v=1783601467486",
+   "level": "advanced",
+   "description": "Imagina un futuro donde la infraestructura de la nube se auto-gobierna, auto-optimiza y auto-repara usando una combinación de sistemas económicos programables e inteligencia artificial. En esta visión, recursos como cómputo, almacenamiento y ancho de banda no son simplemente asignados estáticamente, sino dinámicamente negociados, intercambiados y optimizados por agentes autónomos que operan en un mercado descentralizado.\r\n\r\nEstos agentes, desplegados con pipelines de CI/CD en Google Cloud, utilizarían técnicas avanzadas de IA como aprendizaje por refuerzo, teoría de juegos evolutiva y modelos generativos para:\r\n\r\nPredecir demanda futura y ajustar oferta en tiempo real\r\nDescubrir nuevas estrategias de fijación de precios y formación de coaliciones\r\nDetectar y responder automáticamente a anomalías y fallas\r\nGenerar nuevas arquitecturas y topologías de red optimizadas para costo-performance\r\nEvolucionar y mejorarse a sí mismos mediante mutación y selección artificial\n\nPuntos clave:\nPredecir demanda futura y ajustar oferta en tiempo real; AIDescubrir nuevas estrategias de fijación de precios y formación de coaliciones; Generar nuevas arquitecturas y topologías de red optimizadas para costo-performance; Vertex y AI model training"
   },
   {
    "id": "daf92202-6157-4a0c-99a6-23608d11da4e",
@@ -424,7 +496,10 @@
     "Data"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/56cee963-16a9-49d5-9b98-e1984b9042d9/6133dfac-e16f-49a8-ae84-b0acb3a2e090.jpg?v=1788958948530",
+   "level": "beginner",
+   "description": "En una crisis, el problema central no es la falta de datos, sino la asimetría de estos y el exceso de ruido. Esta sesión desglosa la ingeniería detrás de Google Crisis Resilience, mostrando cómo el código estructura la información para salvar vidas a través de sistemas como Android Earthquake Alerts, Flood Hub y SOS Alerts.\r\n\r\n​Analizaremos la plataforma desde tres pilares arquitectónicos:\r\n​Telemetría Distribuida: Cómo se ingiere y procesa la señal de millones de acelerómetros en smartphones para crear la red de detección sísmica más grande del mundo.\r\n\r\n​Modelado Predictivo (ML): La aplicación de algoritmos de Machine Learning e imágenes satelitales para anticipar trayectorias de inundaciones antes de que ocurran.\r\n\r\n​Despliegue a Escala: La integración de APIs, enrutamiento de datos críticos y el diseño de interfaces de alta legibilidad (UX) para distribuir alertas masivas cuando la infraestructura física colapsa.\r\n\r\n​Esta sesión demostrará cómo la computación en la nube y el procesamiento de datos a gran escala se convierten en la herramienta humanitaria más rápida y efectiva a nuestra disposición.\n\nPuntos clave:\nModelado predictivo; Herramientas de Google Crisis Resilience"
   },
   {
    "id": "7fdd2ea5-5a60-45c7-87b5-4d17a6b412e9",
@@ -438,7 +513,10 @@
    "speaker_title": "",
    "topics": [],
    "language": "es",
-   "icon": "☕"
+   "icon": "☕",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   },
   {
    "id": "e0e4dbdb-bcea-41d1-9968-fc5056af5140",
@@ -455,7 +533,10 @@
     "DevOps"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/61a8a4c7-e7d6-48e4-9d3f-07046fe8c3fb/07b247eb-bc79-4f8f-a888-4f00d580ce31.jpg?v=1788958948530",
+   "level": "intermediate",
+   "description": "La IA está permitiendo construir software en horas en lugar de semanas. Pero cuando ese prototipo llega a producción, aparecen los retos de verdad: arquitectura, mantenibilidad, pruebas, seguridad, observabilidad y deuda técnica.\n\nEn esta charla exploraremos cómo aprovechar herramientas de IA y el vibe coding sin sacrificar las buenas prácticas de ingeniería. Veremos un flujo de trabajo práctico para pasar de una idea a un sistema listo para crecer, utilizando documentos de arquitectura, PRDs, planificación por tareas y asistentes de IA como parte del proceso de desarrollo.\n\nSi ya estás usando IA para escribir código, o estás pensando en incorporarla a tu equipo, descubrirás cómo acelerar el desarrollo sin comprometer la calidad ni la escalabilidad de tus aplicaciones."
   },
   {
    "id": "6ac59e2a-4361-4b54-bc40-5b5fcebe3d74",
@@ -472,7 +553,10 @@
     "Producto & Startups"
    ],
    "language": "Inglés",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/3986e49d-e4ec-4255-bf6b-c6ac3548c971/3236bb0c-0b48-488f-857e-18853454237c.webp?v=1788279683521",
+   "level": "intermediate",
+   "description": "El acceso a la IA ya no es el diferenciador. Todo el mundo alquila el mismo «caballo» (el modelo). Esta charla desglosa de dónde sale la ventaja real: el Caballo (el modelo en sí: cómo razona, dónde se rompe, cómo exprimirlo), el Arnés (los agentes, las herramientas, los flujos de trabajo y las salvaguardas que construyes y son tuyos) y el Heno (los datos propios que van haciendo mejores a los dos con el tiempo).\n\nHéctor lo recorrerá con heva, la plataforma de salud transfronteriza y nativa de IA que está construyendo, donde los agentes tienen que funcionar entre idiomas, países, proveedores, pacientes, agendas y pagos en el mundo real. Ese enfoque llevó a heva de unos 100.000 dólares a más de un millón de ARR en unos cinco meses, además de levantar más de 10 millones en capital de riesgo.\n\nLa charla termina con una pregunta para quienes desarrollan y emprenden en República Dominicana: cuando los modelos de primer nivel se vuelvan un commodity, ¿de dónde sale de verdad tu ventaja? Entiende el caballo. Adúeñate del arnés. Cultiva el heno.\n\nNo hace falta experiencia previa en IA/ML. Es una charla de marco de trabajo, construida sobre lecciones reales de producción y no sobre teoría."
   },
   {
    "id": "5a7d10b6-40a0-46c8-9f2f-ab398ed274a5",
@@ -490,7 +574,10 @@
     "Web"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/fe012717-53f7-4ef6-92de-f1e33c99f280/b0fbfd1e-7d33-4b51-8d20-1aaba586e864.jpeg?v=1784513905309",
+   "level": "intermediate",
+   "description": "Un taller donde los participantes reciben una aplicación web vulnerable, encuentran vulnerabilidades, las explotan y finalmente las corrigen.\n\nHands-on:\n\n• XSS\n• SQL Injection\n• IDOR / Broken Access Control\n• Authentication flaws\n• Exposed secrets\n• APIs inseguras\n\nLa dinámica es: Recon → Attack → Exploit → Fix → Re-test"
   },
   {
    "id": "7dac4efa-3c83-4406-b4c3-8ff17de174fb",
@@ -507,7 +594,10 @@
     "Producto & Startups"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/devfest/speakers/carlos-paulino.webp",
+   "level": "intermediate",
+   "description": "La inteligencia artificial está cambiando una de las reglas fundamentales del desarrollo de software: escribir código cada vez cuesta menos tiempo.\r\n\r\nPero eso no significa que estemos construyendo mejores productos.\r\n\r\nCuando un agente de IA puede generar código, pruebas y componentes en minutos, el verdadero cuello de botella se mueve hacia otro lugar: nuestra capacidad de definir con precisión qué debemos construir, por qué y cómo sabremos que funciona.\r\n\r\nEn esta sesión exploraremos Spec-Driven Development (SDD) como una evolución natural de las prácticas ágiles en equipos que comienzan a trabajar con agentes de IA.\r\n\r\nVeremos cómo pasar de historias de usuario pensadas para coordinar personas a especificaciones capaces de transmitir intención de negocio, reglas, restricciones y criterios verificables a humanos y agentes.\r\n\r\nY discutiremos una pregunta que puede redefinir los próximos años de Business Agility:\r\n\r\nSi la IA puede escribir el código, ¿dónde está ahora el verdadero trabajo de Product Owners, developers y equipos ágiles?\r\n\r\nNo se trata de desarrollar más rápido.\r\n\r\nSe trata de reducir la distancia entre una idea de negocio y software funcionando en manos del cliente.\n\nPuntos clave:\nEl código ya no es el cuello de botella; Agile fue diseñado para un mundo diferente; Prompting ≠ Spec-Driven Development; De User Stories a SpecificationsLa SPEC se convierte en una nueva unidad de trabajo"
   },
   {
    "id": "7501dfe7-979f-450a-9397-620101132b97",
@@ -524,7 +614,10 @@
     "Data"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/6a5a4186-cd72-42af-825c-ec19a81a705e/fc5f8073-4ee6-45b4-9d81-34bd2231763b.webp?v=1785273560823",
+   "level": "intermediate",
+   "description": "En esta charla traduce el mundo del marketing al lenguaje que los desarrolladores ya hablan: sistemas, automatización y datos.\r\n\r\nLa mayoría de los desarrolladores creen tres cosas sobre el marketing: que es \"subir posts a redes\", que es \"darle al botón de promocionar\", y que es un talento creativo que ellos no tienen. Las tres son falsas — y esa confusión es exactamente la razón por la que productos técnicamente superiores mueren en el anonimato mientras productos mediocres se vuelven negocios.\r\n\r\nEsta charla toma la mentalidad que un desarrollador ya domina — pensar en sistemas, flujos de datos, condiciones y automatización — y la usa como puente para explicar qué es realmente el marketing digital hoy. Recorremos un contraste tras otro entre \"lo que creías\" y \"lo que realmente es\": del social media al ecosistema digital completo; del post improvisado a la estrategia basada en la psicología del buyer persona y los niveles de conciencia (TOFU / MOFU / BOFU); del \"promocionar\" a la segmentación avanzada; y del trabajo manual al marketing como sistema automatizado con funnels, flujos de IA en n8n y agentes que nutren clientes 24/7.\r\n\r\nEl asistente sale con un cambio de mentalidad concreto: deja de ver el marketing como una caja negra creativa y empieza a verlo como un sistema que puede diseñar, medir y automatizar — con las mismas herramientas mentales que usa para programar.\n\nPuntos clave:\nUn mapa mental claro de qué compone el marketing digital real; El modelo de niveles de conciencia y el funnel TOFU/MOFU/BOFU — y cómo mapea a un pipeline de datos que ya entienden.; Por qué la segmentación y el análisis de audiencia deciden si tu presupuesto trae clientes o solo curiosos.; Cómo el marketing moderno se automatiza con funnels, flujos de IA (n8n) y agentes — territorio donde un dev tiene ventaja.; Un primer paso accionable para empezar a hacerse conocer sin volverse \"marketero\"."
   },
   {
    "id": "ec5c3784-7306-4033-b2c1-3447863b0b07",
@@ -538,7 +631,10 @@
    "speaker_title": "",
    "topics": [],
    "language": "es",
-   "icon": "🍽"
+   "icon": "🍽",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   },
   {
    "id": "169ed48b-9c30-430d-ae0e-4bc28947e9b6",
@@ -555,7 +651,10 @@
     "Producto & Startups"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/d9a39064-25ea-4891-9247-4ab7e75229f1/76587bd3-d6d5-4d65-9f6d-66432827479f.webp?v=1785769862331",
+   "level": "intermediate",
+   "description": "La IA no solo está cambiando la forma en que escribimos código. También está convirtiendo una parte cada vez mayor del “knowledge work” en una nueva superficie para la ingeniería. Procesos que antes dependían de conocimiento tácito, coordinación manual y decisiones dispersas ahora pueden hacerse explícitos, convertirse en sistemas y mejorar con base en evidencia.\r\n\r\nPara los software engineers, esto representa un punto de inflexión. Las mismas capacidades que aprendimos para construir software, como descomponer problemas, modelar sistemas, automatizar, probar y aprender, ahora pueden aplicarse mucho más allá del código.\r\n\r\nA partir de experiencias creando productos, automatizaciones y negocios con IA, esta charla explora qué significa pasar de ejecutar requerimientos a aplicar la ingeniería para transformar conocimiento, experiencia e ideas en resultados. También hablaremos de las oportunidades y los límites de esta transformación, del papel del criterio humano y de cómo los software engineers pueden aprovechar lo que ya saben para crear con mayor autonomía.\n\nPuntos clave:\nComprender por qué una parte cada vez mayor del “knowledge work” se está convirtiendo en una nueva superficie para la ingeniería.; Reconocer procesos, decisiones y problemas que pueden hacerse explícitos, convertirse en sistemas y mejorar a partir de evidencia.; Distinguir entre escribir código y diseñar un sistema completo capaz de producir resultados reales.; Entender el papel del criterio humano y los límites que debemos considerar al incorporar IA en procesos reales.; Aplicar las capacidades de ingeniería de software para crear productos, automatizaciones y resultados con mayor autonomía."
   },
   {
    "id": "ff325ea8-8293-40fc-b28c-5e194e8123f0",
@@ -572,7 +671,10 @@
     "DevOps"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/0d321bd5-35ed-4970-afd1-2a89d9b349f1/d94aea12-7114-4648-95b7-a4542cb5adbf.jpg?v=1788961727564",
+   "level": "beginner",
+   "description": "La audiencia entenderá qué significa realmente ejecutar inteligencia artificial de forma local y cuándo tiene sentido hacerlo en lugar de depender completamente de servicios en la nube.\n\nAl terminar la charla podrán distinguir entre SLMs, LLMs y frontier models, entender por qué no todas las tareas necesitan el modelo más grande disponible y conocer los factores principales que determinan qué modelos pueden ejecutar en su propio hardware.\n\nTambién aprenderán conceptos prácticos como RAM, VRAM, parámetros, cuantización e inferencia, y verán cómo una computadora, workstation o Home Lab puede convertirse en infraestructura para ejecutar modelos de IA, aplicaciones y agentes."
   },
   {
    "id": "0c28268c-8de2-4fcf-9057-a553ed0dbf87",
@@ -589,7 +691,10 @@
     "AI/ML"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/2b44db6c-cea6-479e-b9a0-9aba5f04def4/0ae3ef4c-2e5e-4c0d-a9c8-3276104ec42b.jpg?v=1788958948531",
+   "level": "beginner",
+   "description": "Las prácticas de Modern Android Development (MAD) revolucionaron la forma en que construimos aplicaciones móviles. Ahora, con la llegada de los modelos de lenguaje pequeños (SLMs) que se ejecutan directamente en el procesador del teléfono, la Inteligencia Artificial se integra como un componente nativo más del ecosistema Android.\nEn este taller 100% práctico, aprenderás a aplicar patrones MAD Skills para integrar Gemini Nano (Google AI Edge) en una aplicación Android moderna, privada y funcional sin necesidad de conexión a internet."
   },
   {
    "id": "64c3ed91-ae8e-4e0b-bd7f-0d2e16bece14",
@@ -605,7 +710,10 @@
     "AI/ML"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/778d8f9c-b708-487a-aefc-0fcdce99c7a5/477cc4db-a4b8-475c-a881-2f74a3d06a59.jpeg?v=1787854258983",
+   "level": "intermediate",
+   "description": "Charla de 90 minutos explicando hacia donde se dirige la IA más allá de agentes, loops, modelos, etc. Basado en varios de mis artículos pasados en eliax.com\n\nEsta charla profundiza bastante en varios temas que tendrán una gran repercusión en la sociedad en los próximos años, y también contiene una premisa bastante interesante con relación a los dispositivos con IA que tendremos en el día a día."
   },
   {
    "id": "d23a732b-5a82-4afe-bb7f-5d71276c36b5",
@@ -623,7 +731,10 @@
     "Web"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/34802416-8ecf-4a01-9d3b-87a0d1f22afb/d6a6d73a-1d25-4fec-b723-d305c6ee7787.webp?v=1785945449752",
+   "level": "intermediate",
+   "description": "Las interfaces generadas dinámicamente por IA permiten crear experiencias personalizadas, pero también pueden provocar cambios inesperados de layout, alta carga en el cliente y retrasos en el renderizado. En esta sesión exploraremos cómo optimizar una UI generativa mediante estrategias de renderizado, streaming, reutilización del DOM y manejo eficiente del estado, manteniendo experiencias rápidas, fluidas y accesibles.\n\nPuntos clave:\nIdentificar los desafíos de rendimiento de la UI generativa.; Reducir cambios de layout y carga en el cliente.; Mantener interfaces dinámicas rápidas y accesibles."
   },
   {
    "id": "5fd03c21-9215-44c2-824f-91cc485df80c",
@@ -640,7 +751,10 @@
     "Producto & Startups"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/fd8bffe6-b90e-41ad-ad52-25318c40b2dd/186544fe-470a-4874-ba69-ac2c725cf609.png?v=1786846270044",
+   "level": "beginner",
+   "description": "¿La Inteligencia Artificial viene a reemplazarnos o podemos convertirla en una aliada?\n\nEn este taller práctico descubrirás, sin necesidad de tener conocimientos técnicos, cómo puedes utilizar la IA para potenciar tus habilidades, facilitar tareas de tu día a día y transformar tus ideas en soluciones.\n\nAdemás, trabajaremos en equipos para crear una idea utilizando herramientas de IA y presentarla en un pitch de 3 minutos. El objetivo: aprender haciendo y descubrir todo lo que puedes lograr cuando utilizas la IA a tu favor. 🤖✨"
   },
   {
    "id": "fd46dbd8-1bf1-4224-a34e-82630b87257b",
@@ -654,7 +768,10 @@
    "speaker_title": "",
    "topics": [],
    "language": "es",
-   "icon": "☕"
+   "icon": "☕",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   },
   {
    "id": "19d33bca-858d-48ca-a159-f87b1f6c2d92",
@@ -671,7 +788,10 @@
     "Comunidad"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/fc16d2f0-87bf-4a82-bbbb-5298d870e917/84213944-e2b4-4b41-bbcd-e3c5670bb347.webp?v=1786571963487",
+   "level": "beginner",
+   "description": "¿Y si una de las piezas más importantes de nuestro stack profesional no fuera tecnológica?\n\nCarreras, startups y proyectos rara vez avanzan únicamente por conocimiento técnico. Avanzan también porque encontramos personas con quienes aprender, colaborar, construir, vender, contratar, conectar ideas o abrir nuevas posibilidades. Sin embargo, con frecuencia reducimos el networking a intercambiar contactos, agregar personas en LinkedIn o asistir a eventos sin una estrategia para convertir esos encuentros en relaciones duraderas.\n\nEn esta charla exploraremos el networking como infraestructura humana para el crecimiento, no como una práctica transaccional. A partir de experiencias reales de una trayectoria que ha atravesado publicidad, tecnología, emprendimiento, innovación pública y gobernanza de IA, veremos cómo una conversación puede convertirse años después en una oportunidad, un proyecto o una nueva comunidad.\n\nPresentaremos un framework práctico basado en cinco elementos —Contexto, Curiosidad, Contribución, Continuidad y Colaboración— para construir relaciones profesionales basadas en confianza y beneficio mutuo.\n\nFinalmente, construiremos un pequeño Relationship Stack con herramientas de Google: Contacts para preservar contexto, Calendar y Tasks para dar seguimiento, Gmail y Drive para mantener continuidad, Sheets como tracker ligero y Gemini para reducir la carga de organizar y recuperar información.\n\nLa tecnología puede ayudarnos a recordar y dar seguimiento. La confianza todavía tenemos que construirla nosotros."
   },
   {
    "id": "1046b6a0-bb77-4194-b2a3-dc39098345ad",
@@ -688,7 +808,10 @@
     "Seguridad"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/446426f4-ed9e-4039-9ecc-9c2c9532a84c/96bd3877-0ca1-4041-96ac-3815235cd91f.webp?v=1786473457441",
+   "level": "intermediate",
+   "description": "Los LLM dejaron de ser simples interfaces de conversación. Hoy los conectamos a APIs, bases de datos, archivos, navegadores, repositorios y herramientas externas para construir agentes capaces de ejecutar acciones reales. \r\n\r\nEn esta charla exploraremos qué ocurre cuando un LLM recibe instrucciones desde múltiples fuentes, utiliza herramientas mediante tool calling o MCP y además tiene permisos para interactuar con sistemas externos. Veremos cómo ataques como prompt injection e indirect prompt injection pueden manipular el comportamiento de un agente y provocar acciones que el desarrollador nunca pretendió autorizar.\r\n\r\nAnalizaremos una arquitectura típica de agentes de IA y veremos dónde aparecen los principales límites de confianza entre el usuario, el modelo, el contexto, las herramientas, MCP servers, APIs y datos externos.\r\n\r\nTambién revisaremos controles que pueden aplicarse desde el desarrollo: least privilege, validación de parámetros, tool allowlisting, separación de credenciales, approval gates, human-in-the-loop, logging y límites de ejecución.\r\n\r\nEl objetivo es entender que la seguridad de un agente no puede depender únicamente de un system prompt. Si un LLM puede actuar, también debemos controlar exactamente qué puede hacer, con qué datos y bajo qué condiciones.\n\nPuntos clave:\nCómo cambia el modelo de seguridad cuando un LLM pasa de generar texto a utilizar APIs, herramientas, archivos y servicios externos.; Entender la diferencia entre direct prompt injection e indirect prompt injection y cómo contenido externo puede influir en las decisiones de un agente.; Identificar dónde aparecen límites de confianza cuando agentes utilizan MCP servers, tools, resources y APIs.; Limitar permisos, credenciales, herramientas y acciones para reducir el impacto de un agente comprometido o manipulado.; Aplicar validación, allowlists, approval gates, logging, sandboxing y human-in-the-loop para operaciones sensibles."
   },
   {
    "id": "b85fec70-74de-4af1-afc8-699add24f082",
@@ -706,7 +829,10 @@
     "DevOps"
    ],
    "language": "Español",
-   "icon": ""
+   "icon": "",
+   "photo_url": "https://pub-23962521560c45eeb19769a9329d0ce5.r2.dev/avatar/4f2ac200-5cd1-496e-b165-f2ae3b5d5dff/e058106b-603f-4cde-b8c4-24b73c301846.webp?v=1786628983608",
+   "level": "intermediate",
+   "description": "¿Y si el problema de seguridad de tu aplicación comienza antes de escribir una sola línea de código?\n\nEn esta sesión vamos a cambiar la forma en que pensamos el desarrollo de software: desde la definición del requerimiento hasta el código que finalmente llega a producción. Aprenderemos a identificar riesgos desde el inicio y a pensar como un atacante para descubrir cómo podría romperse una funcionalidad antes de que alguien más lo haga.\n\nA través de ejemplos prácticos exploraremos vulnerabilidades como SQL Injection, XSS, problemas de autenticación y autorización, validación de entradas y seguridad en APIs. Veremos no solo cómo ocurren, sino también cómo podemos detectarlas y prevenirlas durante el desarrollo.\n\nPorque un requerimiento también puede tener una vulnerabilidad, y una línea de código puede convertirse en una puerta de entrada. La pregunta es: ¿la estamos viendo antes de que alguien más la encuentre?"
   },
   {
    "id": "2114966f-c8f0-4a57-87e1-25249be17bc7",
@@ -722,7 +848,10 @@
     "AI/ML"
    ],
    "language": "es",
-   "icon": ""
+   "icon": "",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   },
   {
    "id": "876e530f-98f5-4462-b71e-8ae7399d3240",
@@ -736,7 +865,10 @@
    "speaker_title": "",
    "topics": [],
    "language": "es",
-   "icon": ""
+   "icon": "",
+   "photo_url": "",
+   "level": "",
+   "description": ""
   }
  ]
 }

@@ -95,6 +95,10 @@ _CAPABILITIES = {
         "- Agenda: consultar ahora la agenda oficial en la web del DevFest y decirte qué ha "
         "cambiado, qué hay ahora y qué viene."
     ),
+    "show_talk": (
+        "- Charlas en pantalla: enseñar junto a ti la tarjeta de una charla de la agenda "
+        "(título, ponente con su foto, día, hora, sala y temas)."
+    ),
 }
 
 #: ``play_animation`` cuando el director de gestos puede elegir cualquier gesto de Sage.
@@ -142,10 +146,14 @@ _TRIVIA_WHEN = (
     "empezar otra desde cero o quiera dejar de jugar.\n"
 )
 
-#: Cuándo consultar la agenda en la web (``check_agenda``).
+#: Cuándo consultar la agenda en la web (``check_agenda``) y enseñar una charla (``show_talk``).
 _AGENDA_WHEN = (
     "- Te pregunten si ha cambiado algo de la agenda, quieran confirmar una charla, una hora o "
     "una sala, o no tengas claro qué hay ahora o qué viene.\n"
+)
+_TALK_WHEN = (
+    "- Hables de una charla, un workshop o un ponente concretos: enseña su tarjeta en tu "
+    "pantalla mientras la cuentas; cuando cambies de tema, retírala.\n"
 )
 
 #: Cuándo buscar en internet (``web_search`` del backend).
@@ -372,6 +380,7 @@ _BACKEND_DOES = {
     "play_animation": "bailar o hacer un gesto",
     "start_trivia": "la trivia (empezarla, registrar respuestas, pasar de pregunta, reiniciarla y terminarla)",
     "check_agenda": "consultar la agenda en la web",
+    "show_talk": "enseñar la tarjeta de una charla",
 }
 
 
@@ -462,7 +471,8 @@ def build_live_instructions(
         moves_when=_MOVES_WHEN if "play_animation" in names else "",
         trivia_rule=_TRIVIA_RULE if "start_trivia" in names else "",
         trivia_when=_TRIVIA_WHEN if "start_trivia" in names else "",
-        agenda_when=_AGENDA_WHEN if "check_agenda" in names else "",
+        agenda_when=(_AGENDA_WHEN if "check_agenda" in names else "")
+        + (_TALK_WHEN if "show_talk" in names else ""),
         search_when=_SEARCH_WHEN if web_search else "",
         no_delegate_chat=_NO_DELEGATE_CHAT[mode],
     )

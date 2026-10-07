@@ -481,3 +481,96 @@ async def test_el_motor_da_la_hora_y_pasa_los_cambios_de_agenda(tmp_path: Path) 
         await asyncio.sleep(0.15)
         assert len(conn.of_type("session.thinking.append")) == 2
         assert len(conn.of_type("session.instructions.append")) == 1
+
+
+# -- tarjetas de charlas (show_talk) --------------------------------------------------
+
+
+class FakeAvatar:
+    """Lo que las acciones piden a Unity: aquí solo se apunta."""
+
+    def __init__(self) -> None:
+        self.shown: list[dict[str, Any]] = []
+
+    async def show_image(
+        self, *, image_id: str, source: str, mime: str, data: bytes, caption: str | None
+    ) -> None:
+        self.shown.append({"image_id": image_id, "source": source, "mime": mime, "data": data})
+
+    async def hide_image(self) -> None:
+        pass
+
+
+def test_busca_la_charla_por_titulo_o_ponente() -> None:
+    from sonia.agenda.card import find_talk
+
+    schedule = parse_schedule_page(page(base_rows()))
+    assert (find_talk(schedule, "charla uno") or base_rows()).id == "b"  # type: ignore[union-attr]
+    assert (find_talk(schedule, "la de Luis Gomez") or base_rows()).id == "c"  # type: ignore[union-attr]
+    assert (find_talk(schedule, "taller practico") or base_rows()).id == "d"  # type: ignore[union-attr]
+    assert find_talk(schedule, "cocina medieval") is None
+    # Los descansos sin ponente no son charlas.
+    assert find_talk(schedule, "break") is None
+
+
+def test_la_tarjeta_es_un_png_de_1600x900() -> None:
+    import io
+
+    from PIL import Image
+
+    from sonia.agenda.card import HEIGHT, WIDTH, render_talk_card
+
+    schedule = parse_schedule_page(page(base_rows()))
+    talk = next(t for t in schedule.talks if t.id == "b")
+    image = Image.open(io.BytesIO(render_talk_card(talk, TZ, photo=b"no es una foto")))
+    assert image.format == "PNG" and image.size == (WIDTH, HEIGHT)
+
+
+async def test_show_talk_ensena_la_tarjeta_y_dice_cuando_y_donde(tmp_path: Path) -> None:
+    from sonia.actions.agenda import show_talk
+
+    rows = base_rows()
+    rows[1]["speakers"]["photo_url"] = "https://fotos.test/ana.webp"
+    web = FakeWeb(page(rows))
+    book = make_book(tmp_path, web, fallback_rows=rows)
+    await book.load()
+    avatar = FakeAvatar()
+    ctx = ActionContext(camera=None, avatar=avatar, gallery_dir="", extra={"agenda": book})
+    result = await show_talk(ctx, {"charla": "Charla uno"})
+    assert result.text.startswith(
+        "Mostrando ya en tu pantalla la tarjeta de la charla «Charla uno»"
+    )
+    assert "Ya se ve: no ofrezcas enseñarla." in result.text
+    assert "de 10:40 a 11:20 de la mañana en el Salón Principal" in result.text
+    assert avatar.shown[0]["source"] == "agenda" and avatar.shown[0]["mime"] == "image/png"
+    assert avatar.shown[0]["data"].startswith(b"\x89PNG")
+    # La foto se pidió (la web falsa no la tiene, y aun así sale la tarjeta) una sola vez.
+    await show_talk(ctx, {"charla": "Charla uno"})
+    assert web.requests == 1
+
+    result = await show_talk(ctx, {"charla": "cocina medieval"})
+    assert result.text.startswith("No encuentro en la agenda")
+    assert len(avatar.shown) == 2
+
+
+def test_las_descripciones_largas_se_leen_de_su_trozo() -> None:
+    from sonia.agenda.source import _text_chunks
+
+    uno, dos = "Primera descripción: ñandú.", "Segunda, justo detrás"
+    largo = len(uno.encode("utf-8"))
+    payload = (
+        f'5:["$","x",null,{{}}]\n18:T{largo:x},{uno}19:T{len(dos.encode()):x},{dos}20:["fin"]\n'
+    )
+    assert _text_chunks(payload) == {"18": uno, "19": dos}
+
+    rows = base_rows()
+    rows[1]["description"] = "$18"
+    rows[2]["description"] = "Inline"
+    rows[3]["description"] = None
+    data = {"talkRows": rows, "trackRows": TRACKS}
+    flight = f"5:{json.dumps(data, ensure_ascii=False)}\n18:T{largo:x},{uno}"
+    html = f"<script>self.__next_f.push([1,{json.dumps(flight)}])</script>"
+    talks = {t.id: t for t in parse_schedule_page(html).talks}
+    assert talks["b"].description == uno
+    assert talks["c"].description == "Inline"
+    assert talks["d"].description == ""
