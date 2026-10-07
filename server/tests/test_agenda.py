@@ -6,6 +6,7 @@ la web del DevFest (flujo RSC de Next.js) servido con ``httpx.MockTransport``.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -441,17 +442,21 @@ async def test_el_motor_da_la_hora_y_pasa_los_cambios_de_agenda(tmp_path: Path) 
         ]
 
         # Mismo minuto que al abrir la sesión: no hace falta nota.
-        await rig.engine.submit_text("hola")
+        await asyncio.sleep(0.1)
         assert conn.of_type("session.thinking.append") == []
 
+        # Cambia el minuto: la nota va en calma, no al empezar a hablar alguien.
         now[0] = local(9, 10, 47)
-        await rig.engine.submit_text("¿qué hora es?")
         await conn.wait_type("session.thinking.append")
         note = conn.of_type("session.thinking.append")[0]["content"]
         assert note.startswith("[Reloj] Ahora: viernes 9 de octubre de 2026, 10:47")
         assert "Ahora mismo: Salón Principal: «Charla uno»" in note
-        await rig.engine.submit_text("otra cosa")
+        await asyncio.sleep(0.1)
         assert len(conn.of_type("session.thinking.append")) == 1
+        # Al minuto siguiente, solo la hora: lo de la agenda no ha cambiado.
+        now[0] = local(9, 10, 48)
+        await conn.wait_type("session.thinking.append", 2)
+        assert "Ahora mismo" not in conn.of_type("session.thinking.append")[1]["content"]
 
         # La web cambia: el código lo detecta y se lo pasa a la sesión abierta.
         await wait_until(lambda: web.requests >= 1)
@@ -465,3 +470,14 @@ async def test_el_motor_da_la_hora_y_pasa_los_cambios_de_agenda(tmp_path: Path) 
         assert (
             "«Charla uno» de Ana Pérez cambia de sala: del Salón Principal al Salón B." in appended
         )
+
+        # Con alguien hablando no se le pasa nada: ni la hora ni los cambios.
+        await conn.hear("Hola")
+        await rig.rec.wait_state("listening")
+        now[0] = local(9, 10, 49)
+        rows[2]["track_id"] = "t1"
+        web.html = page(rows)
+        await book.refresh()
+        await asyncio.sleep(0.15)
+        assert len(conn.of_type("session.thinking.append")) == 2
+        assert len(conn.of_type("session.instructions.append")) == 1

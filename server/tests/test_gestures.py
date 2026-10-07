@@ -893,3 +893,38 @@ async def test_si_razona_hasta_agotar_el_tope_es_un_fallo_con_relleno() -> None:
     assert sent.gestures()[0]["name"] in FILLERS
     snap = director.snapshot()
     assert snap["failures"] == 1 and snap["fallbacks"] == 1 and snap["none"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Gestos que pide el visitante («tócate un ojo»)
+# ---------------------------------------------------------------------------
+
+
+async def test_un_gesto_pedido_lo_elige_el_modelo_aunque_sea_rare() -> None:
+    llm = FakeGestureLLM('{"gesto": "bigCheer"}')
+    director, sent = make_director(llm)
+    director.note_requested("bigWow")  # un Rare reciente no impide pedir otro
+    choice = await director.choose_requested("celebrar a lo grande")
+    assert choice.name == "bigCheer" and not choice.error
+    # Mismo mensaje de sistema (las fichas, en caché); otra pregunta.
+    assert llm.requests[0][0]["content"] == director.system_prompt
+    assert (
+        "Petición: el visitante le pide a Sonnia que haga este gesto o movimiento: «celebrar a lo grande»."
+        in llm.user()
+    )
+    assert "no cuentan la frecuencia" in llm.user()
+    # Elegir no manda nada a Unity: lo lanza play_animation.
+    assert sent.messages == []
+    director.note_requested("bigCheer")
+    assert "bigCheer" in director._cooldowns(time.monotonic()).repeated
+
+
+async def test_un_gesto_pedido_sin_parecido_o_con_fallo_no_da_nada() -> None:
+    director, _ = make_director(FakeGestureLLM('{"gesto": "ninguno"}'))
+    assert (await director.choose_requested("volar")).name is None
+    director, _ = make_director(FakeGestureLLM(RuntimeError("caído")))
+    choice = await director.choose_requested("tocarse un ojo")
+    assert choice.name is None and choice.error == "caído"
+    empty = GestureDirector(fast(), FakeGestureLLM(), Sent())
+    assert not empty.can_choose
+    assert (await empty.choose_requested("tocarse un ojo")).error

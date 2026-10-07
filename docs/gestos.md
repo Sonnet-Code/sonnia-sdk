@@ -182,6 +182,10 @@ El modelo de gestos falló (no contestó en 1.9 s); relleno noImpact02 (frase 16
 
 Lo que hay que vigilar es el límite de tokens por minuto de la cuenta, más que el dinero: son de 50 000 a 100 000 tokens por minuto mientras alguien conversa. Si la API responde 429, cada frase cae al relleno y el registro lo dice.
 
+### Gestos que pide el visitante
+
+«Tócate un ojo», «encógete de hombros»: GPT-Live delega `play_animation` y el backend, si no es uno de los movimientos fijos (bailar, saludar, paz...), lo describe en el parámetro `gesto`. El director lo resuelve con `choose_requested`: la misma llamada al modelo de gestos, con el mismo mensaje de sistema (las fichas de los 161 gestos, ya en la caché de Gemini) y otra pregunta (`build_request_message`): elegir el gesto que hace eso, aunque sea Rare o se haya usado hace poco, o «ninguno» si no hay nada parecido o no es apropiado. Así las fichas no van en el contexto de GPT-Live ni del backend. El clip se lanza entero (`play_animation` con `whole`, que Unity reproduce con `PlayGenieReaction`) y cuenta como gesto hecho para las reglas de frecuencia. Los desmarcados en «La usa» también valen: lo pide el visitante, no es por su cuenta. Probado con Gemini el 7 de octubre de 2026: «tocarse un ojo» → `touchEyeH`, «encogerse de hombros» → `shrugging`, «taparse la cara» → `coveringFaceTinashe`, «lanzar un beso» → `blowingKissTinashe`, todos en menos de un segundo; «volar como un pájaro» → ninguno.
+
 ### Cómo se engancha en el motor
 
 `LiveEngine` recibe el director por el constructor (`gestures=`), registra `gesture_catalog` en el hub y le cuenta:

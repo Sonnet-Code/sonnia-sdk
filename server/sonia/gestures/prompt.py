@@ -20,6 +20,7 @@ from sonia.gestures.catalog import Gesture, GestureCatalog
 __all__ = [
     "Cooldowns",
     "NONE_ANSWER",
+    "build_request_message",
     "build_system_prompt",
     "build_user_message",
     "gesture_line",
@@ -182,6 +183,31 @@ def build_user_message(
             lines.append("Ahora no disponibles: " + "; ".join(blocked) + ".")
     lines.append('¿Qué gesto hace ahora? Responde solo con {"gesto": "..."}.')
     return "\n".join(lines)
+
+
+#: Tope de la descripción de un gesto pedido.
+REQUEST_CHARS = 200
+
+
+def build_request_message(request: str) -> str:
+    """Un gesto que pide el visitante (``play_animation`` con ``gesto``), no el de una frase.
+
+    Va con el mismo mensaje de sistema que los gestos al hablar, para que el
+    servidor lo sirva de su caché: solo cambia la pregunta.
+    """
+    return "\n".join(
+        [
+            "Petición: el visitante le pide a Sonnia que haga este gesto o movimiento: "
+            + _quote(request, REQUEST_CHARS)
+            + ".",
+            "Elige el gesto de la lista que mejor hace exactamente eso, fijándote sobre todo en "
+            "la descripción física. Aquí no cuentan la frecuencia (vale aunque sea Rare o "
+            "Uncommon), los gestos recientes ni la apertura: lo ha pedido el visitante.",
+            "Si ninguno se parece de verdad, o lo que pide no es apropiado en un entorno "
+            "profesional, contesta ninguno.",
+            'Responde solo con {"gesto": "..."}.',
+        ]
+    )
 
 
 #: Un objeto JSON en la respuesta (el modelo a veces lo envuelve en texto o en ```).

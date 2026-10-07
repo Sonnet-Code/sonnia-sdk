@@ -349,8 +349,12 @@ class LiveEngine:
         tz = resolve_timezone(settings.timezone)
         self._place = place_of(settings.timezone)
         self._now: Clock = clock or clock_for(tz)
-        #: Última nota ``[Reloj]`` que tiene la sesión (la hora de las instrucciones al abrirla).
+        #: Última nota ``[Reloj]`` que tiene la sesión (la hora de las instrucciones al abrirla)
+        #: y lo último que se le dijo de la agenda («ahora mismo...»).
         self._clock_said = ""
+        self._happening_said = ""
+        #: Cambios de agenda a la espera de un momento de calma para pasárselos a la sesión.
+        self._pending_agenda_note = ""
         self._agenda = agenda
         #: La agenda que se puso en las instrucciones de la sesión abierta.
         self._session_agenda: Schedule | None = None
@@ -460,7 +464,6 @@ class LiveEngine:
             logger.warning("Texto ignorado: GPT-Live no está conectado")
             await self._hub.broadcast_json(p.msg_error("GPT-Live no está conectado"))
             return
-        await self._clock_note()
         try:
             # ``instructions.append`` no la hace hablar; ``commentary`` sí.
             await client.append_commentary(TEXT_INPUT_TEMPLATE.format(text=text))
@@ -569,6 +572,8 @@ class LiveEngine:
         )
         self._session_agenda = agenda.schedule if agenda is not None else None
         self._clock_said = clock_text
+        self._happening_said = ""
+        self._pending_agenda_note = ""
         if len(config["instructions"]) > INSTRUCTIONS_WARN_CHARS:
             logger.warning(
                 "Las instrucciones de GPT-Live ocupan %d caracteres: pueden pasar del límite de "
@@ -800,7 +805,6 @@ class LiveEngine:
             # Alguien habla: lo próximo que diga Sonia es una respuesta.
             self._ambient_expected_until = 0.0
             self._maybe_look(turn_start=True)
-            await self._clock_note()
         self._user_parts.append(delta)
         self._last_input_at = now
         self._touch()
@@ -976,6 +980,7 @@ class LiveEngine:
             extra={
                 "trivia": self._trivia,
                 "moves": self._moves,
+                "gestures": self._gestures,
                 "agenda": self._agenda,
                 "agenda_baseline": self._session_agenda,
             },
@@ -1153,6 +1158,7 @@ class LiveEngine:
         if self._is_idle(now) and self._client is not None and not self._restarting:
             await self._maybe_renew_session(now)
             if not self._restarting:
+                await self._between_turns()
                 await self._maybe_showcase(now)
 
     def _rest_state(self, now: float) -> AssistantState:
@@ -1442,11 +1448,31 @@ class LiveEngine:
         """Hay actividad: retrasa la animación de stand y la sesión nueva por inactividad."""
         self._touch()
 
-    async def _clock_note(self) -> None:
-        """Nota ``[Reloj]`` con la hora (y qué hay en la agenda) al empezar un turno.
+    async def _between_turns(self) -> None:
+        """Lo que se le pasa a la sesión solo en calma: la hora y los cambios de agenda.
 
-        Solo si cambió desde la última que tiene la sesión: como mucho una por
-        minuto y nunca con nadie callado. Va por ``thinking``: no la hace hablar.
+        Nunca mientras alguien habla: un append justo cuando GPT-Live decide si
+        delega puede cambiar lo que hace (el 7 de octubre de 2026 una nota de
+        reloj al empezar a contestar coincidió con una respuesta de la trivia
+        que no se registró).
+        """
+        client = self._client
+        if client is None:
+            return
+        if self._pending_agenda_note:
+            text, self._pending_agenda_note = self._pending_agenda_note, ""
+            try:
+                await client.append_instructions(text)
+            except Exception as exc:  # noqa: BLE001
+                _log_stage_failure("No se pudo pasar el cambio de agenda a GPT-Live: %s", exc)
+            else:
+                logger.info("Cambios de agenda pasados a GPT-Live: %s", text)
+        await self._clock_note()
+
+    async def _clock_note(self) -> None:
+        """Nota ``[Reloj]`` con la hora si cambió el minuto (y qué hay en la agenda si cambió).
+
+        Va por ``thinking``: no la hace hablar. Como mucho una por minuto.
         """
         client = self._client
         if client is None:
@@ -1458,7 +1484,8 @@ class LiveEngine:
         note = f"{CLOCK_NOTE_PREFIX} Ahora: {clock_text}."
         if self._agenda is not None:
             happening = self._agenda.happening()
-            if happening:
+            if happening and happening != self._happening_said:
+                self._happening_said = happening
                 note += " " + happening
         try:
             await client.append_thinking(note)
@@ -1468,9 +1495,11 @@ class LiveEngine:
         logger.info("Nota de reloj: %s", note)
 
     async def _on_agenda_change(self, changes: list[str]) -> None:
-        """La agenda cambió en la web: se le cuenta a la sesión abierta (las nuevas ya la traen)."""
-        client = self._client
-        if client is None or not changes:
+        """La agenda cambió en la web: se le contará a la sesión abierta en un momento de calma.
+
+        Las sesiones nuevas ya traen la agenda entera.
+        """
+        if self._client is None or not changes:
             return
         budget = APPEND_MAX_CHARS - len(AGENDA_CHANGED_TEMPLATE) - len(AGENDA_MORE_TEXT)
         shown: list[str] = []
@@ -1481,12 +1510,13 @@ class LiveEngine:
         text = AGENDA_CHANGED_TEMPLATE.format(changes=" ".join(shown))
         if len(shown) < len(changes):
             text += AGENDA_MORE_TEXT
-        try:
-            await client.append_instructions(text)
-        except Exception as exc:  # noqa: BLE001
-            _log_stage_failure("No se pudo pasar el cambio de agenda a GPT-Live: %s", exc)
-            return
-        logger.info("Cambios de agenda pasados a GPT-Live (%d de %d)", len(shown), len(changes))
+        # Si ya había otro pendiente, el nuevo lo incluye: la web solo va a más.
+        self._pending_agenda_note = text
+        logger.info(
+            "Cambios de agenda (%d de %d) a la espera de un momento de calma",
+            len(shown),
+            len(changes),
+        )
 
     async def set_notes(self, text: str) -> None:
         """Avisos del día: entran ya en la sesión y en las instrucciones de las siguientes."""

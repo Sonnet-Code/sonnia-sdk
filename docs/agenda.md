@@ -6,7 +6,7 @@ Sonnia sabe qué día y qué hora es en Santo Domingo, lee la agenda del DevFest
 
 - La hora es la del stand (`TIMEZONE`, por defecto `America/Santo_Domingo`), no la del equipo: el Mac de desarrollo está en España y la app puede correr en cualquier sitio.
 - Al abrir cada sesión, las instrucciones llevan una sección «FECHA Y HORA» (`martes 6 de octubre de 2026, 19:25 (las 7:25 de la noche), hora de Santo Domingo`).
-- Cada vez que alguien empieza a hablar (o escribe en la pantalla), si el minuto cambió desde la última, el motor manda una nota silenciosa `[Reloj]` por `session.thinking.append` con la hora y, si hay agenda, qué hay ahora y qué viene (o cuánto falta para el DevFest). Como mucho una por minuto y nunca sin nadie hablando, para no llenar el contexto.
+- Entre turnos, cuando Sonnia está en reposo (`_between_turns` en el ciclo del motor), si cambió el minuto, el motor manda una nota silenciosa `[Reloj]` por `session.thinking.append` con la hora y, si cambió, qué hay ahora y qué viene (o cuánto falta para el DevFest). Como mucho una por minuto. Nunca mientras alguien habla: al principio iba al empezar cada turno y una de esas notas coincidió con una respuesta de la trivia que GPT-Live no registró (un append puede cambiar lo que el modelo está decidiendo). Los cambios de agenda esperan igual a un momento de calma.
 - Windows no trae la base de zonas horarias de `zoneinfo`: Santo Domingo es UTC-4 todo el año y `resolve_timezone` lo resuelve sin ella. Otra zona que falte cae en la del sistema con un aviso.
 
 ## Agenda en vivo (`server/sonia/agenda`)

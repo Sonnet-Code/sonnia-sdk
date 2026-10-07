@@ -97,6 +97,20 @@ _CAPABILITIES = {
     ),
 }
 
+#: ``play_animation`` cuando el director de gestos puede elegir cualquier gesto de Sage.
+_ANY_GESTURE_CAPABILITY = (
+    "- Moverte en la pantalla: bailar, saludar con la mano, la señal de paz, un saludo militar, "
+    "pulgares arriba, celebrar, lamentarte, ponerte pensativa o cualquier otro gesto concreto "
+    "que te pidan (tocarte un ojo, encogerte de hombros, taparte la cara...): tienes más de 150."
+)
+
+
+def gestures_on_request(settings: Settings) -> bool:
+    """¿Puede elegir el director de gestos cualquier gesto que pidan (modelo con clave)?"""
+    gestures = settings.gestures
+    return gestures.enabled and bool(gestures.llm_settings(settings.llm).key)
+
+
 #: La búsqueda en internet no es una acción del registro: es la herramienta
 #: ``web_search`` de la API Responses, que ejecuta OpenAI.
 _SEARCH_CAPABILITY = (
@@ -105,8 +119,9 @@ _SEARCH_CAPABILITY = (
 
 #: Cuándo delegar un movimiento (``play_animation``).
 _MOVES_WHEN = (
-    "- Te pidan bailar, saludar o hacer un gesto («¡baila!», «hazme un bailecito», «haz la de "
-    "la paz»): delégalo en ese mismo turno, sin preguntar, y acompáñalo con una frase corta. "
+    "- Te pidan bailar, saludar o hacer un gesto, el que sea («¡baila!», «hazme un bailecito», "
+    "«haz la de la paz», «tócate un ojo»): delégalo en ese mismo turno, sin preguntar ni decir "
+    "antes que no lo tienes, y acompáñalo con una frase corta. "
     "No te muevas por tu cuenta a cada rato: solo cuando te lo pidan o al celebrar algo.\n"
 )
 
@@ -420,12 +435,17 @@ def build_live_instructions(
     mode = camera_mode(settings, names)
     meeting = in_meeting(settings) and mode != "none"
     web_search = settings.live.backend_web_search
+    any_gesture = gestures_on_request(settings)
+
+    def capability(name: str) -> str:
+        if meeting and name == "look":
+            return _MEETING_LOOK_CAPABILITY
+        if any_gesture and name == "play_animation":
+            return _ANY_GESTURE_CAPABILITY
+        return _CAPABILITIES[name]
+
     capabilities = "\n".join(
-        [
-            _MEETING_LOOK_CAPABILITY if meeting and n == "look" else _CAPABILITIES[n]
-            for n in names
-            if n in _CAPABILITIES
-        ]
+        [capability(n) for n in names if n in _CAPABILITIES]
         + ([_SEARCH_CAPABILITY] if web_search else [])
     )
     camera_rule = _CAMERA_RULE[mode]

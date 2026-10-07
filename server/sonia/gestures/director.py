@@ -36,6 +36,7 @@ from sonia.config import GestureSettings
 from sonia.gestures.catalog import DEFAULT_CORE_S, GestureCatalog
 from sonia.gestures.prompt import (
     Cooldowns,
+    build_request_message,
     build_system_prompt,
     build_user_message,
     parse_choice,
@@ -120,6 +121,17 @@ class _Stats:
     latency_total_s: float = 0.0
 
 
+@dataclass(frozen=True, slots=True)
+class RequestedGesture:
+    """El gesto que eligió el modelo para lo que pidió el visitante."""
+
+    #: Nombre exacto del catálogo, o ``None`` si ninguno lo hace (o falló el modelo).
+    name: str | None
+    #: Por qué no hay gesto cuando falló el modelo (vacío si contestó).
+    error: str = ""
+    latency_s: float = 0.0
+
+
 class GestureDirector:
     """Elige y manda a Unity los gestos de hablar. Todo entra por el constructor.
 
@@ -186,6 +198,53 @@ class GestureDirector:
         if not self.enabled or not self._live or not len(self._catalog):
             return False
         return self._has_clients is None or self._has_clients()
+
+    # -- gestos pedidos por el visitante -----------------------------------------
+
+    @property
+    def can_choose(self) -> bool:
+        """¿Puede elegir un gesto que pida el visitante (modelo y catálogo de Unity)?"""
+        return self.enabled and len(self._catalog) > 0
+
+    async def choose_requested(self, request: str) -> RequestedGesture:
+        """El gesto del catálogo que hace lo que pide el visitante («tocarse un ojo»).
+
+        Lo decide el mismo modelo que los gestos al hablar, con el mismo mensaje
+        de sistema (las fichas de Genies, ya en su caché) y otra pregunta: así
+        las fichas no van en el contexto de GPT-Live ni del backend. No manda
+        nada a Unity; quien lo lance avisa con :meth:`note_requested`.
+        """
+        if not self.can_choose:
+            return RequestedGesture(None, "sin modelo de gestos o sin catálogo de Unity")
+        assert self._llm is not None
+        messages = [system(self._system), user_text(build_request_message(request))]
+        started = time.monotonic()
+        timeout = self._settings.timeout_s
+        try:
+            async with asyncio.timeout(max(0.05, timeout)):
+                completion = await self._llm.complete(messages)
+        except TimeoutError:
+            return RequestedGesture(None, f"no contestó en {timeout:.1f} s", timeout)
+        except Exception as exc:  # noqa: BLE001 - un fallo del modelo no tumba nada
+            return RequestedGesture(None, str(exc) or type(exc).__name__)
+        latency = time.monotonic() - started
+        name, understood = parse_choice(completion.content, self._catalog)
+        if not understood:
+            logger.info(
+                "Respuesta del modelo de gestos que no es un gesto: %r", completion.content[:120]
+            )
+        logger.info(
+            "Gesto pedido %s -> %s (%.2f s%s)",
+            f"«{' '.join(request.split())[:80]}»",
+            name or "ninguno",
+            latency,
+            _usage(completion),
+        )
+        return RequestedGesture(name, latency_s=latency)
+
+    def note_requested(self, name: str) -> None:
+        """Se lanzó un gesto pedido: cuenta como hecho para no repetirlo ni pisarlo al hablar."""
+        self._played(name, time.monotonic())
 
     # -- lo que cuenta el motor -------------------------------------------------
 

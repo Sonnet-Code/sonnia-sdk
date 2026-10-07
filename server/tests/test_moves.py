@@ -92,3 +92,61 @@ async def test_el_registro_rechaza_un_movimiento_inventado() -> None:
     result = await registry.execute("play_animation", {"movimiento": "volar"}, ctx_with(catalog))
     assert result.text.startswith("Error")
     assert sent.messages == []
+
+
+# -- gestos concretos («tócate un ojo»): los elige el director de gestos --------
+
+
+def with_sage(*clips: str) -> dict[str, Any]:
+    return {
+        "type": "animations",
+        "animations": UNITY_CATALOG["animations"] + [{"clip": c, "group": "sage"} for c in clips],
+    }
+
+
+def ctx_with_director(catalog: MoveCatalog, director: Any) -> ActionContext:
+    return ActionContext(
+        camera=None, avatar=None, gallery_dir="", extra={"moves": catalog, "gestures": director}
+    )
+
+
+async def test_un_gesto_concreto_lo_busca_el_director_y_suena_entero() -> None:
+    from tests.test_gestures import FakeGestureLLM, make_director
+
+    llm = FakeGestureLLM('{"gesto": "bigCheer"}')
+    director, director_sent = make_director(llm)
+    catalog, sent = make_catalog(with_sage("bigCheer", "wave"))
+    result = await play_animation(ctx_with_director(catalog, director), {"gesto": "celebrar"})
+    assert result.text.startswith("Hecho: Sonia está haciendo «celebrar»")
+    assert sent.messages == [{"type": "play_animation", "clip": "bigCheer", "whole": True}]
+    assert director_sent.messages == []
+    assert "«celebrar»" in llm.user()
+
+
+async def test_un_gesto_que_no_hay_ofrece_los_movimientos_o_usa_el_de_respaldo() -> None:
+    from tests.test_gestures import FakeGestureLLM, make_director
+
+    director, _ = make_director(FakeGestureLLM('{"gesto": "ninguno"}'))
+    catalog, sent = make_catalog(with_sage("bigCheer"))
+    result = await play_animation(ctx_with_director(catalog, director), {"gesto": "volar"})
+    assert result.text.startswith("Un gesto que sea «volar» no lo tienes. Puedes hacer: bailar")
+    assert sent.messages == []
+    # Con un movimiento de respaldo, se hace ese.
+    result = await play_animation(
+        ctx_with_director(catalog, director), {"gesto": "volar", "movimiento": "bailar"}
+    )
+    assert result.text.startswith("Hecho")
+    assert sent.messages == [{"type": "play_animation", "clip": "QuickAction_vibe", "whole": True}]
+
+
+async def test_un_gesto_elegido_que_la_app_no_tiene_no_se_manda() -> None:
+    from tests.test_gestures import FakeGestureLLM, make_director
+
+    director, _ = make_director(FakeGestureLLM('{"gesto": "bigCheer"}'))
+    catalog, sent = make_catalog()  # sin el grupo sage
+    result = await play_animation(ctx_with_director(catalog, director), {"gesto": "celebrar"})
+    assert "no lo tienes" in result.text
+    assert sent.messages == []
+    # Sin director tampoco: se ofrece lo que hay.
+    result = await play_animation(ctx_with(catalog), {"gesto": "tocarse un ojo"})
+    assert "no lo tienes" in result.text

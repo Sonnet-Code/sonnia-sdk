@@ -64,7 +64,7 @@ Definidas una sola vez en `server/sonia/actions`; de ese registro salen las herr
 | `look` | Toma una captura fresca de la cámara y se la manda al backend como imagen. |
 | `show_image` | Muestra una imagen en el panel de la escena de Unity. Acepta un id de la galería local o `camera` para la última captura. Opcionalmente un pie de texto. |
 | `hide_image` | Retira el panel de imágenes. |
-| `play_animation` | Baila o hace un gesto (saludar, paz, pulgares arriba...) cuando se lo piden: busca el clip en el catálogo que manda Unity y lo lanza entero (`whole`), aunque Sonia hable mientras tanto (`server/sonia/actions/moves.py`). |
+| `play_animation` | Baila o hace un gesto cuando se lo piden: los de una lista fija (bailar, saludar, paz, pulgares arriba...) o cualquier gesto de Sage descrito con palabras («tocarse un ojo»), que elige el modelo del director de gestos con las fichas de Genies que ya tiene en caché, sin cargar el contexto de GPT-Live ni del backend. Lanza el clip entero (`whole`), aunque Sonia hable mientras tanto (`server/sonia/actions/moves.py`, `docs/gestos.md`). |
 | `check_agenda` | Vuelve a leer la agenda en la web del DevFest y devuelve, calculado en código, qué cambió respecto a la que tenía la sesión y qué hay ahora y qué viene (`docs/agenda.md`). |
 | Búsqueda en internet | No es una acción del registro: el backend lleva la herramienta `web_search` de la API Responses (la ejecuta OpenAI, `LIVE_BACKEND_WEB_SEARCH`). |
 | `start_trivia`, `trivia_answer`, `restart_trivia`, `stop_trivia` | Modo trivia (`docs/trivia.md`): empezar, registrar la letra que eligió el visitante, empezar otra desde cero y terminar. El orquestador guarda la clave y la pantalla; GPT-Live entiende la respuesta y lee el guion que devuelve cada acción. |
