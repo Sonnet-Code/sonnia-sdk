@@ -37,7 +37,6 @@ FONTS_DIR = BUNDLE_ROOT / "assets" / "fonts"
 
 WIDTH, HEIGHT = 1600, 900
 MARGIN = 72
-RADIUS = 44
 NAVY = (22, 31, 64)
 BORDER = (96, 140, 255)
 WHITE = (255, 255, 255)
@@ -228,11 +227,11 @@ def render_talk_card(talk: Talk, tz: tzinfo, *, photo: bytes | None = None) -> b
     """La tarjeta de ``talk`` en PNG (1600x900, se ve bien a 750 px de ancho)."""
     from PIL import Image, ImageDraw
 
-    card = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    # Opaca y de esquinas rectas: el panel de imágenes de Unity no usa la transparencia
+    # (unas esquinas redondeadas salían con triángulos negros).
+    card = Image.new("RGBA", (WIDTH, HEIGHT), NAVY + (255,))
     draw = ImageDraw.Draw(card)
-    draw.rounded_rectangle(
-        (0, 0, WIDTH - 1, HEIGHT - 1), radius=RADIUS, fill=NAVY, outline=BORDER, width=5
-    )
+    draw.rectangle((0, 0, WIDTH - 1, HEIGHT - 1), outline=BORDER, width=6)
     inner = WIDTH - 2 * MARGIN
 
     # Cabecera: tipo, día, hora y sala.
@@ -296,5 +295,5 @@ def render_talk_card(talk: Talk, tz: tzinfo, *, photo: bytes | None = None) -> b
             x += width + 18
 
     out = io.BytesIO()
-    card.save(out, format="PNG")
+    card.convert("RGB").save(out, format="PNG")
     return out.getvalue()
