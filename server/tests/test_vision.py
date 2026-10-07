@@ -11,6 +11,7 @@ import asyncio
 import base64
 import json
 import socket
+import sys
 import threading
 import time
 from pathlib import Path
@@ -659,3 +660,50 @@ def test_policy_maybe_save_debug_sin_frame(tmp_path: Path) -> None:
 def test_policy_enabled(supports_vision: bool) -> None:
     policy = VisionPolicy(VisionSettings(source="opencv"), supports_vision=supports_vision)
     assert policy.enabled is supports_vision
+
+
+class _FakeCv2:
+    """``cv2`` falso: solo abre las cámaras de ``present``."""
+
+    CAP_ANY = 0
+
+    def __init__(self, present: set[int]) -> None:
+        self.present = present
+        self.opened: list[int] = []
+
+    def VideoCapture(self, index: int, backend: int = 0) -> Any:  # noqa: N802 - como cv2
+        cv2 = self
+
+        class _Device(_FakeDevice):
+            def isOpened(self) -> bool:  # noqa: N802 - como cv2
+                return index in cv2.present
+
+            def set(self, prop: int, value: Any) -> bool:
+                return True
+
+        if index in self.present:
+            self.opened.append(index)
+        return _Device()
+
+
+def test_si_la_camara_configurada_no_abre_se_usa_la_0(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    fake = _FakeCv2({0})
+    monkeypatch.setitem(sys.modules, "cv2", fake)
+    camera = OpenCVCamera(VisionSettings(source="opencv", camera_index=3))
+    assert camera._open_sync() is not None
+    assert fake.opened == [0]
+    assert "se usa la de por defecto" in caplog.text
+
+
+async def test_se_puede_cambiar_de_camara_en_marcha(monkeypatch: pytest.MonkeyPatch) -> None:
+    primera, segunda = _FakeDevice(), _FakeDevice()
+    settings = VisionSettings(source="opencv")
+    camera = OpenCVCamera(settings)
+    abiertos = _with_devices(monkeypatch, camera, [primera, segunda])
+    assert await camera.capture() is not None
+    await camera.set_index(2)
+    assert primera.released and settings.camera_index == 2
+    assert await camera.capture() is not None
+    assert abiertos == [primera, segunda]

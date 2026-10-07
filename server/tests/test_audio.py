@@ -138,6 +138,17 @@ def test_resolve_input_device_acepta_indice_nombre_y_vacio(fake_sd: _FakeSoundde
         resolve_input_device("micrófono inexistente")
 
 
+def test_si_el_micro_configurado_no_esta_se_usa_el_del_sistema(
+    fake_sd: _FakeSounddevice, caplog: pytest.LogCaptureFixture
+) -> None:
+    """El .env de otro equipo (o el de la app) nombra un micro que aquí no existe."""
+    from sonia.audio.capture import input_device_or_default
+
+    assert input_device_or_default("yeti") == 2
+    assert input_device_or_default("condenser") is None
+    assert "Se usa el micrófono por defecto del sistema" in caplog.text
+
+
 async def test_mic_capture_entrega_los_bloques_del_callback(fake_sd: _FakeSounddevice) -> None:
     settings = make_settings(input_device="yeti")
 

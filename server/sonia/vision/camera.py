@@ -139,19 +139,36 @@ class OpenCVCamera:
             backends.append(int(cv2.CAP_AVFOUNDATION))
         backends.append(int(getattr(cv2, "CAP_ANY", 0)))
 
-        for backend in backends:
-            device = cv2.VideoCapture(index, backend)
-            if device.isOpened():
-                # Buffer mínimo: queremos el frame de ahora, no el de hace medio segundo.
-                try:
-                    device.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                except Exception:  # noqa: BLE001 - no todos los backends lo soportan
-                    logger.debug("El backend no soporta CAP_PROP_BUFFERSIZE")
-                return device
-            device.release()
+        # La configurada y, si no abre (en este equipo no existe), la de por defecto.
+        for candidate in dict.fromkeys((index, 0)):
+            for backend in backends:
+                device = cv2.VideoCapture(candidate, backend)
+                if device.isOpened():
+                    # Buffer mínimo: queremos el frame de ahora, no el de hace medio segundo.
+                    try:
+                        device.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    except Exception:  # noqa: BLE001 - no todos los backends lo soportan
+                        logger.debug("El backend no soporta CAP_PROP_BUFFERSIZE")
+                    if candidate != index:
+                        logger.warning(
+                            "No se pudo abrir la cámara %s: se usa la de por defecto (0)", index
+                        )
+                    return device
+                device.release()
 
         logger.warning("No se pudo abrir la cámara con índice %s", index)
         return None
+
+    async def set_index(self, index: int) -> None:
+        """Cambia de cámara: suelta la abierta y la siguiente captura abre ``index``."""
+        async with self._lock:
+            self._settings.camera_index = max(0, int(index))
+            device, self._capture = self._capture, None
+            self._retry_after = 0.0
+            self._read_failures = 0
+        if device is not None:
+            await asyncio.to_thread(_release_quietly, device)
+        logger.info("Cámara cambiada a la %d", self._settings.camera_index)
 
     async def _ensure_open(self) -> Any | None:
         if self._capture is not None:

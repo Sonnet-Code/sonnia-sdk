@@ -147,6 +147,31 @@ def resolve_input_device(spec: str) -> int | None:
     )
 
 
+def input_device_or_default(spec: str) -> int | None:
+    """Como :func:`resolve_input_device`, pero si ese micrófono no está usa el del sistema.
+
+    El ``.env`` de un equipo (o el que va dentro de la app) puede nombrar un
+    micrófono que en otro equipo no existe: entonces se avisa y se usa el de por
+    defecto, en vez de quedarse sin micrófono.
+    """
+    try:
+        return resolve_input_device(spec)
+    except ValueError as exc:
+        _log.warning("%s. Se usa el micrófono por defecto del sistema.", exc)
+        return None
+
+
+def default_input_name() -> str:
+    """Nombre del micrófono por defecto del sistema (vacío si no se sabe)."""
+    try:
+        import sounddevice as sd
+
+        device = sd.query_devices(kind="input")
+    except Exception:  # noqa: BLE001 - depende del hardware
+        return ""
+    return str(device.get("name", "")) if isinstance(device, dict) else ""
+
+
 class MicCapture:
     """Micrófono mono float32 como flujo asíncrono de bloques.
 
@@ -206,7 +231,7 @@ class MicCapture:
         self._closed = False
         self._dropped = 0
 
-        device = resolve_input_device(self._settings.input_device)
+        device = input_device_or_default(self._settings.input_device)
         self._stream = sd.InputStream(
             samplerate=self._sample_rate,
             blocksize=self._block_samples,
