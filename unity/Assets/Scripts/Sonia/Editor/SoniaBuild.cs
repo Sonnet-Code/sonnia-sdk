@@ -76,7 +76,7 @@ namespace Sonia.EditorTools
         [MenuItem("Sonia/Build Windows")]
         public static void BuildWindows()
         {
-            Build(BuildTarget.StandaloneWindows64, "Windows", "Sonnia.exe");
+            Build(BuildTarget.StandaloneWindows64, "Windows-x64", "Sonnia.exe");
         }
 
         /// <summary>
@@ -90,11 +90,11 @@ namespace Sonia.EditorTools
             BuildForTesters(() => Build(BuildTarget.StandaloneOSX, "macOS-pruebas", "Sonnia.app"));
         }
 
-        /// <summary>Como BuildMacTesters, para Windows (Build/Windows-pruebas).</summary>
+        /// <summary>Como BuildMacTesters, para Windows (Build/Windows-pruebas-x64).</summary>
         [MenuItem("Sonia/Build Windows (pruebas, sin cámara en el panel)")]
         public static void BuildWindowsTesters()
         {
-            BuildForTesters(() => Build(BuildTarget.StandaloneWindows64, "Windows-pruebas", "Sonnia.exe"));
+            BuildForTesters(() => Build(BuildTarget.StandaloneWindows64, "Windows-pruebas-x64", "Sonnia.exe"));
         }
 
         private static void BuildForTesters(System.Action build)
@@ -141,6 +141,11 @@ namespace Sonia.EditorTools
             {
                 PlayerSettings.SetUseDefaultGraphicsAPIs(target, false);
                 PlayerSettings.SetGraphicsAPIs(target, new[] { GraphicsDeviceType.Vulkan });
+                // Siempre x64: desde un Mac con Apple Silicon el ajuste estaba en ARM64 y esa
+                // app no abre en los PC normales («This app can't run on your PC» en un AMD
+                // Ryzen, 7 de octubre de 2026). Los Windows ARM la abren igual, emulando x64.
+                EditorUserBuildSettings.SetPlatformSettings(
+                    BuildPipeline.GetBuildTargetName(target), WindowsArchitectureSetting, "x64");
             }
 
             // Mono solo durante esta build (ver la cabecera).
@@ -169,12 +174,58 @@ namespace Sonia.EditorTools
             }
 
             string summary = Summarize(report);
+            bool wrongArchitecture = false;
+            if (target == BuildTarget.StandaloneWindows64 && report.summary.result == BuildResult.Succeeded)
+            {
+                string machine = WindowsMachine(output);
+                summary += "Arquitectura: " + machine + "\n";
+                wrongArchitecture = machine != "x64";
+                if (wrongArchitecture)
+                {
+                    Debug.LogError("[Sonia] La build de Windows salió para " + machine
+                                   + ", no x64: no abriría en los PC normales.");
+                }
+            }
+
             File.WriteAllText(Path.Combine(outputDir, "build-report.txt"), summary);
             Debug.Log("[Sonia] Build " + folder + ": " + report.summary.result + "\n" + summary);
 
-            if (Application.isBatchMode && report.summary.result != BuildResult.Succeeded)
+            if (Application.isBatchMode && (report.summary.result != BuildResult.Succeeded || wrongArchitecture))
             {
                 EditorApplication.Exit(1);
+            }
+        }
+
+        /// <summary>Ajuste de plataforma con la arquitectura de la build de Windows (x64 o ARM64).</summary>
+        private const string WindowsArchitectureSetting = "Architecture";
+
+        /// <summary>Para qué procesador es un .exe de Windows, leído de su cabecera PE.</summary>
+        private static string WindowsMachine(string exe)
+        {
+            try
+            {
+                using (BinaryReader reader = new BinaryReader(File.OpenRead(exe)))
+                {
+                    reader.BaseStream.Seek(0x3C, SeekOrigin.Begin);
+                    int header = reader.ReadInt32();
+                    reader.BaseStream.Seek(header + 4, SeekOrigin.Begin);
+                    ushort machine = reader.ReadUInt16();
+                    switch (machine)
+                    {
+                        case 0x8664:
+                            return "x64";
+                        case 0xAA64:
+                            return "ARM64";
+                        case 0x014C:
+                            return "x86";
+                        default:
+                            return "0x" + machine.ToString("X4");
+                    }
+                }
+            }
+            catch (IOException ex)
+            {
+                return "desconocida (" + ex.Message + ")";
             }
         }
 

@@ -302,7 +302,7 @@ avatar. En el aparcamiento: …», con objetos, mallas y texturas).
 
 Se puede compilar en Windows o desde un Mac. **Sonia > Build Windows** (o
 `SoniaBuild.BuildWindows` en modo batch, ver más abajo) deja la carpeta
-`unity/Build/Windows/` (`Sonnia.exe`, `Sonnia_Data`, `UnityPlayer.dll`…), que
+`unity/Build/Windows-x64/` (`Sonnia.exe`, `Sonnia_Data`, `UnityPlayer.dll`…), que
 se copia entera al equipo.
 
 - **Vulkan como única API gráfica.** Genies lo exige en Windows: NAF entrega las
@@ -330,10 +330,17 @@ se copia entera al equipo.
   (`cache/faces/modelos` y `huellas`) del equipo donde se compila: sin las
   huellas, la app de Windows no reconocería a las personas dadas de alta con
   fotos locales (`docs/caras.md`).
-- **Sin probar todavía en un Windows de verdad** (6 de octubre de 2026). El
-  lado de Windows de Genies no lleva los arreglos de macOS (llavero y rutas): su
-  librería de sesión usa DPAPI y no hace falta tocarla. Al probarla por primera
-  vez, mirar el `Player.log`
+- **Siempre x64.** La primera prueba en un Windows de verdad (7 de octubre de
+  2026, un portátil con AMD Ryzen) falló con «This app can't run on your PC»:
+  desde un Mac con Apple Silicon, el ajuste de arquitectura de Windows estaba en
+  ARM64. Ahora `SoniaBuild` lo fija en x64 (los Windows ARM la abren igual,
+  emulando x64). La build lee la cabecera de `Sonnia.exe`, lo apunta en
+  `build-report.txt` y falla si no es x64. Las carpetas y los zips llevan `x64`
+  en el nombre. En `Sonnia_Data/Plugins/ARM64` queda un plugin de App UI: es
+  normal, la app x64 carga los de `x86_64`.
+- El lado de Windows de Genies no lleva los arreglos de macOS (llavero y rutas):
+  su librería de sesión usa DPAPI y no hace falta tocarla. Si algo falla, mirar
+  el `Player.log`
   (`%USERPROFILE%\AppData\LocalLow\DefaultCompany\Sonnia\Player.log`) y
   `%APPDATA%\Sonia\logs`.
 
@@ -344,7 +351,7 @@ primera vez, porque compila los shaders para Vulkan):
 cd unity
 /Applications/Unity/Hub/Editor/6000.6.0f1/Unity.app/Contents/MacOS/Unity -batchmode -quit \
   -projectPath "$PWD" -executeMethod Sonia.EditorTools.SoniaBuild.BuildWindows -logFile Build/build-windows.log
-cat Build/Windows/build-report.txt
+cat Build/Windows-x64/build-report.txt
 ```
 
 La build cambia la plataforma activa del proyecto a Windows. Para seguir con la
@@ -601,7 +608,7 @@ mide algo distinto, así que recalcularlo cambia un poco el plano.
 **Sonia > Build macOS (pruebas, sin cámara en el panel)** y **Sonia > Build Windows
 (pruebas, sin cámara en el panel)** (o `SoniaBuild.BuildMacTesters` y
 `BuildWindowsTesters` en modo batch) hacen la misma app que las del stand, pero:
-- salen en `Build/macOS-pruebas` y `Build/Windows-pruebas`, para no confundirlas;
+- salen en `Build/macOS-pruebas` y `Build/Windows-pruebas-x64`, para no confundirlas;
 - llevan, junto al orquestador, un `build.env` con `PANEL_CAMERA_STREAM=false`. Manda
   sobre el `.env` copiado (`sonia/paths.py`), así que la app no manda ni la cámara ni
   el micrófono al panel de Cloudflare: quien la prueba en casa no puede ser visto ni

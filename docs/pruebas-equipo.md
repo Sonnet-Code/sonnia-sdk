@@ -1,6 +1,8 @@
 # Probar Sonnia: builds de prueba para el equipo
 
-Son `Sonnia-pruebas-macOS.zip` y `Sonnia-pruebas-Windows.zip`. Hace falta internet:
+Son `Sonnia-pruebas-macOS.zip`, para un Mac con Apple Silicon (M1 o posterior), y
+`Sonnia-pruebas-Windows-x64.zip`, para un PC con Windows de 64 bits (Intel o AMD).
+Hace falta internet:
 Sonnia habla de verdad con GPT-Live, que cuesta unos 3 USD por hora mientras la
 app está abierta. **Ciérrala cuando acabes de probar.**
 
