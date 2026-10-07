@@ -198,6 +198,14 @@ namespace Sonia.EditorTools
                     Debug.LogError("[Sonia] La build de Windows salió para " + machine
                                    + ", no x64: no abriría en los PC normales.");
                 }
+
+                // Sin el runtime de Visual C++ al lado, Genies no monta el avatar en un PC que no
+                // lo tenga instalado (SoniaPlayerBuildFixes.AddVisualCppRuntime).
+                string[] runtime = { "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "concrt140.dll" };
+                string missing = string.Join(", ", System.Array.FindAll(
+                    runtime, dll => !File.Exists(Path.Combine(outputDir, dll))));
+                summary += "Runtime de Visual C++: " + (missing.Length == 0 ? "sí" : "falta " + missing) + "\n";
+                wrongArchitecture |= missing.Length > 0;
             }
 
             File.WriteAllText(Path.Combine(outputDir, "build-report.txt"), summary);

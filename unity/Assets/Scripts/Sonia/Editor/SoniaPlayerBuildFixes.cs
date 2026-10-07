@@ -166,8 +166,44 @@ namespace Sonia.EditorTools
                 case BuildTarget.StandaloneWindows64:
                     string data = Path.Combine(Path.GetDirectoryName(output), Path.GetFileNameWithoutExtension(output) + "_Data");
                     AddOrchestrator("Windows", Path.Combine(data, "orquestador"));
+                    AddVisualCppRuntime(Path.GetDirectoryName(output), data);
                     break;
             }
+        }
+
+        /// <summary>
+        /// El runtime de Visual C++ (msvcp140, vcruntime140, concrt140...) junto a Sonnia.exe y
+        /// a los plugins de 64 bits: lo necesitan las DLL nativas de Genies y Windows no lo trae
+        /// de serie (7 de octubre de 2026: sin él, Genies no montaba el avatar y salía el doble).
+        /// Sale del orquestador congelado en Windows (scripts/build_orquestador.sh, vcredist/).
+        /// </summary>
+        private static void AddVisualCppRuntime(string root, string data)
+        {
+            string source = Path.Combine(FrozenOrchestrator("Windows"), "vcredist");
+            string[] dlls = Directory.Exists(source) ? Directory.GetFiles(source, "*.dll") : new string[0];
+            if (dlls.Length == 0)
+            {
+                Debug.LogError("[Sonia] Build de Windows sin el runtime de Visual C++ (falta " + source
+                               + "): en un PC sin él Genies no monta el avatar. Hay que volver a congelar "
+                               + "el orquestador de Windows (scripts/build_orquestador.sh en Windows o el workflow).");
+                return;
+            }
+
+            string plugins = Path.Combine(data, "Plugins", "x86_64");
+            var names = new System.Collections.Generic.List<string>();
+            foreach (string dll in dlls)
+            {
+                string name = Path.GetFileName(dll);
+                File.Copy(dll, Path.Combine(root, name), true);
+                if (Directory.Exists(plugins))
+                {
+                    File.Copy(dll, Path.Combine(plugins, name), true);
+                }
+
+                names.Add(name);
+            }
+
+            Debug.Log("[Sonia] Runtime de Visual C++ en la build de Windows: " + string.Join(", ", names));
         }
 
         // ------------------------------------------------------------------

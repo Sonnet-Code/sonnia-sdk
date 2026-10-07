@@ -67,5 +67,28 @@ uv run --no-sync pyinstaller --noconfirm --clean --log-level WARN \
   --add-data "$REPO/server/sonia/panel/static${SEP}sonia/panel/static" \
   ${EXTRA[@]+"${EXTRA[@]}"} \
   "$REPO/server/sonia/__main__.py"
+# Runtime de Visual C++ para la app de Windows: lo necesitan las DLL nativas de Genies
+# y Windows no lo trae de serie (7 de octubre de 2026: sin él no se montaba el avatar).
+# Van las de este Windows (en el runner de GitHub, las del Visual Studio instalado) y
+# la build de Unity las pone junto a Sonnia.exe y a los plugins (SoniaPlayerBuildFixes).
+if [ "$PLATFORM" = Windows ]; then
+  SYS="$(printf '%s' "${SYSTEMROOT:-C:/Windows}" | tr '\\' '/')/System32"
+  VCREDIST="$OUT/sonia-orquestador/vcredist"
+  mkdir -p "$VCREDIST"
+  for dll in msvcp140 msvcp140_1 msvcp140_2 msvcp140_atomic_wait msvcp140_codecvt_ids \
+             vcruntime140 vcruntime140_1 concrt140; do
+    if [ -f "$SYS/$dll.dll" ]; then
+      cp "$SYS/$dll.dll" "$VCREDIST/"
+    else
+      echo "aviso: no está $SYS/$dll.dll" >&2
+    fi
+  done
+  for dll in msvcp140 vcruntime140 vcruntime140_1 concrt140; do
+    if [ ! -f "$VCREDIST/$dll.dll" ]; then
+      echo "error: falta $dll.dll del runtime de Visual C++ para la app de Windows" >&2
+      exit 1
+    fi
+  done
+fi
 du -sh "$OUT/sonia-orquestador"
 echo "listo: $OUT/sonia-orquestador"

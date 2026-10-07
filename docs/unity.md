@@ -338,13 +338,15 @@ se copia entera al equipo.
   `build-report.txt` y falla si no es x64. Las carpetas y los zips llevan `x64`
   en el nombre. En `Sonnia_Data/Plugins/ARM64` queda un plugin de App UI: es
   normal, la app x64 carga los de `x86_64`.
-- **Runtime de Visual C++.** Las DLL nativas de Genies (`CommonDeps`,
-  `GeniesAuthAPI`, `GeniesTelemetryBridge`) necesitan el de Visual C++ 2015-2022
-  x64 (`MSVCP140`, `VCRUNTIME140`, `VCRUNTIME140_1`, `CONCRT140`). Windows no lo
-  trae de serie y la app no lo lleva: si falta, instalarlo desde
-  https://aka.ms/vs/17/release/vc_redist.x64.exe. Es la primera sospecha de la
-  prueba del 7 de octubre de 2026, en la que Genies no montó el avatar
-  (`NativeGenie` sin mallas) y salió el doble.
+- **Runtime de Visual C++ dentro de la app.** Las DLL nativas de Genies
+  (`CommonDeps`, `GeniesAuthAPI`, `GeniesTelemetryBridge`) necesitan el de
+  Visual C++ 2015-2022 x64 (`msvcp140`, `vcruntime140`, `vcruntime140_1`,
+  `concrt140`), y Windows no lo trae de serie. En la prueba del 7 de octubre de
+  2026, en un PC sin él, Genies no montó el avatar (`NativeGenie` sin mallas) y
+  salió el doble. Ahora la app lo lleva: `scripts/build_orquestador.sh`, al
+  congelar en Windows, copia esas DLL de `System32` a `sonia-orquestador/vcredist/`.
+  La build las pone junto a `Sonnia.exe` y en `Sonnia_Data/Plugins/x86_64`, y
+  falla si faltan (`build-report.txt`, «Runtime de Visual C++»).
 - Para diagnosticar en un PC, **Sonia > Build Windows (diagnóstico, registro de
   Genies)** (`Build/Windows-dev-x64`). Es la build de prueba en desarrollo y con
   el registro interno de Genies (`FORCE_LOGS`) en el `Player.log`.
