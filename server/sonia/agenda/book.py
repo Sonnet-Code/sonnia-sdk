@@ -88,6 +88,10 @@ class AgendaBook:
     def schedule(self) -> Schedule | None:
         return self._schedule
 
+    def now(self) -> datetime:
+        """La hora del stand (inyectable en los tests)."""
+        return self._clock()
+
     @property
     def tz(self) -> tzinfo:
         """La zona horaria del stand, con la que se dicen las horas."""

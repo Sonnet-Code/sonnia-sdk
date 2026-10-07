@@ -17,7 +17,7 @@ import logging
 import re
 import unicodedata
 from collections.abc import Iterable
-from datetime import tzinfo
+from datetime import datetime, tzinfo
 from difflib import SequenceMatcher
 from typing import Any
 
@@ -61,7 +61,7 @@ _LEVELS = {
 _ENGLISH = {"en", "english", "inglés", "ingles"}
 
 #: Lo mínimo que se tiene que parecer el texto pedido a un título o un ponente.
-MATCH_THRESHOLD = 0.55
+MATCH_THRESHOLD = 0.47
 
 
 # -- buscar la charla ------------------------------------------------------------
@@ -74,26 +74,43 @@ def _norm(text: str) -> str:
 
 
 def _score(query: str, candidate: str) -> float:
+    """Cuánto se parece: 1 si es igual, algo menos si lo contiene, y si no, el parecido."""
     if not query or not candidate:
         return 0.0
-    if query in candidate or (len(candidate) > 6 and candidate in query):
+    if query == candidate:
         return 1.0
-    return SequenceMatcher(None, query, candidate).ratio()
+    if query in candidate:
+        # «cierre» encaja más con «Cierre» que con «… al Cierre de Negocios».
+        return 0.85 + 0.1 * len(query) / len(candidate)
+    if len(candidate) > 6 and candidate in query:
+        return 0.85
+    return 0.85 * SequenceMatcher(None, query, candidate).ratio()
 
 
-def find_talk(schedule: Schedule, query: str) -> Talk | None:
-    """La charla que mejor encaja con ``query`` (su título, o parte, o su ponente)."""
+def find_talk(schedule: Schedule, query: str, now: datetime | None = None) -> Talk | None:
+    """La sesión que mejor encaja con ``query``: su título (o parte), su ponente o su nombre.
+
+    También la apertura, la keynote, un panel, el almuerzo o el cierre, por cómo se
+    llaman en la agenda («Descanso con café», «Almuerzo»...). Si varias encajan igual
+    (hay varios descansos), la próxima a ``now``; si ya pasaron todas, la primera.
+    """
     wanted = _norm(query)
-    best: tuple[float, Talk] | None = None
+    scored: list[tuple[float, Talk]] = []
     for talk in schedule.talks:
-        if talk.kind == "break" and not talk.speaker:
-            continue
-        score = max(_score(wanted, _norm(talk.title)), _score(wanted, _norm(talk.speaker)))
-        if best is None or score > best[0]:
-            best = (score, talk)
-    if best is None or best[0] < MATCH_THRESHOLD:
+        names = (talk.title, _plain_title(talk), talk.speaker)
+        score = max(_score(wanted, _norm(name)) for name in names)
+        scored.append((score, talk))
+    if not scored:
         return None
-    return best[1]
+    best = max(score for score, _ in scored)
+    if best < MATCH_THRESHOLD:
+        return None
+    tied = [talk for score, talk in scored if score >= best - 1e-9]
+    if now is not None:
+        upcoming = [talk for talk in tied if talk.ends_at > now]
+        if upcoming:
+            return min(upcoming, key=lambda t: t.starts_at)
+    return tied[0]
 
 
 # -- foto del ponente -------------------------------------------------------------

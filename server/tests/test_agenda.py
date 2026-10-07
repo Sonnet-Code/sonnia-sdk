@@ -509,8 +509,25 @@ def test_busca_la_charla_por_titulo_o_ponente() -> None:
     assert (find_talk(schedule, "la de Luis Gomez") or base_rows()).id == "c"  # type: ignore[union-attr]
     assert (find_talk(schedule, "taller practico") or base_rows()).id == "d"  # type: ignore[union-attr]
     assert find_talk(schedule, "cocina medieval") is None
-    # Los descansos sin ponente no son charlas.
-    assert find_talk(schedule, "break") is None
+    # También lo que no tiene ponente: la apertura, un descanso o el cierre.
+    assert (find_talk(schedule, "Apertura") or base_rows()).id == "a"  # type: ignore[union-attr]
+    assert (find_talk(schedule, "el cierre") or base_rows()).id == "f"  # type: ignore[union-attr]
+    # Igual gana a «contiene»: «Cierre» y no una charla que lleve esa palabra.
+    rows = base_rows()
+    rows[2]["title"] = "Del código al cierre de negocios"
+    other = parse_schedule_page(page(rows))
+    assert (find_talk(other, "cierre") or base_rows()).id == "f"  # type: ignore[union-attr]
+
+
+def test_entre_varias_iguales_elige_la_proxima() -> None:
+    from sonia.agenda.card import find_talk
+
+    rows = base_rows()
+    rows.append(row("e2", "BREAK", "18:00", "18:15", kind="break", plenary=True, icon="☕"))
+    schedule = parse_schedule_page(page(rows))
+    assert find_talk(schedule, "descanso con café", now=local(9, 9, 0)).id == "e"  # type: ignore[union-attr]
+    assert find_talk(schedule, "descanso con café", now=local(9, 13, 0)).id == "e2"  # type: ignore[union-attr]
+    assert find_talk(schedule, "descanso con café", now=local(11, 9, 0)).id == "e"  # type: ignore[union-attr]
 
 
 def test_la_tarjeta_es_un_png_de_1600x900() -> None:

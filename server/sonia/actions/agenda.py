@@ -71,7 +71,7 @@ async def show_talk(ctx: ActionContext, arguments: dict[str, Any]) -> ActionResu
     if ctx.avatar is None:
         return ActionResult(text="El avatar no está conectado.")
     query = " ".join(str(arguments.get("charla") or "").split())
-    talk = find_talk(book.schedule, query)
+    talk = find_talk(book.schedule, query, now=book.now())
     if talk is None:
         return ActionResult(
             text=f"No encuentro en la agenda ninguna charla que sea «{query}». Pide el título o "
