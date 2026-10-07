@@ -491,6 +491,8 @@ class Settings(BaseSettings):
 
     assets_dir: str = str(BUNDLE_ROOT / "assets")
     log_level: str = "INFO"
+    #: ``DEVICES_FILE``: micrófono y cámara elegidos en el menú de opciones (sonia/devices.py).
+    devices_file: str = str(_HOME / "cache" / "devices.json")
     #: ``TIMEZONE``: la hora que Sonia sabe y dice (la del stand, no la del equipo).
     timezone: str = "America/Santo_Domingo"
     #: Reiniciar la conversación tras N segundos sin actividad (modo kiosco).

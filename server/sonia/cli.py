@@ -37,6 +37,7 @@ from sonia.agenda import AgendaBook
 from sonia.audio.capture import list_input_devices, resolve_input_device
 from sonia.clock import resolve_timezone
 from sonia.config import Settings, is_gemini_url, is_openai_url, load_settings
+from sonia.devices import DeviceManager, apply_choice, load_choice
 from sonia.gestures.director import GestureDirector
 from sonia.guest.link import FrameGrabber
 from sonia.live.audio import silence_blocks
@@ -495,7 +496,9 @@ async def _feed_silence(engine: LiveEngine, settings: Settings, seconds: float |
         await engine.push_mic(block)
 
 
-async def _live_mic_loop(settings: Settings, engine: LiveEngine) -> None:
+async def _live_mic_loop(
+    settings: Settings, engine: LiveEngine, switch: asyncio.Event | None = None
+) -> None:
     """Micrófono → GPT-Live, reabriendo si falla.
 
     Igual que el bucle del otro motor, reintenta indefinidamente; mientras el
@@ -507,10 +510,19 @@ async def _live_mic_loop(settings: Settings, engine: LiveEngine) -> None:
     from sonia.audio.capture import MicCapture, refresh_devices
 
     while True:
+        switched = False
         try:
             async with MicCapture(settings.audio, sample_rate=settings.live.sample_rate) as mic:
                 async for block in mic.blocks():
                     await engine.push_mic(block)
+                    if switch is not None and switch.is_set():
+                        # Otro micrófono elegido en el menú de opciones (sonia/devices.py).
+                        switch.clear()
+                        switched = True
+                        break
+            if switched:
+                await asyncio.to_thread(refresh_devices)
+                continue
             logger.warning("El micrófono se cerró solo; se reabre en %.0f s", MIC_RETRY_DELAY_S)
         except asyncio.CancelledError:
             raise
@@ -693,6 +705,8 @@ async def _stop_panel(panel: _Panel | None) -> None:
 async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
     if _missing_live_key(settings):
         return 1
+    # Micrófono y cámara elegidos en el menú de opciones de este equipo (sonia/devices.py).
+    apply_choice(settings, load_choice(Path(settings.devices_file)))
     components = build_components(settings)
     _log_summary(settings, components)
     # En la app empaquetada, las frases ya grabadas que trae pasan a este equipo.
@@ -726,8 +740,9 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
                 camera=components.camera,
             )
             tasks.append(asyncio.create_task(engine.run(), name="live-engine"))
+            devices = DeviceManager(settings, components.hub, camera=components.camera)
             source = (
-                _live_mic_loop(settings, engine)
+                _live_mic_loop(settings, engine, devices.mic_changed)
                 if use_mic
                 else _feed_silence(engine, settings, None)
             )

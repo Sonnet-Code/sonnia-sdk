@@ -62,6 +62,7 @@ MSG_REQUEST_FRAME = "request_frame"
 MSG_PRESENCE = "presence"
 MSG_STAGE_MODE = "stage_mode"
 MSG_SET_VOLUME = "set_volume"
+MSG_DEVICES = "devices"
 MSG_PLAY_ANIMATION = "play_animation"
 MSG_GESTURE = "gesture"
 MSG_SET_SUBTITLES = "set_subtitles"
@@ -87,6 +88,9 @@ MSG_TEXT_INPUT = "text_input"
 MSG_CAMERA_FRAME = "camera_frame"
 MSG_ANIMATIONS = "animations"
 MSG_GESTURE_CATALOG = "gesture_catalog"
+#: Menú de opciones de Unity: pide los dispositivos y elige micrófono o cámara.
+MSG_LIST_DEVICES = "list_devices"
+MSG_SET_DEVICE = "set_device"
 MSG_ANIMATION_PLAYING = "animation_playing"
 MSG_AVATAR_EDITOR = "avatar_editor"
 MSG_AVATAR_SAVED = "avatar_saved"
@@ -273,6 +277,31 @@ def msg_stage_mode(mode: str, talk: bool) -> dict[str, Any]:
     GPT-Live está apagada y Sonia no contestaría.
     """
     return {"type": MSG_STAGE_MODE, "mode": str(mode), "talk": bool(talk)}
+
+
+def msg_devices(
+    *,
+    microphones: list[dict[str, Any]],
+    microphone: str,
+    default_microphone: str,
+    camera: int,
+    camera_source: str,
+) -> dict[str, Any]:
+    """Micrófonos de este equipo y lo elegido, para el menú de opciones de Unity.
+
+    ``microphone`` es lo configurado (vacío: el del sistema, que se llama
+    ``default_microphone``). Las cámaras las lista Unity (``WebCamTexture``):
+    ``camera`` es el índice que usa el orquestador y ``camera_source`` de dónde
+    saca las fotos (``opencv``, ``unity``...).
+    """
+    return {
+        "type": MSG_DEVICES,
+        "microphones": microphones,
+        "microphone": str(microphone),
+        "default_microphone": str(default_microphone),
+        "camera": int(camera),
+        "camera_source": str(camera_source),
+    }
 
 
 def msg_set_volume(value: float) -> dict[str, Any]:

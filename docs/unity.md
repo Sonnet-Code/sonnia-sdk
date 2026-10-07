@@ -1514,7 +1514,7 @@ En **Edit > Project Settings > Audio**:
    | Tecla | Qué hace |
    |---|---|
    | F1 | Muestra y esconde el HUD |
-   | Escape | Abre el menú de opciones (siempre, también sin `-dev-ui`): **Calidad gráfica** y **Editar a Sonia**. Dentro de la calidad gráfica, Esc vuelve a las opciones. Con el editor de personaje abierto no hace nada. Para callar a Sonia, el botón **Interrumpir** |
+   | Escape | Abre el menú de opciones (siempre, también sin `-dev-ui`): **Calidad gráfica**, **Editar a Sonia** y **Micrófono, cámara y pantalla** (`StandSettingsMenu`: micrófono y cámara que usa el orquestador de este equipo, por defecto los del sistema, con `list_devices`/`set_device`; resolución 9:16 de la ventana y ventana o pantalla completa, que Unity recuerda solo). Dentro de cada submenú, Esc vuelve a las opciones. Con el editor de personaje abierto no hace nada. Para callar a Sonia, el botón **Interrumpir** |
    | Enter | Envía el texto escrito |
 
 6. Para ver el detalle de cada mensaje, marcar **Verbose Log** en `SoniaClient`

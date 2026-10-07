@@ -158,6 +158,9 @@ namespace Sonia
         /// <summary>Volumen de la voz.</summary>
         public event Action<SetVolumeMessage> OnSetVolume;
 
+        /// <summary>Micrófonos del equipo y lo elegido (respuesta a <see cref="SendListDevices"/>).</summary>
+        public event Action<DevicesMessage> OnDevices;
+
         /// <summary>Error informado por el orquestador.</summary>
         public event Action<ErrorMessage> OnError;
 
@@ -360,6 +363,24 @@ namespace Sonia
             }
 
             SendJson(Protocol.GestureCatalogMessage(set));
+        }
+
+        /// <summary>Pide al orquestador los micrófonos y lo elegido (llega por <see cref="OnDevices"/>).</summary>
+        public void SendListDevices()
+        {
+            SendJson(Protocol.ListDevicesMessage());
+        }
+
+        /// <summary>Elige micrófono en el orquestador (vacío: el del sistema).</summary>
+        public void SendSetMicrophone(string name)
+        {
+            SendJson(Protocol.SetMicrophoneMessage(name));
+        }
+
+        /// <summary>Elige cámara en el orquestador (índice, como <c>WebCamTexture.devices</c>).</summary>
+        public void SendSetCamera(int index)
+        {
+            SendJson(Protocol.SetCameraMessage(index));
         }
 
         /// <summary>Avisa de qué clip del catálogo suena ahora (null: ninguno).</summary>
@@ -700,6 +721,8 @@ namespace Sonia
                     return Protocol.Deserialize<StageModeMessage>(payload);
                 case MessageTypes.SetVolume:
                     return Protocol.Deserialize<SetVolumeMessage>(payload);
+                case MessageTypes.Devices:
+                    return Protocol.Deserialize<DevicesMessage>(payload);
                 case MessageTypes.Error:
                     return Protocol.Deserialize<ErrorMessage>(payload);
                 case MessageTypes.RequestFrame:
@@ -979,6 +1002,13 @@ namespace Sonia
             if (setVolume != null)
             {
                 Raise(OnSetVolume, setVolume);
+                return;
+            }
+
+            DevicesMessage devices = message as DevicesMessage;
+            if (devices != null)
+            {
+                Raise(OnDevices, devices);
                 return;
             }
 

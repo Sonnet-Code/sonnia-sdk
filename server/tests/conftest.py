@@ -12,3 +12,9 @@ def _agenda_sin_red(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """La agenda nunca se baja de la web ni escribe en ``cache/`` en un test."""
     monkeypatch.setenv("AGENDA_URL", "off")
     monkeypatch.setenv("AGENDA_CACHE_FILE", str(tmp_path / "agenda-cache.json"))
+
+
+@pytest.fixture(autouse=True)
+def _dispositivos_aparte(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """La elección de micrófono y cámara de un test no toca la del equipo."""
+    monkeypatch.setenv("DEVICES_FILE", str(tmp_path / "devices.json"))

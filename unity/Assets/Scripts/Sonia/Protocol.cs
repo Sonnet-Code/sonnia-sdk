@@ -33,6 +33,7 @@ namespace Sonia
         public const string Presence = "presence";
         public const string StageMode = "stage_mode";
         public const string SetVolume = "set_volume";
+        public const string Devices = "devices";
         public const string PlayAnimation = "play_animation";
         public const string Gesture = "gesture";
         public const string SetSubtitles = "set_subtitles";
@@ -58,6 +59,8 @@ namespace Sonia
         public const string CameraFrame = "camera_frame";
         public const string Animations = "animations";
         public const string GestureCatalog = "gesture_catalog";
+        public const string ListDevices = "list_devices";
+        public const string SetDevice = "set_device";
         public const string AnimationPlaying = "animation_playing";
         public const string AvatarEditor = "avatar_editor";
         public const string AvatarSaved = "avatar_saved";
@@ -468,6 +471,30 @@ namespace Sonia
         [JsonProperty("value")] public float Value = 1f;
     }
 
+    /// <summary>Un micrófono del equipo donde corre el orquestador.</summary>
+    [Serializable]
+    public class MicrophoneInfo
+    {
+        [JsonProperty("name")] public string Name;
+        [JsonProperty("default")] public bool IsDefault;
+    }
+
+    /// <summary>
+    /// Micrófonos del equipo y lo elegido, para el menú de opciones. Las cámaras
+    /// las lista Unity (<c>WebCamTexture.devices</c>); <c>camera</c> es el índice
+    /// que usa el orquestador y <c>camera_source</c> de dónde saca las fotos.
+    /// </summary>
+    [Serializable]
+    public class DevicesMessage
+    {
+        [JsonProperty("microphones")] public MicrophoneInfo[] Microphones;
+        /// <summary>Lo configurado; vacío es el del sistema (<see cref="DefaultMicrophone"/>).</summary>
+        [JsonProperty("microphone")] public string Microphone;
+        [JsonProperty("default_microphone")] public string DefaultMicrophone;
+        [JsonProperty("camera")] public int Camera;
+        [JsonProperty("camera_source")] public string CameraSource;
+    }
+
     /// <summary>Un visema con su instante de inicio relativo al <c>speech_start</c>.</summary>
     [Serializable]
     public class VisemeFrame
@@ -837,6 +864,37 @@ namespace Sonia
         }
 
         /// <summary>Clip del catálogo que suena ahora en el avatar, o null si ninguno.</summary>
+        /// <summary>Pide la lista de micrófonos y lo elegido (menú de opciones).</summary>
+        public static string ListDevicesMessage()
+        {
+            JObject message = new JObject { ["type"] = MessageTypes.ListDevices };
+            return message.ToString(Formatting.None);
+        }
+
+        /// <summary>Elige micrófono (nombre; vacío es el del sistema) desde el menú de opciones.</summary>
+        public static string SetMicrophoneMessage(string name)
+        {
+            JObject message = new JObject
+            {
+                ["type"] = MessageTypes.SetDevice,
+                ["kind"] = "microphone",
+                ["value"] = name ?? string.Empty
+            };
+            return message.ToString(Formatting.None);
+        }
+
+        /// <summary>Elige cámara (índice) desde el menú de opciones.</summary>
+        public static string SetCameraMessage(int index)
+        {
+            JObject message = new JObject
+            {
+                ["type"] = MessageTypes.SetDevice,
+                ["kind"] = "camera",
+                ["value"] = Math.Max(0, index)
+            };
+            return message.ToString(Formatting.None);
+        }
+
         public static string AnimationPlayingMessage(string clip)
         {
             JObject message = new JObject

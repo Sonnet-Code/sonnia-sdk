@@ -152,6 +152,14 @@ Modo del stand (`conversation`, `greeter` o `away`) y si Sonia puede conversar a
 {"type": "stage_mode", "mode": "greeter", "talk": false}
 ```
 
+### `devices`
+
+Respuesta a `list_devices` (y tras cada `set_device`), para el menú de opciones de Unity («Micrófono, cámara y pantalla»): los micrófonos del equipo donde corre el orquestador, el configurado (`microphone`; vacío es el del sistema, que se llama `default_microphone`; puede ser solo parte del nombre, como en el `.env`), el índice de la cámara que usa el orquestador y de dónde saca las fotos (`camera_source`). Las cámaras no van: las lista Unity (`WebCamTexture.devices`), en el mismo orden en que las abre OpenCV.
+
+```json
+{"type": "devices", "microphones": [{"name": "MacBook Pro Microphone", "default": true}], "microphone": "", "default_microphone": "MacBook Pro Microphone", "camera": 0, "camera_source": "opencv"}
+```
+
 ### `set_volume`
 
 Volumen de la voz de Sonia, de 0 a 1,5 (1 es el normal). También fijo: se repite tras `hello`.
@@ -347,6 +355,16 @@ Si `VISION_SOURCE=unity`, Unity envía capturas de su `WebCamTexture` cuando el 
 
 ```json
 {"type": "camera_frame", "mime": "image/jpeg", "data_base64": "..."}
+```
+
+### `list_devices` y `set_device`
+
+Desde el menú de opciones de Unity: `list_devices` pide los micrófonos y lo elegido (llega `devices`); `set_device` elige micrófono (`kind: microphone`, `value`: el nombre, o vacío para el del sistema) o cámara (`kind: camera`, `value`: el índice). El orquestador lo aplica al momento (reabre el micrófono; la siguiente foto ya sale de la cámara nueva) y lo guarda en ese equipo (`DEVICES_FILE`, por defecto `cache/devices.json`), que manda sobre `AUDIO_INPUT_DEVICE` y `VISION_CAMERA_INDEX` del `.env`.
+
+```json
+{"type": "list_devices"}
+{"type": "set_device", "kind": "microphone", "value": "Yeti"}
+{"type": "set_device", "kind": "camera", "value": 1}
 ```
 
 ### `animations`
