@@ -211,6 +211,49 @@ async def test_opencv_camera_abandona_una_lectura_colgada(
     await asyncio.sleep(0.05)
 
 
+async def test_al_arrancar_se_espera_al_permiso_de_macos_y_la_camara_queda_lista(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El aviso de permiso sale al arrancar, no con un visitante delante (7 de octubre)."""
+    camera = OpenCVCamera(VisionSettings(source="opencv"))
+    # Sin permiso aún, macOS no deja abrir; aceptado el aviso, sí.
+    abiertos = _with_devices(monkeypatch, camera, [None, _FakeDevice()])
+    estados = iter(["undetermined", "undetermined", "undetermined", "authorized"])
+
+    assert await camera.warm_up(access=lambda: next(estados), poll_s=0.01)
+    # La apertura fallida no deja a Sonia esperando el cooldown: ya da imagen.
+    assert len(abiertos) == 2
+    assert await camera.capture() is not None
+
+
+def test_el_permiso_de_camara_de_macos_se_consulta_sin_pedirlo() -> None:
+    # Solo consulta (no enseña ningún aviso); fuera de macOS no se sabe.
+    states = (None, "authorized", "denied", "restricted", "undetermined")
+    assert camera_module.mac_camera_access() in states
+
+
+async def test_al_arrancar_con_el_permiso_denegado_lo_dice_sin_abrir_nada(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    camera = OpenCVCamera(VisionSettings(source="opencv"))
+    abiertos = _with_devices(monkeypatch, camera, [_FakeDevice()])
+    assert not await camera.warm_up(access=lambda: "denied")
+    assert abiertos == []
+    assert "Privacidad y seguridad > Cámara" in caplog.text
+
+
+async def test_al_arrancar_fuera_de_macos_solo_abre_la_camara(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    camera = OpenCVCamera(VisionSettings(source="opencv"))
+    _with_devices(monkeypatch, camera, [_FakeDevice()])
+    assert await camera.warm_up(access=lambda: None)
+    camera = OpenCVCamera(VisionSettings(source="opencv"))
+    _with_devices(monkeypatch, camera, [None])
+    assert not await camera.warm_up(access=lambda: None, wait_s=0)
+    assert "no da imagen al arrancar" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # UnityCamera
 # ---------------------------------------------------------------------------

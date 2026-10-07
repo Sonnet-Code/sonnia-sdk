@@ -40,9 +40,16 @@ namespace Sonia
         {
             /// <summary>
             /// "state", "speak", "attention", "wait", "freeze" (apaga los controladores
-            /// de la cara), "shape" (pesos fijos: "nombre:peso,...") o "avatar" (espera
+            /// de la cara), "shape" (pesos fijos: "nombre:peso,..."), "avatar" (espera
             /// en tiempo real, sin grabar, a que el SDK de Genies entregue su avatar;
-            /// <see cref="seconds"/> es el tope).
+            /// <see cref="seconds"/> es el tope), "message" (un mensaje del protocolo
+            /// en <see cref="text"/>, como si llegara del orquestador: trivia,
+            /// activity...), "particles" (efecto de StageParticles a la fuerza:
+            /// ambient, trivia o matrix; vacío vuelve a elegir solo) o "menu" (abre
+            /// el menú de Esc cuyo componente se nombra en <see cref="value"/>, por
+            /// ejemplo ParticleSettingsMenu, y lo graba aparte en menu/; vacío los
+            /// cierra) o "tuning" (ajustes de un efecto de partículas, "matrix
+            /// amount=200 size=150"; al terminar se dejan como estaban).
             /// </summary>
             public string kind = "wait";
 
@@ -52,7 +59,7 @@ namespace Sonia
             /// <summary>WAV para "speak" (PCM 16 bit mono).</summary>
             public string wav = string.Empty;
 
-            /// <summary>Texto de la frase (solo para el registro y los subtítulos).</summary>
+            /// <summary>Texto de la frase (solo para el registro y los subtítulos), o el JSON de "message".</summary>
             public string text = string.Empty;
 
             /// <summary>Segundos que dura el paso (para "speak", lo que se espera después de que termine el audio).</summary>
@@ -150,6 +157,19 @@ namespace Sonia
         private Texture2D _closeupTexture;
         private RenderTexture _standTarget;
         private RenderTexture _closeupTarget;
+
+        // Menús de Esc: van en Canvas superpuestos, que la cámara del stand no
+        // dibuja. Se pasan a una cámara propia, lejos de la escena, que los graba
+        // en menu/ con la proporción de la captura.
+        private const int MenuLayer = 31;
+        private Camera _menuCamera;
+        private RenderTexture _menuTarget;
+        private Texture2D _menuTexture;
+        private bool _menuOpen;
+
+        // Ajustes de partículas guardados antes del guion (null: no había).
+        private string _savedParticles;
+        private bool _particlesTouched;
         private StreamWriter _log;
         private readonly StringBuilder _line = new StringBuilder();
         private string _currentLabel = string.Empty;
@@ -157,6 +177,13 @@ namespace Sonia
         private void Start()
         {
             Time.captureDeltaTime = 1f / Mathf.Max(1, fps);
+            if (standCamera != null)
+            {
+                // Lo que se calcula con la cámara durante el fotograma (encuadre,
+                // partículas) tiene que ver la proporción de la captura, no la de
+                // la ventana del editor o del batchmode.
+                standCamera.aspect = standSize.x / (float)Mathf.Max(1, standSize.y);
+            }
             // Todo el de Sonia: con el invitado del Modo Jean en la escena hay dos de cada.
             _bootstrap = FindAnyObjectByType<SoniaBootstrap>();
             _player = SoniaComponent<AudioStreamPlayer>();
@@ -309,11 +336,204 @@ namespace Sonia
                 case "shape":
                     SetShapes(step.value);
                     break;
+                case "message":
+                    InjectMessage(step.text);
+                    break;
+                case "particles":
+                    PreviewParticles(step.value);
+                    break;
+                case "menu":
+                    OpenMenu(step.value);
+                    break;
+                case "tuning":
+                    TuneParticles(step.value);
+                    break;
                 case "avatar":
                     // Tiempo real y sin grabar mientras el SDK descarga y monta el avatar.
                     _waitingAvatar = true;
                     _avatarWaitStart = Time.realtimeSinceStartup;
                     Time.captureDeltaTime = 0f;
+                    break;
+            }
+        }
+
+        private void InjectMessage(string json)
+        {
+            SoniaClient client = SoniaComponent<SoniaClient>();
+            if (client == null || !client.InjectMessage(json))
+            {
+                Debug.LogWarning("[FaceLab] mensaje no entregado: " + json);
+            }
+        }
+
+        /// <summary>Abre un menú de Esc por el nombre de su componente (vacío: los cierra todos).</summary>
+        private void OpenMenu(string component)
+        {
+            GameObject host = GameObject.Find("SoniaGraphicsQuality");
+            if (host == null)
+            {
+                Debug.LogWarning("[FaceLab] no hay menús de Esc (SoniaGraphicsQuality)");
+                return;
+            }
+
+            string[] menus = { "ParticleSettingsMenu", "GraphicsQualityMenu", "StandSettingsMenu", "SoniaOptionsMenu" };
+            foreach (string name in menus)
+            {
+                if (name != component)
+                {
+                    SetMenuOpen(host.GetComponent(name), false);
+                }
+            }
+
+            _menuOpen = !string.IsNullOrEmpty(component);
+            if (!_menuOpen)
+            {
+                return;
+            }
+
+            Component menu = host.GetComponent(component);
+            if (menu == null)
+            {
+                Debug.LogWarning("[FaceLab] menú desconocido: " + component);
+                _menuOpen = false;
+                return;
+            }
+
+            SetMenuOpen(menu, true);
+            EnsureMenuCamera();
+            foreach (Canvas canvas in host.GetComponentsInChildren<Canvas>(true))
+            {
+                if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+                {
+                    canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                    canvas.worldCamera = _menuCamera;
+                    canvas.planeDistance = 1f;
+                    foreach (Transform child in canvas.GetComponentsInChildren<Transform>(true))
+                    {
+                        child.gameObject.layer = MenuLayer;
+                    }
+                }
+            }
+        }
+
+        private static void SetMenuOpen(Component menu, bool open)
+        {
+            MethodInfo method = menu != null ? menu.GetType().GetMethod("SetOpen", new[] { typeof(bool) }) : null;
+            if (method != null)
+            {
+                method.Invoke(menu, new object[] { open });
+            }
+        }
+
+        private void EnsureMenuCamera()
+        {
+            if (_menuCamera != null)
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(Path.Combine(outputDir, "menu"));
+            _menuTarget = new RenderTexture(standSize.x, standSize.y, 24, RenderTextureFormat.ARGB32);
+            _menuTexture = new Texture2D(standSize.x, standSize.y, TextureFormat.RGB24, false);
+            GameObject go = new GameObject("FaceLabMenu");
+            go.transform.position = new Vector3(0f, -1000f, 0f);
+            _menuCamera = go.AddComponent<Camera>();
+            _menuCamera.enabled = false;
+            _menuCamera.clearFlags = CameraClearFlags.SolidColor;
+            _menuCamera.backgroundColor = new Color(0.12f, 0.16f, 0.3f, 1f);
+            _menuCamera.cullingMask = 1 << MenuLayer;
+            _menuCamera.nearClipPlane = 0.1f;
+            _menuCamera.farClipPlane = 10f;
+            _menuCamera.allowHDR = false;
+            _menuCamera.allowMSAA = false;
+            // Fija: el Canvas calcula su tamaño con la cámara, y así ve 9:16.
+            _menuCamera.targetTexture = _menuTarget;
+        }
+
+        /// <summary>"efecto campo=valor ...": cambia los ajustes de un efecto de partículas.</summary>
+        private void TuneParticles(string spec)
+        {
+            string[] parts = (spec ?? string.Empty).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (StageParticles.Instance == null || parts.Length == 0)
+            {
+                Debug.LogWarning("[FaceLab] ajuste de partículas ignorado: " + spec);
+                return;
+            }
+
+            StageEffect effect;
+            switch (parts[0].ToLowerInvariant())
+            {
+                case "trivia":
+                    effect = StageEffect.Trivia;
+                    break;
+                case "matrix":
+                    effect = StageEffect.Matrix;
+                    break;
+                default:
+                    effect = StageEffect.Ambient;
+                    break;
+            }
+
+            if (!_particlesTouched)
+            {
+                _particlesTouched = true;
+                _savedParticles = PlayerPrefs.HasKey(ParticleSettingsStore.Key)
+                    ? PlayerPrefs.GetString(ParticleSettingsStore.Key)
+                    : null;
+            }
+
+            StageParticles.Instance.EditSettings(settings =>
+            {
+                EffectTuning tuning = settings.For(effect);
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    string[] kv = parts[i].Split('=');
+                    int value;
+                    if (kv.Length != 2 || !int.TryParse(kv[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+                    {
+                        continue;
+                    }
+
+                    switch (kv[0])
+                    {
+                        case "amount":
+                            tuning.amount = value;
+                            break;
+                        case "speed":
+                            tuning.speed = value;
+                            break;
+                        case "size":
+                            tuning.size = value;
+                            break;
+                        case "brightness":
+                            tuning.brightness = value;
+                            break;
+                    }
+                }
+            });
+        }
+
+        private static void PreviewParticles(string effect)
+        {
+            if (StageParticles.Instance == null)
+            {
+                Debug.LogWarning("[FaceLab] no hay StageParticles en la escena");
+                return;
+            }
+
+            switch ((effect ?? string.Empty).ToLowerInvariant())
+            {
+                case "ambient":
+                    StageParticles.Instance.Preview = StageEffect.Ambient;
+                    break;
+                case "trivia":
+                    StageParticles.Instance.Preview = StageEffect.Trivia;
+                    break;
+                case "matrix":
+                    StageParticles.Instance.Preview = StageEffect.Matrix;
+                    break;
+                default:
+                    StageParticles.Instance.Preview = null;
                     break;
             }
         }
@@ -563,6 +783,17 @@ namespace Sonia
                     Path.Combine(outputDir, "stand", frame.ToString("D5") + ".jpg"));
             }
 
+            if (_menuOpen && _menuCamera != null)
+            {
+                _menuCamera.Render();
+                RenderTexture previous = RenderTexture.active;
+                RenderTexture.active = _menuTarget;
+                _menuTexture.ReadPixels(new Rect(0, 0, _menuTarget.width, _menuTarget.height), 0, 0);
+                _menuTexture.Apply(false);
+                RenderTexture.active = previous;
+                File.WriteAllBytes(Path.Combine(outputDir, "menu", frame.ToString("D5") + ".jpg"), _menuTexture.EncodeToJPG(92));
+            }
+
             if (captureCloseup && closeupCamera != null && _head != null)
             {
                 // Desde la misma posición que la cámara del stand, con teleobjetivo
@@ -686,6 +917,21 @@ namespace Sonia
             }
 
             WriteWav(Path.Combine(outputDir, "heard.wav"), _heard, _outputRate);
+            if (_particlesTouched)
+            {
+                // Los ajustes del guion no se quedan en el editor de quien lo lanzó.
+                if (_savedParticles == null)
+                {
+                    PlayerPrefs.DeleteKey(ParticleSettingsStore.Key);
+                }
+                else
+                {
+                    PlayerPrefs.SetString(ParticleSettingsStore.Key, _savedParticles);
+                }
+
+                PlayerPrefs.Save();
+            }
+
             File.WriteAllText(Path.Combine(outputDir, "done.txt"), _frame.ToString(CultureInfo.InvariantCulture));
             Debug.Log("[FaceLab] terminado: " + _frame + " fotogramas en " + Path.GetFullPath(outputDir));
             Time.captureDeltaTime = 0f;

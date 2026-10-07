@@ -21,14 +21,21 @@ import logging
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, tzinfo
+from datetime import datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 from sonia.agenda.card import USER_AGENT, PhotoCache
-from sonia.agenda.schedule import Schedule, diff_agenda, happening, render_agenda
+from sonia.agenda.schedule import (
+    Schedule,
+    diff_agenda,
+    happening,
+    render_agenda,
+    starting_soon,
+    today_now_and_next,
+)
 from sonia.agenda.source import AgendaError, parse_schedule_page
 from sonia.clock import Clock, clock_for, spoken_date, spoken_time
 from sonia.config import AgendaSettings
@@ -127,6 +134,18 @@ class AgendaBook:
         if self._schedule is None:
             return ""
         return happening(self._schedule, self._clock(), self._tz)
+
+    def today(self) -> str:
+        """Lo que hay ahora y lo siguiente de hoy (vacío si hoy ya no queda nada)."""
+        if self._schedule is None:
+            return ""
+        return today_now_and_next(self._schedule, self._clock(), self._tz)
+
+    def starting_soon(self, lead: timedelta) -> tuple[datetime, str] | None:
+        """Lo que empieza dentro de ``lead`` (sin descansos), contado, y a qué hora empieza."""
+        if self._schedule is None:
+            return None
+        return starting_soon(self._schedule, self._clock(), self._tz, lead)
 
     def diff_from(self, baseline: Schedule | None) -> list[str]:
         """Cambios de ``baseline`` a la versión actual."""

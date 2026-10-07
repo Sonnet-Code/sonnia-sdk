@@ -50,8 +50,10 @@ OVERRIDES_FILE = "overrides.env"
 #: Variables que fija el tipo de build (las escribe la build de Unity junto al orquestador).
 BUILD_ENV_FILE = "build.env"
 
-#: Lo que la app congelada trae hecho para cada equipo nuevo (ver ``seed_home``).
-SEEDED = ("cache/voice",)
+#: Lo que la app congelada trae hecho para cada equipo nuevo (ver ``seed_home``): las
+#: frases grabadas y, para reconocer caras sin descargar nada, los modelos y las huellas
+#: (docs/caras.md). Las fotos locales del equipo (``cache/faces/fotos``) no viajan.
+SEEDED = ("cache/voice", "cache/faces/modelos", "cache/faces/huellas")
 
 
 def frozen() -> bool:
@@ -104,7 +106,8 @@ def seed_home(bundle: Path | None = None, target: Path | None = None) -> int:
     """Copia a ``home()`` lo que trae la app congelada y aún no tiene este equipo.
 
     Son las frases grabadas (``SEEDED``): sin ellas, una instalación nueva no tiene
-    voces para «Solo saludos» hasta que conecta y las graba. No pisa nada (lo que
+    voces para «Solo saludos» hasta que conecta y las graba. También los modelos y las
+    huellas de las caras conocidas. No pisa nada (lo que
     grabe este equipo manda) y fuera de la app no hace nada. Devuelve cuántos
     archivos copió.
     """

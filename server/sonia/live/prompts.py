@@ -34,7 +34,7 @@ __all__ = [
 #: Prefijo de las notas silenciosas con lo que ve la cámara.
 CAMERA_NOTE_PREFIX = "[Cámara]"
 
-#: Prefijo de las notas silenciosas con la hora (al empezar a hablar alguien).
+#: Prefijo de las notas silenciosas con la hora (unos minutos antes de cada charla).
 CLOCK_NOTE_PREFIX = "[Reloj]"
 
 LIVE_RULES = """\
@@ -42,7 +42,7 @@ CÓMO FUNCIONAS (voz a voz en tiempo real):
 - Oyes directamente al visitante y hablas con tu propia voz. Habla siempre en español, con registro caribeño natural, salvo que te pidan otro idioma.
 - Pronuncia "Sonnet Code" como en inglés (sónet cóud) y "DevFest" como "dev fest".
 {setting_rule}
-- Sabes la fecha y la hora: te las da la sección "FECHA Y HORA" y, después, las notas internas "[Reloj]" (manda la más reciente). Úsalas si te preguntan qué día o qué hora es, cuánto falta para el DevFest o qué charla toca; no supongas que hoy es un día del evento sin mirar la fecha. No leas las notas en voz alta ni digas que te llegan.
+{clock_rule}
 - Si un nombre, una fecha o un dato importante no se entendió bien, pregunta justo esa parte.
 {camera_rule}
 - Si te indican que un visitante te ha escrito algo en la pantalla, respóndele en voz alta igual que si te lo hubiera dicho.
@@ -92,7 +92,7 @@ _CAPABILITIES = {
     "stop_trivia": "- Terminar la trivia en curso.",
     "check_agenda": (
         "- Agenda: consultar ahora la agenda oficial en la web del DevFest y decirte qué ha "
-        "cambiado, qué hay ahora y qué viene."
+        "cambiado, qué hay ahora y qué viene, con la hora exacta de ahora."
     ),
     "show_talk": (
         "- Charlas en pantalla: enseñar junto a ti la tarjeta de una charla de la agenda "
@@ -137,6 +137,23 @@ _TRIVIA_RULE = (
     "Si alguien no sabe qué preguntarte, puedes proponerle la trivia.\n"
 )
 
+#: La fecha y la hora. Antes llegaba una nota ``[Reloj]`` por minuto y Sonia decía la hora
+#: sin venir a cuento (7 de octubre de 2026): ahora solo llega unos minutos antes de cada
+#: charla, y la hora exacta se consulta delegando (``check_agenda`` la trae).
+_CLOCK_RULE = (
+    '- Sabes la fecha: te la da la sección "FECHA Y HORA", con la hora a la que empezó esta '
+    'conversación. Unos minutos antes de cada charla te llega una nota interna "[Reloj]" con la '
+    "hora y lo que va a empezar. No digas la hora ni comentes esas notas por tu cuenta: úsalas "
+    "solo si te preguntan qué día o qué hora es, cuánto falta para el DevFest o qué charla toca, "
+    "o si viene a cuento (el visitante busca justo la charla que va a empezar). No supongas que "
+    "hoy es un día del evento sin mirar la fecha. No leas las notas en voz alta ni digas que te "
+    "llegan."
+)
+_CLOCK_ASK_RULE = (
+    " Si te preguntan la hora exacta, delega: la de FECHA Y HORA puede tener un rato y el "
+    "backend la consulta al momento."
+)
+
 #: Cuándo delegar la trivia.
 _TRIVIA_WHEN = (
     "- El visitante quiera jugar a la trivia: delega empezarla en ese mismo turno, sin "
@@ -148,7 +165,7 @@ _TRIVIA_WHEN = (
 #: Cuándo consultar la agenda en la web (``check_agenda``) y enseñar una charla (``show_talk``).
 _AGENDA_WHEN = (
     "- Te pregunten si ha cambiado algo de la agenda, quieran confirmar una charla, una hora o "
-    "una sala, o no tengas claro qué hay ahora o qué viene.\n"
+    "una sala, no tengas claro qué hay ahora o qué viene, o te pregunten qué hora es.\n"
 )
 _TALK_WHEN = (
     "- Hables de una charla, un workshop o un ponente concretos: enseña su tarjeta en tu "
@@ -184,6 +201,33 @@ _CAMERA_RULE: dict[CameraMode, str] = {
         "cumplidos sobre lo que lleva alguien."
     ),
 }
+
+#: Caras conocidas (``sonia.faces``, docs/caras.md): el equipo de Sonnet Code y los ponentes.
+_FACES_RULE = (
+    "- Tu cámara reconoce sola a las personas del equipo de Sonnet Code y a los ponentes del "
+    "DevFest, y a nadie más. Cuando uno se pone delante te llega una nota interna como "
+    '"[Cámara] Acaba de ponerse delante de la cámara Brian James (del equipo de Sonnet Code, '
+    '...)", y de esa persona no te vuelve a llegar otra en un buen rato. Si te habla, '
+    "salúdala por su nombre con naturalidad; a un ponente puedes nombrarle su charla, y si la "
+    "nota dice cuándo es o que ya la dio, fíate de eso y no supongas otra cosa. Si la "
+    'nota trae "Para saludar a ...", úsalo al saludarla, con tus palabras y sin leerlo tal '
+    "cual. Si dice que esa persona ya pasó hoy por el stand, ya la saludaste antes aunque no lo "
+    "recuerdes: no la saludes como si fuera la primera vez (un «¡otra vez por aquí!» o sigue "
+    "con lo que estabas). La nota "
+    "dice quién se vio en ese momento, no quién te habla después: si pasó un rato o la voz no "
+    "encaja, no des por hecho que es esa persona, y si te dicen que no son quien crees, "
+    "discúlpate y sigue. No leas la nota en voz alta ni te pongas a hablar solo porque llegue. "
+    "Nunca digas que reconoces a alguien sin una nota así ni adivines nombres por el aspecto. "
+    "Si te preguntan cómo les reconoces, di que reconoces al equipo de Sonnet Code y a los "
+    "ponentes del evento por sus fotos públicas, y que la cara de los demás no la guardas."
+)
+
+_FACES_BACKEND_RULE = (
+    '- Si el resultado de mirar por la cámara trae "Personas conocidas en la foto", son del '
+    "equipo de Sonnet Code o ponentes del DevFest: díselo a Sonia con su nombre, y también si "
+    "ya pasaron hoy por el stand o el contexto que trae para saludarles. A nadie más lo "
+    "identifiques por la cara ni le pongas nombre."
+)
 
 _LOOK_WHEN: dict[CameraMode, str] = {
     "notes": "- Te pregunten qué ves, te enseñen algo a la cámara o necesites mirar de nuevo.\n",
@@ -282,6 +326,7 @@ Eres el backend de Sonia, la asistente virtual del stand de Sonnet Code en el De
 
 Reglas:
 - Haz lo que pide la tarea con las herramientas que tengas y responde en español con una o dos frases cortas y factuales, sin markdown ni listas: Sonia las usará para seguir hablando.
+- Todo lo que devuelves lo dice Sonia en voz alta: nada de código, direcciones web, tablas ni listas. Si piden un script o un programa, explica en dos o tres frases cómo se haría, sin escribirlo.
 - No saludes ni te presentes: Sonia ya está hablando con el visitante.
 - Para mostrar imágenes usa solo los ids exactos de la galería, o "camera" para la última foto de la cámara.
 - Si miras por la cámara, describe solo lo útil para conversar: cuántas personas hay, ropa y colores, gafas, gorras, gafetes, logos o textos legibles, y objetos que estén enseñando. Nunca hables del cuerpo, el peso, la edad o la piel, ni supongas origen, género o profesión.
@@ -294,7 +339,9 @@ def _action_names(registry: ActionRegistry | None) -> list[str]:
     return list(registry.names()) if registry is not None else []
 
 
-def describe_live_stack(settings: Settings, *, action_names: list[str] | None = None) -> str:
+def describe_live_stack(
+    settings: Settings, *, action_names: list[str] | None = None, faces: bool = False
+) -> str:
     """Los componentes que usa Sonia, contados sin marcas.
 
     Se genera al arrancar para que Sonia hable con propiedad de sí misma, pero
@@ -328,6 +375,12 @@ def describe_live_stack(settings: Settings, *, action_names: list[str] | None = 
         lines.append(
             f"Ojos: {origin}; cuando alguien empieza a hablarte, un modelo de visión ({where}) "
             "describe la foto y te llega como nota [Cámara]. Las fotos no se guardan."
+        )
+    if faces:
+        lines.append(
+            "Reconocer caras: aquí mismo, en el equipo del stand, tu cámara reconoce al equipo "
+            "de Sonnet Code y a los ponentes del DevFest por sus fotos públicas. Ninguna foto sale "
+            "del equipo y de los visitantes no se guarda nada."
         )
     if live.backend_web_search:
         lines.append(
@@ -365,8 +418,8 @@ def describe_live_stack(settings: Settings, *, action_names: list[str] | None = 
 
 def _clock_section(clock_text: str) -> str:
     return (
-        f'FECHA Y HORA (al empezar esta conversación): {clock_text}. Las notas "[Reloj]" '
-        "te la actualizan."
+        f"FECHA Y HORA (al empezar esta conversación): {clock_text}. No la digas si no te la "
+        "preguntan."
     )
 
 
@@ -450,8 +503,12 @@ def build_live_instructions(
     notes: str = "",
     agenda: str = "",
     clock_text: str = "",
+    faces: bool = False,
 ) -> str:
-    """``instructions`` de la sesión: persona, reglas, conocimiento, agenda, stack y recordatorio."""
+    """``instructions`` de la sesión: persona, reglas, conocimiento, agenda, stack y recordatorio.
+
+    ``faces``: la cámara reconoce al equipo de Sonnet Code y a los ponentes (docs/caras.md).
+    """
     names = _action_names(registry)
     mode = camera_mode(settings, names)
     meeting = in_meeting(settings) and mode != "none"
@@ -475,8 +532,11 @@ def build_live_instructions(
         camera_rule = _MEETING_RULE + "\n" + camera_rule
         if mode == "look":
             look_when = _MEETING_LOOK_WHEN
+    if faces:
+        camera_rule += "\n" + _FACES_RULE
     rules = LIVE_RULES.format(
         capabilities=capabilities or "- Ninguna en este momento: no delegues.",
+        clock_rule=_CLOCK_RULE + (_CLOCK_ASK_RULE if "check_agenda" in names else ""),
         setting_rule=_MEETING_SETTING_RULE if in_meeting(settings) else _STAND_RULE,
         camera_rule=camera_rule,
         look_when=look_when if "look" in names else "",
@@ -507,7 +567,7 @@ def build_live_instructions(
         parts.append(
             "Imágenes que el backend puede mostrar en tu pantalla: " + ", ".join(gallery_ids)
         )
-    parts.append(describe_live_stack(settings, action_names=names))
+    parts.append(describe_live_stack(settings, action_names=names, faces=faces))
     reminder = _reminder_section(names, web_search=web_search, mode=mode)
     if reminder:
         parts.append(reminder)
@@ -534,11 +594,14 @@ def build_backend_instructions(
     agenda: str = "",
     clock_text: str = "",
     web_search: bool = False,
+    faces: bool = False,
 ) -> str:
     """Instrucciones del backend Responses: reglas, galería, conocimiento y agenda."""
     rules = BACKEND_PROMPT
     if meeting:
         rules += "\n" + _MEETING_BACKEND_RULE
+    if faces:
+        rules += "\n" + _FACES_BACKEND_RULE
     if web_search:
         rules += "\n" + _BACKEND_SEARCH_RULE
     parts = [rules]
@@ -583,6 +646,7 @@ def build_session_config(
     notes: str = "",
     agenda: str = "",
     clock_text: str = "",
+    faces: bool = False,
 ) -> dict[str, Any]:
     """El objeto ``session`` de ``session.start``.
 
@@ -600,6 +664,7 @@ def build_session_config(
             agenda=agenda,
             clock_text=clock_text,
             web_search=live.backend_web_search,
+            faces=faces,
         ),
         "max_output_tokens": max(16, live.backend_max_output_tokens),
     }
@@ -626,6 +691,7 @@ def build_session_config(
             notes=notes,
             agenda=agenda,
             clock_text=clock_text,
+            faces=faces,
         ),
         "audio": {
             "format": {"type": "audio/pcm", "rate": int(live.sample_rate)},

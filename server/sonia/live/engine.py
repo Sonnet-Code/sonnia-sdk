@@ -36,6 +36,7 @@ import re
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any, Protocol
 
 import numpy as np
@@ -44,10 +45,11 @@ from sonia.actions.gallery import Gallery
 from sonia.actions.moves import MoveCatalog
 from sonia.actions.registry import ActionRegistry
 from sonia.agenda import AgendaBook, Schedule
-from sonia.clock import Clock, clock_for, place_of, resolve_timezone, spoken_now
+from sonia.clock import Clock, clock_for, place_of, resolve_timezone, spoken_now, spoken_time
 from sonia.config import Settings
+from sonia.faces import FaceWatcher, Sighting
 from sonia.gestures.director import GestureDirector
-from sonia.live.audio import NoiseGate, pcm16_from_float, rms
+from sonia.live.audio import MicGate, rms
 from sonia.live.client import APPEND_MAX_CHARS, LiveClient, WsConnect, describe_error
 from sonia.live.prompts import (
     CAMERA_NOTE_PREFIX,
@@ -71,6 +73,7 @@ from sonia.types import (
     Frame,
 )
 from sonia.vision.policy import VisionPolicy
+from sonia.vision.presence import PresenceWatch
 from sonia.ws import protocol as p
 from sonia.ws.hub import MessageCallback
 
@@ -91,8 +94,19 @@ RESPONSE_WAIT_S = 4.0
 #: Una tarea delegada que no termina en este tiempo se da por perdida.
 DELEGATION_TIMEOUT_S = 90.0
 
+#: Una tarea delegada que lleva más que esto se le cuenta a Unity (``activity``
+#: ``think``) para la lluvia estilo Matrix. En los registros del 7 de octubre de
+#: 2026 las tareas con acciones tardaban 3,4 s de mediana (4,8 s el percentil
+#: 75): con menos, la lluvia saldría en casi todas (enseñar una imagen, la
+#: agenda) y no solo en las que tardan de verdad.
+SLOW_TASK_S = 5.0
+
 #: Ventana en la que la próxima voz de Sonia se considera el número del stand pedido.
 AMBIENT_WAIT_S = 8.0
+#: Tras un tramo de frase del stand, lo que diga GPT-Live en este tiempo es su
+#: continuación: un momento largo salía en dos tramos y el segundo ya no iba como
+#: frase del stand (el avatar pasaba a «hablando»; 7 de octubre de 2026).
+AMBIENT_CONTINUE_S = 2.5
 
 #: Adelanto del audio sobre el tiempo real a partir del cual se avisa en el log.
 LEAD_WARN_S = 1.5
@@ -134,6 +148,14 @@ NOTES_TEMPLATE = (
 )
 NOTES_CLEARED_TEXT = "El equipo del stand ha retirado los avisos de hoy: ya no aplican."
 
+#: Cómo se le cuenta a GPT-Live que su tarea delegada se quedó sin resultado: no se
+#: entera solo y seguía dando largas («estoy cuadrando cómo explicártelo»).
+DELEGATION_FAILED_TEXT = (
+    "Tu backend no pudo terminar la tarea que le pediste y no tienes el resultado. Díselo "
+    "ahora al visitante en una frase, sin inventarte la respuesta, y ofrécele intentarlo de "
+    "otra forma o contarle lo que sí sabes."
+)
+
 #: Cómo se pasan los cambios de la agenda detectados durante una sesión.
 AGENDA_CHANGED_TEMPLATE = (
     "La agenda oficial del DevFest acaba de cambiar en su web (mandan estos cambios sobre la "
@@ -161,6 +183,31 @@ SHOWCASE_TEMPLATE = (
     "Ahora mismo nadie está hablando contigo. Para animar el stand, di en voz alta, una sola "
     "vez y tal cual, esta frase: «{text}»"
 )
+
+#: Cómo se le pide a GPT-Live un momento del stand (``{focus}``: de qué tira).
+MOMENT_TEMPLATE = (
+    "Ahora mismo nadie está hablando contigo. Para animar el stand, di en voz alta una sola "
+    "frase corta y nueva, distinta de las que ya has dicho, que invite a la gente que pasa a "
+    "acercarse a hablar contigo. Quien pasa ya está aquí, en el DevFest: no le hables del "
+    "evento como si aún fuera a venir, ni de entradas. {focus} Dila sin más: sin saludar como "
+    "si te hubieran hablado y sin explicar por qué la dices."
+)
+
+#: De qué tira cada momento, por turnos entre los que hay. La hora no: la decía de más.
+MOMENT_FOCUS = {
+    "agenda": "Tira de lo que pasa ahora en el DevFest, sin cambiar títulos, salas ni horas: {text}",
+    "cámara": (
+        "Tira de lo que ve ahora tu cámara, en tono simpático: como mucho una prenda, un gafete "
+        "o un objeto, nunca el cuerpo, la edad, la piel ni nada personal. Lo que ve: {text}"
+    ),
+    "invitación": (
+        "Propón algo concreto: jugar a la trivia, preguntarte por la agenda o por Sonnet Code, o "
+        "interrumpirte para ver que hablas en tiempo real."
+    ),
+}
+
+#: Tope para preparar un momento (la foto y su descripción): mientras, no sale otro número.
+MOMENT_PREP_S = 15.0
 
 
 class HubLike(AvatarLink, Protocol):
@@ -212,12 +259,25 @@ class _Delegation:
     #: La respuesta actual del backend ya terminó (``response.completed``...).
     response_done: bool = False
     text: list[str] = field(default_factory=list)
+    #: Búsquedas en internet (``web_search``) en marcha, por id del elemento.
+    searches: set[str] = field(default_factory=set)
 
 
 #: Eventos anidados que cierran una respuesta del backend.
 _TERMINAL_RESPONSE_EVENTS = frozenset(
     {"response.completed", "response.failed", "response.incomplete", "response.cancelled", "error"}
 )
+
+
+def _is_web_search_event(kind: Any, item: Any) -> bool:
+    """Eventos del backend de una búsqueda en internet: los suyos o los de su elemento de salida."""
+    if isinstance(kind, str) and kind.startswith("response.web_search_call."):
+        return True
+    return (
+        kind in ("response.output_item.added", "response.output_item.done")
+        and isinstance(item, dict)
+        and item.get("type") == "web_search_call"
+    )
 
 
 class LiveEngine:
@@ -239,6 +299,8 @@ class LiveEngine:
         gestures: GestureDirector | None = None,
         agenda: AgendaBook | None = None,
         clock: Clock | None = None,
+        faces: FaceWatcher | None = None,
+        presence: PresenceWatch | None = None,
         tick_s: float = 0.05,
     ) -> None:
         self._settings = settings
@@ -253,7 +315,17 @@ class LiveEngine:
         self._knowledge_dir = knowledge_dir
         self._tick = max(0.01, tick_s)
         self._rate = int(self._live.sample_rate)
-        self._gate = NoiseGate(self._live.gate_rms, self._live.gate_hold_ms)
+        #: Si hay alguien delante de la cámara (``sonia.vision.presence``).
+        self._presence = presence
+        #: Qué oye GPT-Live en cada bloque: todas las medidas del micro juntas.
+        self._mic = MicGate(
+            threshold=self._live.gate_rms,
+            hold_ms=self._live.gate_hold_ms,
+            comfort_rms=self._live.comfort_noise_rms,
+            near_scale=self._live.presence_near_gate_scale,
+            presence=presence.gate if presence is not None else None,
+            silence_rms=MIC_SILENCE_RMS,
+        )
 
         self._client: LiveClient | None = None
         #: Con ``False`` no se abre sesión: GPT-Live apagada, sin gasto.
@@ -300,6 +372,8 @@ class LiveEngine:
         # Backend y sesión.
         self._delegations: dict[str, _Delegation] = {}
         self._last_delegation_id: str | None = None
+        #: Lo último que se le dijo a Unity en ``activity``.
+        self._activity = "none"
         #: ``event_id`` de los comandos enviados al backend → delegación, para
         #: cerrar la tarea si la API responde a uno de ellos con ``error``.
         self._command_owner: dict[str, str] = {}
@@ -321,6 +395,8 @@ class LiveEngine:
         self._last_vision_at = float("-inf")
         self._camera_ok: bool | None = None
         self._image_hide_task: asyncio.Task[None] | None = None
+        #: Reconocer al equipo de Sonnet Code y a los ponentes (``sonia.faces``, docs/caras.md).
+        self._faces = faces
 
         # Animación de stand.
         # Se carga siempre (si hay material) para poder activarla desde el panel.
@@ -330,6 +406,7 @@ class LiveEngine:
                 settings.showcase_dir,
                 dance_chance=show.dance_chance,
                 gesture_chance=show.gesture_chance,
+                moment_chance=show.moment_chance,
             )
         self._showcase = showcase if showcase.enabled else None
         # En una videollamada (modo reunión) no hay animación de stand: en los
@@ -338,6 +415,8 @@ class LiveEngine:
         self._showcase_enabled = show.enabled and not self._meeting
         self._next_showcase_at = time.monotonic() + max(0.0, show.first_delay_seconds)
         self._ambient_expected_until = 0.0
+        #: Momentos del stand pedidos: de qué tira el siguiente va por turnos.
+        self._moment_turn = 0
 
         # Modo trivia (``sonia.trivia``): GPT-Live la conduce; aquí van la clave y la pantalla.
         self._trivia: TriviaGame | None = (
@@ -350,10 +429,8 @@ class LiveEngine:
         tz = resolve_timezone(settings.timezone)
         self._place = place_of(settings.timezone)
         self._now: Clock = clock or clock_for(tz)
-        #: Última nota ``[Reloj]`` que tiene la sesión (la hora de las instrucciones al abrirla)
-        #: y lo último que se le dijo de la agenda («ahora mismo...»).
-        self._clock_said = ""
-        self._happening_said = ""
+        #: Inicio de las charlas de la última nota ``[Reloj]`` de la sesión abierta.
+        self._clock_noted: datetime | None = None
         #: Cambios de agenda a la espera de un momento de calma para pasárselos a la sesión.
         self._pending_agenda_note = ""
         self._agenda = agenda
@@ -414,10 +491,11 @@ class LiveEngine:
         """Un bloque del micrófono (float32 mono a la tasa de la sesión).
 
         Va siempre a GPT-Live, también mientras habla Sonia: así se la puede
-        interrumpir hablando. Si el panel silenció el micrófono, si suena una
-        frase grabada (GPT-Live no la dijo y la contestaría) o si la puerta de
-        ruido está cerrada, se manda silencio del mismo tamaño, porque GPT-Live
-        necesita un flujo continuo. Sin sesión, el bloque se pierde.
+        interrumpir hablando. :class:`MicGate` decide si GPT-Live oye el bloque
+        o un ruido muy suave del mismo tamaño (micro silenciado, frase grabada,
+        nadie delante de la cámara, puerta de ruido, silencio), porque GPT-Live
+        necesita un flujo continuo y con ceros absolutos se retrasa. Sin
+        sesión, el bloque se pierde.
         """
         now = time.monotonic()
         level = rms(block)
@@ -437,13 +515,10 @@ class LiveEngine:
         client = self._client
         if client is None or self._restarting:
             return
-        silent = bytes(len(block) * 2)
-        if self._mic_manual_mute or now < self._clip_mute_until:
-            pcm = silent
-        else:
-            if self._user_turn_open:
-                self._turn_level = max(self._turn_level, level)
-            pcm = pcm16_from_float(block) if self._gate.admit(level, now) else silent
+        echo = now < self._clip_mute_until
+        if self._user_turn_open and not (self._mic_manual_mute or echo):
+            self._turn_level = max(self._turn_level, level)
+        pcm = self._mic.pcm(block, level, now, muted=self._mic_manual_mute, echo=echo)
         try:
             await client.append_audio(pcm)
         except Exception as exc:  # noqa: BLE001 - la sesión se reconecta sola
@@ -524,6 +599,15 @@ class LiveEngine:
             # La guardada entra ya en la primera sesión; la de la web, cuando llegue.
             await self._agenda.load()
             watcher = asyncio.create_task(self._agenda.watch(), name="sonia-agenda")
+        faces: asyncio.Task[None] | None = None
+        if self._faces is not None and self._camera is not None:
+            faces = asyncio.create_task(self._faces_loop(self._faces), name="sonia-faces")
+        presence: asyncio.Task[None] | None = None
+        if self._presence is not None:
+            presence = asyncio.create_task(
+                self._presence.run(active=self._session_open, busy=self._in_conversation),
+                name="sonia-presence",
+            )
         delay = live.reconnect_min_seconds
         try:
             while True:
@@ -551,10 +635,10 @@ class LiveEngine:
                 await asyncio.sleep(delay)
                 delay = min(max(delay * 2, live.reconnect_min_seconds), live.reconnect_max_seconds)
         finally:
-            ticker.cancel()
-            if watcher is not None:
-                watcher.cancel()
-            await asyncio.gather(ticker, *([watcher] if watcher else []), return_exceptions=True)
+            extra = [task for task in (watcher, faces, presence) if task is not None]
+            for task in (ticker, *extra):
+                task.cancel()
+            await asyncio.gather(ticker, *extra, return_exceptions=True)
             await self._shutdown()
 
     async def _run_session(self) -> bool:
@@ -570,10 +654,10 @@ class LiveEngine:
             notes=self._notes,
             agenda=agenda.text() if agenda is not None else "",
             clock_text=clock_text,
+            faces=self._faces is not None and self._camera is not None,
         )
         self._session_agenda = agenda.schedule if agenda is not None else None
-        self._clock_said = clock_text
-        self._happening_said = ""
+        self._clock_noted = None
         self._pending_agenda_note = ""
         if len(config["instructions"]) > INSTRUCTIONS_WARN_CHARS:
             logger.warning(
@@ -678,6 +762,7 @@ class LiveEngine:
                 self.last_error = describe_error(event)
                 logger.warning("GPT-Live informó de un error: %s", self.last_error)
                 self._on_command_error(event)
+                await self._on_handoff_error(event)
             case "session.closed":
                 logger.info("GPT-Live cerró la sesión (%s)", event.get("reason"))
             case _:
@@ -775,6 +860,10 @@ class LiveEngine:
         )
         self._last_closed_uid = segment.uid
         self._last_closed_deadline = max(self._playback_end_at, now) + PLAYBACK_GRACE_S
+        if segment.ambient and not self._user_turn_open:
+            self._ambient_expected_until = max(
+                self._ambient_expected_until, now + AMBIENT_CONTINUE_S
+            )
 
     async def _on_output_transcript(self, event: dict[str, Any]) -> None:
         delta = event.get("delta")
@@ -886,6 +975,8 @@ class LiveEngine:
             self._delegations[new_id] = delegation
             self._last_delegation_id = new_id
 
+        if delegation is not None and _is_web_search_event(kind, item):
+            self._track_search(delegation, kind, nested)
         if kind == "response.created" and delegation is not None:
             delegation.response_done = False
             delegation.calls_in_response = 0
@@ -906,7 +997,20 @@ class LiveEngine:
                 )
             if delegation is not None:
                 delegation.response_done = True
+                delegation.searches.clear()
                 await self._maybe_continue(delegation)
+
+    def _track_search(self, delegation: _Delegation, kind: Any, nested: dict[str, Any]) -> None:
+        """Apunta qué búsquedas en internet del backend siguen en marcha."""
+        item = nested.get("item")
+        item_id = nested.get("item_id") or (item.get("id") if isinstance(item, dict) else None)
+        key = str(item_id or "web_search")
+        done = kind in ("response.web_search_call.completed", "response.output_item.done")
+        if done:
+            delegation.searches.discard(key)
+        elif key not in delegation.searches:
+            delegation.searches.add(key)
+            logger.info("El backend busca en internet (%s)", delegation.id)
 
     def _start_call(self, delegation: _Delegation | None, item: dict[str, Any]) -> None:
         name = str(item.get("name") or "")
@@ -989,6 +1093,7 @@ class LiveEngine:
                 "gestures": self._gestures,
                 "agenda": self._agenda,
                 "agenda_baseline": self._session_agenda,
+                "faces": self._faces,
             },
         )
         if self._registry is None:
@@ -1045,6 +1150,33 @@ class LiveEngine:
         if delegation is not None:
             logger.warning("El backend rechazó un comando de la tarea %s; se cierra", owner)
             self._finish_delegation(delegation)
+
+    async def _on_handoff_error(self, event: dict[str, Any]) -> None:
+        """GPT-Live no recibió el resultado de una tarea delegada (``Responses handoff incomplete``).
+
+        Pasa cuando el backend no termina su respuesta (por ejemplo, si se queda
+        sin tokens buscando en internet). La API no manda ningún evento final de
+        esa tarea y GPT-Live no se entera: Sonia se quedaba pensando hasta
+        ``DELEGATION_TIMEOUT_S`` (registro del 7 de octubre de 2026). Se da la
+        tarea por cerrada y se le pide a GPT-Live que se lo diga al visitante.
+        """
+        if "handoff" not in self.last_error.lower():
+            return
+        error = event.get("error")
+        ids = [
+            event.get("delegation_id"),
+            error.get("delegation_id") if isinstance(error, dict) else None,
+        ]
+        delegation_id = next((i for i in ids if isinstance(i, str)), self._last_delegation_id)
+        delegation = self._delegations.get(delegation_id) if delegation_id else None
+        logger.warning(
+            "La tarea delegada %s se quedó sin resultado: %s",
+            delegation.id if delegation is not None else "(sin tarea abierta)",
+            json.dumps(event, ensure_ascii=False)[:500],
+        )
+        if delegation is not None:
+            self._finish_delegation(delegation)
+        await self.speak(DELEGATION_FAILED_TEXT)
 
     def _finish_delegation(self, delegation: _Delegation) -> None:
         self._delegations.pop(delegation.id, None)
@@ -1152,6 +1284,8 @@ class LiveEngine:
                 logger.warning("La tarea delegada %s no terminó; se olvida", delegation.id)
                 self._delegations.pop(delegation.id, None)
 
+        await self._update_activity(now)
+
         if not audible and now >= self._settle_after:
             await self._set_state(self._rest_state(now))
 
@@ -1166,6 +1300,28 @@ class LiveEngine:
             if not self._restarting:
                 await self._between_turns()
                 await self._maybe_showcase(now)
+
+    async def _update_activity(self, now: float) -> None:
+        """Le cuenta a Unity si Sonia busca en internet o si una tarea tarda (efectos de la escena)."""
+        if any(d.searches for d in self._delegations.values()):
+            activity = "search"
+        elif any(now - d.created_at >= SLOW_TASK_S for d in self._delegations.values()):
+            activity = "think"
+        else:
+            activity = "none"
+        if activity == self._activity:
+            return
+        self._activity = activity
+        logger.debug("Actividad para Unity: %s", activity)
+        await self._hub.broadcast_json(p.msg_activity(activity))
+
+    def _session_open(self) -> bool:
+        """¿Hay una sesión de GPT-Live oyendo el micro?"""
+        return self._client is not None and not self._restarting and self._active
+
+    def _in_conversation(self) -> bool:
+        """¿Escucha, piensa o habla Sonia con alguien? (la animación de stand no cuenta)"""
+        return self._state is not AssistantState.IDLE
 
     def _rest_state(self, now: float) -> AssistantState:
         """Estado del avatar cuando Sonia no está hablando."""
@@ -1246,6 +1402,11 @@ class LiveEngine:
         client = self._client
         if bit is None or client is None:
             return
+        if bit.moment:
+            # Mientras se prepara (foto y descripción) no sale otro número.
+            self._ambient_expected_until = now + MOMENT_PREP_S
+            self._spawn(self._request_moment(client, bit.attention), "showcase")
+            return
         recorded = self._voice_cache.get(bit.text) if self._voice_cache is not None else None
         if recorded is not None:
             self._spawn(self.play_clip(recorded, bit.text, attention=bit.attention), "showcase")
@@ -1264,6 +1425,64 @@ class LiveEngine:
             self._ambient_expected_until = 0.0
             return
         logger.info("Número del stand pedido: %s", text)
+
+    async def _request_moment(self, client: LiveClient, attention: str | None) -> None:
+        """Un momento del stand: GPT-Live improvisa una invitación con lo que pasa ahora."""
+        focus = await self._moment_focus()
+        if client is not self._client or not self._is_idle(time.monotonic()):
+            # Alguien se puso a hablar mientras se preparaba: ya no toca.
+            self._ambient_expected_until = 0.0
+            return
+        if attention:
+            await self._hub.broadcast_json(p.msg_attention(attention))
+        self._ambient_expected_until = time.monotonic() + AMBIENT_WAIT_S
+        try:
+            await client.append_commentary(MOMENT_TEMPLATE.format(focus=focus))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("No se pudo pedir el momento del stand: %s", exc)
+            self._ambient_expected_until = 0.0
+            return
+        logger.info("Momento del stand pedido: %s", focus)
+
+    async def _moment_focus(self) -> str:
+        """De qué tira el momento: por turnos, la agenda, la cámara y una invitación concreta.
+
+        La agenda solo si hoy hay algo ahora o a continuación: antes del evento,
+        entre días o al terminar no se anuncia nada (quien pasa ya está en el DevFest).
+        """
+        today = self._agenda.today() if self._agenda is not None else ""
+        options = ["agenda"] if today else []
+        if (
+            self._settings.showcase.moment_camera
+            and self._camera is not None
+            and self._narrator is not None
+            and self._policy.enabled
+        ):
+            options.append("cámara")
+        options.append("invitación")
+        kind = options[self._moment_turn % len(options)]
+        self._moment_turn += 1
+        if kind == "agenda":
+            return MOMENT_FOCUS["agenda"].format(text=today)
+        if kind == "cámara":
+            text = await self._moment_scene()
+            if text:
+                return MOMENT_FOCUS["cámara"].format(text=text)
+        return MOMENT_FOCUS["invitación"]
+
+    async def _moment_scene(self) -> str:
+        """Lo que ve ahora la cámara para un momento (vacío si no se pudo). La foto no se guarda."""
+        assert self._camera is not None and self._narrator is not None
+        try:
+            frame = await asyncio.wait_for(self._camera.capture(), timeout=CAPTURE_TIMEOUT_S)
+            if frame is None:
+                return ""
+            return await self._narrator.describe(frame)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - sin foto, el momento tira de otra cosa
+            logger.debug("Momento del stand sin cámara: %s", exc)
+            return ""
 
     # -- cámara -------------------------------------------------------------
 
@@ -1309,13 +1528,99 @@ class LiveEngine:
         client = self._client
         if not text or client is None:
             return
+        known = await self._known_in(frame)
+        faces = self._faces
+        if known and faces is not None:
+            text = f"{text} {faces.known_note(known)}"
         try:
             await client.append_thinking(f"{CAMERA_NOTE_PREFIX} {text}")
         except Exception as exc:  # noqa: BLE001
             logger.debug("No se pudo pasar la nota de la cámara: %s", exc)
             return
+        if known and faces is not None:
+            await faces.remember(known)
         logger.info("Cámara descrita en %.1f s", time.monotonic() - started)
         logger.debug("Cámara: %s", text)
+
+    # -- caras conocidas (docs/caras.md) ---------------------------------------
+
+    async def _known_in(self, frame: Frame) -> list[Sighting]:
+        """Sonia usa la cámara: quién conocido sale en la foto, aunque ya se le dijera hace poco."""
+        faces = self._faces
+        if faces is None:
+            return []
+        try:
+            sightings = await faces.identify(frame)
+        except Exception as exc:  # noqa: BLE001 - sin caras, la foto sigue valiendo
+            logger.warning("No se pudieron reconocer caras: %s", exc)
+            return []
+        if sightings:
+            logger.info(
+                "Caras en la foto: %s",
+                ", ".join(f"{s.match.person.name} ({s.match.score:.2f})" for s in sightings),
+            )
+        return faces.used(sightings)
+
+    async def _faces_loop(self, faces: FaceWatcher) -> None:
+        """Prepara el reconocimiento y, con sesión abierta, revisa la cámara cada poco."""
+        schedule = self._agenda.schedule if self._agenda is not None else None
+        agenda = self._agenda
+        if agenda is not None:
+            # Las notas de los ponentes dicen cuándo es su charla con la agenda de ahora.
+            faces.follow_agenda(lambda: agenda.schedule)
+        try:
+            await faces.prepare(schedule)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _log_stage_failure("Reconocimiento de caras apagado: %s", exc)
+            return
+        every = faces.scan_seconds
+        if every <= 0 or not faces.ready or self._meeting:
+            # En una videollamada los ojos son OBS o la pantalla: cada foto abre una conexión
+            # y los nombres ya salen en los recuadros. Ahí solo cuenta cuando Sonia mira.
+            return
+        while True:
+            await asyncio.sleep(every)
+            try:
+                await self._scan_faces(faces)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - una revisión fallida no para las demás
+                logger.debug("Revisión de caras fallida: %s", exc)
+
+    async def _scan_faces(self, faces: FaceWatcher) -> None:
+        """Una revisión sola: avisa a Sonia de quien acaba de llegar (una vez cada su plazo)."""
+        client = self._client
+        if client is None or self._camera is None or self._restarting or not self._active:
+            # Sin sesión no hay a quién avisar: en «Solo saludos» y «Fuera» no se mira.
+            return
+        try:
+            frame = await asyncio.wait_for(self._camera.capture(), timeout=CAPTURE_TIMEOUT_S)
+        except Exception:  # noqa: BLE001 - la cámara falla a ratos; la próxima revisión, otra
+            return
+        if frame is None:
+            return
+        fresh = faces.due(await faces.identify(frame))
+        if not fresh:
+            return
+        if client is not self._client:
+            faces.retract(fresh)
+            return
+        note = faces.arrival_note(fresh)
+        try:
+            await client.append_thinking(f"{CAMERA_NOTE_PREFIX} {note}")
+        except Exception as exc:  # noqa: BLE001
+            faces.retract(fresh)
+            logger.debug("No se pudo avisar de las caras: %s", exc)
+            return
+        # Solo cuando la nota llegó: si no, la próxima diría que ya pasó sin que Sonia lo sepa.
+        await faces.remember(fresh)
+        logger.info(
+            "Caras: aviso a Sonia de %s",
+            ", ".join(f"{s.match.person.name} ({s.match.score:.2f})" for s in fresh),
+        )
+        logger.debug("Caras: %s", note)
 
     # -- imagen en pantalla ---------------------------------------------------
 
@@ -1476,23 +1781,22 @@ class LiveEngine:
         await self._clock_note()
 
     async def _clock_note(self) -> None:
-        """Nota ``[Reloj]`` con la hora si cambió el minuto (y qué hay en la agenda si cambió).
+        """Nota ``[Reloj]`` unos minutos antes de cada charla: la hora y lo que empieza.
 
-        Va por ``thinking``: no la hace hablar. Como mucho una por minuto.
+        Es la única nota de hora (la de abrir la sesión va en las instrucciones):
+        con una por minuto, Sonia decía la hora sin venir a cuento (7 de octubre
+        de 2026). Va por ``thinking``, que no la hace hablar, y una por tanda.
         """
         client = self._client
-        if client is None:
+        agenda = self._agenda
+        lead = self._settings.agenda.notice_minutes
+        if client is None or agenda is None or lead <= 0:
             return
-        clock_text = spoken_now(self._now(), self._place)
-        if clock_text == self._clock_said:
+        soon = agenda.starting_soon(timedelta(minutes=lead))
+        if soon is None or soon[0] == self._clock_noted:
             return
-        self._clock_said = clock_text
-        note = f"{CLOCK_NOTE_PREFIX} Ahora: {clock_text}."
-        if self._agenda is not None:
-            happening = self._agenda.happening()
-            if happening and happening != self._happening_said:
-                self._happening_said = happening
-                note += " " + happening
+        self._clock_noted = soon[0]
+        note = f"{CLOCK_NOTE_PREFIX} Son las {spoken_time(self._now())}. {soon[1]}"
         try:
             await client.append_thinking(note)
         except Exception as exc:  # noqa: BLE001 - la sesión se reconecta sola
@@ -1559,7 +1863,24 @@ class LiveEngine:
 
     def set_gate(self, threshold: float) -> None:
         self._live.gate_rms = max(0.0, float(threshold))
-        self._gate = NoiseGate(self._live.gate_rms, self._live.gate_hold_ms)
+        self._mic.set_threshold(self._live.gate_rms)
+
+    @property
+    def presence_available(self) -> bool:
+        """¿Tiene la puerta del micro con la cámara? (cámara USB y ``LIVE_PRESENCE_GATE``)."""
+        return self._presence is not None
+
+    def set_presence_enabled(self, enabled: bool) -> None:
+        """Enciende o apaga la puerta de la cámara (interruptor del panel)."""
+        if self._presence is None:
+            return
+        self._presence.gate.enabled = enabled
+        logger.info(
+            "Puerta del micro con la cámara %s",
+            "encendida: sin nadie delante, GPT-Live no oye"
+            if enabled
+            else "apagada: GPT-Live oye siempre",
+        )
 
     def set_showcase_enabled(self, enabled: bool) -> None:
         enabled = enabled and not self._meeting
@@ -1598,6 +1919,9 @@ class LiveEngine:
             ),
             "mic_muted": self._mic_manual_mute,
             "mic_gate": self._live.gate_rms,
+            #: Por qué GPT-Live no oyó el último bloque del micro (vacío si lo oyó).
+            "mic_reason": self._mic.reason,
+            "mic_presence": (self._presence.snapshot(now) if self._presence is not None else None),
             "camera_enabled": self._camera is not None and self._policy.enabled,
             "camera_ok": self._camera_ok,
             "last_error": self.last_error,

@@ -43,6 +43,9 @@ GUEST_PHASES = ("entering", "live", "leaving", "off")
 #: De quién es el personaje que se edita: Sonia (por defecto) o el invitado del Modo Jean.
 AVATAR_TARGETS = ("sonia", "guest")
 
+#: Valores de ``activity``: nada, una tarea que tarda o una búsqueda en internet.
+ACTIVITIES = ("none", "think", "search")
+
 #: Formato del audio que se anuncia en ``hello``.
 AUDIO_FORMAT = "pcm_s16le"
 AUDIO_CHANNELS = 1
@@ -79,6 +82,7 @@ MSG_TRIVIA_START = "trivia_start"
 MSG_TRIVIA_QUESTION = "trivia_question"
 MSG_TRIVIA_ANSWER = "trivia_answer"
 MSG_TRIVIA_END = "trivia_end"
+MSG_ACTIVITY = "activity"
 
 # Mensajes de Unity hacia el orquestador.
 MSG_CLIENT_HELLO = "client_hello"
@@ -439,6 +443,16 @@ def msg_trivia_end(
         "reason": str(reason),
         "prize": str(prize),
     }
+
+
+def msg_activity(activity: str) -> dict[str, Any]:
+    """Qué hace Sonia por detrás: ``search`` (busca en internet), ``think`` (una tarea tarda) o ``none``.
+
+    Unity lo usa para los efectos de la escena (la lluvia estilo Matrix).
+    """
+    if activity not in ACTIVITIES:
+        raise ValueError(f"actividad desconocida: {activity!r}")
+    return {"type": MSG_ACTIVITY, "activity": activity}
 
 
 def msg_request_frame() -> dict[str, Any]:

@@ -20,6 +20,7 @@ from sonia import cli
 from sonia.config import (
     GEMINI_OPENAI_URL,
     AudioSettings,
+    FaceSettings,
     GestureSettings,
     LiveSettings,
     LLMSettings,
@@ -49,6 +50,8 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
         "audio": AudioSettings(),
         "vision": VisionSettings(source="none"),
         "ws": WSSettings(host="127.0.0.1", port=0),
+        # Nunca la caché real del repo; los tests de caras lo encienden.
+        "faces": FaceSettings(enabled=False, dir=str(tmp_path / "faces")),
         "assets_dir": str(tmp_path),
         "log_level": "WARNING",
     }
@@ -191,6 +194,7 @@ async def test_check_todo_ok(
     assert [(r.name, r.ok) for r in results] == [
         ("Micrófono", True),
         ("Cámara", True),
+        ("Caras", True),
         ("GPT-Live", True),
         ("Visión", True),
         ("Gestos", True),
@@ -214,7 +218,7 @@ async def test_check_todo_ok(
 
     assert cli.print_results(results) is True
     out = capsys.readouterr().out
-    assert out.count("OK   ") == 6
+    assert out.count("OK   ") == 7
     assert "Todo listo." in out
 
 

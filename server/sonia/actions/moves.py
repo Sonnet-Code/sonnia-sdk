@@ -147,8 +147,13 @@ async def _play_requested(
         return None
     director.note_requested(choice.name)
     logger.info("Gesto por voz: «%s» -> %s", request, choice.name)
+    # Lo que se ve de verdad, para que Sonia no prometa más (registro del 7 de octubre de
+    # 2026: un «truco de magia» que eran las manos girando y el visitante preguntó cuál).
+    gesture = director.catalog.get(choice.name)
+    seen = f" (lo que se ve: {gesture.description})" if gesture and gesture.description else ""
     return ActionResult(
-        text=f"Hecho: Sonia está haciendo «{request}» en pantalla. Que lo acompañe con una frase corta."
+        text=f"Hecho: Sonia está haciendo «{request}» en pantalla{seen}. Que lo acompañe con "
+        "una frase corta que cuadre con lo que se ve, sin prometer más."
     )
 
 
@@ -171,6 +176,12 @@ async def play_animation(ctx: ActionContext, arguments: dict[str, Any]) -> Actio
     if clip is None:
         return _offer(catalog, f"Ese movimiento ({move})")
     logger.info("Movimiento por voz: %s -> %s", move, clip)
+    if request:
+        # El de respaldo: que Sonia no diga que hace lo que pidieron.
+        return ActionResult(
+            text=f"No tienes un gesto que sea «{request}»: en su lugar Sonia está haciendo "
+            f"«{move}» en pantalla. Que lo diga con gracia en una frase corta."
+        )
     return ActionResult(
         text=f"Hecho: Sonia está haciendo «{move}» en pantalla. Que lo acompañe con una frase corta."
     )

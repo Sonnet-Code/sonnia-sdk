@@ -140,6 +140,9 @@ namespace Sonia
         /// <summary>Fin de la trivia (ganada, perdida o cancelada).</summary>
         public event Action<TriviaEndMessage> OnTriviaEnd;
 
+        /// <summary>Sonia busca en internet o una tarea tarda (<see cref="ActivityMessage"/>).</summary>
+        public event Action<ActivityMessage> OnActivity;
+
         /// <summary>Un trozo de la voz del invitado (frames "SNGU").</summary>
         public event Action<AudioFrame> OnGuestAudioFrame;
 
@@ -308,6 +311,23 @@ namespace Sonia
                     // Cerrar de golpe es aceptable al salir.
                 }
             }
+        }
+
+        /// <summary>
+        /// Despacha un mensaje JSON como si hubiera llegado del orquestador, en
+        /// el acto. Para el laboratorio de cara (SoniaFaceLabDriver) y pruebas sin
+        /// red; devuelve falso si el tipo no se conoce.
+        /// </summary>
+        public bool InjectMessage(string json)
+        {
+            object parsed = ParseTextMessage(json);
+            if (parsed == null)
+            {
+                return false;
+            }
+
+            Dispatch(parsed);
+            return true;
         }
 
         // ------------------------------------------------------------------
@@ -711,6 +731,8 @@ namespace Sonia
                     return Protocol.Deserialize<TriviaAnswerMessage>(payload);
                 case MessageTypes.TriviaEnd:
                     return Protocol.Deserialize<TriviaEndMessage>(payload);
+                case MessageTypes.Activity:
+                    return Protocol.Deserialize<ActivityMessage>(payload);
                 case MessageTypes.OpenAvatarEditor:
                     return Protocol.Deserialize<OpenAvatarEditorMessage>(payload);
                 case MessageTypes.CloseAvatarEditor:
@@ -967,6 +989,13 @@ namespace Sonia
             if (triviaEnd != null)
             {
                 Raise(OnTriviaEnd, triviaEnd);
+                return;
+            }
+
+            ActivityMessage activity = message as ActivityMessage;
+            if (activity != null)
+            {
+                Raise(OnActivity, activity);
                 return;
             }
 

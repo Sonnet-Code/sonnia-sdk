@@ -2,9 +2,10 @@
 //
 // Desde aquí se va a la calidad gráfica (GraphicsQualityMenu, que con Esc vuelve
 // a este menú), al editor de personaje de Sonia (AvatarEditorLauncher; el de
-// Jean solo se abre desde el panel) y a micrófono, cámara y pantalla
-// (StandSettingsMenu). Se maneja con el ratón o solo con el teclado (↑↓ elige,
-// Intro abre, 1-3 atajos), por si en el stand no hay ratón.
+// Jean solo se abre desde el panel), a micrófono, cámara y pantalla
+// (StandSettingsMenu) y a las partículas del escenario (ParticleSettingsMenu).
+// Se maneja con el ratón o solo con el teclado (↑↓ elige, Intro abre, 1-4
+// atajos), por si en el stand no hay ratón.
 // Con el editor de personaje en pantalla, Esc no hace nada: el editor tiene sus
 // propios botones de guardar y salir.
 
@@ -27,6 +28,7 @@ namespace Sonia
 
         private GraphicsQualityMenu _graphics;
         private StandSettingsMenu _stand;
+        private ParticleSettingsMenu _particles;
         private GameObject _canvas;
         private readonly List<Image> _items = new List<Image>();
         private readonly List<UnityAction> _actions = new List<UnityAction>();
@@ -54,6 +56,14 @@ namespace Sonia
             }
 
             _stand.BackRequested = () => SetOpen(true);
+
+            _particles = GetComponent<ParticleSettingsMenu>();
+            if (_particles == null)
+            {
+                _particles = gameObject.AddComponent<ParticleSettingsMenu>();
+            }
+
+            _particles.BackRequested = () => SetOpen(true);
         }
 
         private void Update()
@@ -80,6 +90,11 @@ namespace Sonia
                 else if (_stand != null && _stand.IsOpen)
                 {
                     _stand.SetOpen(false);
+                    SetOpen(true);
+                }
+                else if (_particles != null && _particles.IsOpen)
+                {
+                    _particles.SetOpen(false);
                     SetOpen(true);
                 }
                 else
@@ -119,6 +134,10 @@ namespace Sonia
             else if (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame)
             {
                 _actions[2]();
+            }
+            else if (keyboard.digit4Key.wasPressedThisFrame || keyboard.numpad4Key.wasPressedThisFrame)
+            {
+                _actions[3]();
             }
         }
 
@@ -165,6 +184,15 @@ namespace Sonia
             if (_stand != null)
             {
                 _stand.SetOpen(true);
+            }
+        }
+
+        private void OpenParticles()
+        {
+            SetOpen(false);
+            if (_particles != null)
+            {
+                _particles.SetOpen(true);
             }
         }
 
@@ -218,13 +246,16 @@ namespace Sonia
                 "Abre el editor de personaje. Al guardar, el nuevo aspecto llega a todas las Sonnias.", OpenSoniaEditor);
             AddItem(panel.transform, "Micrófono, cámara y pantalla",
                 "Qué micrófono y qué cámara usa este equipo, la resolución y ventana o pantalla completa.", OpenStandSettings);
+            AddItem(panel.transform, "Partículas",
+                "Cantidad, velocidad, tamaño y brillo de las partículas, y los efectos de la trivia y de cuando Sonnia busca en internet.",
+                OpenParticles);
             AddItem(panel.transform, "Cerrar", null, () => SetOpen(false));
 
             Text keys = SoniaUiKit.MakeText(panel.transform, "Teclas",
-                "Esc cierra · ↑↓ elige · Intro abre · 1 calidad · 2 editar a Sonnia · 3 micro, cámara y pantalla",
+                "Esc cierra · ↑↓ elige · Intro abre · 1 calidad · 2 editar a Sonnia · 3 micro, cámara y pantalla · 4 partículas",
                 22, TextAnchor.MiddleLeft);
             keys.color = MutedText;
-            keys.GetComponent<LayoutElement>().preferredHeight = 40f;
+            keys.GetComponent<LayoutElement>().preferredHeight = 64f;
 
             _canvas.SetActive(false);
         }

@@ -63,7 +63,35 @@ async def look(ctx: ActionContext, arguments: dict[str, Any]) -> ActionResult:
     frame = await _capture(ctx)
     if frame is None:
         return ActionResult(text="No pude tomar la captura de la cámara.")
-    return ActionResult(text="Captura tomada.", image=frame)
+    return ActionResult(text="Captura tomada." + await _known_faces(ctx, frame), image=frame)
+
+
+async def _known_faces(ctx: ActionContext, frame: Frame) -> str:
+    """Quién del equipo de Sonnet Code o de los ponentes sale en la foto (docs/caras.md).
+
+    Sonia usa la cámara: se le dice aunque se le dijera hace poco, y el plazo
+    para volver a avisarla de esa persona empieza de nuevo. También si ya pasó
+    hoy por el stand (para no saludarle como nuevo) y, si no, su saludo propio.
+    """
+    from sonia.faces import FaceWatcher
+
+    faces = ctx.extra.get("faces")
+    if not isinstance(faces, FaceWatcher):
+        return ""
+    try:
+        sightings = faces.used(await faces.identify(frame))
+    except Exception as exc:  # noqa: BLE001 - sin caras, la foto sigue valiendo
+        logger.warning("No se pudieron reconocer caras en la foto: %s", exc)
+        return ""
+    if not sightings:
+        return ""
+    logger.info(
+        "Caras en la foto de look: %s",
+        ", ".join(f"{s.match.person.name} ({s.match.score:.2f})" for s in sightings),
+    )
+    text = faces.known_note(sightings)
+    await faces.remember(sightings)
+    return " " + text
 
 
 # ---------------------------------------------------------------------------

@@ -39,6 +39,15 @@ if [ -d "$REPO/cache/voice" ]; then
 else
   echo "aviso: sin cache/voice; la app grabará las frases al conectar" >&2
 fi
+# Caras conocidas (docs/caras.md): modelos y huellas, nunca las fotos de cache/faces/fotos.
+for faces in modelos huellas; do
+  if [ -d "$REPO/cache/faces/$faces" ]; then
+    EXTRA+=(--add-data "$REPO/cache/faces/$faces${SEP}cache/faces/$faces")
+  fi
+done
+if [ ! -d "$REPO/cache/faces/huellas" ]; then
+  echo "aviso: sin cache/faces; la app preparará las caras al arrancar (sonia caras para hacerlo antes)" >&2
+fi
 
 cd "$REPO/server"
 uv sync --group dev --extra audio --extra camera --extra panel >/dev/null
@@ -53,6 +62,7 @@ uv run --no-sync pyinstaller --noconfirm --clean --log-level WARN \
   --add-data "$REPO/assets/showcase${SEP}assets/showcase" \
   --add-data "$REPO/assets/trivia${SEP}assets/trivia" \
   --add-data "$REPO/assets/agenda${SEP}assets/agenda" \
+  --add-data "$REPO/assets/faces${SEP}assets/faces" \
   --add-data "$REPO/assets/fonts${SEP}assets/fonts" \
   --add-data "$REPO/server/sonia/panel/static${SEP}sonia/panel/static" \
   ${EXTRA[@]+"${EXTRA[@]}"} \

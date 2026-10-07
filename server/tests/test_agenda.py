@@ -25,12 +25,15 @@ from sonia.agenda import (
     happening,
     parse_schedule_page,
     render_agenda,
+    starting_soon,
+    today_now_and_next,
 )
 from sonia.clock import place_of, resolve_timezone, spoken_now, spoken_time
-from sonia.config import AgendaSettings
+from sonia.config import AgendaSettings, ShowcaseSettings
 from sonia.live.prompts import build_session_config
+from sonia.showcase import Showcase
 from sonia.types import ActionContext
-from tests.test_live import make_rig, make_settings, wait_until
+from tests.test_live import make_rig, make_settings
 
 TZ = timezone(timedelta(hours=-4), "America/Santo_Domingo")
 
@@ -227,6 +230,37 @@ def test_que_hay_ahora_y_que_viene() -> None:
     assert happening(schedule, local(11, 10, 0), TZ) == "El DevFest ya terminó."
 
 
+def test_lo_de_hoy_para_los_momentos_del_stand() -> None:
+    # Sonia solo está en el DevFest: fuera de sus días (o con el día ya acabado) no anuncia nada.
+    schedule = parse_schedule_page(page(base_rows()))
+    assert today_now_and_next(schedule, local(7, 19, 0), TZ) == ""
+    assert today_now_and_next(schedule, local(9, 8, 30), TZ) == (
+        "Lo siguiente, a las 9:15 de la mañana: Apertura, para todos."
+    )
+    now = today_now_and_next(schedule, local(9, 10, 45), TZ)
+    assert now.startswith("Ahora mismo: Salón Principal: «Charla uno» de Ana Pérez; ")
+    assert now.endswith("Lo siguiente, a las 12:05 del mediodía: Descanso con café, para todos.")
+    assert today_now_and_next(schedule, local(9, 18, 0), TZ) == ""
+    assert today_now_and_next(schedule, local(10, 16, 30), TZ) == "Ahora mismo: Cierre, para todos."
+    assert today_now_and_next(schedule, local(11, 10, 0), TZ) == ""
+
+
+def test_lo_que_empieza_en_cinco_minutos_sin_contar_descansos() -> None:
+    schedule = parse_schedule_page(page(base_rows()))
+    lead = timedelta(minutes=5)
+    assert starting_soon(schedule, local(9, 10, 30), TZ, lead) is None
+    soon = starting_soon(schedule, local(9, 10, 35), TZ, lead)
+    assert soon is not None and soon[0] == local(9, 10, 40)
+    assert soon[1] == (
+        "A las 10:40 de la mañana (dentro de 5 min) empieza: Salón Principal: «Charla uno» de "
+        "Ana Pérez; Salón B: «Charla dos» de Luis Gómez; Workshop en el Laboratorio: «Taller "
+        "práctico» de Eva Ruiz."
+    )
+    # La apertura y el cierre sí se avisan; el descanso con café no.
+    assert starting_soon(schedule, local(9, 9, 12), TZ, lead) is not None
+    assert starting_soon(schedule, local(9, 12, 2), TZ, lead) is None
+
+
 # -- caché, web y oyentes ------------------------------------------------------------
 
 
@@ -352,6 +386,10 @@ async def test_check_agenda_cuenta_los_cambios_y_que_hay_ahora(tmp_path: Path) -
 
     result = await check_agenda(ctx_with(book, baseline), {})
     assert result.text.startswith("Consultada ahora la agenda oficial: no ha cambiado nada")
+    # Trae la hora de ahora: GPT-Live solo tiene la de cuando empezó la conversación.
+    assert "Hora de ahora: viernes 9 de octubre de 2026, 10:45 (las 10:45 de la mañana)." in (
+        result.text
+    )
     assert "Ahora mismo: Salón Principal: «Charla uno»" in result.text
 
     web.html = page(rows)
@@ -441,45 +479,50 @@ async def test_el_motor_da_la_hora_y_pasa_los_cambios_de_agenda(tmp_path: Path) 
             t.get("name") for t in session["delegation"]["responses"]["tools"]
         ]
 
-        # Mismo minuto que al abrir la sesión: no hace falta nota.
+        # Pasan los minutos sin charla a la vista: ninguna nota de hora (la decía sin venir
+        # a cuento cuando llegaba una por minuto).
+        now[0] = local(9, 10, 47)
+        await asyncio.sleep(0.1)
+        now[0] = local(9, 11, 30)
         await asyncio.sleep(0.1)
         assert conn.of_type("session.thinking.append") == []
 
-        # Cambia el minuto: la nota va en calma, no al empezar a hablar alguien.
-        now[0] = local(9, 10, 47)
-        await conn.wait_type("session.thinking.append")
-        note = conn.of_type("session.thinking.append")[0]["content"]
-        assert note.startswith("[Reloj] Ahora: viernes 9 de octubre de 2026, 10:47")
-        assert "Ahora mismo: Salón Principal: «Charla uno»" in note
+        # Cinco minutos antes de la siguiente charla (no del descanso de las 12:05), una nota.
+        now[0] = local(9, 12, 1)
         await asyncio.sleep(0.1)
-        assert len(conn.of_type("session.thinking.append")) == 1
-        # Al minuto siguiente, solo la hora: lo de la agenda no ha cambiado.
-        now[0] = local(9, 10, 48)
-        await conn.wait_type("session.thinking.append", 2)
-        assert "Ahora mismo" not in conn.of_type("session.thinking.append")[1]["content"]
-
-        # La web cambia: el código lo detecta y se lo pasa a la sesión abierta.
-        await wait_until(lambda: web.requests >= 1)
+        assert conn.of_type("session.thinking.append") == []
         rows = base_rows()
-        rows[1]["track_id"] = "t2"
+        rows.append(row("g", "Charla tres", "16:20", "17:00", track="t1", speaker={"name": "Zoe"}))
         web.html = page(rows)
         await book.refresh()
+        now[0] = local(9, 12, 16)
+        await conn.wait_type("session.thinking.append")
+        note = conn.of_type("session.thinking.append")[0]["content"]
+        assert note == (
+            "[Reloj] Son las 12:16 (las 12:16 del mediodía). A las 12:20 del mediodía (dentro "
+            "de 4 min) empieza: Salón Principal: «Charla tres» de Zoe."
+        )
+        # Una sola por tanda.
+        now[0] = local(9, 12, 18)
+        await asyncio.sleep(0.1)
+        assert len(conn.of_type("session.thinking.append")) == 1
         await conn.wait_type("session.instructions.append")
+
+        # La web cambió (la charla nueva): el código lo detecta y se lo pasa a la sesión.
         appended = conn.of_type("session.instructions.append")[-1]["content"]
         assert appended.startswith("La agenda oficial del DevFest acaba de cambiar")
-        assert (
-            "«Charla uno» de Ana Pérez cambia de sala: del Salón Principal al Salón B." in appended
-        )
+        assert "Nueva en la agenda: «Charla tres» de Zoe" in appended
 
         # Con alguien hablando no se le pasa nada: ni la hora ni los cambios.
         await conn.hear("Hola")
         await rig.rec.wait_state("listening")
-        now[0] = local(9, 10, 49)
-        rows[2]["track_id"] = "t1"
+        rows[1]["track_id"] = "t2"
+        rows.append(row("h", "Charla cuatro", "16:40", "17:20", track="t2"))
         web.html = page(rows)
         await book.refresh()
+        now[0] = local(9, 12, 37)
         await asyncio.sleep(0.15)
-        assert len(conn.of_type("session.thinking.append")) == 2
+        assert len(conn.of_type("session.thinking.append")) == 1
         assert len(conn.of_type("session.instructions.append")) == 1
 
 
@@ -591,3 +634,45 @@ def test_las_descripciones_largas_se_leen_de_su_trozo() -> None:
     assert talks["b"].description == uno
     assert talks["c"].description == "Inline"
     assert talks["d"].description == ""
+
+
+async def test_un_momento_del_stand_cuenta_lo_que_pasa_en_la_agenda(tmp_path: Path) -> None:
+    book = make_book(tmp_path, None, fallback_rows=base_rows())
+    showcase = Showcase(phrases=[], songs=[], gesture_chance=0, moment_chance=1.0)
+    settings = ShowcaseSettings(
+        enabled=True, first_delay_seconds=0.0, interval_min_seconds=60, interval_max_seconds=60
+    )
+    async with make_rig(
+        tmp_path,
+        agenda=book,
+        showcase=showcase,
+        showcase_settings=settings,
+        clock=lambda: local(9, 10, 45),
+    ) as rig:
+        conn = await rig.conn()
+        await conn.wait_type("session.commentary.append")
+        content = conn.of_type("session.commentary.append")[0]["content"]
+        assert book.today() in content and "Ahora mismo:" in content
+        assert "sin cambiar títulos, salas ni horas" in content
+        assert "ya está aquí, en el DevFest" in content
+
+
+async def test_antes_del_devfest_los_momentos_no_anuncian_el_evento(tmp_path: Path) -> None:
+    # 7-oct: decía «¿Ya tienes tu entrada? Arranca este viernes…» a gente que ya está en él.
+    book = make_book(tmp_path, None, fallback_rows=base_rows(), clock=lambda: local(7, 19, 0))
+    showcase = Showcase(phrases=[], songs=[], gesture_chance=0, moment_chance=1.0)
+    settings = ShowcaseSettings(
+        enabled=True, first_delay_seconds=0.0, interval_min_seconds=60, interval_max_seconds=60
+    )
+    async with make_rig(
+        tmp_path,
+        agenda=book,
+        showcase=showcase,
+        showcase_settings=settings,
+        clock=lambda: local(7, 19, 0),
+    ) as rig:
+        conn = await rig.conn()
+        await conn.wait_type("session.commentary.append")
+        content = conn.of_type("session.commentary.append")[0]["content"]
+        assert "empieza" not in content and "viernes" not in content
+        assert "trivia" in content

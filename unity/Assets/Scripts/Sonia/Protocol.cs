@@ -50,6 +50,7 @@ namespace Sonia
         public const string TriviaQuestion = "trivia_question";
         public const string TriviaAnswer = "trivia_answer";
         public const string TriviaEnd = "trivia_end";
+        public const string Activity = "activity";
 
         // De Unity hacia el orquestador.
         public const string ClientHello = "client_hello";
@@ -461,6 +462,30 @@ namespace Sonia
 
         /// <summary>Cierto si Sonia contestaría a quien le hable.</summary>
         [JsonProperty("talk")] public bool Talk = true;
+    }
+
+    /// <summary>Valores del campo <c>activity</c> del mensaje <c>activity</c>.</summary>
+    public static class ActivityNames
+    {
+        /// <summary>Nada especial: el efecto de partículas de siempre.</summary>
+        public const string None = "none";
+
+        /// <summary>Una tarea delegada en el backend tarda (más de un par de segundos).</summary>
+        public const string Think = "think";
+
+        /// <summary>El backend está buscando en internet.</summary>
+        public const string Search = "search";
+    }
+
+    /// <summary>
+    /// Qué está haciendo Sonia por detrás, para los efectos de la escena: con
+    /// <c>search</c> o <c>think</c> sale la lluvia estilo Matrix (StageParticles).
+    /// No es fijo: llega cada vez que cambia.
+    /// </summary>
+    [Serializable]
+    public class ActivityMessage
+    {
+        [JsonProperty("activity")] public string Activity = ActivityNames.None;
     }
 
     /// <summary>Volumen de la voz de Sonia. También fijo: se repite tras <c>hello</c>.</summary>

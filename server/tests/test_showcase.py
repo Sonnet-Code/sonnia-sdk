@@ -41,3 +41,23 @@ def test_showcase_no_repite_y_respeta_probabilidades(tmp_path: Path) -> None:
 
     assert Showcase([], []).next_bit() is None
     assert not Showcase([], []).enabled
+
+
+def test_los_momentos_salen_con_su_probabilidad_y_sin_texto() -> None:
+    show = Showcase(
+        ["a", "b"],
+        [],
+        dance_chance=0.0,
+        gesture_chance=0.0,
+        moment_chance=1.0,
+        rng=random.Random(3),
+    )
+    bits = [show.next_bit() for _ in range(10)]
+    assert all(bit is not None and bit.moment and bit.text == "" for bit in bits)
+    mixed = Showcase(["a", "b"], [], dance_chance=0.0, moment_chance=0.5, rng=random.Random(4))
+    kinds = {bit.moment for bit in (mixed.next_bit() for _ in range(40)) if bit is not None}
+    assert kinds == {True, False}
+    # Sin frases fijas, todo lo que no es baile son momentos.
+    only = Showcase([], [], moment_chance=0.6)
+    bit = only.next_bit()
+    assert only.enabled and bit is not None and bit.moment

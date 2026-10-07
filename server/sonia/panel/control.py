@@ -212,6 +212,9 @@ class PanelState:
     notes: str = ""
     volume: float = 1.0
     mic_gate: float | None = None
+    #: Interruptor «Oír solo con alguien delante» (la cámara en la puerta del micro);
+    #: ``None``: lo que diga ``LIVE_PRESENCE_GATE`` (apagado). Es de cada equipo.
+    mic_presence: bool | None = None
     voice: str | None = None
     showcase: bool | None = None
     #: Subtítulos en la pantalla de Unity.
@@ -264,7 +267,7 @@ class PanelState:
             value = raw.get(name)
             if _is_number(value):
                 setattr(state, name, float(value))
-        for name in ("showcase", "subtitles", "debug"):
+        for name in ("showcase", "subtitles", "debug", "mic_presence"):
             if isinstance(raw.get(name), bool):
                 setattr(state, name, raw[name])
         disabled = raw.get("disabled_animations")
@@ -399,6 +402,8 @@ class StandControl:
             caps.append("camera_watch")
         if self._engine.trivia is not None:
             caps.append("trivia")
+        if self._engine.presence_available:
+            caps.append("mic_presence")
         return caps
 
     def attach_guest(self, guest: GuestMode) -> None:
@@ -430,6 +435,8 @@ class StandControl:
             self._settings.live.voice = state.voice
         if state.mic_gate is not None:
             engine.set_gate(state.mic_gate)
+        if state.mic_presence is not None:
+            engine.set_presence_enabled(state.mic_presence)
         if state.showcase is not None:
             engine.set_showcase_enabled(state.showcase)
         if state.notes:
@@ -971,6 +978,17 @@ class StandControl:
             return True, "Filtro de ruido apagado: Sonnia oye todo."
         return True, "Filtro de ruido ajustado."
 
+    async def _act_set_mic_presence(self, params: dict[str, Any]) -> tuple[bool, str]:
+        if not self._engine.presence_available:
+            raise _BadRequest("Esta Sonnia no puede mirar quién hay delante: no tiene cámara USB.")
+        enabled = _flag(params, "enabled")
+        self._engine.set_presence_enabled(enabled)
+        self.state.mic_presence = enabled
+        self._save()
+        if enabled:
+            return True, "Sonnia deja de oír el pasillo cuando lleva un rato sin nadie delante."
+        return True, "Sonnia oye siempre, haya o no alguien delante de la cámara."
+
     async def _act_set_voice(self, params: dict[str, Any]) -> tuple[bool, str]:
         voice = params.get("voice")
         if voice not in VOICES:
@@ -1232,6 +1250,7 @@ class StandControl:
             "voices": VOICES,
             "volume": self.state.volume,
             "mic_gate": snap.get("mic_gate", 0.0),
+            "mic_presence": snap.get("mic_presence"),
             "notes": engine.notes,
             "voice_cache": self._voice_cache_status(),
             "tuning": self.state.tuning,
@@ -1310,6 +1329,8 @@ class StandControl:
                 "El micrófono no capta nada",
                 "Puede estar silenciado con su botón o desenchufado.",
             )
+        elif snap.get("mic_reason") == "nadie delante":
+            mic = _health(True, "Micrófono bien; sin nadie delante, Sonnia no oye el pasillo")
         else:
             mic = _health(True, "Micrófono recibe sonido")
         mic["level"] = level

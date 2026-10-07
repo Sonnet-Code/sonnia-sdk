@@ -110,6 +110,9 @@ namespace Sonia
         private static readonly Color Brand = new Color32(3, 113, 245, 255);
         private static readonly Color Dark = new Color32(11, 19, 34, 255);
 
+        /// <summary>Hacia dónde se oscurece el fondo (la lluvia estilo Matrix de StageParticles).</summary>
+        private static readonly Color ShadedBackdrop = Color.black;
+
         private SoniaClient _client;
         private Canvas _hud;
         private ImagePanelController _imagePanel;
@@ -133,6 +136,8 @@ namespace Sonia
         private TextMeshProUGUI _soniaText;
         private Image _scrim;
         private Image _conversationScrim;
+        private Image _backdrop;
+        private float _backdropShade;
 
         // Estado de la conversación.
         private bool _talk = true;
@@ -157,6 +162,24 @@ namespace Sonia
         public bool IsBuilt
         {
             get { return _built; }
+        }
+
+        /// <summary>
+        /// Cuánto negro se pone sobre el fondo de la marca: 0 es el de siempre, 0,3
+        /// lo deja al 70 % y 1 en negro. Lo mueve StageParticles mientras cae la
+        /// lluvia estilo Matrix.
+        /// </summary>
+        public float BackdropShade
+        {
+            get { return _backdropShade; }
+            set
+            {
+                _backdropShade = Mathf.Clamp01(value);
+                if (_backdrop != null)
+                {
+                    _backdrop.color = Color.Lerp(backdropTint, ShadedBackdrop, _backdropShade);
+                }
+            }
         }
 
         private void Awake()
@@ -765,6 +788,8 @@ namespace Sonia
             image.gameObject.layer = 0;
             image.preserveAspect = false;
             Stretch(image.rectTransform);
+            _backdrop = image;
+            BackdropShade = _backdropShade;
         }
 
         /// <summary>Apaga lo que pintaba la pantalla anterior: el telón 3D, el logo y las burbujas de subtítulos.</summary>

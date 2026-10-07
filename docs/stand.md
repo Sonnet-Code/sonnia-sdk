@@ -54,7 +54,13 @@ GPT-Live. Desde la raíz del repositorio:
    seguir; un AVISO en el modelo de visión solo deja a Sonia sin ojos, y uno en
    el de gestos, sin gestos elegidos al hablar (`docs/gestos.md`).
 3. `uv run sonia say "Hola, soy Sonia"` desde `server/` para oír la voz
-   (`LIVE_VOICE`) por el altavoz del stand.
+   (`LIVE_VOICE`) por el altavoz del stand. Si la línea «Caras» de
+   `sonia check` no sale en OK, `uv run --no-sync sonia caras` desde `server/`
+   (no gasta). Con la cámara ya colocada, `sonia caras --probar` y alguien del
+   equipo delante, para confirmar que le reconoce (`docs/caras.md`; eso no
+   apunta visitas). Si antes de abrir pruebas a Sonnia ya en marcha con alguien
+   del equipo delante, eso sí cuenta como su visita del día: al terminar,
+   `sonia caras --olvidar-visitas`, o no le hará la pregunta de la primera vez.
 4. `scripts/kiosk.sh` (o `uv run sonia run` desde `server/` si vas a estar
    delante): reinicia el orquestador solo si se cae y deja logs con fecha en
    `logs/`.
@@ -76,23 +82,63 @@ GPT-Live. Desde la raíz del repositorio:
 |---|---|
 | `sonia check` falla en GPT-Live con HTTP 401 o 403 | La clave (`OPENAI_API_KEY` o `LIVE_API_KEY`) no es válida o el proyecto de OpenAI no tiene acceso a `gpt-live-1`. |
 | El log repite `Sesión de GPT-Live caída` | Sin internet o la API está caída: el motor reintenta solo con espera creciente. Si no vuelve, pasa a Sonia a "Solo saludos" desde el panel local (`http://127.0.0.1:8780`): sigue saludando con frases grabadas, sin red ni gasto. |
-| Contesta a las conversaciones del pasillo | Sube la puerta de ruido: el control "Ruido del pasillo" del panel o `LIVE_GATE_RMS` en `.env` (por debajo de ese nivel el micro manda silencio). Ver "Voces del pasillo". |
+| Contesta a las conversaciones del pasillo | Las de unos metros las ignora sola; se mete cuando charlan justo al lado del stand, tan alto como un visitante. Ayuda un micrófono direccional apuntando al visitante; la puerta de ruido no (se probó). Si el stand se queda vacío mucho rato, enciende "Oír solo con alguien delante" en el panel. Ver "Voces del pasillo". |
+| No oye a quien tiene delante | Si está encendido "Oír solo con alguien delante", mira el texto de debajo en el panel: con «Nadie delante» la cámara no ve a nadie cerca (revisa que apunte a los visitantes y que haya luz). Apágalo y vuelve a oír al momento; con la puerta de ruido muy alta, bájala a cero. |
 | Se corta sola o se contesta a sí misma | Le llega su propia voz por el micrófono. Separa más el altavoz del micro y que no lo apunte, baja el volumen (panel) o usa un micrófono más direccional. Subir un poco la puerta de ruido también ayuda si el eco llega flojo. |
 | No se la puede interrumpir hablando | La puerta de ruido está demasiado alta para una voz normal a un metro: bájala. GPT-Live se calla solo cuando oye al visitante. |
 | El log repite `El micrófono falló` al arrancar | El micrófono no acepta 24 kHz (pasa con algunos drivers de Windows). `LIVE_SAMPLE_RATE=16000` abre el micro a 16 kHz y la voz de Sonia también baja a 16 kHz. |
 | Sonia no reacciona a la voz | Revisa el micrófono seleccionado (`AUDIO_INPUT_DEVICE`), que no esté silenciado por el sistema operativo ni desde el panel, y el medidor del panel. Si se desconectó el micro, el orquestador lo reabre solo cada pocos segundos: busca en el log `El micrófono falló`. `uv run sonia chat` descarta que el problema sea la sesión. |
 | No ve a nadie / `scripts/check_stand.sh` avisa del modelo de visión | Revisa la clave (`LLM_API_KEY` u `OPENAI_API_KEY`) y, si no es la API de OpenAI, `LLM_BASE_URL`, `LLM_MODEL` y `LLM_MAX_TOKENS_PARAM=max_tokens`. Sonia sigue conversando sin ojos mientras tanto. |
-| La cámara no captura nada | Revisa `VISION_CAMERA_INDEX` (si hay varias cámaras USB conectadas, puede que Sonia esté leyendo la equivocada) y que ningún otro programa tenga la cámara abierta. Si se desconectó y se volvió a conectar, el orquestador reintenta abrirla solo cada 30 s: no hace falta reiniciar. |
+| La cámara no captura nada | Revisa `VISION_CAMERA_INDEX` (si hay varias cámaras USB conectadas, puede que Sonia esté leyendo la equivocada) y que ningún otro programa tenga la cámara abierta. Si se desconectó y se volvió a conectar, el orquestador reintenta abrirla solo cada 30 s: no hace falta reiniciar. En macOS, `sonia run` abre la cámara al arrancar para que el aviso de permiso salga entonces y no con un visitante delante: hay que aceptarlo (espera hasta 2 minutos y el registro dice «Cámara lista»). Si el registro dice que macOS no deja usar la cámara, se activa en Ajustes del Sistema > Privacidad y seguridad > Cámara para la app que lanza Sonia (la terminal o Sonnia) y se vuelve a arrancar. |
 | El avatar no se mueve pero se oye audio | Mira "Pantalla conectada" en el panel. Reinicia Unity: el orquestador sigue funcionando aunque Unity se caiga y se reconecta solo. |
 | Se muestra una imagen equivocada o no se muestra ninguna | Comprueba que el id pedido existe en `assets/gallery` (nombre de archivo sin extensión) con `scripts/check_stand.sh`. |
 | El panel avisa de dos Sonias | Otro equipo (el Mac de desarrollo, por ejemplo) tiene `PANEL_CLOUD_TOKEN` y está corriendo. Deja solo la del stand: el botón del aviso manda las demás a "Fuera", y luego se paran en ese equipo. |
 | El orquestador se cae solo repetidamente | Revisa el log más reciente en `logs/` (si usas `scripts/kiosk.sh`) para ver la traza del error antes de seguir probando a ciegas. |
 
-## Voces del pasillo y puerta de ruido
+## Voces del pasillo: la puerta del micro
 
-GPT-Live decide él solo cuándo le hablan, y oye todo lo que llega al
-micrófono. En un pasillo lleno puede contestar a conversaciones ajenas. La
-puerta de ruido lo evita: por debajo de un nivel, el micrófono manda silencio.
+GPT-Live decide él solo cuándo le hablan y ya separa la voz del ruido. Probado
+con la API real el 7 de octubre de 2026 con voces sintetizadas (un visitante a
+un metro, dos personas charlando entre sí a unos metros con eco de sala y
+barullo de varias voces a la vez):
+
+- Ignora las conversaciones del pasillo a unos metros, aunque pregunten algo
+  («¿tú sabes dónde queda el baño?»): 45 s sin contestar nada.
+- Entiende al visitante con barullo fuerte de fondo y contesta en unos 2 s.
+- No se corta cuando hablan al lado mientras ella habla, y se calla cuando el
+  visitante la interrumpe.
+- Lo único que no lleva bien: dos personas charlando justo al lado del stand,
+  tan alto como un visitante. Se metió en la conversación en 3 de 3 pruebas, y
+  ninguna medida propia lo arregla: con la puerta de ruido a 0,05 se metió igual
+  (2 de 2, y además cortaba al visitante a medias: «¿Me lo repites?») y una regla
+  más dura en las instrucciones solo lo evitó en 1 de 2. Lo que ayuda es un
+  micrófono direccional apuntando a donde se pone el visitante.
+
+Por eso el ruido se deja a GPT-Live y las medidas propias vienen apagadas, a
+un clic si alguna vez hacen falta. Van juntas en la puerta del micro
+(`MicGate`, `server/sonia/live/audio.py`):
+
+- **Ruido suave** (`LIVE_COMFORT_NOISE_RMS`, encendido): lo que no pasa le llega
+  a GPT-Live como un ruido muy suave, nunca como silencio absoluto, con el que
+  tardaba mucho en contestar. Se apaga con `0`.
+- **Puerta de ruido** (control "Ruido del pasillo", `LIVE_GATE_RMS`, a cero):
+  por debajo de un nivel, GPT-Live no oye el micro. Con voces no ayuda; queda
+  para casos raros, como música alta pegada al micrófono.
+- **Alguien delante** (interruptor "Oír solo con alguien delante",
+  `LIVE_PRESENCE_GATE`, apagado): OpenCV mira la cámara cada medio segundo, en
+  este equipo y sin guardar nada. Si en diez minutos
+  (`LIVE_PRESENCE_HOLD_SECONDS`) no ha habido ninguna cara cerca ni
+  conversación, GPT-Live deja de oír el micro hasta que llega alguien, y con
+  alguien delante la raya de la puerta de ruido baja a la mitad
+  (`LIVE_PRESENCE_NEAR_GATE_SCALE`). Es muy generoso a propósito: la
+  conversación cuenta como presencia, y la cámara no cuenta hasta que ve su
+  primera cara (si apunta mal, nunca deja sorda a Sonnia) ni si deja de dar
+  imagen. Sirve si el stand se queda vacío mucho rato con gente charlando
+  pegada a él. Necesita la cámara USB y el modelo YuNet que baja el
+  reconocimiento de caras (`sonia caras`).
+
+El panel dice en cada momento qué ve la cámara y si Sonnia oye. Si hace falta
+la puerta de ruido:
 
 1. Arranca a Sonia y háblale desde donde se pondrá el visitante, a un metro.
 2. Cada turno deja su nivel en el log: `Usuario (nivel 0.081): ...`. El
@@ -119,6 +165,11 @@ reinicio automático si usas `scripts/kiosk.sh`):
 - **Modelo de visión**: `LLM_BASE_URL`, `LLM_MODEL` y `LLM_API_KEY` apuntan a
   cualquier servidor compatible con la API de OpenAI que acepte imágenes.
   `LLM_SUPPORTS_VISION=false` apaga la cámara.
+- **Caras conocidas** (equipo de Sonnet Code, ponentes y personas conocidas,
+  `docs/caras.md`): `FACES_THRESHOLD` si confunde o no reconoce,
+  `FACES_COOLDOWN_MINUTES` para avisar menos de quien está todo el día,
+  `FACES_ENABLED=false` lo apaga. Cómo saluda la primera vez, en
+  `assets/faces/saludos.json`.
 
 ## Reinicio por inactividad
 

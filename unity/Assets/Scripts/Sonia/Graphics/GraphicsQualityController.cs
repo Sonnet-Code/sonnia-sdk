@@ -352,6 +352,9 @@ namespace Sonia
                 }
             }
 
+            // Los efectos del escenario (motas, trivia y Matrix) los enciende StageParticles.
+            StageParticles.SetQualityAllows(options.particles);
+
             Application.targetFrameRate = options.targetFrameRate;
             Debug.Log(
                 "[Sonia] Calidad gráfica " + GraphicsQualityStore.Label(State.preset) + ": render "

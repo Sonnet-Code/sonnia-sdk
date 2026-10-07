@@ -285,7 +285,7 @@
       "hide-btn", "mute-btn", "mute-label", "now-showing", "thumbs", "caption-input", "say-form",
       "say-input", "say-btn", "notes-form", "notes-input", "notes-btn", "notes-state", "volume-input",
       "volume-value", "gate-input", "gate-value", "gate-meter-fill", "gate-meter-mark",
-      "gate-meter-caption", "health-list", "last-error", "last-error-text", "chat", "chat-empty",
+      "gate-meter-caption", "front-input", "front-caption", "health-list", "last-error", "last-error-text", "chat", "chat-empty",
       "voice-select", "voice-btn", "showcase-input", "anim-groups", "debug-input", "subtitles-input",
       "hero-debug", "ask-form", "ask-input", "ask-btn", "tune-mouth", "tune-camera", "tune-idle",
       "avatar-state", "avatar-edit-btn", "avatar-close-btn", "avatar-reset-btn",
@@ -1616,18 +1616,52 @@
     }
     const gate = renderGateControl();
 
+    // La puerta del micro es una sola: con alguien delante la raya baja y sin
+    // nadie en un buen rato no pasa nada (sonia/live/audio.py, MicGate).
+    const front = status.mic_presence || null;
+    const near = Boolean(front && front.enabled && front.status === "alguien");
+    const nobody = Boolean(front && front.enabled && front.status === "nadie");
+    const line = near && isNumber(front.near_gate_scale) ? gate * front.near_gate_scale : gate;
+    ui.gateMeterMark.style.left = `${levelToFraction(line) * 100}%`;
+
     const mic = (status.health && status.health.mic) || {};
     const level = isNumber(mic.level) ? mic.level : null;
     const fill = level === null || mic.muted ? 0 : levelToFraction(level);
     ui.gateMeterFill.style.width = `${fill * 100}%`;
-    ui.gateMeterFill.classList.toggle("is-below", level !== null && level < gate);
+    ui.gateMeterFill.classList.toggle("is-below", level !== null && (nobody || level < line));
     let caption = "Micrófono: sin datos ahora mismo.";
     if (mic.muted) caption = "Micrófono silenciado: no llega sonido.";
+    else if (nobody) caption = "Sin nadie delante: Sonnia no oye el pasillo hasta que la cámara vea a alguien.";
     else if (level !== null) {
       caption = `Nivel del micrófono: ${formatNumber(level, 3)}. `;
-      caption += level < gate ? "Por debajo de la raya: Sonnia no lo oye." : "Por encima de la raya: Sonnia lo oye.";
+      caption += level < line ? "Por debajo de la raya: Sonnia no lo oye." : "Por encima de la raya: Sonnia lo oye.";
+      if (line < gate) caption += " Con alguien delante, la raya baja.";
     }
     setText(ui.gateMeterCaption, caption);
+    renderFront(front);
+  }
+
+  function renderFront(front) {
+    if (!isLocked(ui.frontInput)) ui.frontInput.checked = Boolean(front && front.enabled);
+    setText(ui.frontCaption, describeFront(front));
+  }
+
+  function describeFront(front) {
+    if (!front) return "Cámara: sin datos.";
+    if (!front.enabled) return "Apagado: Sonnia oye siempre, haya o no alguien delante.";
+    if (!front.ready) return "Preparando el detector de caras: de momento oye siempre.";
+    const hold = Math.round((front.hold_s || 0) / 60);
+    const idle = isNumber(front.idle_s) ? Math.floor(front.idle_s / 60) : 0;
+    switch (front.status) {
+      case "alguien": return "Ahora: alguien delante. Sonnia oye.";
+      case "hace poco": return `Sin nadie delante desde hace ${idle} min: oye hasta los ${hold} min.`;
+      case "nadie": return `Nadie delante ni conversación en ${hold} min: no oye el pasillo hasta que llegue alguien.`;
+      case "sin caras aún": return "La cámara aún no ha visto ninguna cara: de momento oye siempre.";
+      case "sin imagen": return front.watching
+        ? "La cámara no da imagen: Sonnia oye siempre."
+        : "Sin conversación abierta: la cámara no mira.";
+      default: return "Cámara: sin datos.";
+    }
   }
 
   // ------------------------------------------------------------ salud
@@ -2549,6 +2583,7 @@
     ui.showcaseInput.addEventListener("change", onShowcaseChange);
     ui.debugInput.addEventListener("change", () => onSwitchChange(ui.debugInput, "set_debug"));
     ui.subtitlesInput.addEventListener("change", () => onSwitchChange(ui.subtitlesInput, "set_subtitles"));
+    ui.frontInput.addEventListener("change", () => onSwitchChange(ui.frontInput, "set_mic_presence"));
     for (const button of ui.gestureButtons) {
       button.addEventListener("click", () => sendAction("gesture", { category: button.dataset.gesture }, { button }));
     }

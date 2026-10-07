@@ -2,8 +2,8 @@
 
 El código hace todo el trabajo: baja la página, la compara con la agenda que
 Sonia tenía al empezar esta conversación (``ctx.extra["agenda_baseline"]``) y
-devuelve los cambios ya escritos, más qué hay ahora y qué viene
-(:mod:`sonia.agenda`). El modelo solo tiene que contarlo.
+devuelve los cambios ya escritos, más la hora de ahora y qué hay ahora y qué
+viene (:mod:`sonia.agenda`). El modelo solo tiene que contarlo.
 
 El motor deja la agenda en ``ctx.extra["agenda"]`` (un :class:`AgendaBook`).
 """
@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from sonia.clock import spoken_now
 from sonia.types import ActionContext, ActionResult, ActionSpec
 
 #: Lo que se le pasa de la descripción de la charla (la de la web puede ser larga).
@@ -51,6 +52,8 @@ async def check_agenda(ctx: ActionContext, arguments: dict[str, Any]) -> ActionR
                 "Consultada ahora la agenda oficial: no ha cambiado nada respecto a la que "
                 "conoces, sigue valiendo."
             )
+    # La hora va siempre: GPT-Live solo tiene la de cuando empezó la conversación.
+    parts.append(f"Hora de ahora: {spoken_now(book.now())}.")
     now = book.happening()
     if now:
         parts.append(now)
@@ -122,8 +125,9 @@ CHECK_AGENDA = ActionSpec(
     description=(
         "Consulta ahora mismo la agenda oficial del DevFest en su web y dice qué ha cambiado "
         "respecto a la que conoce Sonia (horas, salas, ponentes, charlas nuevas o quitadas) y "
-        "qué hay ahora y qué viene. Úsala cuando pregunten si cambió algo de la agenda, quieran "
-        "confirmar una charla o un horario, o pregunten qué hay ahora o qué viene después."
+        "qué hay ahora y qué viene, con la hora exacta de ahora. Úsala cuando pregunten si "
+        "cambió algo de la agenda, quieran confirmar una charla o un horario, pregunten qué hay "
+        "ahora o qué viene después, o pregunten qué hora es."
     ),
     parameters={"type": "object", "properties": {}, "required": []},
     handler=check_agenda,

@@ -47,8 +47,10 @@ class LLMSettings(BaseSettings):
     #: Si es False, Sonia no mira la cámara (sin notas de la cámara ni ``look``).
     supports_vision: bool = True
     #: Se envía como ``reasoning_effort`` salvo que valga ``off``. Un valor vacío no
-    #: sirve para quitarlo: en el ``.env`` equivale a no poner la variable y vuelve ``low``.
-    reasoning_effort: str = "low"
+    #: sirve para quitarlo: en el ``.env`` equivale a no poner la variable y vuelve ``none``.
+    #: ``none`` porque con ``low`` luna tardaba el doble (medido el 7-oct-2026, 18 fotos:
+    #: mediana 4,5 s y hasta 14 s con ``low``; 2,1 s y 3,6 s como mucho con ``none``).
+    reasoning_effort: str = "none"
     #: Se envía solo si no es None (algunos modelos solo admiten su valor por defecto).
     temperature: float | None = None
     max_tokens: int = 400
@@ -323,7 +325,10 @@ class LiveSettings(BaseSettings):
     backend_reasoning_effort: str = "low"
     #: ``service_tier`` del backend (vacío = no se envía; ``priority`` = más rápido).
     backend_service_tier: str = ""
-    backend_max_output_tokens: int = 400
+    #: Tope de tokens de cada respuesta del backend, razonamiento y búsquedas incluidos. Con
+    #: 400 se cortaban las búsquedas en internet y GPT-Live daba «Responses handoff
+    #: incomplete»; solo se cobra lo que escribe, y sus respuestas siguen siendo cortas.
+    backend_max_output_tokens: int = 2000
     #: Rondas de acciones que se le permiten al backend por tarea delegada.
     backend_max_tool_rounds: int = 3
     #: ``LIVE_BACKEND_WEB_SEARCH``: el backend puede buscar en internet (herramienta
@@ -345,6 +350,32 @@ class LiveSettings(BaseSettings):
     gate_rms: float = 0.0
     #: Tiempo que la puerta sigue abierta después de la última voz por encima del umbral.
     gate_hold_ms: int = 900
+    #: Puerta de la cámara, parte de la misma puerta del micro (``MicGate`` en
+    #: ``sonia/live/audio.py``): OpenCV busca caras cada ``presence_scan_seconds``,
+    #: en este equipo y sin guardar nada, con el modelo YuNet que baja el
+    #: reconocimiento de caras (``FACES_DIR``). Solo con ``VISION_SOURCE=opencv``.
+    #: Apagada al arrancar: con la API real GPT-Live ya ignora solo las voces del
+    #: pasillo (docs/stand.md, «Voces del pasillo»). Se enciende en caliente con
+    #: el interruptor del panel, que manda sobre esto.
+    presence_gate: bool = False
+    #: Sin una cara cerca ni conversación en este tiempo, GPT-Live deja de oír el
+    #: micro. Muy generoso a propósito: dejarla sorda con alguien delante es mucho
+    #: peor que oír el pasillo un rato.
+    presence_hold_seconds: float = 600.0
+    presence_scan_seconds: float = 0.5
+    #: Ancho mínimo de la cara en una foto de 640 px (unos 1,8 m con una webcam
+    #: normal): quien pasa por el pasillo no cuenta.
+    presence_min_face_px: int = 38
+    #: Con alguien delante de la cámara ahora mismo, la puerta de ruido se abre con
+    #: este tanto de ``gate_rms``: quien habla bajito delante de Sonia también
+    #: pasa. 1 = no cambia.
+    presence_near_gate_scale: float = 0.5
+    #: Ruido muy suave (RMS 0..1) que oye GPT-Live cuando no se le manda el
+    #: micrófono (puerta cerrada, nadie delante, micro silenciado, frase grabada,
+    #: ``--no-mic``). Con ceros absolutos entendía al visitante con 7 a 40 s de
+    #: retraso y no decía lo que le devolvía el backend hasta volver a oír algo.
+    #: 0 = ceros.
+    comfort_noise_rms: float = 0.003
     #: Mínimo entre dos descripciones de la cámara (cada una es una petición al modelo de visión).
     vision_min_interval_seconds: float = 10.0
     #: Reiniciar la sesión en el siguiente momento de calma si el contexto pasa de esta fracción.
@@ -377,6 +408,14 @@ class ShowcaseSettings(BaseSettings):
     dance_chance: float = 0.3
     #: Probabilidad de que una frase vaya acompañada de un gesto de cuarta pared.
     gesture_chance: float = 0.5
+    #: De lo que no es baile, qué parte son momentos: una invitación a acercarse
+    #: que improvisa GPT-Live con lo que pasa ahora (la charla que toca, lo que ve
+    #: la cámara o algo que se puede probar) en vez de una frase fija. 0 = solo
+    #: frases fijas.
+    moment_chance: float = 0.6
+    #: Que los momentos tiren también de lo que ve la cámara (una foto y su
+    #: descripción con el modelo de visión cada pocos momentos; no se guarda).
+    moment_camera: bool = True
 
 
 class TriviaSettings(BaseSettings):
@@ -423,6 +462,10 @@ class AgendaSettings(BaseSettings):
     url: str = "https://devfest.gdgsantodomingo.org/schedule"
     #: Cada cuánto se vuelve a mirar si cambió (0 = solo al arrancar y cuando Sonia lo pide).
     refresh_minutes: float = 10.0
+    #: Minutos antes de cada charla en que se le pasa a Sonia la hora y lo que empieza
+    #: (nota ``[Reloj]``). Es la única nota de hora: con una por minuto la decía sin
+    #: venir a cuento. 0 = nunca.
+    notice_minutes: float = 5.0
     #: Tope de cada descarga: Sonia espera esto como mucho cuando la consulta ella.
     timeout_seconds: float = 6.0
     #: Última agenda descargada, para arrancar sin red.
@@ -431,6 +474,46 @@ class AgendaSettings(BaseSettings):
     @property
     def enabled(self) -> bool:
         return self.url.strip().lower() not in ("", "off", "false", "0", "no")
+
+
+class FaceSettings(BaseSettings):
+    """Reconocer al equipo de Sonnet Code y a los ponentes delante de la cámara (``sonia/faces``, docs/caras.md).
+
+    Corre entero en este equipo (OpenCV) y solo conoce a quien sale en la lista
+    del equipo (``assets/faces/staff.json``) y en la agenda: de los visitantes no
+    se guarda nada. Los umbrales salen de medir las 38 fotos reales el 7-oct-2026:
+    dos personas distintas llegaron a 0,46 de similitud y la misma persona en
+    fotos distintas, a 0,60-0,65.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="FACES_", extra="ignore", env_ignore_empty=True)
+
+    #: ``FACES_ENABLED``: con ``false`` Sonia no reconoce a nadie.
+    enabled: bool = True
+    #: Reconocer también a los ponentes de la agenda (con su foto de la web del DevFest).
+    speakers: bool = True
+    #: Modelos, huellas y fotos locales del equipo (``modelos/``, ``huellas/``, ``fotos/``).
+    dir: str = str(_HOME / "cache" / "faces")
+    #: Lista del equipo; vacío = ``assets/faces/staff.json``.
+    staff_file: str = ""
+    #: Personas conocidas que no son del equipo ni ponentes; vacío = ``assets/faces/invitados.json``.
+    guests_file: str = ""
+    #: Contexto para saludar (por persona y por grupo); vacío = ``assets/faces/saludos.json``.
+    greetings_file: str = ""
+    #: Similitud mínima (coseno de SFace) para dar a alguien por reconocido.
+    threshold: float = 0.52
+    #: Ventaja mínima sobre la segunda persona más parecida; si no, no se arriesga.
+    margin: float = 0.06
+    #: Ancho mínimo de la cara en la foto de la cámara (768 px): quien pasa al fondo no cuenta.
+    min_face_px: int = 64
+    #: Cada cuánto mira la cámara por su cuenta, con sesión abierta (0 = solo cuando Sonia mira).
+    scan_seconds: float = 3.0
+    #: Revisiones seguidas en que tiene que salir alguien antes de avisar a Sonia.
+    confirm_scans: int = 2
+    #: Minutos sin volver a avisar de la misma persona, salvo que Sonia use la cámara.
+    cooldown_minutes: float = 20.0
+    #: Tope de la descarga de cada foto de referencia y de los modelos.
+    download_timeout_seconds: float = 60.0
 
 
 class PanelSettings(BaseSettings):
@@ -488,6 +571,7 @@ class Settings(BaseSettings):
     trivia: TriviaSettings = Field(default_factory=TriviaSettings)
     panel: PanelSettings = Field(default_factory=PanelSettings)
     agenda: AgendaSettings = Field(default_factory=AgendaSettings)
+    faces: FaceSettings = Field(default_factory=FaceSettings)
 
     assets_dir: str = str(BUNDLE_ROOT / "assets")
     log_level: str = "INFO"
@@ -544,6 +628,24 @@ class Settings(BaseSettings):
         """La del stand y, si se pide, la extra (``KNOWLEDGE_EXTRA_DIR``)."""
         extra = [Path(self.knowledge_extra_dir)] if self.knowledge_extra_dir.strip() else []
         return [self.knowledge_dir, *extra]
+
+    @property
+    def faces_staff_file(self) -> Path:
+        """Lista del equipo de Sonnet Code que Sonia reconoce (``FACES_STAFF_FILE``)."""
+        custom = self.faces.staff_file.strip()
+        return Path(custom) if custom else Path(self.assets_dir) / "faces" / "staff.json"
+
+    @property
+    def faces_guests_file(self) -> Path:
+        """Personas conocidas que Sonia reconoce además del equipo y los ponentes (``FACES_GUESTS_FILE``)."""
+        custom = self.faces.guests_file.strip()
+        return Path(custom) if custom else Path(self.assets_dir) / "faces" / "invitados.json"
+
+    @property
+    def faces_greetings_file(self) -> Path:
+        """Contexto propio para saludar a algunas personas conocidas (``FACES_GREETINGS_FILE``)."""
+        custom = self.faces.greetings_file.strip()
+        return Path(custom) if custom else Path(self.assets_dir) / "faces" / "saludos.json"
 
     @property
     def agenda_fallback_file(self) -> Path:

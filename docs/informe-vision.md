@@ -36,7 +36,7 @@ La acción `look` es aparte: manda la foto al backend de OpenAI (`LIVE_BACKEND_M
 | `VISION_INTERVAL_SECONDS` | `0` | 0 = nunca periódico. |
 | `LIVE_VISION_MIN_INTERVAL_SECONDS` | `10` | Mínimo entre dos descripciones (hasta 6 por minuto). |
 | `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY` | OpenAI / `gpt-6-luna` / `OPENAI_API_KEY` | Si el `.env` aún apunta al motor anterior (`localhost:8000`, `kimi-k3`, clave `local`), la capa parece activa pero cada descripción falla. |
-| `LLM_REASONING_EFFORT` | `low` | En OpenAI: `none`, `low`, `medium` (el defecto del modelo, lento) o `high`. `off` no lo envía. **Dejarlo vacío no lo quita**: vuelve a `low`. |
+| `LLM_REASONING_EFFORT` | `none` (era `low` hasta el 7-oct, ver sección 9) | En OpenAI: `none`, `low`, `medium` (el defecto del modelo, lento) o `high`. `off` no lo envía. **Dejarlo vacío no lo quita**: vuelve a `none`. |
 | `LLM_IMAGE_DETAIL` | `low` | `detail` de la imagen en OpenAI; `off` no lo envía. |
 | `LLM_EXTRA_BODY` | `{}` | Campos extra del cuerpo, en JSON entre comillas simples. |
 | `VISION_CAMERA_INDEX` | `0` | En Mac, un iPhone cercano (Continuidad) puede ser el índice 0. Hace falta además el permiso de cámara de macOS para la terminal y `uv sync --extra camera`, y que Unity no tenga la cámara abierta. |
@@ -52,7 +52,7 @@ LLM_SUPPORTS_VISION=true
 VISION_SOURCE=opencv
 VISION_ON_TURN_START=false     # solo `look`; true para la nota automática al empezar a hablar
 # Sin LLM_BASE_URL, LLM_MODEL ni LLM_API_KEY: https://api.openai.com/v1, gpt-6-luna y OPENAI_API_KEY
-LLM_REASONING_EFFORT=low        # prueba `none` si «Cámara descrita en» pasa de ~2 s
+LLM_REASONING_EFFORT=none       # con `low` tardaba el doble (sección 9)
 LLM_IMAGE_DETAIL=low            # `high` lee mejor gafetes y logos por ~100 tokens más
 ```
 
@@ -139,6 +139,30 @@ La descripción corre en paralelo y no frena la respuesta de Sonia. Aun así, cu
    - Con K2.6, de 4 a 6 s.
    - Si pasa de unos 8 s, mejor volver a OpenAI.
 3. Con Kimi, antes del evento, revisa el saldo y el Tier en platform.kimi.ai.
+
+## 9. Medición real del 7 de octubre de 2026
+
+A petición de Jean («haz pruebas para ver si con algún modelo de Gemini es más rápido y eficiente»), con llamadas reales:
+- **Prueba:** el prompt de `VisionNarrator` y la foto a 768 px como en el stand.
+- **Fotos:** seis fotos libres de Wikimedia Commons: una persona mirando a cámara, una mesa de un DevFest, un móvil enseñado a cámara, dos personas en un stand, una sala vacía y un grupo.
+- **Repeticiones:** tres rondas en orden aleatorio.
+- **Coste:** menos de 0,10 USD en total.
+
+| Modelo | Mediana | p90 | Máximo | USD por 100 fotos |
+|---|---|---|---|---|
+| `gpt-6-luna` con `low` (el defecto de entonces) | 4,49 s | 6,30 s | 14,20 s | 0,014 |
+| `gpt-6-luna` con `none` | 2,14 s | 2,77 s | 3,64 s | 0,007 |
+| `gemini-3.1-flash-lite` (`minimal`) | 1,16 s | 1,39 s | 1,53 s | 0,037 |
+| `gemini-3.5-flash-lite` (`minimal`) | 1,11 s | 1,46 s | 1,87 s | 0,048 |
+| `gemini-3.5-flash` (`minimal`) | 1,43 s | 1,62 s | 2,25 s | 0,240 |
+| `gemini-3.8-flash` (`low`; no acepta `minimal`) | 4,30 s | 4,86 s | 6,61 s | 0,110 |
+
+- **Calidad:** parecida en todos. Todos aciertan con la sala vacía («No hay nadie delante de la cámara.») y con el móvil; Gemini Flash-Lite es más escueto y luna lee más textos del fondo.
+- **Gemini:** cuenta unos 1 250 tokens por foto aunque se reduzca, y su endpoint compatible no acepta `detail` ni `media_resolution`. `gemini-2.5-flash-lite` ya no está disponible para cuentas nuevas.
+- **Con `low`, luna llegó a 14,2 s,** más que el tope de 12 s del narrador.
+- **`look` va mejor con la foto en el backend:** el backend contestó en 1,82 s de mediana con la foto, frente a 1,48 s con la descripción de Gemini en texto. Sumando el 1,16 s de Gemini, ese camino sería más lento.
+
+**Decisión de Jean:** quedarse con luna, sin razonamiento. `LLM_REASONING_EFFORT` pasa a `none` por defecto en el código y en `.env.example`.
 
 ## Fuentes
 

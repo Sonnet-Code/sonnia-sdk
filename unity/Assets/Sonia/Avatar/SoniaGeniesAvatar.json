@@ -16,13 +16,14 @@
     "WardrobeGear/c3a89bc45f9a9ad9",
     "AvatarBase/recAyIbaC69cO2CnN",
     "WardrobeGear/recZfKwDGWgdEWQtb",
-    "WardrobeGear/b6a9fd87ac35514b"
+    "WardrobeGear/b6a9fd87ac35514b",
+    "AvatarMakeup/recJm9rUm4e47033J"
   ],
   "colors": {
     "unified-faceGems1": {
-      "r": 0.58431375,
-      "g": 0.6862745,
-      "b": 0.5647059,
+      "r": 0.68235296,
+      "g": 0.458823532,
+      "b": 0.9254902,
       "a": 1.0
     },
     "gear-hairR": {
@@ -44,9 +45,9 @@
       "a": 1.0
     },
     "unified-faceGems2": {
-      "r": 0.8392157,
-      "g": 0.8862745,
-      "b": 0.847058833,
+      "r": 0.968627453,
+      "g": 1.0,
+      "b": 0.258823544,
       "a": 1.0
     },
     "unified-skin": {

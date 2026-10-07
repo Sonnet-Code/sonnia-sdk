@@ -36,16 +36,18 @@ from sonia.config import (
     VisionSettings,
     WSSettings,
 )
+from sonia.faces import FaceWatcher
 from sonia.gestures import GestureDirector
-from sonia.live.audio import NoiseGate, pcm16_from_float, rms
+from sonia.live.audio import ComfortNoise, NoiseGate, pcm16_from_float, rms
 from sonia.live.client import LiveClient, LiveError
-from sonia.live.engine import INTERRUPT_TEXT, LiveEngine
+from sonia.live.engine import DELEGATION_FAILED_TEXT, INTERRUPT_TEXT, LiveEngine
 from sonia.live.oneshot import probe_session, speak_text
 from sonia.live.prompts import build_session_config, describe_live_stack
 from sonia.live.vision import VisionNarrator
 from sonia.showcase import ATTENTION_DANCE, Showcase
 from sonia.types import Frame, LLMEvent, Message, TextDelta, TurnDone
 from sonia.vision.policy import VisionPolicy
+from sonia.vision.presence import PresenceWatch
 from sonia.ws.hub import Hub
 from tests.helpers import FakeCamera, Recorder
 
@@ -329,6 +331,8 @@ async def make_rig(
     gestures: Callable[[Hub], GestureDirector] | None = None,
     agenda: AgendaBook | None = None,
     clock: Clock | None = None,
+    faces: FaceWatcher | None = None,
+    presence: PresenceWatch | None = None,
     **settings_overrides: Any,
 ) -> AsyncIterator[LiveRig]:
     from websockets.asyncio.client import connect
@@ -357,6 +361,8 @@ async def make_rig(
             gestures=gestures(hub) if gestures is not None else None,
             agenda=agenda,
             clock=clock,
+            faces=faces,
+            presence=presence,
             tick_s=0.02,
         )
         async with connect(f"ws://127.0.0.1:{hub.port}/") as client:
@@ -376,6 +382,11 @@ async def make_rig(
 
 def voice_block(value: float = 0.5, samples: int = 768) -> np.ndarray[Any, Any]:
     return np.full(samples, value, dtype=np.float32)
+
+
+def pcm_level(chunk: bytes) -> float:
+    """Nivel RMS (0..1) de un trozo PCM s16le de los que recibe GPT-Live."""
+    return rms(np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32767.0)
 
 
 async def wait_until(predicate: Callable[[], bool], limit: float = 3.0) -> None:
@@ -740,6 +751,13 @@ def test_la_puerta_de_ruido_se_abre_con_voz_y_aguanta_las_pausas() -> None:
     assert NoiseGate(threshold=0.0, hold_ms=500).admit(0.0) is True
 
 
+def test_el_ruido_suave_tiene_el_nivel_pedido_y_con_cero_son_ceros() -> None:
+    noise = ComfortNoise(0.003, seed=1).pcm(2_400)
+    assert len(noise) == 4_800
+    assert pcm_level(noise) == pytest.approx(0.003, rel=0.1)
+    assert ComfortNoise(0.0).pcm(10) == bytes(20)
+
+
 async def test_el_micro_sigue_abierto_mientras_habla_sonia(tmp_path: Path) -> None:
     # GPT-Live es full duplex: el visitante puede interrumpirla en cualquier momento.
     async with make_rig(tmp_path) as rig:
@@ -751,14 +769,62 @@ async def test_el_micro_sigue_abierto_mientras_habla_sonia(tmp_path: Path) -> No
         assert any(conn.audio_in()[-1])
 
 
-async def test_la_puerta_de_ruido_manda_silencio_por_debajo_del_umbral(tmp_path: Path) -> None:
+async def test_la_puerta_de_ruido_manda_ruido_suave_por_debajo_del_umbral(tmp_path: Path) -> None:
     async with make_rig(tmp_path, gate_rms=0.1) as rig:
         conn = await rig.conn()
         await rig.engine.push_mic(voice_block(0.01))
         await rig.engine.push_mic(voice_block(0.5))
         await conn.wait_type("session.input_audio.append", count=2)
         quiet, loud = conn.audio_in()[-2:]
-        assert not any(quiet) and any(loud)
+        assert pcm_level(quiet) == pytest.approx(0.003, rel=0.2)
+        assert pcm_level(loud) == pytest.approx(0.5, rel=0.01)
+
+
+class NoCamera:
+    """Cámara sin imagen: la puerta de la cámara se mueve a mano en los tests."""
+
+    async def capture(
+        self, *, max_width: int | None = None, quality: int | None = None
+    ) -> Frame | None:
+        return None
+
+
+async def test_sin_nadie_delante_en_diez_minutos_gpt_live_no_oye_el_micro(
+    tmp_path: Path,
+) -> None:
+    live = LiveSettings(api_key="x", presence_gate=True)
+    watch = PresenceWatch(live, NoCamera(), model=tmp_path / "no-esta.onnx")
+    async with make_rig(tmp_path, presence=watch) as rig:
+        conn = await rig.conn()
+        now = time.monotonic()
+        watch.gate.scanned(1, now - 1_000.0)  # la última cara, hace casi 17 min
+        watch.gate.scanned(0, now)
+        await rig.engine.push_mic(voice_block(0.5))
+        await conn.wait_type("session.input_audio.append")
+        assert pcm_level(conn.audio_in()[-1]) == pytest.approx(0.003, rel=0.2)
+        assert rig.engine.snapshot()["mic_reason"] == "nadie delante"
+        # Llega alguien: GPT-Live vuelve a oír al momento.
+        watch.gate.scanned(1, time.monotonic())
+        await rig.engine.push_mic(voice_block(0.5))
+        await conn.wait_type("session.input_audio.append", count=2)
+        assert pcm_level(conn.audio_in()[-1]) == pytest.approx(0.5, rel=0.01)
+        snap = rig.engine.snapshot()
+        assert snap["mic_reason"] == "" and snap["mic_presence"]["status"] == "alguien"
+
+
+async def test_gpt_live_nunca_oye_ceros_absolutos(tmp_path: Path) -> None:
+    # Con ceros absolutos GPT-Live se retrasaba al contestar (sonia run --no-mic,
+    # micro sin permiso de macOS); con LIVE_COMFORT_NOISE_RMS=0 se vuelve a ellos.
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await rig.engine.push_mic(voice_block(0.0))
+        await conn.wait_type("session.input_audio.append")
+        assert pcm_level(conn.audio_in()[-1]) == pytest.approx(0.003, rel=0.2)
+    async with make_rig(tmp_path, comfort_noise_rms=0.0) as rig:
+        conn = await rig.conn()
+        await rig.engine.push_mic(voice_block(0.0))
+        await conn.wait_type("session.input_audio.append")
+        assert not any(conn.audio_in()[-1])
 
 
 # ---------------------------------------------------------------------------
@@ -1024,6 +1090,22 @@ async def test_el_numero_del_stand_va_como_commentary_y_suena_como_ambient(tmp_p
         assert "speaking" not in rig.rec.states()
 
 
+async def test_una_frase_del_stand_en_dos_tramos_sigue_siendo_del_stand(tmp_path: Path) -> None:
+    showcase = Showcase(phrases=["Te propongo algo: acércate."], songs=[], gesture_chance=0)
+    settings = ShowcaseSettings(
+        enabled=True, first_delay_seconds=0.0, interval_min_seconds=60, interval_max_seconds=60
+    )
+    async with make_rig(tmp_path, showcase=showcase, showcase_settings=settings) as rig:
+        conn = await rig.conn()
+        await conn.wait_type("session.commentary.append")
+        await conn.audio(pcm(1_200))
+        await rig.rec.wait_type("speech_end")
+        await conn.audio(pcm(1_200))
+        await rig.rec.wait_type("speech_end", count=2)
+        assert [m["ambient"] for m in rig.rec.of_type("speech_start")] == [True, True]
+        assert "speaking" not in rig.rec.states()
+
+
 async def test_un_baile_del_stand_avisa_a_unity_antes_de_pedir_la_voz(tmp_path: Path) -> None:
     showcase = Showcase(phrases=[], songs=["La la la"], dance_chance=1.0)
     settings = ShowcaseSettings(
@@ -1034,6 +1116,66 @@ async def test_un_baile_del_stand_avisa_a_unity_antes_de_pedir_la_voz(tmp_path: 
         await conn.wait_type("session.commentary.append")
         attention = rig.rec.of_type("attention")
         assert attention and attention[0]["category"] == ATTENTION_DANCE
+
+
+def moments_only() -> tuple[Showcase, ShowcaseSettings]:
+    showcase = Showcase(phrases=[], songs=[], gesture_chance=0, moment_chance=1.0)
+    settings = ShowcaseSettings(
+        enabled=True, first_delay_seconds=0.0, interval_min_seconds=60, interval_max_seconds=60
+    )
+    return showcase, settings
+
+
+async def test_un_momento_del_stand_tira_de_lo_que_ve_la_camara(tmp_path: Path) -> None:
+    showcase, settings = moments_only()
+    llm = FakeVisionLLM("Dos personas con gafete del DevFest miran la pantalla.")
+    async with make_rig(
+        tmp_path,
+        showcase=showcase,
+        showcase_settings=settings,
+        camera=FakeCamera(),
+        narrator=VisionNarrator(llm),
+        vision_source="opencv",
+    ) as rig:
+        conn = await rig.conn()
+        await conn.wait_type("session.commentary.append")
+        content = conn.of_type("session.commentary.append")[0]["content"]
+        assert "Dos personas con gafete del DevFest miran la pantalla." in content
+        assert "nunca el cuerpo, la edad, la piel" in content
+        # Lo que dice suena como frase del stand: sin cambiar de estado.
+        await conn.audio(pcm(1_200))
+        await rig.rec.wait_type("speech_start")
+        assert rig.rec.of_type("speech_start")[0]["ambient"] is True
+
+
+async def test_sin_camara_ni_agenda_el_momento_propone_algo_concreto(tmp_path: Path) -> None:
+    showcase, settings = moments_only()
+    async with make_rig(tmp_path, showcase=showcase, showcase_settings=settings) as rig:
+        conn = await rig.conn()
+        await conn.wait_type("session.commentary.append")
+        content = conn.of_type("session.commentary.append")[0]["content"]
+        assert "nadie está hablando contigo" in content and "trivia" in content
+
+
+async def test_si_alguien_habla_mientras_se_prepara_el_momento_no_se_pide(
+    tmp_path: Path,
+) -> None:
+    showcase, settings = moments_only()
+    camera = FakeCamera(delay=0.5)
+    async with make_rig(
+        tmp_path,
+        showcase=showcase,
+        showcase_settings=settings,
+        camera=camera,
+        narrator=VisionNarrator(FakeVisionLLM()),
+        vision_source="opencv",
+        on_turn_start=False,
+    ) as rig:
+        conn = await rig.conn()
+        await wait_until(lambda: camera.captures >= 1)
+        await conn.hear("Hola Sonia")
+        await asyncio.sleep(0.8)
+        assert not conn.of_type("session.commentary.append")
 
 
 async def test_sin_animacion_de_stand_no_pide_nada(tmp_path: Path) -> None:
@@ -1208,6 +1350,38 @@ async def test_un_error_a_un_comando_del_backend_cierra_la_tarea(tmp_path: Path)
         await conn.wait_type("response.item.create")
         await wait_until(lambda: not rig.engine._delegations)
         assert not rig.engine._command_owner
+
+
+async def test_si_el_backend_no_termina_sonia_lo_dice_y_deja_de_pensar(tmp_path: Path) -> None:
+    """``Responses handoff incomplete`` no trae evento final: se quedaba pensando 90 s."""
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(
+            {
+                "type": "session.delegation.created",
+                "event_id": "ed",
+                "delegation": {"id": "deleg_1", "type": "delegation", "target": "responses"},
+            }
+        )
+        await rig.rec.wait_state("thinking")
+        await conn.send(
+            {
+                "type": "error",
+                "event_id": "err",
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "Responses handoff incomplete.",
+                },
+            }
+        )
+        await conn.wait_type("session.commentary.append")
+        assert not rig.engine._delegations
+        assert conn.of_type("session.commentary.append")[0]["content"] == DELEGATION_FAILED_TEXT
+
+        # Otro error cualquiera no le hace decir nada.
+        await conn.send({"type": "error", "error": {"type": "server_error", "message": "x"}})
+        await asyncio.sleep(0.1)
+        assert len(conn.of_type("session.commentary.append")) == 1
 
 
 async def test_una_accion_sin_id_de_delegacion_tambien_continua(tmp_path: Path) -> None:
@@ -1409,3 +1583,70 @@ async def test_baila_cuando_se_lo_piden(tmp_path: Path) -> None:
         ]
         script = await _backend_call(conn, "m3", "play_animation", {"movimiento": "paz"})
         assert "no lo tienes" in script and "bailar, saludar" in script
+
+
+def _delegation_created(delegation_id: str = "deleg_1") -> dict[str, Any]:
+    return {
+        "type": "session.delegation.created",
+        "event_id": "ed",
+        "offset_ms": 100,
+        "delegation": {
+            "id": delegation_id,
+            "type": "delegation",
+            "target": "responses",
+            "response_id": "resp_1",
+        },
+    }
+
+
+def _activities(rig: LiveRig) -> list[str]:
+    return [m["activity"] for m in rig.rec.of_type("activity")]
+
+
+async def test_activity_avisa_a_unity_de_una_busqueda_en_internet(tmp_path: Path) -> None:
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(_delegation_created())
+        await conn.response_event({"type": "response.created"})
+        await conn.response_event(
+            {
+                "type": "response.output_item.added",
+                "item": {"type": "web_search_call", "id": "ws_1", "status": "in_progress"},
+            }
+        )
+        await rig.rec.wait_for(lambda _: _activities(rig) == ["search"])
+        # Los eventos propios de la búsqueda también valen (y no repiten el aviso).
+        await conn.response_event({"type": "response.web_search_call.searching", "item_id": "ws_1"})
+        await conn.response_event({"type": "response.web_search_call.completed", "item_id": "ws_1"})
+        await rig.rec.wait_for(lambda _: _activities(rig) == ["search", "none"])
+        await conn.response_event({"type": "response.output_text.delta", "delta": "Ya lo vi."})
+        await conn.response_event({"type": "response.completed"})
+        await wait_until(lambda: not rig.engine._delegations)
+        await asyncio.sleep(0.1)
+        assert _activities(rig) == ["search", "none"]
+
+
+async def test_activity_avisa_de_una_tarea_que_tarda(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(engine_module, "SLOW_TASK_S", 0.15)
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(_delegation_created())
+        await conn.response_event({"type": "response.created"})
+        await rig.rec.wait_for(lambda _: _activities(rig) == ["think"])
+        await conn.response_event({"type": "response.output_text.delta", "delta": "Listo."})
+        await conn.response_event({"type": "response.completed"})
+        await rig.rec.wait_for(lambda _: _activities(rig) == ["think", "none"])
+
+
+async def test_activity_no_avisa_de_una_tarea_rapida(tmp_path: Path) -> None:
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(_delegation_created())
+        await conn.response_event({"type": "response.created"})
+        await conn.response_event({"type": "response.output_text.delta", "delta": "Listo."})
+        await conn.response_event({"type": "response.completed"})
+        await wait_until(lambda: not rig.engine._delegations)
+        await asyncio.sleep(0.1)
+        assert _activities(rig) == []

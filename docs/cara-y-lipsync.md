@@ -38,6 +38,13 @@ línea de retardo, análisis, lip-sync, expresiones, ojos y gestos.
   `shape` (pesos fijos, `"viseme_aa:1,jawOpen:0.3"`) para galerías de
   blendshapes. `overrides` cambia campos de componentes antes de entrar en Play
   y `loadTuning` decide si se aplica `sonia-tuning.json`.
+- Para la escena, sin orquestador: `message` (un mensaje del protocolo en
+  `text`, como si llegara por el WebSocket: trivia, `activity`...),
+  `particles` (efecto de `StageParticles` a la fuerza: `ambient`, `trivia` o
+  `matrix`), `tuning` (`"matrix amount=200 size=150"`; al terminar los ajustes
+  de partículas quedan como estaban) y `menu` (abre un menú de Esc por su
+  componente, por ejemplo `ParticleSettingsMenu`, y lo graba aparte en `menu/`
+  a la proporción de la captura).
 
 ```bash
 # Unity no abre dos veces el mismo proyecto: con el editor abierto en main,

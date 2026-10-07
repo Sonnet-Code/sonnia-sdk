@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import importlib.util
 import logging
 import os
 import signal
@@ -35,9 +36,11 @@ from sonia.actions import Gallery, build_default_registry
 from sonia.actions.registry import ActionRegistry
 from sonia.agenda import AgendaBook
 from sonia.audio.capture import list_input_devices, resolve_input_device
-from sonia.clock import resolve_timezone
-from sonia.config import Settings, is_gemini_url, is_openai_url, load_settings
+from sonia.clock import clock_for, resolve_timezone
+from sonia.config import Settings, VisionSettings, is_gemini_url, is_openai_url, load_settings
 from sonia.devices import DeviceManager, apply_choice, load_choice
+from sonia.faces import FaceBook, FaceWatcher, load_greetings, models_ready, name_key
+from sonia.faces.model import DETECTOR
 from sonia.gestures.director import GestureDirector
 from sonia.guest.link import FrameGrabber
 from sonia.live.audio import silence_blocks
@@ -50,10 +53,11 @@ from sonia.llm.messages import system, user_text
 from sonia.panel.control import StandControl
 from sonia.panel.logs import LogBuffer
 from sonia.parent import watch_parent
-from sonia.paths import seed_home
+from sonia.paths import BUNDLE_ROOT, frozen, seed_home
 from sonia.types import ActionContext, AudioChunk, CameraSource
-from sonia.vision.camera import build_camera
+from sonia.vision.camera import OpenCVCamera, build_camera
 from sonia.vision.policy import VisionPolicy
+from sonia.vision.presence import PresenceWatch
 from sonia.ws import protocol as p
 from sonia.ws.hub import Hub, MessageCallback
 
@@ -321,6 +325,8 @@ class Components:
     gestures: GestureDirector | None = None
     #: Agenda del evento leída de su web (``sonia.agenda``), si hay de dónde sacarla.
     agenda: AgendaBook | None = None
+    #: Reconocer al equipo de Sonnet Code y a los ponentes (``sonia.faces``, docs/caras.md).
+    faces: FaceWatcher | None = None
 
     def action_context(self) -> ActionContext:
         return ActionContext(
@@ -378,6 +384,39 @@ def build_components(
         gesture_llm=gesture_llm,
         gestures=gestures,
         agenda=agenda,
+        faces=build_faces(settings, vision),
+    )
+
+
+def build_faces(settings: Settings, vision: VisionSettings | None = None) -> FaceWatcher | None:
+    """El reconocimiento de caras (docs/caras.md), si está activado y hay cámara y OpenCV."""
+    vision = vision or settings.vision
+    if not settings.faces.enabled or vision.source == "none" or not settings.llm.supports_vision:
+        return None
+    if importlib.util.find_spec("cv2") is None:
+        logger.warning("Reconocimiento de caras apagado: falta OpenCV (uv sync --extra camera)")
+        return None
+    bundled = BUNDLE_ROOT / "cache" / "faces" / "huellas" / "caras.json"
+    return FaceWatcher(
+        settings.faces,
+        staff_file=settings.faces_staff_file,
+        guests_file=settings.faces_guests_file,
+        greetings_file=settings.faces_greetings_file,
+        bundled_book=bundled if frozen() else None,
+        clock=clock_for(resolve_timezone(settings.timezone)),
+    )
+
+
+def build_presence(settings: Settings, camera: CameraSource | None) -> PresenceWatch | None:
+    """La parte de la cámara de la puerta del micro (``LIVE_PRESENCE_*``): solo con la cámara USB.
+
+    Se crea aunque arranque apagada (``LIVE_PRESENCE_GATE``) para que el panel la
+    pueda encender. Usa el modelo YuNet que baja el reconocimiento de caras (``FACES_DIR``).
+    """
+    if not isinstance(camera, OpenCVCamera):
+        return None
+    return PresenceWatch(
+        settings.live, camera, model=Path(settings.faces.dir) / "modelos" / DETECTOR.name
     )
 
 
@@ -567,7 +606,7 @@ def _room_camera(settings: Settings, camera: CameraSource | None) -> _RoomCamera
     """
     import importlib.util
 
-    from sonia.vision.camera import OpenCVCamera, UnityCamera
+    from sonia.vision.camera import UnityCamera
 
     shared = camera if isinstance(camera, OpenCVCamera) else None
     unity = camera if isinstance(camera, UnityCamera) else None
@@ -702,6 +741,10 @@ async def _stop_panel(panel: _Panel | None) -> None:
     logging.getLogger().removeHandler(panel.logs)
 
 
+async def _warm_up_camera(camera: OpenCVCamera) -> None:
+    await camera.warm_up()
+
+
 async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
     if _missing_live_key(settings):
         return 1
@@ -714,6 +757,7 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
     if seeded:
         logger.info("Frases grabadas de la app copiadas a este equipo: %d", seeded)
     voice_cache = VoiceCache(settings.panel.voice_cache_dir, settings.live)
+    presence = build_presence(settings, components.camera)
     engine = LiveEngine(
         settings,
         hub=components.hub,
@@ -725,6 +769,8 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
         knowledge_dir=settings.knowledge_dirs,
         gestures=components.gestures,
         agenda=components.agenda,
+        faces=components.faces,
+        presence=presence,
     )
 
     tasks: list[asyncio.Task[None]] = []
@@ -740,6 +786,13 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
                 camera=components.camera,
             )
             tasks.append(asyncio.create_task(engine.run(), name="live-engine"))
+            if isinstance(components.camera, OpenCVCamera) and (
+                components.policy.enabled or (presence is not None and presence.gate.enabled)
+            ):
+                # El permiso de cámara se pide al arrancar, no con un visitante delante.
+                tasks.append(
+                    asyncio.create_task(_warm_up_camera(components.camera), name="camera-warm-up")
+                )
             devices = DeviceManager(settings, components.hub, camera=components.camera)
             source = (
                 _live_mic_loop(settings, engine, devices.mic_changed)
@@ -928,6 +981,35 @@ async def check_camera(settings: Settings) -> CheckResult:
     )
 
 
+async def check_faces(settings: Settings) -> CheckResult:
+    """¿Reconoce caras? Sin red: mira los modelos y las huellas guardadas (docs/caras.md)."""
+    cfg = settings.faces
+    if not cfg.enabled:
+        return CheckResult("Caras", True, "desactivado (FACES_ENABLED=false)", False)
+    if build_faces(settings) is None:
+        return CheckResult("Caras", True, "sin cámara u OpenCV: no reconoce a nadie", False)
+    folder = Path(cfg.dir)
+    prepare = "uv run --no-sync sonia caras (o se prepara sola al arrancar, con internet)"
+    if not await asyncio.to_thread(models_ready, folder / "modelos"):
+        return CheckResult("Caras", False, f"faltan los modelos: {prepare}", False)
+    book = FaceBook(folder / "huellas" / "caras.json")
+    await asyncio.to_thread(book.load)
+    people = book.people
+    if not people:
+        return CheckResult("Caras", False, f"no hay nadie dado de alta: {prepare}", False)
+    staff = sum(1 for person in people if person.kind == "staff")
+    guests = sum(1 for person in people if person.kind == "guest")
+    greetings = await asyncio.to_thread(load_greetings, settings.faces_greetings_file)
+    greeted = sum(1 for person in people if name_key(person.name) in greetings.people)
+    return CheckResult(
+        "Caras",
+        True,
+        f"{len(people)} personas ({staff} del equipo, {len(people) - staff - guests} ponentes, "
+        f"{guests} conocidas), {greeted} con saludo propio",
+        False,
+    )
+
+
 async def check_llm(settings: Settings) -> CheckResult:
     """Una única petición mínima (``max_tokens=5``) al endpoint configurado."""
     target = f"{settings.llm.base_url} ({settings.llm.model})"
@@ -1029,6 +1111,7 @@ async def run_checks(settings: Settings) -> list[CheckResult]:
     return [
         await check_audio(settings),
         await check_camera(settings),
+        await check_faces(settings),
         await check_live(settings),
         await check_vision_model(settings),
         await check_gestures(settings),
@@ -1092,6 +1175,91 @@ def print_results(results: list[CheckResult]) -> bool:
 async def cmd_check(settings: Settings) -> int:
     results = await run_checks(settings)
     return 0 if print_results(results) else 1
+
+
+# ---------------------------------------------------------------------------
+# Caras (docs/caras.md)
+# ---------------------------------------------------------------------------
+
+
+async def cmd_caras(settings: Settings, *, probe: bool = False, forget: bool = False) -> int:
+    """Baja los modelos, da de alta al equipo y a los ponentes y, con ``--probar``, dice a quién ve.
+
+    No llama a ningún modelo de IA de pago: solo descarga fotos públicas y los
+    modelos de OpenCV. Con ``--probar`` no guarda nada de la cámara. Con
+    ``--olvidar-visitas`` olvida quién ha pasado ya por el stand.
+    """
+    faces = build_faces(settings)
+    if faces is None:
+        print(
+            "El reconocimiento de caras está apagado (FACES_ENABLED=false, sin cámara o sin "
+            "OpenCV: uv sync --extra camera)."
+        )
+        return 1
+    if forget:
+        forgotten = await faces.forget_visits()
+        print(f"Visitas olvidadas: {forgotten} personas ({faces.visits.path}).")
+    schedule = None
+    agenda = build_agenda(settings)
+    if agenda is not None and settings.faces.speakers:
+        await agenda.load()
+        if settings.agenda.enabled:
+            with contextlib.suppress(Exception):
+                await agenda.refresh("sonia caras")
+        schedule = agenda.schedule
+    try:
+        report = await faces.prepare(schedule)
+    except Exception as exc:
+        print(f"No se pudo preparar: {exc}")
+        return 1
+    order = {"staff": 0, "guest": 1, "speaker": 2}
+    people = sorted(faces.book.people, key=lambda person: (order[person.kind], person.name))
+    own = faces.own_greetings
+    group = {"staff": "equipo  ", "guest": "conocida", "speaker": "ponente "}
+    print(f"Reconoce a {len(people)} personas ({faces.book.path}):")
+    for person in people:
+        mark = "  [saludo propio]" if person.id in own else ""
+        print(f"  {group[person.kind]}  {person.label}{mark}")
+    print(
+        f"Saludos propios: {len(own)} ({settings.faces_greetings_file}). "
+        f"Ya pasaron por el stand: {len(faces.visits)} ({faces.visits.path})."
+    )
+    if report.added:
+        print(f"Huellas nuevas: {report.added}")
+    for name in report.removed:
+        print(f"Quitado (ya no está en la lista): {name}")
+    for name, why in report.failed:
+        print(f"Sin huella nueva de {name}: {why}")
+    if not probe:
+        return 1 if not people else 0
+    return await _probe_faces(settings, faces)
+
+
+async def _probe_faces(settings: Settings, faces: FaceWatcher) -> int:
+    """Cada segundo, cada cara de la cámara con su candidato y si pasaría (para calibrar)."""
+    cfg = settings.faces
+    camera = build_camera(settings.vision)
+    print(
+        f"\nMirando la cámara (umbral {cfg.threshold}, margen {cfg.margin}, cara de al menos "
+        f"{cfg.min_face_px} px). Ctrl+C para salir. No se guarda nada."
+    )
+    try:
+        while True:
+            frame = await asyncio.wait_for(camera.capture(), timeout=10.0)
+            probes = await faces.probe(frame) if frame is not None else []
+            if frame is None:
+                print("  sin imagen de la cámara")
+            elif not probes:
+                print("  ninguna cara")
+            for item in probes:
+                verdict = "SÍ" if item.accepted else f"no ({item.why})"
+                print(
+                    f"  cara de {item.width:3d} px -> {item.name}: {item.score:.2f} "
+                    f"(segunda {item.runner_up:.2f}) {verdict}"
+                )
+            await asyncio.sleep(1.0)
+    finally:
+        await _aclose(camera)
 
 
 # ---------------------------------------------------------------------------
@@ -1200,6 +1368,21 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser(
         "check", help="comprobar micrófono, cámara, GPT-Live, visión, gestos y galería"
     )
+
+    caras = commands.add_parser(
+        "caras",
+        help="preparar el reconocimiento del equipo y los ponentes (docs/caras.md); no gasta",
+    )
+    caras.add_argument(
+        "--probar",
+        action="store_true",
+        help="después, decir cada segundo a quién reconoce la cámara (para calibrar)",
+    )
+    caras.add_argument(
+        "--olvidar-visitas",
+        action="store_true",
+        help="olvidar quién ha pasado ya por el stand (por ejemplo, tras las pruebas)",
+    )
     return parser
 
 
@@ -1228,6 +1411,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run(cmd_say(settings, args.text, args.out))
         case "check":
             return _run(cmd_check(settings))
+        case "caras":
+            return _run(cmd_caras(settings, probe=args.probar, forget=args.olvidar_visitas))
     return 2
 
 

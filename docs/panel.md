@@ -147,6 +147,8 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   "voices": ["marin", "cedar", "coral", "sage", "shimmer"],
   "volume": 1.0,
   "mic_gate": 0.0,
+  "mic_presence": {"enabled": true, "ready": true, "watching": true, "status": "hace poco", "idle_s": 95.0,
+                   "hold_s": 600.0, "near_gate_scale": 0.5},
   "notes": "La charla de IA se movió a la sala B.",
   "voice_cache": {"ready": 18, "total": 25, "busy": false},
   "tuning": {
@@ -174,6 +176,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
 - `image` es `null` o `{"id": "logo-sonnet", "caption": "..."}`; `last_error` es `null` o un texto.
 - `animations` es la lista que mandó Unity al conectar (vacía si la app de Unity es anterior a este mensaje o aún no se ha conectado). `current_animation` es el clip que suena según `animation_playing` (`null` si ninguno o sin pantalla) y `disabled_animations`, los que Sonia no usa por su cuenta.
 - `health.mic.level` es el nivel RMS del micrófono (0 a 1, con decaimiento rápido), la misma escala que `mic_gate`. Llega con el estado cada medio segundo.
+- `mic_presence` es la parte de la cámara de la puerta del micro (`null` si esta Sonnia no tiene cámara USB; entonces tampoco está la capacidad `mic_presence`). Arranca con `enabled` según `LIVE_PRESENCE_GATE` (apagada por defecto) o lo último que se eligió en el panel. `status`: `alguien` (una cara cerca en los últimos 10 s: la raya del ruido baja a `near_gate_scale`), `hace poco` (sin nadie desde hace `idle_s`, pero menos de `hold_s`), `nadie` (GPT-Live no oye el micro hasta que llega alguien), `sin caras aún` (la cámara no ha visto ninguna cara desde que arrancó: no cuenta), `sin imagen` (con `watching` en `false`, porque no hay sesión; si no, la cámara no da imagen: no cuenta) o `apagada`. `ready` es `false` mientras falta el modelo YuNet. Con `nadie`, `health.mic.label` lo dice.
 - `usage` es el gasto del día (desde medianoche, sumando los reinicios del orquestador): segundos de sesión de GPT-Live y su coste aproximado con `PANEL_LIVE_PRICE_PER_MINUTE`.
 - `voice_cache` trae también `error` (texto del último fallo al grabar, o vacío).
 - `tuning` son los ajustes de «Developer» (forma de `set_tuning`).
@@ -225,9 +228,10 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `set_subtitles` | `enabled`: bool | Subtítulos en pantalla sí o no. |
 | `set_debug` | `enabled`: bool | Modo debug: Sonia quieta, sin GPT-Live ni nada automático. |
 | `greet` | | Saludo con frase grabada ahora mismo (modos `conversation` y `greeter`). |
-| `showcase` | `enabled`: bool | Animación de stand (frases y bailes solos) sí o no. |
+| `showcase` | `enabled`: bool | Animación de stand (frases, bailes y momentos solos) sí o no. |
 | `set_volume` | `value`: 0 a 1,5 | Volumen de la voz. |
-| `set_mic_gate` | `value`: 0 a 0,2 | Puerta de ruido: por debajo de este nivel el micrófono manda silencio. |
+| `set_mic_gate` | `value`: 0 a 0,2 | Puerta de ruido: por debajo de este nivel GPT-Live no oye el micro (le llega un ruido muy suave). |
+| `set_mic_presence` | `enabled`: bool | «Oír solo con alguien delante»: la parte de la cámara de la puerta del micro, apagada por defecto (necesita la capacidad `mic_presence`). Se guarda en este equipo y manda sobre `LIVE_PRESENCE_GATE`. |
 | `set_voice` | `voice` | Cambia la voz; reinicia la conversación. |
 | `set_notes` | `text` | Avisos del día que Sonia debe conocer; se le pasan al momento. |
 | `set_tuning` | `mouth`, `camera` y/o `idle`: valores sueltos de `tuning` | Ajustes de «Developer»; se mezclan con los que hay y se recortan a sus límites. Un `tuning` guardado sin `idle` lo recibe con sus valores por defecto. |

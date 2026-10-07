@@ -938,6 +938,45 @@ Las medidas salen del rig humanoide, **nunca de los bounds de los renderers**:
 los accesorios (mochilas, armas, el brazo robótico de Seed-san) los ensanchan
 un metro largo y darían un encuadre absurdo.
 
+### Partículas del escenario
+
+`StageParticles` (lo añade `SoniaBootstrap` en Play) enseña un efecto de
+partículas a la vez y funde de uno a otro en algo menos de un segundo:
+
+| Efecto | Cuándo | Qué se ve |
+|---|---|---|
+| Ambiente | Por defecto | Las `Motes` de `SoniaStage`, adoptadas tal cual y reescaladas con los ajustes. |
+| Trivia | Mientras hay una trivia en pantalla (también la pantalla final) | Destellos que suben y símbolos («?», «!», estrellas) en los colores de Google, entre Sonia y el halo; una explosión de destellos desde su pecho en cada acierto y otra mayor al ganar. Mezcla con alfa, no aditiva: sobre el azul del fondo se ven los colores. |
+| Matrix | Con `activity` `search` o `think` del orquestador (busca en internet o una tarea delegada pasa de 5 s), al menos 2,5 s | Columnas de glifos verdes que caen detrás de Sonia, a la distancia del halo y del tamaño de lo que ve la cámara; la cabeza de cada gota nace casi blanca y deja un rastro que se apaga en verde. El fondo de la marca se oscurece un 30 % (queda al 70 % de su brillo y se sigue viendo detrás; `StageScreen.BackdropShade`). |
+
+Si coinciden, manda la trivia: sus respuestas pasan por el backend y no deben
+encender la lluvia cada vez. Los glifos son dos atlas en
+`Assets/Resources/Particles` (katakana en espejo, cifras y símbolos para Matrix;
+los símbolos de la trivia), generados con `scripts/particulas_glifos.py` (usa
+fuentes de macOS para el katakana). Los materiales se clonan del de las motas,
+que ya está en la build con su variante de shader.
+
+**Esc > Partículas** (`Graphics/ParticleSettingsMenu.cs`) elige un efecto y lo
+enseña al momento mientras el menú está abierto (en la trivia, con la explosión
+de un acierto cada pocos segundos); el panel va abajo y el fondo apenas se
+oscurece para verlo. Por efecto: cantidad (de 0 a 400 %; 0 lo apaga y en su
+lugar sale el ambiente), velocidad (25 a 300 %), tamaño (50 a 500 %) y brillo
+(25 a 300 %). «Cambio automático» en No deja siempre el ambiente. R o
+«Restablecer este efecto» lo vuelve a como está montado. Se guarda en
+PlayerPrefs de cada equipo (`ParticleSettings`). La opción «Partículas» de la
+calidad gráfica las apaga todas, también la lluvia (Baja ya lo hace).
+
+Para verlos en el editor, **Sonia > Partículas** entra en Play y fuerza uno
+(Matrix, trivia o ambiente) o una demostración que alterna Matrix y la trivia
+cada 10 s hasta salir de Play (`Editor/SoniaParticlePreview.cs`); con el editor
+cerrado, `Unity -projectPath unity -executeMethod
+Sonia.EditorTools.SoniaParticlePreview.DemoFromCommandLine` lo abre ya con la
+demostración. Para grabarlos fotograma a fotograma, el laboratorio de cara (`scripts/facelab/run_lab.sh`)
+acepta los pasos `message` (un mensaje del protocolo en `text`, por ejemplo
+`{"type": "activity", "activity": "search"}` o los de la trivia), `particles`
+(`ambient`, `trivia` o `matrix` a la fuerza), `tuning` y `menu` (ver
+[`cara-y-lipsync.md`](cara-y-lipsync.md)).
+
 ### Panel de imágenes
 
 En el plano medio no cabe una imagen que se lea: a los lados de la cabeza quedan
@@ -1514,7 +1553,7 @@ En **Edit > Project Settings > Audio**:
    | Tecla | Qué hace |
    |---|---|
    | F1 | Muestra y esconde el HUD |
-   | Escape | Abre el menú de opciones (siempre, también sin `-dev-ui`): **Calidad gráfica**, **Editar a Sonia** y **Micrófono, cámara y pantalla** (`StandSettingsMenu`: micrófono y cámara que usa el orquestador de este equipo, por defecto los del sistema, con `list_devices`/`set_device`; resolución 9:16 de la ventana y ventana o pantalla completa, que Unity recuerda solo). Dentro de cada submenú, Esc vuelve a las opciones. Con el editor de personaje abierto no hace nada. Para callar a Sonia, el botón **Interrumpir** |
+   | Escape | Abre el menú de opciones (siempre, también sin `-dev-ui`): **Calidad gráfica**, **Editar a Sonia**, **Partículas** (sección «Partículas del escenario») y **Micrófono, cámara y pantalla** (`StandSettingsMenu`: micrófono y cámara que usa el orquestador de este equipo, por defecto los del sistema, con `list_devices`/`set_device`; resolución 9:16 de la ventana y ventana o pantalla completa, que Unity recuerda solo). Dentro de cada submenú, Esc vuelve a las opciones. Con el editor de personaje abierto no hace nada. Para callar a Sonia, el botón **Interrumpir** |
    | Enter | Envía el texto escrito |
 
 6. Para ver el detalle de cada mensaje, marcar **Verbose Log** en `SoniaClient`
@@ -1547,11 +1586,13 @@ cuando el orquestador lo pida con `request_frame`.
    Si el escritorio está en horizontal, la ventana en pantalla completa saldrá
    apaisada y con bandas negras.
 6. Construir fuera del repositorio: las builds no se suben (ver `.gitignore`).
-7. **Menú de opciones (Esc)**: lleva a **Calidad gráfica** y a **Editar a Sonia**
+7. **Menú de opciones (Esc)**: lleva a **Calidad gráfica**, a **Editar a Sonia**,
+   a **Micrófono, cámara y pantalla** y a **Partículas** (efectos y ajustes de las
+   partículas del escenario, sección «Partículas del escenario»)
    (el editor de personaje de Sonia; el de Jean solo se abre desde el panel). Al
    guardar en el editor, el personaje va al orquestador, que lo guarda como
    ajuste compartido y lo devuelve con `set_avatar`: sin orquestador conectado no
-   cambia hasta que se conecte. ↑↓ elige, Intro abre, 1 y 2 son atajos.
+   cambia hasta que se conecte. ↑↓ elige, Intro abre, 1 a 4 son atajos.
    **Calidad gráfica** abre un menú con Alta, Media,
    Baja y Personalizada, los FPS medidos y cada opción (resolución con
    reescalado FSR, suavizado, sombras, oclusión ambiental, desenfoque del fondo,
@@ -1622,7 +1663,11 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `WebcamFrameSender.cs` | Captura de `WebCamTexture` y envío en JPEG cuando llega `request_frame` |
 | `SoniaDebugUI.cs` | HUD de conexión, subtítulos, entrada de texto y botón de interrumpir |
 | `Graphics/GraphicsQuality*.cs` | Calidad gráfica: niveles y opciones, el controlador que los aplica sobre lo montado y su menú |
-| `Graphics/SoniaOptionsMenu.cs` | Menú de opciones de Esc: calidad gráfica y editor de personaje de Sonia |
+| `Graphics/SoniaOptionsMenu.cs` | Menú de opciones de Esc: calidad gráfica, editor de personaje de Sonia, micrófono, cámara y pantalla, y partículas |
+| `Graphics/ParticleSettingsMenu.cs` | Menú **Partículas**: efecto con vista previa, cantidad, velocidad, tamaño y brillo, y si cambian solos |
+| `StageParticles.cs` | Partículas del escenario: motas, efecto de la trivia y lluvia estilo Matrix (con `activity`), con fundidos |
+| `ParticleSettings.cs` | Ajustes de las partículas por efecto, guardados en PlayerPrefs |
+| `Editor/SoniaParticlePreview.cs` | Menú **Sonia > Partículas**: fuerza un efecto en Play o una demostración que alterna Matrix y la trivia |
 | `SoniaBootstrap.cs` | Enlaza todo y aplica los ajustes de kiosco |
 | `Editor/SoniaSceneSetup.cs` | Menús **Sonia > Crear escena base**, **Configurar build 9:16** y **Actualizar componentes** |
 | `Editor/SoniaMotionSetBuilder.cs` | Menú **Sonia > Crear set de animaciones**: importa los FBX, rellena el set, genera la máscara y cablea la escena |

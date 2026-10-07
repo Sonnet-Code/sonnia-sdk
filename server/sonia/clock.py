@@ -21,6 +21,7 @@ __all__ = [
     "place_of",
     "resolve_timezone",
     "spoken_date",
+    "spoken_hour",
     "spoken_now",
     "spoken_time",
 ]
@@ -93,6 +94,11 @@ def spoken_date(moment: datetime) -> str:
 
 def spoken_time(moment: datetime) -> str:
     """``19:05 (las 7:05 de la noche)``: la hora de 24 h y como se dice en el Caribe."""
+    return f"{moment.hour:02d}:{moment.minute:02d} ({spoken_hour(moment)})"
+
+
+def spoken_hour(moment: datetime) -> str:
+    """``las 7:05 de la noche``: la hora como se dice en el Caribe."""
     hour = moment.hour
     twelve = hour % 12 or 12
     if hour < 6:
@@ -106,7 +112,7 @@ def spoken_time(moment: datetime) -> str:
     else:
         part = "de la noche"
     article = "la" if twelve == 1 else "las"
-    return f"{hour:02d}:{moment.minute:02d} ({article} {twelve}:{moment.minute:02d} {part})"
+    return f"{article} {twelve}:{moment.minute:02d} {part}"
 
 
 def spoken_now(moment: datetime, place: str = "") -> str:

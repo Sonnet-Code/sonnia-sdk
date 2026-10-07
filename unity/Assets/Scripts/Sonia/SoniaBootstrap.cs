@@ -297,6 +297,13 @@ namespace Sonia
                 gameObject.AddComponent<StageScreen>();
             }
 
+            if (GetComponent<StageParticles>() == null)
+            {
+                // También por código: las partículas del escenario (motas, trivia
+                // y la lluvia estilo Matrix cuando busca o tarda).
+                gameObject.AddComponent<StageParticles>();
+            }
+
             if (GetComponent<AvatarEditorLauncher>() == null)
             {
                 // También por código: abre la escena del editor de personaje cuando

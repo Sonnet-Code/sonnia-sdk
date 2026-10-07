@@ -31,6 +31,14 @@ Cambio de estado del asistente. Unity lo usa para disparar animaciones.
 
 Valores: `idle`, `listening`, `thinking`, `speaking`. GPT-Live no emite eventos de turno, así que el orquestador los deduce: `listening` mientras llega transcripción del visitante, `thinking` tras su turno o mientras el backend ejecuta una acción, `speaking` con el primer audio de Sonia, `idle` cuando Unity termina de reproducir.
 
+### `activity`
+
+Qué hace Sonia por detrás, para los efectos de la escena: `search` mientras el backend busca en internet (`web_search`), `think` si una tarea delegada en el backend lleva más de `SLOW_TASK_S` (5 s; las normales tardan unos 3,4 s) y `none` cuando no pasa nada de eso. Se manda solo al cambiar, también mientras Sonia habla (si dice «déjame buscarlo» mientras el backend sigue). Unity enseña la lluvia estilo Matrix con `search` o `think` (`StageParticles`, al menos 2,5 s) salvo durante la trivia. No es fijo: no se repite tras `hello`. Una Unity que no lo conoce lo ignora.
+
+```json
+{"type": "activity", "activity": "search"}
+```
+
 ### `transcript`
 
 Texto de lo que dice el visitante (`user`) o Sonia (`assistant`), para los subtítulos y el panel. `final` es `false` mientras el texto sigue creciendo; cada mensaje trae el texto acumulado, no solo lo nuevo.

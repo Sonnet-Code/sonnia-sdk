@@ -33,15 +33,19 @@ from sonia.panel.control import (
 )
 from sonia.panel.logs import LogBuffer
 from sonia.panel.server import AccessVerifier, PanelServer
+from sonia.vision.presence import PresenceWatch
 from sonia.ws.hub import Hub
 from tests.helpers import Recorder
 from tests.test_live import (
     RATE,
     FakeConn,
     FakeLiveServer,
+    NoCamera,
     make_settings,
     pcm,
+    pcm_level,
     running,
+    voice_block,
     wait_until,
 )
 
@@ -98,6 +102,7 @@ async def make_panel_rig(
     state: PanelState | None = None,
     material: _Material | None = None,
     trial_minutes: float = 0.0,
+    presence: PresenceWatch | None = None,
     **overrides: Any,
 ) -> AsyncIterator[PanelRig]:
     from websockets.asyncio.client import connect
@@ -120,6 +125,7 @@ async def make_panel_rig(
             connect=live_connect,
             knowledge_dir=tmp_path,
             voice_cache=cache,
+            presence=presence,
             tick_s=0.02,
         )
         control = StandControl(
@@ -244,13 +250,13 @@ async def test_gpt_live_no_oye_la_frase_grabada_mientras_suena(
         await rig.rec.wait_type("speech_end")
         await rig.engine.push_mic(loud)
         await conn.wait_type("session.input_audio.append")
-        assert not any(conn.audio_in()[-1])
+        assert pcm_level(conn.audio_in()[-1]) < 0.01
         # Unity confirma que terminó de sonar: pasada la cola, GPT-Live vuelve a oír.
         rig.engine.notify_playback_done(rig.rec.of_type("speech_start")[-1]["utterance_id"])
         await asyncio.sleep(0.1)
         await rig.engine.push_mic(loud)
         await conn.wait_type("session.input_audio.append", count=2)
-        assert any(conn.audio_in()[-1])
+        assert pcm_level(conn.audio_in()[-1]) == pytest.approx(0.5, rel=0.01)
 
 
 async def test_sin_frase_grabada_saluda_solo_con_el_gesto(tmp_path: Path) -> None:
@@ -708,7 +714,7 @@ async def test_silenciar_el_micro_manda_silencio(tmp_path: Path) -> None:
         await rig.control.act("mute", {"muted": True})
         await rig.engine.push_mic(np.full(768, 0.5, dtype=np.float32))
         await conn.wait_type("session.input_audio.append")
-        assert not any(conn.audio_in()[-1])
+        assert pcm_level(conn.audio_in()[-1]) < 0.01
         health = rig.control.status()["health"]["mic"]
         assert health["ok"] is False and health["muted"] is True
 
@@ -971,3 +977,44 @@ async def test_sin_banco_la_trivia_no_esta_disponible(tmp_path: Path) -> None:
         assert rig.control.status()["trivia"]["available"] is False
         ok, message = await rig.control.act("trivia_start", {})
         assert not ok and "preguntas" in message
+
+
+async def test_interruptor_oir_solo_con_alguien_delante(tmp_path: Path) -> None:
+    watch = PresenceWatch(make_settings(tmp_path).live, NoCamera(), model=tmp_path / "no-esta.onnx")
+    async with make_panel_rig(tmp_path, presence=watch) as rig:
+        # Arranca apagado (LIVE_PRESENCE_GATE) y se enciende y apaga en caliente.
+        assert "mic_presence" in rig.control.capabilities
+        assert rig.control.status()["mic_presence"]["enabled"] is False
+        ok, _ = await rig.control.act("set_mic_presence", {"enabled": True})
+        assert ok and watch.gate.enabled is True
+        ok, _ = await rig.control.act("set_mic_presence", {"enabled": False})
+        assert ok and watch.gate.enabled is False
+        assert rig.control.status()["mic_presence"]["enabled"] is False
+    # Se guarda en este equipo: al volver a arrancar sigue apagado.
+    assert PanelState.load(Path(rig.settings.panel.state_file)).mic_presence is False
+    live = make_settings(tmp_path, presence_gate=True).live
+    watch = PresenceWatch(live, NoCamera(), model=tmp_path / "no-esta.onnx")
+    async with make_panel_rig(tmp_path, presence=watch) as rig:
+        assert watch.gate.enabled is False  # lo guardado en el panel manda sobre el .env
+
+
+async def test_sin_camara_usb_no_hay_interruptor_de_alguien_delante(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path) as rig:
+        assert "mic_presence" not in rig.control.capabilities
+        ok, _ = await rig.control.act("set_mic_presence", {"enabled": True})
+        assert not ok
+        assert rig.control.status()["mic_presence"] is None
+
+
+async def test_salud_del_micro_sin_nadie_delante(tmp_path: Path) -> None:
+    live = make_settings(tmp_path, presence_gate=True).live
+    watch = PresenceWatch(live, NoCamera(), model=tmp_path / "no-esta.onnx")
+    async with make_panel_rig(tmp_path, presence=watch) as rig:
+        conn = await rig.conn()
+        now = time.monotonic()
+        watch.gate.scanned(1, now - 1_000.0)
+        watch.gate.scanned(0, now)
+        await rig.engine.push_mic(voice_block(0.5))
+        await conn.wait_type("session.input_audio.append")
+        mic = rig.control.status()["health"]["mic"]
+        assert mic["ok"] is True and "sin nadie delante" in mic["label"]

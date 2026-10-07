@@ -53,6 +53,55 @@ MAX_READ_FAILURES = 2
 READ_TIMEOUT_S = 2.0
 
 
+#: Cuánto espera el arranque a que alguien acepte el aviso de permiso de cámara de macOS.
+PERMISSION_WAIT_S = 120.0
+
+#: Qué hacer si macOS no deja usar la cámara (``tccutil`` lo deja sin decidir otra vez).
+MAC_CAMERA_DENIED = (
+    "macOS no deja usar la cámara a este proceso: Sonia no podrá mirar. Actívalo en Ajustes "
+    "del Sistema > Privacidad y seguridad > Cámara para la app que lanza Sonia (la terminal o "
+    "Sonnia) y vuelve a arrancarla, o ejecuta «tccutil reset Camera» para que lo pregunte otra vez."
+)
+
+#: ``AVAuthorizationStatus`` de AVFoundation.
+_MAC_CAMERA_STATUS = {0: "undetermined", 1: "restricted", 2: "denied", 3: "authorized"}
+
+
+def mac_camera_access() -> str | None:
+    """Permiso de cámara de este proceso en macOS, sin pedirlo ni abrir nada.
+
+    ``authorized``, ``denied``, ``restricted`` o ``undetermined`` (aún no se ha
+    preguntado). ``None`` fuera de macOS o si no se puede saber.
+    """
+    if sys.platform != "darwin":
+        return None
+    try:
+        import ctypes
+        import ctypes.util
+
+        objc_path = ctypes.util.find_library("objc")
+        if not objc_path:
+            return None
+        objc = ctypes.CDLL(objc_path)
+        avfoundation = ctypes.CDLL("/System/Library/Frameworks/AVFoundation.framework/AVFoundation")
+        objc.objc_getClass.restype = ctypes.c_void_p
+        objc.objc_getClass.argtypes = [ctypes.c_char_p]
+        objc.sel_registerName.restype = ctypes.c_void_p
+        objc.sel_registerName.argtypes = [ctypes.c_char_p]
+        send = objc.objc_msgSend
+        send.restype = ctypes.c_long
+        send.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        device_class = objc.objc_getClass(b"AVCaptureDevice")
+        video = ctypes.c_void_p.in_dll(avfoundation, "AVMediaTypeVideo").value
+        if not device_class or not video:
+            return None
+        selector = objc.sel_registerName(b"authorizationStatusForMediaType:")
+        return _MAC_CAMERA_STATUS.get(int(send(device_class, selector, video)))
+    except Exception:  # noqa: BLE001 - es solo un aviso
+        logger.debug("No se pudo comprobar el permiso de cámara", exc_info=True)
+        return None
+
+
 def encode_frame(bgr: Any, max_width: int, quality: int) -> Frame | None:
     """Redimensiona un array BGR de OpenCV y lo codifica en JPEG.
 
@@ -169,6 +218,61 @@ class OpenCVCamera:
         if device is not None:
             await asyncio.to_thread(_release_quietly, device)
         logger.info("Cámara cambiada a la %d", self._settings.camera_index)
+
+    async def warm_up(
+        self,
+        *,
+        wait_s: float = PERMISSION_WAIT_S,
+        access: Callable[[], str | None] = mac_camera_access,
+        poll_s: float = 1.0,
+    ) -> bool:
+        """Abre la cámara al arrancar para que el permiso se pida ya y no con un visitante delante.
+
+        En macOS, la primera vez que un proceso abre la cámara el sistema enseña
+        su aviso de permiso y esa apertura falla: Sonia decía «no pude tomar la
+        captura» en mitad de la conversación (7 de octubre de 2026). Aquí se abre
+        al arrancar, se espera a que alguien acepte el aviso (hasta ``wait_s``) y
+        se vuelve a abrir, así la primera foto que pida Sonia ya sale. El frame
+        de prueba se tira. Devuelve si la cámara da imagen.
+        """
+        status = await asyncio.to_thread(access)
+        if status in ("denied", "restricted"):
+            logger.warning(MAC_CAMERA_DENIED)
+            return False
+        frame = await self.capture()
+        if frame is None and status == "undetermined":
+            logger.warning(
+                "macOS pide permiso para usar la cámara: acepta el aviso del sistema "
+                "(se espera hasta %.0f s)",
+                wait_s,
+            )
+            deadline = time.monotonic() + wait_s
+            while status == "undetermined" and time.monotonic() < deadline:
+                await asyncio.sleep(poll_s)
+                status = await asyncio.to_thread(access)
+            if status in ("denied", "restricted"):
+                logger.warning(MAC_CAMERA_DENIED)
+                return False
+            if status == "authorized":
+                logger.info("Permiso de cámara concedido")
+                async with self._lock:
+                    self._retry_after = 0.0
+                frame = await self.capture()
+        if frame is None:
+            logger.warning(
+                "La cámara %s no da imagen al arrancar: Sonia no podrá mirar hasta que se "
+                "arregle (se reintenta sola cada %.0f s)",
+                self._settings.camera_index,
+                OPEN_RETRY_COOLDOWN_S,
+            )
+            return False
+        logger.info(
+            "Cámara lista (índice %s, %dx%d)",
+            self._settings.camera_index,
+            frame.width,
+            frame.height,
+        )
+        return True
 
     async def _ensure_open(self) -> Any | None:
         if self._capture is not None:

@@ -118,6 +118,8 @@ async def test_un_gesto_concreto_lo_busca_el_director_y_suena_entero() -> None:
     catalog, sent = make_catalog(with_sage("bigCheer", "wave"))
     result = await play_animation(ctx_with_director(catalog, director), {"gesto": "celebrar"})
     assert result.text.startswith("Hecho: Sonia está haciendo «celebrar»")
+    # Con lo que se ve de verdad (su ficha), para que Sonia no prometa más.
+    assert "(lo que se ve: Gesto bigCheer.)" in result.text
     assert sent.messages == [{"type": "play_animation", "clip": "bigCheer", "whole": True}]
     assert director_sent.messages == []
     assert "«celebrar»" in llm.user()
@@ -135,7 +137,8 @@ async def test_un_gesto_que_no_hay_ofrece_los_movimientos_o_usa_el_de_respaldo()
     result = await play_animation(
         ctx_with_director(catalog, director), {"gesto": "volar", "movimiento": "bailar"}
     )
-    assert result.text.startswith("Hecho")
+    # Y Sonia sabe que no es lo que pidieron.
+    assert result.text.startswith("No tienes un gesto que sea «volar»: en su lugar Sonia está")
     assert sent.messages == [{"type": "play_animation", "clip": "QuickAction_vibe", "whole": True}]
 
 

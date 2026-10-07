@@ -259,6 +259,17 @@
           <p class="meter-caption" id="gate-meter-caption">Micrófono: sin datos</p>
           <p class="cap-note" data-cap-note="mic_gate" hidden>No disponible con el motor de voz actual.</p>
         </div>
+
+        <div class="control">
+          <label class="switch">
+            <input type="checkbox" role="switch" id="front-input" data-cap="mic_presence">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Oír solo con alguien delante</span>
+          </label>
+          <p class="help">Normalmente no hace falta: Sonnia ya ignora sola las conversaciones del pasillo. Encendido, la cámara mira si hay alguien cerca y, tras un buen rato sin nadie delante ni conversación, Sonnia deja de oír hasta que llegue alguien. Apágalo si Sonnia no oye a quien tiene delante.</p>
+          <p class="meter-caption" id="front-caption">Cámara: sin datos</p>
+          <p class="cap-note" data-cap-note="mic_presence" hidden>Esta Sonnia no puede mirar quién hay delante: no tiene cámara USB o hay que actualizar el orquestador.</p>
+        </div>
       </section>
     </div>
 

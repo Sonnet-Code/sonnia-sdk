@@ -225,7 +225,7 @@ namespace Sonia
             AddOption(panel.transform, "Brillo (bloom)",
                 () => BloomLabel(Options.bloom),
                 dir => Edit(o => o.bloom = (BloomLevel)CycleEnum((int)o.bloom, 3, -dir)));
-            AddOption(panel.transform, "Partículas de ambiente",
+            AddOption(panel.transform, "Partículas",
                 () => Options.particles ? "Sí" : "No",
                 dir => Edit(o => o.particles = !o.particles));
             AddOption(panel.transform, "Fotogramas por segundo",

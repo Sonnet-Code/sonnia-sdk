@@ -84,7 +84,7 @@ namespace Sonia
         public BlurLevel backgroundBlur = BlurLevel.Full;
         public BloomLevel bloom = BloomLevel.High;
 
-        [Tooltip("Partículas de ambiente (las motas del escenario).")]
+        [Tooltip("Partículas del escenario: las motas y los efectos de la trivia y de Matrix (StageParticles).")]
         public bool particles = true;
 
         public int targetFrameRate = 60;

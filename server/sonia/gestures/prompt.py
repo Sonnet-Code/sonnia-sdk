@@ -200,10 +200,11 @@ def build_request_message(request: str) -> str:
             "Petición: el visitante le pide a Sonnia que haga este gesto o movimiento: "
             + _quote(request, REQUEST_CHARS)
             + ".",
-            "Elige el gesto de la lista que mejor hace exactamente eso, fijándote sobre todo en "
-            "la descripción física. Aquí no cuentan la frecuencia (vale aunque sea Rare o "
-            "Uncommon), los gestos recientes ni la apertura: lo ha pedido el visitante.",
-            "Si ninguno se parece de verdad, o lo que pide no es apropiado en un entorno "
+            "Elige el gesto de la lista cuya descripción física hace eso mismo. No vale uno que "
+            "solo se le parezca en la intención o el ánimo: para «hacer un truco de magia» no "
+            "vale mover las manos de cualquier forma. Aquí no cuentan la frecuencia (vale aunque "
+            "sea Rare o Uncommon), los gestos recientes ni la apertura: lo ha pedido el visitante.",
+            "Si ninguno lo hace de verdad, o lo que pide no es apropiado en un entorno "
             "profesional, contesta ninguno.",
             'Responde solo con {"gesto": "..."}.',
         ]

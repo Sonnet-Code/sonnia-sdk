@@ -148,6 +148,14 @@ def test_msg_del_editor_de_personaje_con_target() -> None:
     assert p.parse_avatar_target({"type": "avatar_saved", "target": "guest"}) == "guest"
 
 
+def test_msg_activity() -> None:
+    assert p.msg_activity("search") == {"type": "activity", "activity": "search"}
+    assert p.msg_activity("think")["activity"] == "think"
+    assert p.msg_activity("none")["activity"] == "none"
+    with pytest.raises(ValueError):
+        p.msg_activity("bailando")
+
+
 def test_dumps_keeps_accents() -> None:
     text = p.dumps(p.msg_speech_start(1, "¿cómo estás?"))
     assert "¿cómo estás?" in text

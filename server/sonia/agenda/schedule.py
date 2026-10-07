@@ -8,9 +8,10 @@ lista de cambios en frases (:func:`diff_agenda`).
 from __future__ import annotations
 
 import logging
+import math
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime, tzinfo
+from datetime import datetime, timedelta, tzinfo
 from typing import Any
 
 from sonia.clock import spoken_date
@@ -22,6 +23,8 @@ __all__ = [
     "diff_agenda",
     "happening",
     "render_agenda",
+    "starting_soon",
+    "today_now_and_next",
 ]
 
 logger = logging.getLogger(__name__)
@@ -429,3 +432,57 @@ def happening(schedule: Schedule, now: datetime, tz: tzinfo) -> str:
             + "."
         )
     return " ".join(parts)
+
+
+def today_now_and_next(schedule: Schedule, now: datetime, tz: tzinfo) -> str:
+    """Lo que hay ahora y lo siguiente de hoy, para hablar del momento en el evento.
+
+    Vacío si hoy ya no queda nada (antes del evento, entre días o al terminar):
+    Sonia solo se usa dentro del DevFest y quien pasa ya está en él, así que no
+    tiene sentido anunciarle «empieza el viernes» (7 de octubre de 2026).
+    """
+    today = now.astimezone(tz).date()
+    talks = [t for t in schedule.talks if t.starts_at.astimezone(tz).date() == today]
+    current = [t for t in talks if t.starts_at <= now < t.ends_at]
+    upcoming = sorted((t for t in talks if t.starts_at > now), key=lambda t: t.starts_at)
+    parts: list[str] = []
+    if current:
+        parts.append("Ahora mismo: " + "; ".join(_short(t) for t in current) + ".")
+    if upcoming:
+        soon = upcoming[0].starts_at
+        batch = [t for t in upcoming if t.starts_at == soon]
+        local = soon.astimezone(tz)
+        parts.append(
+            f"Lo siguiente, a las {_hm(local)} {_day_part(local)}: "
+            + "; ".join(_short(t) for t in batch)
+            + "."
+        )
+    return " ".join(parts)
+
+
+def _is_pause(talk: Talk) -> bool:
+    """¿Es un descanso o la comida? La apertura y el cierre no: se avisan como una charla."""
+    return talk.title.strip().lower() in _BREAK_NAMES
+
+
+def starting_soon(
+    schedule: Schedule, now: datetime, tz: tzinfo, lead: timedelta
+) -> tuple[datetime, str] | None:
+    """Las sesiones que empiezan dentro de ``lead``, ya contadas, y su hora de inicio.
+
+    Solo la tanda más próxima y sin descansos ni comida. ``None`` si no empieza
+    ninguna tan pronto.
+    """
+    soon = [t for t in schedule.talks if now < t.starts_at <= now + lead and not _is_pause(t)]
+    if not soon:
+        return None
+    start = min(t.starts_at for t in soon)
+    batch = [t for t in soon if t.starts_at == start]
+    local = start.astimezone(tz)
+    minutes = max(1, math.ceil((start - now).total_seconds() / 60))
+    text = (
+        f"A las {_hm(local)} {_day_part(local)} (dentro de {minutes} min) empieza: "
+        + "; ".join(_short(t) for t in batch)
+        + "."
+    )
+    return start, text
