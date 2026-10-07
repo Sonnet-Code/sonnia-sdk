@@ -22,7 +22,10 @@
 // fallos (o un rato) se enseña como último recurso el doble (Sticker) que la
 // escena guarda desactivado, y se sigue reintentando; si una carga se abandona
 // por tiempo, el avatar que el SDK entregue tarde se suelta (si no, quedaba una
-// copia de Sonia en escena). Con el editor de personaje en pantalla
+// copia de Sonia en escena). Mientras no hay ningún avatar del SDK puesto (la
+// primera carga en cada equipo, que descarga unos 90 MB), la carga no se abandona a
+// los stepTimeoutSeconds: se espera hasta FirstLoadMinutes. Abandonarla y pedir otra
+// cada 90 s dejaba la primera vez en el doble hasta reabrir la app. Con el editor de personaje en pantalla
 // (AvatarEditorSession.IsOpen) Sonia no se pinta, así que los cambios ni se
 // montan hasta que se cierre: montar a la vez que el editor se atascaba.
 //
@@ -124,6 +127,16 @@ namespace Sonia
 
         /// <summary>Tope de cada BeforeShow (s).</summary>
         private const float BeforeShowTimeoutSeconds = 8f;
+
+        /// <summary>
+        /// Hasta cuánto se espera la carga mientras no hay ningún avatar del SDK puesto (la
+        /// primera de cada equipo). Descarga unos 90 MB de piezas y, con una conexión normal, no
+        /// cabe en stepTimeoutSeconds. Abandonarla y pedir otra cada 90 s la dejaba en el doble
+        /// para siempre (Windows, 7 de octubre de 2026): al reabrir, con las piezas ya en la
+        /// caché, montaba en segundos. Una hora: no se sabe cómo será la red del DevFest y
+        /// reintentar no ayuda; mientras tanto se ve el doble.
+        /// </summary>
+        private const float FirstLoadMinutes = 60f;
 
         /// <summary>Donde espera el avatar mientras carga, lejos de la cámara.</summary>
         private static readonly Vector3 ParkedPosition = new Vector3(0f, -1000f, 0f);
@@ -453,6 +466,10 @@ namespace Sonia
         private async UniTask<string> TryLoadAsync(string json, int version, CancellationToken token)
         {
             TimeSpan limit = TimeSpan.FromSeconds(Mathf.Max(5f, stepTimeoutSeconds));
+            // Sin ningún avatar del SDK puesto, la descarga y el montaje se esperan más (ver FirstLoadMinutes).
+            bool first = _avatar == null;
+            TimeSpan patient = first ? TimeSpan.FromMinutes(Mathf.Max(FirstLoadMinutes, (float)limit.TotalMinutes)) : limit;
+            TimeSpan stepLimit = limit;
             ManagedAvatar pending = null;
             // Paso en curso, para decir en qué se quedó si falla o tarda.
             string step = "iniciar el SDK";
@@ -475,7 +492,8 @@ namespace Sonia
 
                 // La precarga solo adelanta descargas; si falla, la carga lo vuelve a intentar.
                 step = "precargar las piezas";
-                bool cached = await AvatarSdk.PrecacheAvatarAssetsByDefinitionAsync(json).Timeout(limit);
+                stepLimit = patient;
+                bool cached = await AvatarSdk.PrecacheAvatarAssetsByDefinitionAsync(json).Timeout(patient);
                 if (!cached && _failures == 0)
                 {
                     Debug.LogWarning("[Sonia] Genies no pudo precargar las piezas del avatar; se intenta montarlo igual.", this);
@@ -506,7 +524,8 @@ namespace Sonia
                 }).Preserve();
                 try
                 {
-                    pending = await load.Timeout(limit);
+                    stepLimit = patient;
+                    pending = await AwaitLoad(load, limit, patient);
                 }
                 catch (TimeoutException)
                 {
@@ -531,6 +550,7 @@ namespace Sonia
                 if (!pending.IsLoadingComplete)
                 {
                     step = "terminar de cargar el avatar";
+                    stepLimit = limit;
                     await complete.Task.Timeout(limit);
                 }
 
@@ -577,7 +597,7 @@ namespace Sonia
             }
             catch (TimeoutException)
             {
-                return "«" + step + "» tardó más de " + limit.TotalSeconds.ToString("F0") + " s";
+                return "«" + step + "» tardó más de " + stepLimit.TotalSeconds.ToString("F0") + " s";
             }
             catch (OperationCanceledException)
             {
@@ -598,6 +618,40 @@ namespace Sonia
                 if (pending != null && !pending.IsDisposed)
                 {
                     pending.Dispose();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Espera a que el SDK entregue el avatar hasta <paramref name="total"/>, sin abandonar
+        /// la carga ni pedir otra; cada <paramref name="step"/> deja en el registro cómo va.
+        /// Lanza TimeoutException al agotar <paramref name="total"/>.
+        /// </summary>
+        private async UniTask<ManagedAvatar> AwaitLoad(UniTask<ManagedAvatar> load, TimeSpan step, TimeSpan total)
+        {
+            DateTime until = DateTime.UtcNow + total;
+            while (true)
+            {
+                TimeSpan left = until - DateTime.UtcNow;
+                if (left <= TimeSpan.Zero)
+                {
+                    throw new TimeoutException();
+                }
+
+                try
+                {
+                    return await load.Timeout(left < step ? left : step);
+                }
+                catch (TimeoutException)
+                {
+                    if (DateTime.UtcNow >= until - TimeSpan.FromSeconds(1))
+                    {
+                        throw;
+                    }
+
+                    Debug.Log("[Sonia] Genies sigue montando el avatar (la primera vez en este equipo descarga "
+                              + "las piezas; se espera hasta " + total.TotalMinutes.ToString("F0")
+                              + " min). En el aparcamiento: " + DescribeParking(), this);
                 }
             }
         }

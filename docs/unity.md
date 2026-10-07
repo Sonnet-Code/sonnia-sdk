@@ -282,6 +282,17 @@ vez descarga las piezas de Sonia, del invitado y de la gorra de referencia de la
 trivia (unos 90 MB con las texturas de alta resolución); después arranca sin
 descargar.
 
+Esa primera carga puede pasar de los 90 s de cada paso del cargador. Mientras no
+hay ningún avatar del SDK puesto, `GeniesAvatarLoader` la espera hasta una hora
+sin abandonarla (no se sabe cómo será la red del DevFest) y deja en el registro
+cómo va cada 90 s; mientras tanto se ve el doble. Antes la abandonaba a los 90 s y
+pedía otra que competía con la primera: en el primer PC con Windows (7 de octubre
+de 2026) se quedó en el doble hasta que se reabrió la app, y entonces montó en
+segundos. Aun así, conviene:
+- abrir la app una vez en el equipo del stand antes del evento, con internet;
+- al cambiar de build, copiar la carpeta `cache/` de la anterior a la nueva, para
+  no descargar las piezas otra vez.
+
 El post-procesado (Volume con ACES y bloom) se ve también en la app: en
 `UniversalRenderPipelineGlobalSettings` está desactivado «Strip Unused Post
 Processing Variants», que recortaba el shader `PaniniProjection` y con él todos
