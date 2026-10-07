@@ -97,6 +97,18 @@ REMIND_TEXT = (
     "(están en la pantalla)."
 )
 
+#: Empujón si el visitante habló en plena partida y GPT-Live no delegó nada: a veces
+#: decía «la termino» o «la marco» sin delegar (7 de octubre de 2026). Lo decide ella.
+NUDGE_TEXT = (
+    "TRIVIA: el visitante acaba de hablarte y no has delegado nada. Si te ha pedido dejar de "
+    "jugar, otra desde cero o la siguiente pregunta, o te ha dicho su opción, delégalo ahora "
+    "mismo (decirlo no basta: la pantalla solo cambia si delegas) y luego dilo en pocas "
+    "palabras. Si solo charlaba, no digas nada."
+)
+
+#: Segundos tras el turno del visitante sin ninguna delegación antes del empujón.
+NUDGE_S = 3.0
+
 CORRECT_TEXT = "Ha elegido la {letter}, «{option}»: es CORRECTA. Celébralo."
 WRONG_TEXT = (
     "Ha elegido la {letter}, «{option}»: NO es correcta; la buena era la {right_letter}, "
@@ -213,6 +225,9 @@ class TriviaGame:
         self._reminded = False
         #: Última vez que se oyó al visitante (o se contestó).
         self._last_user_at = 0.0
+        #: Cuándo toca el empujón de :data:`NUDGE_TEXT` (0: no toca) y la última delegación.
+        self._nudge_at = 0.0
+        self._delegated_at = float("-inf")
         self._tasks: set[asyncio.Task[Any]] = set()
 
     # -- estado -------------------------------------------------------------
@@ -386,6 +401,20 @@ class TriviaGame:
         if self.active:
             self._last_user_at = now
 
+    def on_user_turn_end(self, now: float, started_at: float) -> None:
+        """Terminó un turno del visitante (empezó en ``started_at``): si no delega nada, empujón.
+
+        GPT-Live suele delegar antes de que llegue el final de la transcripción:
+        lo delegado desde que empezó a hablar ya cuenta.
+        """
+        if self.active and self._delegated_at < started_at - 0.5:
+            self._nudge_at = now + NUDGE_S
+
+    def on_delegation(self, now: float) -> None:
+        """GPT-Live delegó algo: no hace falta empujón."""
+        self._delegated_at = now
+        self._nudge_at = 0.0
+
     async def answer(self, choice: int, source: str) -> tuple[bool, str]:
         """Registra la respuesta (0, 1, 2 o :data:`PASS`). Nunca lanza.
 
@@ -520,9 +549,16 @@ class TriviaGame:
     async def tick(self, now: float) -> None:
         """Lo llama el ciclo del motor: recordar la pregunta y dar la partida por abandonada."""
         if self._phase is TriviaPhase.OFF or self._final:
+            self._nudge_at = 0.0
             return
         settings = self._settings
         quiet = self._host.quiet_for()
+        if self._nudge_at and now >= self._nudge_at and quiet >= 0.5:
+            # Ya contestó sin delegar: que lo decida ella. Va por commentary porque una
+            # instrucción silenciosa no le abre turno y no delegaba (probado con la API).
+            self._nudge_at = 0.0
+            logger.info("Trivia: el visitante habló y no se delegó nada; se le recuerda")
+            self._spawn(self._host.speak(NUDGE_TEXT), "trivia-nudge")
         if now - self._last_user_at >= settings.abandon_seconds and quiet >= 1.0:
             await self.stop("abandoned")
             return

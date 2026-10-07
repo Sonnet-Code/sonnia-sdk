@@ -544,3 +544,43 @@ async def test_acciones_de_la_trivia(tmp_path: Path) -> None:
 def test_sin_trivia_no_se_anuncian_sus_acciones() -> None:
     names = build_default_registry(include_look=False).names()
     assert "start_trivia" not in names and "trivia_answer" not in names
+
+
+async def test_si_el_visitante_habla_y_no_se_delega_nada_se_le_recuerda(tmp_path: Path) -> None:
+    from sonia.trivia.game import NUDGE_S, NUDGE_TEXT
+
+    game, host, _ = make_game(tmp_path)
+    await game.start("voice")
+    host.spoken.clear()
+    now = game._asked_at + 5
+    # «Mejor cancela»: Sonia contesta sin delegar.
+    game.on_user_turn_end(now, now - 2)
+    host.quiet = 0.0
+    await game.tick(now + NUDGE_S + 1)
+    assert host.spoken == []  # mientras habla, nada
+    host.quiet = 1.0
+    await game.tick(now + NUDGE_S + 1.5)
+    await settle()
+    assert host.spoken == [NUDGE_TEXT]
+    await game.tick(now + NUDGE_S + 5)
+    await settle()
+    assert host.spoken == [NUDGE_TEXT]  # una vez por turno
+
+    # Si delega, no hace falta: después del turno o, como suele, antes de que termine.
+    game.on_user_turn_end(now + 20, now + 18)
+    game.on_delegation(now + 21)
+    await game.tick(now + 20 + NUDGE_S + 1)
+    await settle()
+    assert host.spoken == [NUDGE_TEXT]
+    game.on_delegation(now + 29)
+    game.on_user_turn_end(now + 30, now + 28)
+    await game.tick(now + 20 + NUDGE_S + 1)
+    await settle()
+    assert host.spoken == [NUDGE_TEXT]
+
+    # Sin partida, tampoco.
+    await game.stop("voice")
+    game.on_user_turn_end(now + 40, now + 38)
+    await game.tick(now + 40 + NUDGE_S + 1)
+    await settle()
+    assert NUDGE_TEXT not in host.spoken[1:]

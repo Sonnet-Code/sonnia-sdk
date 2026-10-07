@@ -281,6 +281,7 @@ class LiveEngine:
         # Voz del visitante.
         self._user_parts: list[str] = []
         self._user_turn_open = False
+        self._user_turn_started_at = 0.0
         self._last_input_at = 0.0
         self._turn_level = 0.0
         self._expect_response_until = 0.0
@@ -799,6 +800,7 @@ class LiveEngine:
         now = time.monotonic()
         if not self._user_turn_open:
             self._user_turn_open = True
+            self._user_turn_started_at = now
             self._user_parts = []
             self._turn_level = 0.0
             self._session_conversation = True
@@ -829,6 +831,8 @@ class LiveEngine:
                 self._gestures.on_user_turn(text, answering=self._audible)
         if not self._audible:
             self._expect_response_until = now + RESPONSE_WAIT_S
+        if self._trivia is not None and text:
+            self._trivia.on_user_turn_end(now, self._user_turn_started_at)
 
     # -- delegación y acciones ----------------------------------------------
 
@@ -853,6 +857,8 @@ class LiveEngine:
             delegation_id,
             f": {json.dumps(details, ensure_ascii=False)[:300]}" if details else "",
         )
+        if self._trivia is not None:
+            self._trivia.on_delegation(now)
         if not self._audible:
             await self._set_state(AssistantState.THINKING)
 
