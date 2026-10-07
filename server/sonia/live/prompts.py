@@ -13,7 +13,6 @@ Así la persona vive en un solo sitio.
 
 from __future__ import annotations
 
-import platform
 from typing import Any, Literal
 
 from sonia.actions.registry import ActionRegistry
@@ -260,12 +259,12 @@ def in_meeting(settings: Settings) -> bool:
 def _eyes(settings: Settings) -> str:
     source = settings.vision.source
     if source == "unity":
-        return "Unity"
+        return "la cámara del equipo del stand"
     if source == "obs":
-        return "la ventana de la videollamada, que captura OBS"
+        return "la ventana de la videollamada"
     if source == "screen":
         return "la pantalla del equipo, con la videollamada"
-    return "una cámara USB"
+    return "una cámara en el stand"
 
 
 def camera_mode(settings: Settings, action_names: list[str]) -> CameraMode:
@@ -287,6 +286,7 @@ Reglas:
 - Para mostrar imágenes usa solo los ids exactos de la galería, o "camera" para la última foto de la cámara.
 - Si miras por la cámara, describe solo lo útil para conversar: cuántas personas hay, ropa y colores, gafas, gorras, gafetes, logos o textos legibles, y objetos que estén enseñando. Nunca hables del cuerpo, el peso, la edad o la piel, ni supongas origen, género o profesión.
 - Usa solo los datos de la base de conocimiento y de tus herramientas. Si algo no está, dilo; nunca inventes datos, cifras ni nombres.
+- No nombres marcas, empresas, productos ni modelos de la tecnología con la que está hecha Sonia (ni de su voz, ni tuya, ni de su avatar): si te lo preguntan, en términos generales.
 - Si el resultado de una herramienta empieza por "PARA SONIA:", devuelve todo lo que sigue tal cual, entero y sin resumir: es el guion de Sonia (por ejemplo, la pregunta de la trivia con sus opciones, que ella no lee en voz alta)."""
 
 
@@ -295,16 +295,19 @@ def _action_names(registry: ActionRegistry | None) -> list[str]:
 
 
 def describe_live_stack(settings: Settings, *, action_names: list[str] | None = None) -> str:
-    """Los componentes reales que usa Sonia con el motor GPT-Live.
+    """Los componentes que usa Sonia, contados sin marcas.
 
-    Igual que :func:`sonia.persona.describe_stack` para el otro motor: se genera
-    al arrancar para que Sonia hable con propiedad de sí misma.
+    Se genera al arrancar para que Sonia hable con propiedad de sí misma, pero
+    en términos generales: ni el modelo de voz, ni el del backend, ni el motor
+    del avatar (decisión de Jean del 7 de octubre de 2026).
     """
     live = settings.live
     lines = [
-        f"Voz y conversación: {live.model} de OpenAI, un modelo de voz a voz en tiempo real "
-        "que oye y habla directamente, en la nube.",
-        f"Acciones y tareas delegadas: {live.backend_model} de OpenAI (API Responses), en la nube.",
+        "Voz y conversación: un modelo de inteligencia artificial de voz a voz, en tiempo real "
+        "y en la nube: te oye y habla directamente con su propia voz, por eso se te puede "
+        "interrumpir como en una charla normal.",
+        "Acciones y tareas delegadas: tu backend, un agente de inteligencia artificial con "
+        "herramientas que trabaja por detrás, también en la nube.",
     ]
 
     mode = camera_mode(settings, action_names or [])
@@ -315,26 +318,27 @@ def describe_live_stack(settings: Settings, *, action_names: list[str] | None = 
     elif mode == "look":
         origin = _eyes(settings)
         lines.append(
-            f"Ojos: {origin}; no miras sola: cuando tú lo decides, tu backend "
-            f"({live.backend_model}, en la nube) toma una foto y te dice qué se ve. "
-            "Las fotos no se guardan."
+            f"Ojos: {origin}; no miras sola: cuando tú lo decides, tu backend toma una foto "
+            "y te dice qué se ve. Las fotos no se guardan."
         )
     else:
         origin = _eyes(settings)
         host = host_of(settings.llm.base_url)
-        where = "en local" if is_local_host(host) else f"en {host}"
+        where = "en este mismo equipo" if is_local_host(host) else "en la nube"
         lines.append(
-            f"Ojos: {origin}; cuando alguien empieza a hablarte, el modelo {settings.llm.model} "
-            f"({where}) describe la foto y te llega como nota [Cámara]. Las fotos no se guardan."
+            f"Ojos: {origin}; cuando alguien empieza a hablarte, un modelo de visión ({where}) "
+            "describe la foto y te llega como nota [Cámara]. Las fotos no se guardan."
         )
     if live.backend_web_search:
         lines.append(
-            f"Búsqueda en internet: tu backend ({live.backend_model}) puede buscar en la web "
-            "con la búsqueda de OpenAI cuando le pides un dato que no sabes."
+            "Búsqueda en internet: tu backend puede buscar en la web cuando le pides un dato "
+            "que no sabes."
         )
-    lines.append("Cuerpo: un avatar 3D en Unity que corre en el equipo del stand.")
-    machine = f"{platform.system()} {platform.machine()}".strip()
-    lines.append(f"Equipo: {machine}, nombre {platform.node() or 'desconocido'}.")
+    lines.append(
+        "Cuerpo: un avatar 3D animado en tiempo real aquí, en el equipo del stand: gestos, "
+        "mirada, parpadeo, bailes y la boca, que sigue los sonidos de tu voz. Mientras hablas, "
+        "otro modelo ligero lee lo que vas diciendo y elige el gesto que mejor le va."
+    )
     lines.append(
         "Acciones disponibles a través del backend: " + ", ".join(action_names) + "."
         if action_names
@@ -343,7 +347,15 @@ def describe_live_stack(settings: Settings, *, action_names: list[str] | None = 
     lines.append(
         "TU VOZ Y TU CONVERSACIÓN CORREN EN LA NUBE: si te preguntan dónde corres, dilo con "
         "naturalidad. El avatar y la cámara están aquí, en el equipo del stand; la conversación "
-        "la procesa GPT-Live de OpenAI en tiempo real. No digas que corres en local."
+        "la procesa en tiempo real un modelo de voz en la nube. No digas que corres en local."
+    )
+    lines.append(
+        "SIN MARCAS: no nombres empresas, productos, modelos ni programas de la tecnología con "
+        "la que estás hecha. Si te preguntan qué modelo eres, qué empresa hay detrás de tu voz o "
+        "con qué programa te hicieron, di que Sonnet Code te creó combinando modelos de "
+        "inteligencia artificial en la nube con un avatar 3D en tiempo real, y que los detalles "
+        "técnicos te los cuenta con gusto el equipo del stand. No lo niegues ni digas otra marca: "
+        "sencillamente no hablas de marcas."
     )
     return "\n".join(
         ["TU STACK AHORA MISMO (generado automáticamente al arrancar):"]

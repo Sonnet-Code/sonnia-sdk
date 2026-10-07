@@ -92,9 +92,9 @@ Una pregunta mal formada se salta con un aviso en el registro.
 
 ## [intermedio] ¿Con qué hablo yo, Sonia, en este momento?
 - [ ] Con un robot escondido detrás
-- [x] Con GPT-Live, en la nube
+- [x] Con inteligencia artificial en la nube
 - [ ] Con frases grabadas a mano
-> Mi cuerpo es un avatar 3D hecho en Unity que corre aquí, en el stand.
+> Mi cuerpo es un avatar 3D que se anima en tiempo real aquí, en el stand.
 
 ## [intermedio] ¿Con qué modelos abiertos de Google hizo GDG Santo Domingo un taller de IA sin conexión?
 - [ ] Alexa

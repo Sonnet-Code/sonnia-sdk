@@ -12,6 +12,7 @@ import asyncio
 import base64
 import contextlib
 import json
+import re
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -458,7 +459,7 @@ def test_en_modo_reunion_sonia_sabe_que_esta_en_una_videollamada(tmp_path: Path)
     assert "Mirar: ver ahora la pantalla de la videollamada" in instructions
     assert "Mirar: tomar una foto nueva" not in instructions
     assert "Sonia está en una videollamada" in config["delegation"]["responses"]["instructions"]
-    assert "que captura OBS" in describe_live_stack(settings, action_names=["look"])
+    assert "la ventana de la videollamada" in describe_live_stack(settings, action_names=["look"])
 
 
 def test_con_meeting_sabe_que_esta_en_un_google_meet_y_no_en_el_stand(tmp_path: Path) -> None:
@@ -493,10 +494,28 @@ def test_las_reglas_piden_parar_si_la_interrumpen(tmp_path: Path) -> None:
 
 def test_el_stack_de_live_dice_que_la_voz_va_en_la_nube(tmp_path: Path) -> None:
     text = describe_live_stack(make_settings(tmp_path), action_names=["show_image"])
-    assert "gpt-live-1" in text
     assert "en la nube" in text
     assert "No digas que corres en local" in text
     assert "no puedes ver a nadie" in text
+
+
+#: Lo que Sonia no debe saber de su stack: lo explica sin marcas (7 de octubre de 2026).
+_BRANDS = ("gpt", "openai", "unity", "genies", "gemini", "luna", "obs", "darwin", "windows")
+
+
+@pytest.mark.parametrize("vision_source", ["opencv", "unity", "obs", "screen", "none"])
+def test_sonia_no_conoce_las_marcas_de_su_stack(tmp_path: Path, vision_source: str) -> None:
+    settings = make_settings(tmp_path, vision_source=vision_source)
+    config = build_session_config(
+        settings, registry=build_default_registry(include_look=True), gallery_ids=[]
+    )
+    texts = {
+        "instrucciones": config["instructions"],
+        "backend": config["delegation"]["responses"]["instructions"],
+    }
+    for name, text in texts.items():
+        found = [b for b in _BRANDS if re.search(rf"\b{b}\b", text, re.IGNORECASE)]
+        assert not found, f"{name} nombra {found}"
 
 
 def test_la_tasa_de_muestreo_se_lee_del_entorno(monkeypatch: pytest.MonkeyPatch) -> None:
