@@ -145,9 +145,9 @@ namespace Sonia
         private float minBow = 20f;
 
         [SerializeField]
-        [Range(0f, 80f)]
-        [Tooltip("Cuánto se inclina, como mucho, para que la cámara no vea el gorro abajo, en grados.")]
-        private float maxBow = 70f;
+        [Range(0f, 90f)]
+        [Tooltip("Cuánto se inclina, como mucho, para que la cámara no vea el gorro abajo, en grados. Con el encuadre de medio muslo hace falta casi doblarse del todo: Sonnia es bajita y la cámara de conversación ve hasta las rodillas.")]
+        private float maxBow = 88f;
 
         [SerializeField]
         [Range(0f, 0.3f)]
@@ -193,6 +193,19 @@ namespace Sonia
         // Grados por segundo a los que puede cambiar la inclinación que busca.
         private const float BowRate = 120f;
 
+        // Dónde coge el gorro respecto a los hombros inclinados, en largos de brazo:
+        // casi colgando (más lejos de la cámara y más abajo que con los brazos por delante).
+        private const float PickupForward = 0.15f;
+        private const float PickupDrop = 0.95f;
+
+        // Margen de cuadro para dar el gorro por visto (en coordenadas de -1 a 1).
+        private const float FrameMargin = 0.06f;
+
+        // Parte de la inclinación que se hace por la cadera (el resto, en la columna). En
+        // los avatares de Genies Spine, Chest y UpperChest están altos: doblándose solo
+        // por ahí los hombros apenas bajaban (88° y las manos a 0,52 m del suelo).
+        private const float HipShare = 0.65f;
+
         // Reparto de la inclinación entre Spine, Chest y UpperChest.
         private static readonly float[] BowShares = { 0.45f, 0.35f, 0.2f };
 
@@ -210,7 +223,16 @@ namespace Sonia
         private Vector3 _pickupLocal;
         private bool _pickupSet;
         private float _bow;
+        // Esquinas del gorro respecto a su punto de agarre, medidas con él abajo
+        // (con la hélice y la visera): para saber si la cámara lo vería.
+        private readonly Vector3[] _capCorners = new Vector3[8];
+        private bool _capMeasured;
+        private bool _grabLogged;
+        private CameraFramingController _framing;
         private readonly Transform[] _spine = new Transform[3];
+        private Transform _hips;
+        private Transform _leftThigh;
+        private Transform _rightThigh;
         private readonly System.Collections.Generic.List<Transform> _dynamicBones = new System.Collections.Generic.List<Transform>();
         private Vector3[] _dynamicPositions = new Vector3[0];
         private Quaternion[] _dynamicRotations = new Quaternion[0];
@@ -286,6 +308,12 @@ namespace Sonia
         public bool IsOn
         {
             get { return _wanted; }
+        }
+
+        /// <summary>Cierto cuando el gorro ya está abajo del todo (quitado) y no se lo quiere poner.</summary>
+        public bool IsOff
+        {
+            get { return !_wanted && _time <= 0f; }
         }
 
         /// <summary>Cierto mientras las manos están poniendo o quitando el gorro.</summary>
@@ -468,6 +496,24 @@ namespace Sonia
             _root.SetPositionAndRotation(useHands ? position : headPosition, useHands ? rotation : headRotation);
             float size = ModelSize();
             _root.localScale = new Vector3(scale / squash, scale * squash, scale / squash) * (size / parent);
+            if (useHands && t < ReachEnd)
+            {
+                MeasureCap(position);
+            }
+
+            if (useHands && t >= GrabEnd && !_grabLogged)
+            {
+                _grabLogged = true;
+                Camera cam = Camera.main;
+                bool seen = cam != null && SeenByCamera(cam, pickup);
+                Debug.Log("[Sonia] Gorro de la trivia: recogida con " + _bow.ToString("F0") + "° de inclinación, a "
+                          + _avatar.InverseTransformPoint(pickup).y.ToString("F2") + " m del suelo"
+                          + (seen ? " (la cámara lo ve: falta inclinación)" : ", fuera de cuadro") + ".");
+            }
+            else if (t < GrabEnd)
+            {
+                _grabLogged = false;
+            }
             Transform swayed = _rig != null ? _model : _cone;
             if (swayed != null)
             {
@@ -536,7 +582,7 @@ namespace Sonia
             Vector3 point = shoulders;
             while (true)
             {
-                point = BentShoulders(shoulders, bow) + (forward * (reach * 0.4f)) - (up * (reach * 0.88f));
+                point = BentShoulders(shoulders, bow) + (forward * (reach * PickupForward)) - (up * (reach * PickupDrop));
                 if (bow >= maxBow || cam == null || !SeenByCamera(cam, point))
                 {
                     break;
@@ -547,7 +593,7 @@ namespace Sonia
 
             _bow = _pickupSet ? Mathf.MoveTowards(_bow, bow, BowRate * Time.deltaTime) : bow;
             // Con la inclinación de verdad (que puede ir por detrás de la buscada), las manos llegan aquí.
-            point = BentShoulders(shoulders, _bow) + (forward * (reach * 0.4f)) - (up * (reach * 0.88f));
+            point = BentShoulders(shoulders, _bow) + (forward * (reach * PickupForward)) - (up * (reach * PickupDrop));
             _pickupLocal = _avatar.InverseTransformPoint(point);
             _pickupSet = true;
         }
@@ -589,13 +635,27 @@ namespace Sonia
             }
 
             Vector3 axis = _avatar.right;
+            float hipAngle = HipAngle(angle);
+            if (hipAngle > 0.01f)
+            {
+                // Por la cadera, como una persona: gira la pelvis y los muslos se quedan
+                // donde estaban, así que las piernas no se mueven.
+                Quaternion back = Quaternion.AngleAxis(-hipAngle, axis);
+                Quaternion leftThigh = back * _leftThigh.rotation;
+                Quaternion rightThigh = back * _rightThigh.rotation;
+                _hips.rotation = Quaternion.AngleAxis(hipAngle, axis) * _hips.rotation;
+                _leftThigh.rotation = leftThigh;
+                _rightThigh.rotation = rightThigh;
+            }
+
+            float spineAngle = angle - hipAngle;
             float total = BowShareTotal();
             for (int i = 0; i < _spine.Length; i++)
             {
                 if (_spine[i] != null)
                 {
                     // Cada hueso gira sobre sí mismo y arrastra a los de encima.
-                    _spine[i].rotation = Quaternion.AngleAxis(angle * BowShares[i] / total, axis) * _spine[i].rotation;
+                    _spine[i].rotation = Quaternion.AngleAxis(spineAngle * BowShares[i] / total, axis) * _spine[i].rotation;
                 }
             }
 
@@ -653,6 +713,20 @@ namespace Sonia
             }
 
             Vector3 point = shoulders;
+            float hipAngle = HipAngle(angle);
+            if (hipAngle > 0.01f)
+            {
+                Quaternion hipTurn = Quaternion.AngleAxis(hipAngle, axis);
+                Vector3 hipPivot = _hips.position;
+                for (int j = 0; j < joints.Length; j++)
+                {
+                    joints[j] = hipPivot + (hipTurn * (joints[j] - hipPivot));
+                }
+
+                point = hipPivot + (hipTurn * (point - hipPivot));
+            }
+
+            float spineAngle = angle - hipAngle;
             for (int i = 0; i < _spine.Length; i++)
             {
                 if (_spine[i] == null)
@@ -660,7 +734,7 @@ namespace Sonia
                     continue;
                 }
 
-                Quaternion turn = Quaternion.AngleAxis(angle * BowShares[i] / total, axis);
+                Quaternion turn = Quaternion.AngleAxis(spineAngle * BowShares[i] / total, axis);
                 Vector3 pivot = joints[i];
                 for (int j = i + 1; j < joints.Length; j++)
                 {
@@ -671,6 +745,12 @@ namespace Sonia
             }
 
             return point;
+        }
+
+        /// <summary>Cuánto de <paramref name="angle"/> se hace por la cadera (0 si el avatar no tiene cadera y muslos).</summary>
+        private float HipAngle(float angle)
+        {
+            return _hips != null && _leftThigh != null && _rightThigh != null ? angle * HipShare : 0f;
         }
 
         /// <summary>Suma de los repartos de los huesos de la columna que tiene el avatar.</summary>
@@ -688,11 +768,116 @@ namespace Sonia
             return total > 0f ? total : 1f;
         }
 
-        /// <summary>Cierto si la cámara vería el gorro con la boca en <paramref name="point"/> (mira la punta de la hélice, con margen).</summary>
+        /// <summary>
+        /// Cierto si se vería el gorro con su punto de agarre en <paramref name="point"/>:
+        /// desde la cámara de ahora o desde el encuadre al que va (al empezar la trivia
+        /// la cámara se está yendo al plano de la trivia mientras Sonia se agacha).
+        /// Mira las esquinas del gorro de verdad, con la hélice y la visera.
+        /// </summary>
         private bool SeenByCamera(Camera cam, Vector3 point)
         {
-            Vector3 top = cam.WorldToViewportPoint(point + (_avatar.up * (0.27f * ModelSize())));
-            return top.z > 0f && top.y > -0.03f && top.x > -0.2f && top.x < 1.2f;
+            if (SeenFrom(cam.transform.position, cam.transform.rotation, cam.fieldOfView, cam.aspect, point))
+            {
+                return true;
+            }
+
+            if (_framing == null || _framing.TargetCamera != cam)
+            {
+                _framing = null;
+                foreach (CameraFramingController framing in FindObjectsByType<CameraFramingController>(FindObjectsSortMode.None))
+                {
+                    if (framing.TargetCamera == cam)
+                    {
+                        _framing = framing;
+                        break;
+                    }
+                }
+            }
+
+            return _framing != null
+                   && _framing.TryGetTargetShot(out ShotPose shot)
+                   && SeenFrom(shot.Position, shot.Rotation, shot.FieldOfView, cam.aspect, point);
+        }
+
+        private bool SeenFrom(Vector3 eye, Quaternion look, float fieldOfView, float aspect, Vector3 point)
+        {
+            float tanY = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float tanX = tanY * Mathf.Max(0.01f, aspect);
+            Quaternion inverse = Quaternion.Inverse(look);
+            for (int i = 0; i < _capCorners.Length; i++)
+            {
+                Vector3 local = inverse * (point + CapCorner(i) - eye);
+                if (local.z <= 0.01f)
+                {
+                    continue;
+                }
+
+                float y = local.y / (local.z * tanY);
+                float x = local.x / (local.z * tanX);
+                if (y > -1f - FrameMargin && y < 1f + FrameMargin && x > -1f - FrameMargin && x < 1f + FrameMargin)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Esquina <paramref name="index"/> del gorro abajo respecto a su punto de agarre.</summary>
+        private Vector3 CapCorner(int index)
+        {
+            if (_capMeasured)
+            {
+                return _capCorners[index];
+            }
+
+            // Antes de medirlo, la caja del gorro Noogler medida a mano (en tamaños de cabeza):
+            // sube 0,2 con la hélice, baja 0,08, la visera sale 0,25 hacia delante.
+            float size = ModelSize();
+            float x = (index & 1) == 0 ? -0.11f : 0.11f;
+            float y = (index & 2) == 0 ? -0.08f : 0.2f;
+            float z = (index & 4) == 0 ? -0.13f : 0.25f;
+            return ((_avatar.right * x) + (_avatar.up * y) + (_avatar.forward * z)) * size;
+        }
+
+        /// <summary>Mide las esquinas del gorro, ya puesto abajo con su punto de agarre en <paramref name="point"/>.</summary>
+        private void MeasureCap(Vector3 point)
+        {
+            Bounds bounds = default;
+            bool any = false;
+            foreach (Renderer renderer in _root.GetComponentsInChildren<Renderer>())
+            {
+                if (!renderer.enabled)
+                {
+                    continue;
+                }
+
+                if (any)
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+                else
+                {
+                    bounds = renderer.bounds;
+                    any = true;
+                }
+            }
+
+            if (!any)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _capCorners.Length; i++)
+            {
+                Vector3 corner = new Vector3(
+                    (i & 1) == 0 ? bounds.min.x : bounds.max.x,
+                    (i & 2) == 0 ? bounds.min.y : bounds.max.y,
+                    (i & 4) == 0 ? bounds.min.z : bounds.max.z);
+                _capCorners[i] = corner - point;
+            }
+
+            _capMeasured = true;
         }
 
         /// <summary>
@@ -746,6 +931,9 @@ namespace Sonia
                 _spine[0] = animator.GetBoneTransform(HumanBodyBones.Spine);
                 _spine[1] = animator.GetBoneTransform(HumanBodyBones.Chest);
                 _spine[2] = animator.GetBoneTransform(HumanBodyBones.UpperChest);
+                _hips = animator.GetBoneTransform(HumanBodyBones.Hips);
+                _leftThigh = animator.GetBoneTransform(HumanBodyBones.LeftUpperLeg);
+                _rightThigh = animator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
                 FindDynamicBones();
                 _pickupSet = false;
                 FindAvatarParts();

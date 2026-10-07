@@ -96,6 +96,11 @@ namespace Sonia
         [Tooltip("Desplazamiento extra de la cámara sobre el plano de panel (metros): más alta y más atrás para que Sonia y su gorro quepan bajo la tarjeta.")]
         private Vector3 panelShotExtra = new Vector3(0f, 0.3f, -0.8f);
 
+        [SerializeField]
+        [Range(0f, 3f)]
+        [Tooltip("Segundos que espera Sonia para agacharse a por el gorro al empezar: antes sube la cámara al plano de la trivia, que ve menos abajo que el de conversación, y así el gorro sale de fuera de cuadro.")]
+        private float hatDelay = 0.9f;
+
         [Header("Tiempos")]
         [SerializeField]
         [Range(2f, 30f)]
@@ -233,6 +238,9 @@ namespace Sonia
 
         // Animación.
         private float _clock;
+        // Cuándo va Sonia a por el gorro (-1: no toca) y si falta devolver la cámara.
+        private float _hatAt = -1f;
+        private bool _releaseCamera;
         private float _rootAlpha;
         private float _cardAppear = -1f;
         private bool _cardShown;
@@ -373,7 +381,10 @@ namespace Sonia
                 _root.gameObject.SetActive(true);
             }
 
-            if (_hat != null)
+            // El gorro, cuando la cámara ya va por el plano de la trivia (ver hatDelay).
+            _releaseCamera = false;
+            _hatAt = hatDelay > 0f ? _clock + hatDelay : -1f;
+            if (_hat != null && hatDelay <= 0f)
             {
                 _hat.SetOn(true);
             }
@@ -608,19 +619,40 @@ namespace Sonia
             _resultShown = false;
             _rainUntil = -1f;
             _bannerAt = -1f;
+            _hatAt = -1f;
             if (_hat != null)
             {
                 _hat.SetOn(false);
             }
 
-            if (_framing != null)
-            {
-                _framing.PanelRequested = false;
-            }
+            // La cámara vuelve cuando el gorro ya está abajo: el plano de conversación ve
+            // hasta las rodillas y Sonia lo deja fuera del de la trivia.
+            _releaseCamera = true;
+            ReleaseCameraWhenHatIsDown();
 
             if (_choreographer != null)
             {
                 _choreographer.GreetingSuppressed = false;
+            }
+        }
+
+        private void ReleaseCameraWhenHatIsDown()
+        {
+            if (!_releaseCamera || _active)
+            {
+                _releaseCamera = false;
+                return;
+            }
+
+            if (_hat != null && !_hat.IsOff)
+            {
+                return;
+            }
+
+            _releaseCamera = false;
+            if (_framing != null)
+            {
+                _framing.PanelRequested = false;
             }
         }
 
@@ -667,6 +699,17 @@ namespace Sonia
 
             float dt = Time.deltaTime;
             _clock += dt;
+
+            if (_hatAt >= 0f && _clock >= _hatAt)
+            {
+                _hatAt = -1f;
+                if (_active && _hat != null)
+                {
+                    _hat.SetOn(true);
+                }
+            }
+
+            ReleaseCameraWhenHatIsDown();
 
             if (_awaitReplayUntil > 0f && Time.unscaledTime > _awaitReplayUntil)
             {

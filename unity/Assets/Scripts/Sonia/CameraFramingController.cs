@@ -205,6 +205,8 @@ namespace Sonia
         // Encuadre impuesto desde fuera (Modo Jean): manda sobre todos.
         private bool _hasOverride;
         private ShotPose _override;
+        private bool _hasTargetShot;
+        private ShotPose _targetShot;
 
         // Planos del stand: el de reposo es el base más este desplazamiento.
         private AvatarStateController _avatarState;
@@ -239,6 +241,17 @@ namespace Sonia
         /// ocupa la misma franja alta de la pantalla).
         /// </summary>
         public bool PanelRequested { get; set; }
+
+        /// <summary>
+        /// El encuadre al que va la cámara (el que calculó en su último frame).
+        /// Con la cámara a medio camino, sirve para saber si algo quedará en
+        /// cuadro cuando llegue (el gorro de la trivia se recoge fuera de cuadro).
+        /// </summary>
+        public bool TryGetTargetShot(out ShotPose pose)
+        {
+            pose = _targetShot;
+            return _hasTargetShot;
+        }
 
         /// <summary>
         /// Desplazamiento extra (metros) sobre el plano de panel mientras se pide
@@ -606,6 +619,9 @@ namespace Sonia
             {
                 targetPosition = _basePosition + _idleOffset;
             }
+
+            _targetShot = new ShotPose(targetPosition, targetRotation, targetFieldOfView);
+            _hasTargetShot = true;
 
             Transform cameraTransform = targetCamera.transform;
 
