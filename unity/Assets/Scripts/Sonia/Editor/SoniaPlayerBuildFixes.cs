@@ -350,14 +350,21 @@ namespace Sonia.EditorTools
             CopyDirectory(frozen, target);
 #endif
 
-            // Frases grabadas de este equipo si el orquestador congelado no las trae
-            // (el del runner de GitHub para Windows no las tiene: cache/ no está en git).
-            string voice = Path.Combine(RepoRoot, "cache", "voice");
-            string bundledVoice = Path.Combine(target, "_internal", "cache", "voice");
-            if (Directory.Exists(voice) && !Directory.Exists(bundledVoice))
+            // Frases grabadas y modelos y huellas de caras de este equipo si el orquestador
+            // congelado no los trae (el del runner de GitHub para Windows no los tiene:
+            // cache/ no está en git). Sin las huellas, la app no reconocería a quien se dio
+            // de alta con fotos locales, como las personas conocidas (docs/caras.md).
+            string[][] seeded = { new[] { "voice" }, new[] { "faces", "modelos" }, new[] { "faces", "huellas" } };
+            foreach (string[] part in seeded)
             {
-                CopyDirectory(voice, bundledVoice);
-                Debug.Log("[Sonia] Frases grabadas de este equipo añadidas al orquestador (" + platform + ").");
+                string source = Path.Combine(RepoRoot, "cache", Path.Combine(part));
+                string bundled = Path.Combine(target, "_internal", "cache", Path.Combine(part));
+                if (Directory.Exists(source) && !Directory.Exists(bundled))
+                {
+                    CopyDirectory(source, bundled);
+                    Debug.Log("[Sonia] cache/" + string.Join("/", part) + " de este equipo añadido al orquestador ("
+                              + platform + ").");
+                }
             }
 
             string buildEnv = Path.Combine(target, "build.env");

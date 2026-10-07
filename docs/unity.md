@@ -325,8 +325,11 @@ se copia entera al equipo.
 
   Sin esa carpeta la build sale igual, pero sin orquestador (lo avisa la
   consola) y la app espera uno externo en el puerto 8765 (`uv run sonia run` en
-  ese equipo). La build mete en el orquestador el `.env` del repo y, si no las
-  trae, las frases grabadas de `cache/voice` del equipo donde se compila.
+  ese equipo). La build mete en el orquestador el `.env` del repo y, si no los
+  trae, las frases grabadas (`cache/voice`) y los modelos y las huellas de caras
+  (`cache/faces/modelos` y `huellas`) del equipo donde se compila: sin las
+  huellas, la app de Windows no reconocería a las personas dadas de alta con
+  fotos locales (`docs/caras.md`).
 - **Sin probar todavía en un Windows de verdad** (6 de octubre de 2026). El
   lado de Windows de Genies no lleva los arreglos de macOS (llavero y rutas): su
   librería de sesión usa DPAPI y no hace falta tocarla. Al probarla por primera
