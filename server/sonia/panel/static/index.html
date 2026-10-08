@@ -200,6 +200,17 @@
         </label>
         <p class="cap-note" data-cap-note="images" hidden>Mostrar imágenes no está disponible con el motor de voz actual.</p>
       </section>
+
+      <!-- ===== Animación de stand ===== -->
+      <section class="card" id="animacion-stand" aria-labelledby="showcase-title">
+        <h2 id="showcase-title">Animación de stand</h2>
+        <label class="switch">
+          <input type="checkbox" role="switch" id="showcase-input" data-cap="showcase">
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="switch-text">Cuando no hay nadie, Sonnia dice frases y baila sola</span>
+        </label>
+        <p class="cap-note" data-cap-note="showcase" hidden>No disponible con el motor de voz actual.</p>
+      </section>
     </div>
 
     <div class="col col-2">
@@ -213,6 +224,26 @@
           <button type="submit" class="btn btn-primary" id="say-btn" data-cap="say" data-extra="sonia_here">Decirlo ahora</button>
         </form>
         <p class="cap-note" data-cap-note="say" hidden>No disponible con el motor de voz actual.</p>
+      </section>
+
+      <!-- ===== Preguntar como visitante ===== -->
+      <section class="card" id="preguntar" aria-labelledby="preguntar-title">
+        <h2 id="preguntar-title">Preguntar como visitante</h2>
+        <p class="help">Sonnia contesta en voz alta como si un visitante se lo hubiera dicho. Sirve para probarla.</p>
+        <form class="row" id="ask-form">
+          <label class="visually-hidden" for="ask-input">Pregunta</label>
+          <input type="text" id="ask-input" maxlength="400" autocomplete="off" data-cap="ask" placeholder="¿Qué hace Sonnet Code?">
+          <button type="submit" class="btn" id="ask-btn" data-cap="ask">Preguntar</button>
+        </form>
+        <p class="cap-note" data-cap-note="ask" hidden>No disponible con el motor de voz actual.</p>
+      </section>
+
+      <!-- ===== Conversación nueva ===== -->
+      <section class="card" id="reiniciar" aria-labelledby="reiniciar-title">
+        <h2 id="reiniciar-title">Conversación nueva</h2>
+        <p class="help">Sonnia olvida todo lo hablado y empieza de cero. Útil si se queda rara o repite cosas.</p>
+        <button type="button" class="btn" id="restart-btn" data-cap="restart">Empezar conversación nueva</button>
+        <p class="cap-note" data-cap-note="restart" hidden>No disponible con el motor de voz actual.</p>
       </section>
 
       <!-- ===== Avisos del día ===== -->
@@ -296,7 +327,7 @@
 
     <!-- ===== Avanzado (plegado) ===== -->
     <details class="card advanced" id="avanzado">
-      <summary><span>Avanzado</span><span class="summary-hint">Modo debug, subtítulos, voz, animaciones, gasto y registro</span></summary>
+      <summary><span>Avanzado</span><span class="summary-hint">Modo debug, subtítulos, voz, gestos, animaciones, gasto y registro</span></summary>
 
       <p class="sync-note" data-sync-note hidden></p>
       <div class="adv-grid">
@@ -332,16 +363,6 @@
           <p class="cap-note" data-cap-note="voice" hidden>No disponible con el motor de voz actual.</p>
         </section>
 
-        <section class="adv-block" aria-labelledby="adv-showcase-title">
-          <h3 id="adv-showcase-title">Animación de stand</h3>
-          <label class="switch">
-            <input type="checkbox" role="switch" id="showcase-input" data-cap="showcase">
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Cuando no hay nadie, Sonnia dice frases y baila sola</span>
-          </label>
-          <p class="cap-note" data-cap-note="showcase" hidden>No disponible con el motor de voz actual.</p>
-        </section>
-
         <section class="adv-block" aria-labelledby="adv-gestures-title">
           <h3 id="adv-gestures-title">Gestos</h3>
           <p class="help">Solo se ven cuando Sonnia no está hablando.</p>
@@ -354,30 +375,13 @@
           <p class="cap-note" data-cap-note="gestures" hidden>No disponible con el motor de voz actual.</p>
         </section>
 
-        <section class="adv-block adv-wide" aria-labelledby="adv-anim-title">
-          <h3 id="adv-anim-title">Animaciones</h3>
+        <!-- Plegado de entrada: son muchas animaciones. -->
+        <details class="adv-block adv-wide adv-fold" id="anim-fold">
+          <summary><h3 id="adv-anim-title">Animaciones</h3><span class="summary-hint" id="anim-count"></span></summary>
           <p class="help">Cada botón hace una animación concreta; la que está sonando se ve en azul. Si Sonnia está hablando, corta sus gestos un momento y luego sigue. Desmarca «La usa» para que Sonnia no la haga por su cuenta (con el botón sigue saliendo).</p>
           <div class="anim-groups" id="anim-groups"></div>
           <p class="cap-note" data-cap-note="animations" hidden>Esta Sonnia no tiene aún las animaciones: hay que actualizar el orquestador.</p>
-        </section>
-
-        <section class="adv-block" aria-labelledby="adv-ask-title">
-          <h3 id="adv-ask-title">Preguntar como visitante</h3>
-          <p class="help">Sonnia contesta en voz alta como si un visitante se lo hubiera dicho. Sirve para probarla.</p>
-          <form class="row" id="ask-form">
-            <label class="visually-hidden" for="ask-input">Pregunta</label>
-            <input type="text" id="ask-input" maxlength="400" autocomplete="off" data-cap="ask" placeholder="¿Qué hace Sonnet Code?">
-            <button type="submit" class="btn" id="ask-btn" data-cap="ask">Preguntar</button>
-          </form>
-          <p class="cap-note" data-cap-note="ask" hidden>No disponible con el motor de voz actual.</p>
-        </section>
-
-        <section class="adv-block" aria-labelledby="adv-restart-title">
-          <h3 id="adv-restart-title">Conversación nueva</h3>
-          <p class="help">Sonnia olvida todo lo hablado y empieza de cero. Útil si se queda rara o repite cosas.</p>
-          <button type="button" class="btn" id="restart-btn" data-cap="restart">Empezar conversación nueva</button>
-          <p class="cap-note" data-cap-note="restart" hidden>No disponible con el motor de voz actual.</p>
-        </section>
+        </details>
 
         <section class="adv-block" aria-labelledby="adv-cache-title">
           <h3 id="adv-cache-title">Voces del modo saludos</h3>

@@ -236,7 +236,10 @@ h3 {
 .hero { order: 0; }
 #acciones { order: 1; }
 #imagenes { order: 2; }
+#animacion-stand { order: 2; }
 #decir { order: 3; }
+#preguntar { order: 3; }
+#reiniciar { order: 3; }
 #salud { order: 4; }
 #sonido { order: 5; }
 #avisos { order: 6; }
@@ -1248,7 +1251,7 @@ input[type="range"]:disabled {
   padding: 0;
 }
 
-.advanced summary {
+.advanced > summary {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -1261,16 +1264,16 @@ input[type="range"]:disabled {
   list-style: none;
 }
 
-.advanced summary::-webkit-details-marker {
+.advanced > summary::-webkit-details-marker {
   display: none;
 }
 
-.advanced summary::before {
+.advanced > summary::before {
   content: "▸";
   color: var(--blue-strong);
 }
 
-.advanced[open] summary::before {
+.advanced[open] > summary::before {
   content: "▾";
 }
 
@@ -1300,6 +1303,39 @@ input[type="range"]:disabled {
 }
 
 .adv-block .help:last-child {
+  margin-bottom: 0;
+}
+
+/* Bloque plegable dentro de Avanzado (Animaciones) */
+.adv-fold > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: -14px;
+  padding: 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.adv-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adv-fold > summary::before {
+  content: "▸";
+  color: var(--blue-strong);
+}
+
+.adv-fold[open] > summary::before {
+  content: "▾";
+}
+
+.adv-fold > summary h3 {
+  margin: 0;
+}
+
+.adv-fold[open] > summary {
   margin-bottom: 0;
 }
 

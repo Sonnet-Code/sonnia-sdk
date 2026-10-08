@@ -286,7 +286,7 @@
       "say-input", "say-btn", "notes-form", "notes-input", "notes-btn", "notes-state", "volume-input",
       "volume-value", "gate-input", "gate-value", "gate-meter-fill", "gate-meter-mark",
       "gate-meter-caption", "front-input", "front-caption", "health-list", "last-error", "last-error-text", "chat", "chat-empty",
-      "voice-select", "voice-btn", "showcase-input", "anim-groups", "debug-input", "subtitles-input",
+      "voice-select", "voice-btn", "showcase-input", "anim-groups", "anim-count", "debug-input", "subtitles-input",
       "hero-debug", "ask-form", "ask-input", "ask-btn", "tune-mouth", "tune-camera", "tune-idle",
       "avatar-state", "avatar-edit-btn", "avatar-close-btn", "avatar-reset-btn",
       "guest-avatar-state", "guest-avatar-edit-btn", "guest-avatar-reset-btn",
@@ -1789,6 +1789,7 @@
 
   function buildAnimationTiles(list, toggles) {
     animTiles.clear();
+    setText(ui.animCount, list && list.length > 0 ? `${list.length} animaciones` : "");
     if (!list) {
       ui.animGroups.replaceChildren();
       return;
