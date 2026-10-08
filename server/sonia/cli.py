@@ -1207,6 +1207,9 @@ async def cmd_caras(
             "OpenCV: uv sync --extra camera)."
         )
         return 1
+    # En la app: los modelos y las huellas que trae, si este equipo aún no los tiene
+    # (sonia-orquestador caras --alta antes de abrir la app nueva no baja 210 MB).
+    await asyncio.to_thread(seed_home)
     if forget:
         forgotten = await faces.forget_visits()
         print(f"Visitas olvidadas: {forgotten} personas ({faces.visits.path}).")
