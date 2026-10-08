@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import numpy as np
 
 from sonia.agenda.schedule import Schedule, Talk
 from sonia.clock import Clock, spoken_date, spoken_hour
@@ -59,7 +60,16 @@ from sonia.faces.visits import Visit, VisitLog, same_day_as
 from sonia.types import CameraSource, Frame
 from sonia.vision.camera import OpenCVCamera
 
-__all__ = ["FaceWatcher", "Probe", "Sighting", "arrival_text", "join_labels", "known_text"]
+__all__ = [
+    "CameraEnrollReport",
+    "FaceWatcher",
+    "Probe",
+    "Sighting",
+    "arrival_text",
+    "join_labels",
+    "known_text",
+    "most_different",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +89,15 @@ NEAR_MISS_LOG_S = 60.0
 
 #: Calidad JPEG de la foto a resolución completa en la que se buscan caras.
 CAPTURE_QUALITY = 90
+
+#: Huellas que se quedan como mucho al dar de alta con la cámara (``sonia caras --alta``).
+#: Con una segunda foto real se reconoce unos 15 puntos más que con una sola (docs/caras.md).
+ENROLL_KEEP = 5
+#: Dos huellas de la cámara más parecidas que esto son casi la misma foto: no aporta otra.
+ENROLL_DUPLICATE = 0.92
+#: A quién se puede dar de alta con la cámara: el equipo y las personas conocidas. A los
+#: ponentes se les reconoce solo por su foto pública (CLAUDE.md, decisión del 7-oct-2026).
+CAMERA_KINDS = ("staff", "guest")
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +128,47 @@ class Probe:
     accepted: bool
     #: Por qué no se acepta: ``pequeña``, ``umbral`` o ``margen`` (vacío si se acepta).
     why: str = ""
+
+
+@dataclass(slots=True)
+class CameraEnrollReport:
+    """Qué pasó al dar de alta a alguien con la cámara (``sonia caras --alta``)."""
+
+    person: Person
+    #: Fotos tomadas y fotos con cara.
+    frames: int = 0
+    faces: int = 0
+    #: Fotos con otra persona conocida delante, y con alguien que no se parece a sus fotos.
+    others: int = 0
+    unlike: int = 0
+    #: Huellas que se quedan (las más distintas entre sí).
+    kept: int = 0
+    #: Parecido con sus fotos de las que valían (el más bajo y el más alto).
+    similar: tuple[float, float] = (0.0, 0.0)
+
+
+def most_different(
+    vectors: list[np.ndarray[Any, Any]], keep: int, duplicate: float = ENROLL_DUPLICATE
+) -> list[np.ndarray[Any, Any]]:
+    """Hasta ``keep`` huellas, cada una lo más distinta posible de las ya elegidas.
+
+    Se empieza por la más típica (la que más se parece a las demás) y se añade cada vez la
+    que menos se parece a las elegidas: otra pose, otra luz, otra distancia. Las casi
+    iguales a una elegida (``duplicate``) no aportan y no se guardan.
+    """
+    if not vectors or keep <= 0:
+        return []
+    matrix = np.stack(vectors)
+    sims = matrix @ matrix.T
+    chosen = [int(np.argmax(sims.sum(axis=1)))]
+    while len(chosen) < keep:
+        closest = sims[:, chosen].max(axis=1)
+        closest[chosen] = np.inf
+        pick = int(np.argmin(closest))
+        if closest[pick] >= duplicate:
+            break
+        chosen.append(pick)
+    return [vectors[i] for i in chosen]
 
 
 def join_labels(sightings: list[Sighting]) -> str:
@@ -492,6 +552,64 @@ class FaceWatcher:
             width = max(0, self._settings.analysis_width)
             return await camera.capture(max_width=width, quality=CAPTURE_QUALITY)
         return await camera.capture()
+
+    def find(self, name: str) -> Person | None:
+        """Alguien conocido por su nombre (da igual acentos y mayúsculas)."""
+        key = name_key(name)
+        return next((p for p in self.book.people if name_key(p.name) == key), None)
+
+    async def enroll_from_camera(
+        self, person: Person, frames: list[Frame], *, stamp: str, keep: int = ENROLL_KEEP
+    ) -> CameraEnrollReport:
+        """Da de alta a ``person`` con fotos de la cámara: guarda solo las huellas más distintas.
+
+        Las fotos se analizan en memoria y no se guardan. Se descartan las que no tienen
+        cara, las de otra persona conocida y las que no se parecen a sus fotos (otra persona
+        delante o el nombre equivocado). Cambia las huellas de la cámara que tuviera. Solo el
+        equipo y las personas conocidas (``CAMERA_KINDS``): a un ponente no se le toca.
+        """
+        if person.kind not in CAMERA_KINDS:
+            return CameraEnrollReport(person, frames=len(frames))
+        report, vectors = await asyncio.to_thread(self._camera_prints_sync, person, frames)
+        chosen = most_different(vectors, keep)
+        if chosen:
+            report.kept = self.book.set_camera_prints(person, chosen, stamp)
+            await asyncio.to_thread(self.book.save)
+        return report
+
+    def _camera_prints_sync(
+        self, person: Person, frames: list[Frame]
+    ) -> tuple[CameraEnrollReport, list[np.ndarray[Any, Any]]]:
+        report = CameraEnrollReport(person, frames=len(frames))
+        analyzer = self._analyzer
+        if analyzer is None:
+            return report, []
+        photos = self.book.photo_prints(person.id)
+        floor = self.threshold - NEAR_MISS
+        similar: list[float] = []
+        vectors: list[np.ndarray[Any, Any]] = []
+        for frame in frames:
+            image = analyzer.decode(frame.data)
+            if image is None:
+                continue
+            found = analyzer.faces(image, min_width=self._settings.min_face_px, limit=1)
+            if not found:
+                continue
+            report.faces += 1
+            embedding = found[0].embedding
+            best = self.book.best(embedding)
+            if best is not None and best.person.id != person.id and best.score >= self.threshold:
+                report.others += 1
+                continue
+            own = max((float(v @ embedding) for v in photos), default=1.0)
+            if own < floor:
+                report.unlike += 1
+                continue
+            similar.append(own)
+            vectors.append(embedding)
+        if similar:
+            report.similar = (min(similar), max(similar))
+        return report, vectors
 
     async def identify(self, frame: Frame) -> list[Sighting]:
         """Las personas conocidas en ``frame`` (en un hilo). Sin preparar, nadie.

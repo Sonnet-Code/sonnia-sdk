@@ -56,9 +56,11 @@ GPT-Live. Desde la raíz del repositorio:
 3. `uv run sonia say "Hola, soy Sonia"` desde `server/` para oír la voz
    (`LIVE_VOICE`) por el altavoz del stand. Si la línea «Caras» de
    `sonia check` no sale en OK, `uv run --no-sync sonia caras` desde `server/`
-   (no gasta). Con la cámara ya colocada, `sonia caras --probar` y alguien del
-   equipo delante, para confirmar que le reconoce (`docs/caras.md`; eso no
-   apunta visitas). Si antes de abrir pruebas a Sonnia ya en marcha con alguien
+   (no gasta). Con la cámara ya colocada, cada persona del equipo se da de
+   alta con ella, unos diez segundos: `sonia caras --alta "Su Nombre"` (guarda
+   solo la huella; es lo que más mejora que la reconozca de lado o lejos). Luego
+   `sonia caras --probar` con alguien del equipo delante, para confirmar que le
+   reconoce (`docs/caras.md`; eso no apunta visitas). Si antes de abrir pruebas a Sonnia ya en marcha con alguien
    del equipo delante, eso sí cuenta como su visita del día: al terminar,
    `sonia caras --olvidar-visitas`, o no le hará la pregunta de la primera vez.
 4. `scripts/kiosk.sh` (o `uv run sonia run` desde `server/` si vas a estar

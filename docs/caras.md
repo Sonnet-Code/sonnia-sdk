@@ -26,7 +26,10 @@ Código en `server/sonia/faces`; integración en `server/sonia/live/engine.py`
   `cache/faces/huellas/caras-arcface.json` (las de SFace, en `caras.json`),
   sin las fotos.
 - **De los visitantes no se guarda nada**: su cara se compara en memoria y se
-  olvida. Nunca se da de alta a nadie desde la cámara.
+  olvida. Desde la cámara solo se da de alta a mano, con su nombre y su
+  permiso, a alguien del equipo o una persona conocida que ya está en la lista,
+  con `sonia caras --alta`, y de esas fotos se guarda solo su huella. A los
+  ponentes, solo por su foto pública.
 - Las sesiones con varios ponentes no dan de alta a nadie: la web trae la foto
   de uno solo y no se sabe de cuál.
 
@@ -173,7 +176,8 @@ orquestador.
 En los dos casos:
 1. Pon sus fotos, de frente y con buena luz, en `cache/faces/fotos/` (no van al
    repo). Mejor varias: una huella por foto reconoce mejor con distinta luz o
-   ángulo.
+   ángulo. Después, mejor aún, dale de alta con la cámara (la sección
+   siguiente).
 2. **Que en cada foto salga solo su cara.** De cada foto se usa la cara más
    grande, así que de una foto de grupo hay que recortar la suya. Las de Victor
    y Wanda se recortaron el 7 de octubre de 2026 con YuNet y SFace. Su foto
@@ -187,6 +191,44 @@ La huella viaja en la build (`cache/faces/huellas`), las fotos no. Si el equipo
 del stand ya tenía huellas de antes, la app no las pisa. Pero a quien allí no
 tiene ni huella ni fotos le pone la que trae la build, así que basta con
 compilar después de `sonia caras`.
+
+## Dar de alta con la cámara (lo que más ayuda al equipo)
+
+Con una sola foto de la web, al equipo se le reconoce mal de lado, lejos o a
+contraluz. Con una segunda foto real, distinta de la primera, se reconoce unos
+15 puntos más (medido el 8 de octubre, ver «ArcFace en vez de SFace»). La forma
+fácil de dársela es con la cámara del stand, en sus condiciones:
+
+```bash
+uv run --no-sync sonia caras --alta "Brian James"        # desde server/
+```
+
+- Cuenta 3, 2, 1 y durante unos diez segundos toma 24 fotos. Quien se da de
+  alta mira a la pantalla, gira un poco la cabeza a los lados y se acerca y se
+  aleja un paso. Que no salga nadie más.
+- Se queda con las cinco huellas más distintas entre sí (`--fotos` para otro
+  número) y cambia las de la cámara que tuviera esa persona. Las fotos se
+  analizan en memoria y no se guardan nunca.
+- Descarta las fotos sin cara, las de otra persona conocida y las que no se
+  parecen a sus fotos (a más de 0,12 por debajo del umbral): así no se da de
+  alta a otro por un nombre equivocado. Si no queda ninguna, no guarda nada y
+  lo dice.
+- Solo vale para quien ya está en la lista del equipo (`staff.json`) o de
+  personas conocidas (`invitados.json`), con su permiso. A los ponentes se les
+  reconoce solo por su foto pública, y nunca a un visitante.
+- Las huellas de la cámara van con las demás en `caras-arcface.json`, sobreviven
+  a `sonia caras` y viajan en la build. En el equipo del stand, la app pone las
+  que trae la build a quien allí no tenga ninguna de la cámara. Si allí se da de
+  alta, mandan las suyas.
+
+Desde la app, sin `uv`, se lanza el orquestador que lleva dentro (usa la misma
+carpeta de datos que la app):
+
+- macOS, con la app abierta o cerrada (la cámara se comparte):
+  `Sonnia.app/Contents/Resources/orquestador/sonia-orquestador/sonia-orquestador caras --alta "Brian James"`
+- Windows, con la app cerrada (Windows no suele dejar usar la webcam a dos
+  programas a la vez):
+  `Sonnia_Data\orquestador\sonia-orquestador\sonia-orquestador.exe caras --alta "Brian James"`
 
 ## Calibrar en el stand
 

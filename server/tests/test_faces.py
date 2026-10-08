@@ -43,7 +43,7 @@ from sonia.faces import (
 )
 from sonia.faces.book import book_path, enroll
 from sonia.faces.model import ARCFACE, RECOGNIZER, model_files
-from sonia.faces.watcher import RECENT_S
+from sonia.faces.watcher import RECENT_S, most_different
 from sonia.live.prompts import build_session_config
 from sonia.paths import REPO_ROOT, SEEDED
 from sonia.types import Frame
@@ -458,6 +458,115 @@ async def test_las_huellas_de_otro_modelo_no_se_mezclan(tmp_path: Path) -> None:
     arcface_book = FaceBook(tmp_path / "caras.json", "w600k_r50.onnx")
     arcface_book.load()  # el archivo es de SFace: no se usa
     assert len(arcface_book) == 0
+
+
+# ---------------------------------------------------------------------------
+# Alta con la cámara (sonia caras --alta)
+# ---------------------------------------------------------------------------
+
+
+def camera_sources(faces: FaceWatcher, person_id: str) -> list[str]:
+    saved = json.loads(faces.book.path.read_text(encoding="utf-8"))
+    prints = next(p["prints"] for p in saved["people"] if p["id"] == person_id)
+    return sorted(s for s in prints if s.startswith("camara:"))
+
+
+async def test_alta_con_la_camara_guarda_las_huellas_mas_distintas_y_ninguna_foto(
+    tmp_path: Path,
+) -> None:
+    # Jean sale de seis maneras distintas, una repetida, y hay fotos que no valen.
+    poses = [face(near(1, 0.70, other=10 + k)) for k in range(6)]
+    analyzer = reference_analyzer(
+        **{f"toma{k}": [pose] for k, pose in enumerate(poses)},
+        repetida=[poses[0]],
+        brian=[face(axis(0))],  # otra persona conocida delante
+        nadie=[],
+        otro=[face(near(1, 0.10))],  # no se parece a sus fotos
+    )
+    faces = watcher(tmp_path, analyzer)
+    await faces.prepare(None)
+    jean = faces.find("jean CALDERÓN")
+    assert jean is not None
+    names = [f"toma{k}" for k in range(6)] + ["repetida", "brian", "nadie", "otro"]
+    report = await faces.enroll_from_camera(
+        jean, [Frame(data=n.encode()) for n in names], stamp="20261008-1500", keep=4
+    )
+
+    assert (report.frames, report.faces, report.others, report.unlike) == (10, 9, 1, 1)
+    assert report.kept == 4 and report.similar == pytest.approx((0.70, 0.70), abs=1e-4)
+    assert camera_sources(faces, jean.id) == [f"camara:20261008-1500-{k}" for k in range(1, 5)]
+    # Ninguna foto de la cámara en disco: solo huellas.
+    written = [p for p in (tmp_path / "faces").rglob("*") if p.is_file() and "fotos" not in p.parts]
+    assert {p.suffix for p in written} <= {".json"}
+
+
+async def test_si_no_se_parece_a_sus_fotos_no_se_guarda_nada(tmp_path: Path) -> None:
+    faces = watcher(tmp_path, reference_analyzer(otro=[face(near(1, 0.10))]))
+    await faces.prepare(None)
+    jean = faces.find("Jean Calderon")
+    assert jean is not None
+    before = faces.book.path.read_text(encoding="utf-8")
+    report = await faces.enroll_from_camera(jean, [Frame(data=b"otro")] * 3, stamp="s")
+    assert (report.unlike, report.kept) == (3, 0)
+    assert faces.book.path.read_text(encoding="utf-8") == before
+
+
+async def test_las_huellas_de_la_camara_se_quedan_y_viajan_en_la_app(tmp_path: Path) -> None:
+    analyzer = reference_analyzer(toma=[face(near(1, 0.70, other=20))])
+    dev = tmp_path / "desarrollo"
+    faces = watcher(dev, analyzer)
+    await faces.prepare(None)
+    jean = faces.find("Jean Calderon")
+    assert jean is not None
+    assert (await faces.enroll_from_camera(jean, [Frame(data=b"toma")], stamp="mac")).kept == 1
+
+    # Otra vez sonia caras: no se borran aunque no estén en staff.json.
+    again = watcher(dev, analyzer)
+    await again.prepare(None)
+    assert camera_sources(again, jean.id) == ["camara:mac-1"]
+    # En el equipo del stand, sin huellas de la cámara, la app trae las del Mac...
+    stand = tmp_path / "stand"
+    there = watcher(stand, analyzer, bundled_book=faces.book.path)
+    await there.prepare(None)
+    assert camera_sources(there, jean.id) == ["camara:mac-1"]
+    # ...y si allí se da de alta con su cámara, las suyas mandan.
+    await there.enroll_from_camera(jean, [Frame(data=b"toma")], stamp="stand")
+    later = watcher(stand, analyzer, bundled_book=faces.book.path)
+    await later.prepare(None)
+    assert camera_sources(later, jean.id) == ["camara:stand-1"]
+
+
+async def test_a_un_ponente_no_se_le_da_de_alta_con_la_camara(tmp_path: Path) -> None:
+    # A los ponentes se les reconoce solo por su foto pública (CLAUDE.md).
+    analyzer = reference_analyzer(toma=[face(axis(2))])
+    analyzer.photos[b"foto-lowell.webp"] = [face(axis(2))]
+    folder = tmp_path / "faces"
+    local_photos(folder, ["brian", "jean"])
+    faces = FaceWatcher(
+        FaceSettings(dir=str(folder)),
+        staff_file=staff_file(tmp_path, [BRIAN, JEAN]),
+        analyzer_factory=lambda folder: analyzer,
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, content=b"foto-lowell.webp")),
+        models=False,
+    )
+    await faces.prepare(Schedule((talk("IA", "Lowell Abbott", "https://fotos.test/l.webp"),)))
+    lowell = faces.find("Lowell Abbott")
+    assert lowell is not None and lowell.kind == "speaker"
+    report = await faces.enroll_from_camera(lowell, [Frame(data=b"toma")], stamp="s")
+    assert report.kept == 0 and faces.book.camera_prints(lowell.id) == 0
+
+
+def test_most_different_elige_poses_distintas_y_salta_las_repetidas() -> None:
+    a, b = near(1, 0.70, other=10), near(1, 0.70, other=11)
+    chosen = most_different([a, a.copy(), b, a.copy()], keep=5)
+    assert len(chosen) == 2
+    assert most_different([], keep=3) == [] and most_different([a], keep=0) == []
+
+
+def test_parser_caras_alta() -> None:
+    args = cli.build_parser().parse_args(["caras", "--alta", "Jean Calderon", "--fotos", "3"])
+    assert (args.alta, args.fotos) == ("Jean Calderon", 3)
+    assert cli.build_parser().parse_args(["caras"]).alta is None
 
 
 async def test_quien_se_queda_cerca_del_umbral_queda_en_el_registro(

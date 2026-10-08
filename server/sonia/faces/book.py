@@ -31,6 +31,7 @@ from sonia.agenda.schedule import Schedule
 from sonia.faces.model import RECOGNIZER, FaceAnalyzer, Recognizer
 
 __all__ = [
+    "CAMERA_SOURCE",
     "EnrollReport",
     "FaceBook",
     "book_path",
@@ -57,6 +58,8 @@ _TITLE_MAX_CHARS = 70
 #: Fotos que se descargan a la vez al dar de alta.
 _DOWNLOADS_AT_ONCE = 6
 _STORE_VERSION = 1
+#: Las huellas sacadas de la cámara con ``sonia caras --alta``: no hay foto detrás.
+CAMERA_SOURCE = "camara:"
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,7 +360,8 @@ class FaceBook:
         """Pone al día nombres y cargos y quita a quien ya no está en la lista. Devuelve los quitados.
 
         De cada persona se quitan también las huellas de fotos que ya no tiene
-        (un ponente que cambió su foto en la web).
+        (un ponente que cambió su foto en la web). Las de la cámara (``sonia caras
+        --alta``) se quedan mientras siga en la lista.
         """
         wanted = {p.id: p for p in people}
         removed = [self._people[pid].name for pid in self._people if pid not in wanted]
@@ -369,7 +373,8 @@ class FaceBook:
             self._people[pid] = person
             prints = self._prints.setdefault(pid, {})
             for source in [s for s in prints if s not in person.photos]:
-                del prints[source]
+                if not source.startswith(CAMERA_SOURCE):
+                    del prints[source]
         self._rebuild()
         return removed
 
@@ -377,19 +382,49 @@ class FaceBook:
         """Copia de ``other`` las huellas de ``people`` que aquí faltan; devuelve cuántas.
 
         Es para las que trae la app (``cache/faces/huellas`` de la build): de alguien
-        dado de alta con fotos locales, este equipo no tiene las fotos.
+        dado de alta con fotos locales, este equipo no tiene las fotos. También las de
+        la cámara de quien aquí no tiene ninguna (se dio de alta en otro equipo).
         """
         added = 0
         for person in people:
             theirs = other._prints.get(person.id, {})
-            for source in person.photos:
-                if source in theirs and not self.has_print(person.id, source):
+            mine = self._prints.get(person.id, {})
+            camera = not any(s.startswith(CAMERA_SOURCE) for s in mine)
+            for source, vector in theirs.items():
+                wanted = source in person.photos or (camera and source.startswith(CAMERA_SOURCE))
+                if wanted and not self.has_print(person.id, source):
                     self._people[person.id] = person
-                    self._prints.setdefault(person.id, {})[source] = theirs[source]
+                    self._prints.setdefault(person.id, {})[source] = vector
                     added += 1
         if added:
             self._rebuild()
         return added
+
+    def photo_prints(self, person_id: str) -> list[np.ndarray[Any, Any]]:
+        """Las huellas de sus fotos (no las de la cámara): con qué se comprueba que es esa persona."""
+        prints = self._prints.get(person_id, {})
+        return [v for source, v in prints.items() if not source.startswith(CAMERA_SOURCE)]
+
+    def camera_prints(self, person_id: str) -> int:
+        """Cuántas huellas de la cámara tiene."""
+        return sum(1 for s in self._prints.get(person_id, {}) if s.startswith(CAMERA_SOURCE))
+
+    def set_camera_prints(
+        self, person: Person, vectors: list[np.ndarray[Any, Any]], stamp: str
+    ) -> int:
+        """Cambia las huellas de la cámara de ``person`` por ``vectors``. Devuelve cuántas quedan."""
+        prints = self._prints.setdefault(person.id, {})
+        for source in [s for s in prints if s.startswith(CAMERA_SOURCE)]:
+            del prints[source]
+        self._people[person.id] = person
+        kept = 0
+        for vector in vectors:
+            normalized = _normalized(vector)
+            if normalized is not None:
+                kept += 1
+                prints[f"{CAMERA_SOURCE}{stamp}-{kept}"] = normalized
+        self._rebuild()
+        return kept
 
     def add_print(self, person: Person, source: str, embedding: np.ndarray[Any, Any]) -> None:
         self._people[person.id] = person

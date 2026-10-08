@@ -28,6 +28,7 @@ import time
 import wave
 from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,7 @@ from sonia.devices import DeviceManager, apply_choice, load_choice
 from sonia.faces import FaceBook, FaceWatcher, load_greetings, models_ready, name_key
 from sonia.faces.book import book_path
 from sonia.faces.model import DETECTOR, print_model
+from sonia.faces.watcher import CAMERA_KINDS, ENROLL_KEEP
 from sonia.gestures.director import GestureDirector
 from sonia.guest.link import FrameGrabber
 from sonia.live.audio import silence_blocks
@@ -55,7 +57,7 @@ from sonia.panel.control import StandControl
 from sonia.panel.logs import LogBuffer
 from sonia.parent import watch_parent
 from sonia.paths import BUNDLE_ROOT, frozen, seed_home
-from sonia.types import ActionContext, AudioChunk, CameraSource
+from sonia.types import ActionContext, AudioChunk, CameraSource, Frame
 from sonia.vision.camera import OpenCVCamera, build_camera
 from sonia.vision.policy import VisionPolicy
 from sonia.vision.presence import PresenceWatch
@@ -1183,12 +1185,20 @@ async def cmd_check(settings: Settings) -> int:
 # ---------------------------------------------------------------------------
 
 
-async def cmd_caras(settings: Settings, *, probe: bool = False, forget: bool = False) -> int:
+async def cmd_caras(
+    settings: Settings,
+    *,
+    probe: bool = False,
+    forget: bool = False,
+    enroll: str | None = None,
+    keep: int = ENROLL_KEEP,
+) -> int:
     """Baja los modelos, da de alta al equipo y a los ponentes y, con ``--probar``, dice a quién ve.
 
     No llama a ningún modelo de IA de pago: solo descarga fotos públicas y los
-    modelos de OpenCV. Con ``--probar`` no guarda nada de la cámara. Con
-    ``--olvidar-visitas`` olvida quién ha pasado ya por el stand.
+    modelos. Con ``--probar`` no guarda nada de la cámara. Con
+    ``--olvidar-visitas`` olvida quién ha pasado ya por el stand. Con ``--alta``
+    da de alta con la cámara a alguien de la lista: guarda solo su huella.
     """
     faces = build_faces(settings)
     if faces is None:
@@ -1231,9 +1241,69 @@ async def cmd_caras(settings: Settings, *, probe: bool = False, forget: bool = F
         print(f"Quitado (ya no está en la lista): {name}")
     for name, why in report.failed:
         print(f"Sin huella nueva de {name}: {why}")
+    if enroll:
+        return await _enroll_faces(settings, faces, enroll, keep)
     if not probe:
         return 1 if not people else 0
     return await _probe_faces(settings, faces)
+
+
+#: Fotos que toma ``sonia caras --alta``, una cada ``_ENROLL_EVERY_S``: unos diez segundos.
+_ENROLL_SHOTS = 24
+_ENROLL_EVERY_S = 0.4
+
+
+async def _enroll_faces(settings: Settings, faces: FaceWatcher, name: str, keep: int) -> int:
+    """``sonia caras --alta``: unas fotos de la cámara y se guardan las huellas más distintas."""
+    person = faces.find(name)
+    if person is None or person.kind not in CAMERA_KINDS:
+        print(
+            f"\nNo hay nadie llamado «{name}» en el equipo ni en las personas conocidas. A los "
+            "ponentes se les reconoce solo por su foto pública."
+        )
+        return 1
+    camera = build_camera(settings.vision)
+    print(
+        f"\nDando de alta a {person.label} con la cámara: se guarda solo su huella, nunca la "
+        "foto.\nPonte delante de la cámara donde estarías en el stand. Durante unos diez "
+        "segundos mira a la pantalla, gira un poco la cabeza a los lados y acércate y aléjate "
+        "un paso. Que no salga nadie más."
+    )
+    frames: list[Frame] = []
+    try:
+        for count in (3, 2, 1):
+            print(f"  {count}…")
+            await asyncio.sleep(1.0)
+        print("  mirando…")
+        for _ in range(_ENROLL_SHOTS):
+            frame = await asyncio.wait_for(faces.capture(camera), timeout=10.0)
+            if frame is not None:
+                frames.append(frame)
+            await asyncio.sleep(_ENROLL_EVERY_S)
+    finally:
+        await _aclose(camera)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    report = await faces.enroll_from_camera(person, frames, stamp=stamp, keep=keep)
+    frames.clear()
+    print(
+        f"\n{report.frames} fotos, {report.faces} con cara"
+        + (f", {report.others} con otra persona conocida" if report.others else "")
+        + (f", {report.unlike} que no se parecen a sus fotos" if report.unlike else "")
+        + "."
+    )
+    if not report.kept:
+        print(
+            "No se guardó nada: no salía su cara o no se parecía a sus fotos. ¿Es el nombre "
+            "correcto? Prueba con más luz en la cara y más cerca."
+        )
+        return 1
+    low, high = report.similar
+    print(
+        f"{person.name}: {report.kept} huellas de la cámara ({faces.book.path}). Parecido con "
+        f"sus fotos: entre {low:.2f} y {high:.2f} (umbral {faces.threshold:.2f}). La app las "
+        "lleva en la próxima build."
+    )
+    return 0
 
 
 async def _probe_faces(settings: Settings, faces: FaceWatcher) -> int:
@@ -1388,6 +1458,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="olvidar quién ha pasado ya por el stand (por ejemplo, tras las pruebas)",
     )
+    caras.add_argument(
+        "--alta",
+        metavar="NOMBRE",
+        help=(
+            "dar de alta con la cámara a alguien del equipo o una persona conocida, con su "
+            "permiso: se guarda solo su huella, nunca la foto"
+        ),
+    )
+    caras.add_argument(
+        "--fotos",
+        type=int,
+        default=ENROLL_KEEP,
+        help=f"huellas que se guardan con --alta (por defecto {ENROLL_KEEP})",
+    )
     return parser
 
 
@@ -1417,7 +1501,15 @@ def main(argv: list[str] | None = None) -> int:
         case "check":
             return _run(cmd_check(settings))
         case "caras":
-            return _run(cmd_caras(settings, probe=args.probar, forget=args.olvidar_visitas))
+            return _run(
+                cmd_caras(
+                    settings,
+                    probe=args.probar,
+                    forget=args.olvidar_visitas,
+                    enroll=args.alta,
+                    keep=args.fotos,
+                )
+            )
     return 2
 
 
