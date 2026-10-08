@@ -1619,7 +1619,18 @@ cuando el orquestador lo pida con `request_frame`.
    Si el escritorio está en horizontal, la ventana en pantalla completa saldrá
    apaisada y con bandas negras.
 6. Construir fuera del repositorio: las builds no se suben (ver `.gitignore`).
-7. **Menú de opciones (Esc)**: lleva a **Calidad gráfica**, a **Editar a Sonia**,
+   **Versiones** (desde el 8 de octubre de 2026): cada build de `SoniaBuild` lleva
+   la versión `1.0.<commits del repo>` (`SoniaBuild.ResolveVersion`; todas las de un
+   mismo commit llevan la misma, `SONIA_VERSION` la fuerza y `MajorMinor` se sube a
+   mano para un salto grande). Va en `Application.version` (solo durante la build:
+   `ProjectSettings` no cambia), sale arriba a la derecha del menú de Esc y en
+   `build-report.txt`, y al acabar deja el zip en `unity/Build/<tipo>-<versión>.zip`
+   (`Sonnia-macOS`, `Sonnia-Windows-x64`, `Sonnia-pruebas-macOS`,
+   `Sonnia-pruebas-Windows-x64`, `Sonnia-desarrollo-macOS` y
+   `Sonnia-diagnostico-Windows-x64`), borrando los zips anteriores de ese tipo. La
+   app de macOS va con `ditto` (conserva enlaces y firma); la de Windows, con `tar`
+   y sin `Sonnia_BackUpThisFolder_ButDontShipItWithYourGame`.
+7. **Menú de opciones (Esc)**: arriba a la derecha, la versión de la app. Lleva a **Calidad gráfica**, a **Editar a Sonia**,
    a **Micrófono, cámara y pantalla** y a **Partículas** (efectos y ajustes de las
    partículas del escenario, sección «Partículas del escenario»)
    (el editor de personaje de Sonia; el de Jean solo se abre desde el panel). Al

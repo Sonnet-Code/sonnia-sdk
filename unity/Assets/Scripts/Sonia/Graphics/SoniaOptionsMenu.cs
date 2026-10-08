@@ -8,6 +8,8 @@
 // atajos), por si en el stand no hay ratón.
 // Con el editor de personaje en pantalla, Esc no hace nada: el editor tiene sus
 // propios botones de guardar y salir.
+// Arriba a la derecha sale la versión de la app (Application.version, que pone
+// SoniaBuild al compilar), para saber qué build tiene cada equipo.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -240,6 +242,17 @@ namespace Sonia
             title.fontStyle = FontStyle.Bold;
             title.GetComponent<LayoutElement>().preferredHeight = 64f;
 
+            // La versión, a la altura del título y fuera de la columna.
+            Text version = SoniaUiKit.MakeText(panel.transform, "Version", VersionLabel(), 26, TextAnchor.MiddleRight);
+            version.color = MutedText;
+            version.GetComponent<LayoutElement>().ignoreLayout = true;
+            RectTransform versionRect = version.rectTransform;
+            versionRect.anchorMin = new Vector2(1f, 1f);
+            versionRect.anchorMax = new Vector2(1f, 1f);
+            versionRect.pivot = new Vector2(1f, 1f);
+            versionRect.sizeDelta = new Vector2(420f, 64f);
+            versionRect.anchoredPosition = new Vector2(-40f, -36f);
+
             AddItem(panel.transform, "Calidad gráfica",
                 "Resolución, sombras, efectos y fotogramas por segundo de este equipo.", OpenGraphics);
             AddItem(panel.transform, "Editar a Sonnia",
@@ -258,6 +271,12 @@ namespace Sonia
             keys.GetComponent<LayoutElement>().preferredHeight = 64f;
 
             _canvas.SetActive(false);
+        }
+
+        /// <summary>«Versión 1.0.179»; en el editor, con «(editor)» detrás, porque no es la de ninguna build.</summary>
+        private static string VersionLabel()
+        {
+            return "Versión " + Application.version + (Application.isEditor ? " (editor)" : string.Empty);
         }
 
         private void AddItem(Transform parent, string label, string description, UnityAction action)

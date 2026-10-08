@@ -15,7 +15,14 @@
 // porque las texturas de NAF (Genies) llegan en formatos de Vulkan.
 // El resumen del BuildReport se escribe en unity/Build/<plataforma>/build-report.txt
 // para poder leerlo sin rebuscar en el log de Unity.
+//
+// Cada build lleva versión (ResolveVersion: «1.0.<commits del repo>»): sale en el menú
+// de Esc de la app (Application.version) y en el nombre del zip que se deja en
+// unity/Build, p. ej. Sonnia-pruebas-macOS-1.0.179.zip. Los zips anteriores del mismo
+// tipo se borran.
 
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using UnityEditor;
@@ -23,6 +30,7 @@ using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Debug = UnityEngine.Debug;
 
 namespace Sonia.EditorTools
 {
@@ -33,6 +41,15 @@ namespace Sonia.EditorTools
 
         /// <summary>Identificador de la app (antes salía el de la plantilla de URP).</summary>
         public const string BundleId = "com.sonnetcode.sonia";
+
+        /// <summary>
+        /// Primera parte de la versión de las builds; la última es el número de commits del
+        /// repo (ResolveVersion). Se sube a mano para marcar un salto grande.
+        /// </summary>
+        public const string MajorMinor = "1.0";
+
+        /// <summary>Variable de entorno que fuerza la versión (p. ej. en un equipo sin git).</summary>
+        public const string VersionVariable = "SONIA_VERSION";
 
         /// <summary>
         /// Escenas de la build: la de Sonia primero (es la que arranca) y la del
@@ -60,7 +77,7 @@ namespace Sonia.EditorTools
         [MenuItem("Sonia/Build macOS")]
         public static void BuildMac()
         {
-            Build(BuildTarget.StandaloneOSX, "macOS", "Sonnia.app");
+            Build(BuildTarget.StandaloneOSX, "macOS", "Sonnia.app", "Sonnia-macOS");
         }
 
         /// <summary>
@@ -70,13 +87,14 @@ namespace Sonia.EditorTools
         [MenuItem("Sonia/Build macOS (desarrollo, registro de Genies)")]
         public static void BuildMacDevelopment()
         {
-            Build(BuildTarget.StandaloneOSX, "macOS-dev", "Sonnia.app", BuildOptions.Development, "FORCE_LOGS");
+            Build(BuildTarget.StandaloneOSX, "macOS-dev", "Sonnia.app", "Sonnia-desarrollo-macOS",
+                BuildOptions.Development, "FORCE_LOGS");
         }
 
         [MenuItem("Sonia/Build Windows")]
         public static void BuildWindows()
         {
-            Build(BuildTarget.StandaloneWindows64, "Windows-x64", "Sonnia.exe");
+            Build(BuildTarget.StandaloneWindows64, "Windows-x64", "Sonnia.exe", "Sonnia-Windows-x64");
         }
 
         /// <summary>
@@ -87,14 +105,15 @@ namespace Sonia.EditorTools
         [MenuItem("Sonia/Build macOS (pruebas, sin cámara en el panel)")]
         public static void BuildMacTesters()
         {
-            BuildForTesters(() => Build(BuildTarget.StandaloneOSX, "macOS-pruebas", "Sonnia.app"));
+            BuildForTesters(() => Build(BuildTarget.StandaloneOSX, "macOS-pruebas", "Sonnia.app", "Sonnia-pruebas-macOS"));
         }
 
         /// <summary>Como BuildMacTesters, para Windows (Build/Windows-pruebas-x64).</summary>
         [MenuItem("Sonia/Build Windows (pruebas, sin cámara en el panel)")]
         public static void BuildWindowsTesters()
         {
-            BuildForTesters(() => Build(BuildTarget.StandaloneWindows64, "Windows-pruebas-x64", "Sonnia.exe"));
+            BuildForTesters(() => Build(BuildTarget.StandaloneWindows64, "Windows-pruebas-x64", "Sonnia.exe",
+                "Sonnia-pruebas-Windows-x64"));
         }
 
         /// <summary>
@@ -107,7 +126,7 @@ namespace Sonia.EditorTools
         public static void BuildWindowsDiagnostics()
         {
             BuildForTesters(() => Build(BuildTarget.StandaloneWindows64, "Windows-dev-x64", "Sonnia.exe",
-                BuildOptions.Development, "FORCE_LOGS"));
+                "Sonnia-diagnostico-Windows-x64", BuildOptions.Development, "FORCE_LOGS"));
         }
 
         private static void BuildForTesters(System.Action build)
@@ -123,9 +142,10 @@ namespace Sonia.EditorTools
             }
         }
 
-        private static void Build(BuildTarget target, string folder, string fileName,
+        private static void Build(BuildTarget target, string folder, string fileName, string zipName,
                                   BuildOptions extraOptions = BuildOptions.None, params string[] defines)
         {
+            string version = ResolveVersion();
             SoniaSceneSetup.ConfigureVerticalBuild();
             PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Standalone, BundleId);
             // macOS exige explicar para qué se usan la cámara y el micrófono; sin
@@ -172,6 +192,10 @@ namespace Sonia.EditorTools
                 PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, ScriptingImplementation.Mono2x);
             }
 
+            // La versión solo durante la build, para no tocar ProjectSettings en cada una.
+            string savedVersion = PlayerSettings.bundleVersion;
+            PlayerSettings.bundleVersion = version;
+
             BuildReport report;
             try
             {
@@ -179,6 +203,7 @@ namespace Sonia.EditorTools
             }
             finally
             {
+                PlayerSettings.bundleVersion = savedVersion;
                 // Y a disco: la build guarda los ajustes con Mono y, si no, se quedaba así.
                 PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, backend);
                 AssetDatabase.SaveAssets();
@@ -186,7 +211,7 @@ namespace Sonia.EditorTools
                 SoniaPlayerBuildFixes.RestoreEditorNafPreload();
             }
 
-            string summary = Summarize(report);
+            string summary = "Versión: " + version + "\n" + Summarize(report);
             bool wrongArchitecture = false;
             if (target == BuildTarget.StandaloneWindows64 && report.summary.result == BuildResult.Succeeded)
             {
@@ -211,9 +236,135 @@ namespace Sonia.EditorTools
             File.WriteAllText(Path.Combine(outputDir, "build-report.txt"), summary);
             Debug.Log("[Sonia] Build " + folder + ": " + report.summary.result + "\n" + summary);
 
-            if (Application.isBatchMode && (report.summary.result != BuildResult.Succeeded || wrongArchitecture))
+            bool zipped = true;
+            if (report.summary.result == BuildResult.Succeeded && !wrongArchitecture)
+            {
+                zipped = Zip(target, outputDir, fileName, zipName, version);
+            }
+
+            if (Application.isBatchMode && (report.summary.result != BuildResult.Succeeded || wrongArchitecture || !zipped))
             {
                 EditorApplication.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Versión de esta build: «MajorMinor.<commits del repo>», así que todas las builds de un
+        /// mismo commit llevan la misma. SONIA_VERSION la fuerza; sin git, la última parte es 0.
+        /// </summary>
+        public static string ResolveVersion()
+        {
+            string forced = System.Environment.GetEnvironmentVariable(VersionVariable);
+            if (!string.IsNullOrWhiteSpace(forced))
+            {
+                return forced.Trim();
+            }
+
+            string count = RunTool("git", new[] { "rev-list", "--count", "HEAD" }, RepoRoot, out string output) ? output.Trim() : string.Empty;
+            if (!int.TryParse(count, out int commits))
+            {
+                Debug.LogWarning("[Sonia] No se pudo contar los commits con git: la build sale con la versión "
+                                 + MajorMinor + ".0. Para fijarla, " + VersionVariable + ".");
+                commits = 0;
+            }
+
+            return MajorMinor + "." + commits;
+        }
+
+        private static string RepoRoot => Path.GetFullPath(Path.Combine(Application.dataPath, "..", ".."));
+
+        /// <summary>
+        /// Deja la build en Build/&lt;zipName&gt;-&lt;versión&gt;.zip y borra los zips anteriores del
+        /// mismo tipo. La app de macOS va con ditto (enlaces, permisos y firma tal cual); la de
+        /// Windows, con tar (bsdtar, que viene en macOS y en Windows 10+), sin la carpeta
+        /// _BackUpThisFolder_ButDontShipItWithYourGame.
+        /// </summary>
+        private static bool Zip(BuildTarget target, string outputDir, string fileName, string zipName, string version)
+        {
+            string root = Path.GetFullPath(BuildRoot);
+            string zip = Path.Combine(root, zipName + "-" + version + ".zip");
+            List<string> old = new List<string>(Directory.GetFiles(root, zipName + "-*.zip"));
+            if (File.Exists(Path.Combine(root, zipName + ".zip")))
+            {
+                old.Add(Path.Combine(root, zipName + ".zip"));
+            }
+
+            foreach (string path in old)
+            {
+                File.Delete(path);
+            }
+
+            string folder = Path.GetFullPath(outputDir);
+            bool ok;
+            string output;
+            if (target == BuildTarget.StandaloneOSX)
+            {
+                ok = RunTool("/usr/bin/ditto", new[] { "-c", "-k", "--keepParent", Path.Combine(folder, fileName), zip }, root, out output);
+            }
+            else
+            {
+                List<string> args = new List<string> { "-a", "-c", "-f", zip, "--exclude", ".DS_Store", "-C", folder };
+                foreach (string entry in Directory.GetFileSystemEntries(folder))
+                {
+                    string name = Path.GetFileName(entry);
+                    if (!name.EndsWith("_BackUpThisFolder_ButDontShipItWithYourGame") && name != ".DS_Store")
+                    {
+                        args.Add(name);
+                    }
+                }
+
+                ok = RunTool("tar", args.ToArray(), root, out output);
+            }
+
+            if (!ok || !File.Exists(zip))
+            {
+                Debug.LogError("[Sonia] No se pudo crear " + zip + ": " + output);
+                return false;
+            }
+
+            Debug.Log("[Sonia] Zip de la build: " + zip + " (" + (new FileInfo(zip).Length / (1024 * 1024)) + " MB)");
+            return true;
+        }
+
+        /// <summary>Un argumento entre comillas si hace falta (ProcessStartInfo no tiene ArgumentList aquí).</summary>
+        private static string Quote(string arg)
+        {
+            if (arg.Length > 0 && arg.IndexOfAny(new[] { ' ', '\t', '"' }) < 0)
+            {
+                return arg;
+            }
+
+            return "\"" + arg.Replace("\"", "\\\"") + "\"";
+        }
+
+        /// <summary>Lanza una herramienta y espera a que acabe. Cierto si sale con 0.</summary>
+        private static bool RunTool(string tool, string[] args, string workingDirectory, out string output)
+        {
+            ProcessStartInfo info = new ProcessStartInfo(tool, string.Join(" ", System.Array.ConvertAll(args, Quote)))
+            {
+                WorkingDirectory = workingDirectory,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            // Sin los «._» de los atributos de macOS dentro del zip de Windows.
+            info.EnvironmentVariables["COPYFILE_DISABLE"] = "1";
+            try
+            {
+                using (Process process = Process.Start(info))
+                {
+                    System.Threading.Tasks.Task<string> stderr = process.StandardError.ReadToEndAsync();
+                    output = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+                    output += stderr.Result;
+                    return process.ExitCode == 0;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                output = ex.Message;
+                return false;
             }
         }
 

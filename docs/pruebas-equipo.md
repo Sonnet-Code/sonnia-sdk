@@ -1,7 +1,8 @@
 # Probar Sonnia: builds de prueba para el equipo
 
-Son `Sonnia-pruebas-macOS.zip`, para un Mac con Apple Silicon (M1 o posterior), y
-`Sonnia-pruebas-Windows-x64.zip`, para un PC con Windows de 64 bits (Intel o AMD).
+Son `Sonnia-pruebas-macOS-<versión>.zip`, para un Mac con Apple Silicon (M1 o
+posterior), y `Sonnia-pruebas-Windows-x64-<versión>.zip`, para un PC con Windows de
+64 bits (Intel o AMD). La versión sale también arriba a la derecha al pulsar Esc.
 Hace falta internet:
 Sonnia habla de verdad con GPT-Live, que cuesta unos 3 USD por hora mientras la
 app está abierta. **Ciérrala cuando acabes de probar.**
@@ -53,12 +54,13 @@ Silicon. Usa la de Windows en un PC.
 - Háblale con normalidad: te oye por el micrófono y contesta con voz. Puedes
   interrumpirla hablando. Prueba la trivia, que te diga la agenda del DevFest o
   que baile.
-- Esc abre el menú de opciones. Si va lenta, baja ahí la calidad gráfica.
+- Esc abre el menú de opciones, con la versión arriba a la derecha. Si va lenta,
+  baja ahí la calidad gráfica.
 - Para cerrarla: Cmd+Q en Mac y Alt+F4 en Windows.
 
 ## Si algo falla
 
-Mándale a Jean la hora aproximada y los registros:
+Mándale a Jean la versión (sale al pulsar Esc), la hora aproximada y los registros:
 
 - **Mac:** `~/Library/Application Support/Sonia/logs/` y
   `~/Library/Logs/DefaultCompany/Sonnia/Player.log`.
