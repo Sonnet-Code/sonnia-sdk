@@ -350,5 +350,5 @@ Puede haber varias Sonias a la vez en sitios distintos (por ejemplo, la del stan
 
 - Secretos del Worker (`wrangler secret put` en `cloud/panel/`): `AGENT_TOKEN`, `PANEL_PASSWORD` y, cuando exista Access, `ACCESS_TEAM_DOMAIN` y `ACCESS_AUD`.
 - En el `.env` de cada equipo con Sonia: `PANEL_CLOUD_TOKEN` (el mismo valor que `AGENT_TOKEN`) y, si se quiere, `PANEL_INSTANCE_NAME`.
-- Despliegue: `cd cloud/panel && npm install && npm run deploy` (copia los estáticos del panel y la galería a `public/` y ejecuta `wrangler deploy`). El dominio `sonia.sonnetcode.com` es un Custom Domain del Worker.
+- Despliegue: `cd cloud/panel && npm install && npm run deploy` (copia los estáticos del panel y la galería a `public/` y ejecuta `wrangler deploy`). El dominio `sonia.sonnetcode.com` es un Custom Domain del Worker; `sonnia.sonnetcode.com` (con doble n, como se escribe Sonnia) es otro que redirige ahí.
 - Plan free de Workers: el Durable Object usa SQLite y la API de hibernación; con el estado cada 15 s cuando nadie mira, el consumo queda muy por debajo de los límites gratuitos.

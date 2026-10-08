@@ -41,7 +41,7 @@ npx wrangler secret put PANEL_PASSWORD   # contraseña para el personal del stan
 ```
 
 - Hasta que existan los secretos nadie entra al panel y ninguna Sonia conecta: desplegar primero es seguro. Cambiar un secreto no necesita volver a desplegar.
-- El dominio `sonia.sonnetcode.com` es un Custom Domain del Worker (`routes` en `wrangler.jsonc`): `wrangler deploy` crea el registro DNS y el certificado. No puede existir ya otro registro DNS con ese nombre.
+- El dominio `sonia.sonnetcode.com` es un Custom Domain del Worker (`routes` en `wrangler.jsonc`): `wrangler deploy` crea el registro DNS y el certificado. No puede existir ya otro registro DNS con ese nombre. `sonnia.sonnetcode.com` (con doble n, como se escribe Sonnia) es otro Custom Domain del mismo Worker que solo redirige (301) a `sonia.sonnetcode.com`, con la misma ruta, por si alguien lo teclea así.
 - `workers_dev` y `preview_urls` están desactivados para que no haya otra URL fuera de Access.
 - En el `.env` de cada equipo con Sonia: `PANEL_CLOUD_TOKEN` (el mismo valor que `AGENT_TOKEN`) y, si se quiere, `PANEL_INSTANCE_NAME`.
 

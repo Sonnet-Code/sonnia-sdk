@@ -1,4 +1,5 @@
 // Panel de control de Sonia en Cloudflare: https://sonia.sonnetcode.com
+// (https://sonnia.sonnetcode.com, con doble n como se escribe Sonnia, redirige ahí).
 // Sin account_id: se toma de la sesión de wrangler de quien despliega.
 // Secretos (wrangler secret put): AGENT_TOKEN, PANEL_PASSWORD y, cuando
 // exista la aplicación de Cloudflare Access, ACCESS_TEAM_DOMAIN y ACCESS_AUD.
@@ -12,7 +13,10 @@
   // quedarían fuera de la aplicación de Cloudflare Access.
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [{ "pattern": "sonia.sonnetcode.com", "custom_domain": true }],
+  "routes": [
+    { "pattern": "sonia.sonnetcode.com", "custom_domain": true },
+    { "pattern": "sonnia.sonnetcode.com", "custom_domain": true }
+  ],
 
   // Estáticos (página del panel y galería) que copia scripts/build.mjs.
   // run_worker_first: todo pasa antes por el Worker, que exige la sesión.

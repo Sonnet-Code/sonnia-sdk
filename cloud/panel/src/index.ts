@@ -1,6 +1,7 @@
 /**
  * Worker `sonia-panel`: panel de control de Sonnia en Cloudflare.
  *
+ * - `sonnia.sonnetcode.com` (con doble n): todo redirige a `sonia.sonnetcode.com`.
  * - `/agent`: WebSocket de cada Sonnia, solo con `AGENT_TOKEN`.
  * - `/guest/agent`: WebSocket del Modo Jean de cada Sonnia (cámara, micro y voz
  *   del invitado), también con `AGENT_TOKEN`; el navegador entra por `/api/guest`.
@@ -19,6 +20,10 @@ import { bouncePage, handleLoginGet, handleLoginPost, handleLogout } from "./log
 export { ControlRoom } from "./control-room";
 export { GuestRoom } from "./guest-room";
 
+/** Dominio del panel. */
+const PANEL_HOST = "sonia.sonnetcode.com";
+/** Con doble n, como se escribe Sonnia: solo redirige al dominio del panel (por si alguien lo teclea así). */
+const ALIAS_HOSTS = new Set(["sonnia.sonnetcode.com"]);
 /** Estáticos que se ven sin sesión (los usa la página de entrada). */
 const PUBLIC_PATHS = new Set(["/static/sonnet-code-logo.svg", "/static/favicon.svg", "/favicon.ico"]);
 /** Tamaño máximo del cuerpo de `POST /api/action`. */
@@ -54,6 +59,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   const path = url.pathname;
   const method = request.method;
 
+  // Antes que nada: la sesión y las cookies son las del dominio del panel.
+  if (ALIAS_HOSTS.has(url.hostname)) return redirect(`https://${PANEL_HOST}${path}${url.search}`, 301);
   if (path === "/agent") return handleAgent(request, env);
   if (path === "/guest/agent") return handleGuestAgent(request, env);
   if (path === "/login") {
