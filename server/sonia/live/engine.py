@@ -879,6 +879,9 @@ class LiveEngine:
         await self._hub.broadcast_json(p.msg_transcript("assistant", text, False))
         if self._gestures is not None:
             self._gestures.on_assistant_text(segment.uid, text)
+        if self._trivia is not None:
+            # La trivia retenida mientras pregunta por Sonnet Code sale cuando arranca.
+            await self._trivia.on_assistant_text(text)
 
     async def _on_input_transcript(self, event: dict[str, Any]) -> None:
         delta = event.get("delta")

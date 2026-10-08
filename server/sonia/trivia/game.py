@@ -35,6 +35,7 @@ import asyncio
 import contextlib
 import logging
 import random
+import re
 import time
 from collections.abc import Coroutine
 from enum import StrEnum
@@ -80,10 +81,38 @@ OFF_TEXT = (
     "normalidad."
 )
 
-INTRO_TEXT = (
-    "La trivia está en tu pantalla, nivel {level}. Arranca con energía: di en una frase que son "
-    "{total} preguntas y que con {threshold} aciertos gana. "
+INTRO_TEXT = "La trivia está en tu pantalla, nivel {level}. "
+READY_TEXT = (
+    "La trivia está preparada, nivel {level}, pero aún no ha empezado ni sale en tu pantalla: "
+    "sale cuando arranques. "
 )
+LEVEL_TEXT = "Si pide otro nivel (fácil, intermedio o difícil), delega reiniciarla con ese nivel. "
+KICKOFF_TEXT = (
+    "{lead} con energía: di en una frase que son {total} preguntas y que con {threshold} "
+    "aciertos gana. "
+)
+
+#: Para jugar hay que seguir a Sonnet Code, y se pide antes de empezar. La partida se prepara
+#: ya (GPT-Live tiene la primera pregunta) y sale en pantalla cuando Sonia arranca: si
+#: esperaba a una segunda delegación («ya las sigo»), GPT-Live se la saltaba cuando el
+#: visitante contestaba mientras ella hablaba y se inventaba la pregunta (registro y pruebas
+#: con la API real del 8 de octubre de 2026).
+FOLLOW_TEXT = (
+    "Antes de empezar, pregúntale solo si ya sigue a Sonnet Code en Instagram y LinkedIn "
+    "(@sonnetcode); si no, que escanee el QR de la pantalla y las siga. No lo puedes comprobar: "
+    "créele. Espera su respuesta: no digas todavía la pregunta ni cuántas son. Si no quiere "
+    "seguirlas, dile con cariño que es lo único que pide la trivia y, si aun así no quiere, "
+    "delega terminarla. Cuando te diga que ya las sigue (no antes), "
+)
+
+#: Margen de la primera pregunta mientras el visitante sigue a Sonnet Code con el móvil:
+#: ni recordatorio ni partida abandonada por no oírle. Pasado, la trivia sale en pantalla.
+FOLLOW_GRACE_S = 45.0
+
+#: Lo que dice Sonia al arrancar (:data:`KICKOFF_TEXT`) y saca la trivia a la pantalla.
+KICKOFF_WORDS = frozenset({"acierto", "aciertos"})
+#: Parte de las palabras de la primera pregunta que tiene que haber dicho para sacarla.
+QUESTION_HEARD_SHARE = 0.5
 
 QUESTION_TEXT = (
     "{lead} la pregunta {number} de {total} y lee solo la pregunta, tal cual: «{question}». "
@@ -92,6 +121,12 @@ QUESTION_TEXT = (
 
 #: Las opciones de cada pregunta, directas a GPT-Live: el backend resumía el guion y se
 #: las comía, y Sonia no sabía que «Cobol» era la B (7 de octubre de 2026).
+#: Delante de :data:`OPTIONS_TEXT` mientras se pregunta si sigue a Sonnet Code: con la
+#: pregunta en la mano, GPT-Live la leía sin esperar el «ya las sigo» (8 de octubre de 2026).
+WAIT_OPTIONS_TEXT = (
+    "TRIVIA PREPARADA, AÚN SIN EMPEZAR: primero pregúntale si sigue a Sonnet Code en Instagram "
+    "y LinkedIn y espera a que te diga que sí; no digas antes la pregunta ni cuántas son. "
+)
 OPTIONS_TEXT = (
     "TRIVIA, pregunta {number} de {total}: «{question}». Opciones en la pantalla, para que "
     "sepas qué letra elige el visitante, diga la letra o la respuesta (no las leas): "
@@ -240,6 +275,13 @@ class TriviaGame:
         #: Cuándo toca el empujón de :data:`NUDGE_TEXT` (0: no toca) y la última delegación.
         self._nudge_at = 0.0
         self._delegated_at = float("-inf")
+        #: Se le ha preguntado si sigue a Sonnet Code y aún no ha contestado a la primera:
+        #: su «ya las sigo» no es una respuesta, así que no hay empujón.
+        self._follow_pending = False
+        #: Pantalla retenida hasta que Sonia arranca (``None``: no se retiene) y lo que ha
+        #: dicho mientras tanto.
+        self._held: dict[str, dict[str, Any]] | None = None
+        self._heard: set[str] = set()
         self._tasks: set[asyncio.Task[Any]] = set()
 
     # -- estado -------------------------------------------------------------
@@ -290,13 +332,16 @@ class TriviaGame:
 
     # -- arranque y final ---------------------------------------------------
 
-    async def start(self, source: str, level: str | None = None) -> tuple[bool, str]:
+    async def start(
+        self, source: str, level: str | None = None, *, ask_follow: bool = False
+    ) -> tuple[bool, str]:
         """Empieza una partida. Nunca lanza.
 
         Con ``source="voice"`` (acción ``start_trivia``) devuelve el guion para
         que GPT-Live lo diga como resultado de la acción. Con ``panel`` se lo
         pasa la partida a GPT-Live en cuanto calla y devuelve un texto para el
-        personal del stand.
+        personal del stand. Con ``ask_follow``, el guion pide preguntarle antes
+        de la primera si sigue a Sonnet Code (:data:`FOLLOW_TEXT`).
         """
         if not self._settings.enabled:
             return False, "La trivia está desactivada (TRIVIA_ENABLED=false)."
@@ -324,15 +369,30 @@ class TriviaGame:
             "Trivia en marcha (%s): %d preguntas, nivel %s", source, self._total, self._level
         )
         self._host.touch()
-        await self._screen.hide_image()
-        await self._screen.set_sticky(
+        # Mientras se pregunta si sigue a Sonnet Code, la pantalla espera: el QR sigue a la vista.
+        self._held = {} if ask_follow else None
+        self._heard = set()
+        if not ask_follow:
+            await self._screen.hide_image()
+        await self._show(
             STICKY_START, p.msg_trivia_start(self._total, self._threshold, self._level)
         )
         await self._host.instruct(
             RULES_TEXT.format(total=self._total, threshold=self._threshold, level=self._level)
         )
+        self._follow_pending = ask_follow
         await self._ask(0)
-        script = INTRO_TEXT.format(total=self._total, threshold=self._threshold, level=self._level)
+        intro = READY_TEXT if ask_follow else INTRO_TEXT
+        script = intro.format(level=self._level) + LEVEL_TEXT
+        if ask_follow:
+            grace = time.monotonic() + FOLLOW_GRACE_S
+            self._asked_at = self._last_user_at = grace
+            script += FOLLOW_TEXT
+        script += KICKOFF_TEXT.format(
+            lead="arranca" if ask_follow else "Arranca",
+            total=self._total,
+            threshold=self._threshold,
+        )
         script += self._question_text(0, lead="Después di")
         if source == "voice":
             return True, script
@@ -343,12 +403,67 @@ class TriviaGame:
         )
 
     async def restart(self, source: str, level: str | None = None) -> tuple[bool, str]:
-        """Empieza una partida nueva, cortando sin despedida la que haya en marcha."""
+        """Empieza una partida nueva, cortando sin despedida la que haya en marcha.
+
+        Si aún no ha contestado ninguna (pide otro nivel al empezar), solo cambian
+        las preguntas: la partida sigue y Sonia no se quita y se vuelve a poner la gorra.
+        """
+        if self.active and self._index == 0 and self._phase is TriviaPhase.ASKING:
+            return await self._change_level(source, level)
         if self.active:
             logger.info("Trivia reiniciada (%s) con %d de %d", source, self._score, self._index + 1)
             level = level or self._level
             await self._end(won=False, reason="cancelled")
-        return await self.start(source, level)
+        ok, script = await self.start(source, level)
+        if ok and source == "voice":
+            script = "Trivia nueva desde cero. " + script
+        return ok, script
+
+    async def _change_level(self, source: str, level: str | None) -> tuple[bool, str]:
+        """Otras preguntas del nivel ``level`` antes de contestar la primera."""
+        self._level = normalize_level(level) or self._level
+        self._questions = self._bank.draw(self._total, self._rng, self._level)
+        logger.info("Trivia: nivel %s antes de la primera (%s)", self._level, source)
+        self._host.touch()
+        await self._show(
+            STICKY_START, p.msg_trivia_start(self._total, self._threshold, self._level)
+        )
+        grace = max(self._asked_at, self._last_user_at)
+        await self._ask(0)
+        # Si aún sigue a Sonnet Code con el móvil, se mantiene su margen.
+        self._asked_at = max(self._asked_at, grace)
+        script = f"Ahora la trivia es de nivel {self._level} y la primera pregunta es otra. "
+        if self._held is not None:
+            script += "Sigue sin salir en tu pantalla hasta que arranques. "
+        if self._follow_pending:
+            script += "Si aún no te ha dicho que sigue a Sonnet Code, pregúntaselo antes. "
+        script += KICKOFF_TEXT.format(lead="Arranca", total=self._total, threshold=self._threshold)
+        script += self._question_text(0, lead="Después di")
+        if source == "voice":
+            return True, script
+        self._spawn(self._speak_when_quiet(self._game, "TRIVIA: " + script), "trivia-level")
+        return True, f"Trivia de nivel {self._level}: otras preguntas desde la primera."
+
+    async def resume(self) -> str:
+        """El guion si se pide empezar la trivia con la partida ya en marcha.
+
+        Pasa si GPT-Live vuelve a delegar empezarla tras el «ya las sigo»: sin
+        esto, el backend le contaba que no se pudo empezar. Si la pantalla
+        esperaba a que arrancase, sale ya.
+        """
+        await self.show_screen()
+        question = self._current
+        if not self.active or question is None:
+            return OFF_TEXT
+        if self._phase is TriviaPhase.REVEALING:
+            if self._final:
+                return "Era la última pregunta: la trivia ya terminó, despídela."
+            return WAITING_NEXT_TEXT.format(number=self._index + 1)
+        text = "La trivia ya está en marcha en tu pantalla, no hace falta empezarla. "
+        if self._index > 0:
+            return text + self._question_text(self._index, lead="Si no la has leído, lee")
+        text += KICKOFF_TEXT.format(lead="Arranca", total=self._total, threshold=self._threshold)
+        return text + self._question_text(0, lead="Después di")
 
     async def stop(self, reason: str) -> tuple[bool, str]:
         """Cancela la partida. ``reason``: ``panel``, ``voice``, ``abandoned``, ``session``..."""
@@ -366,12 +481,51 @@ class TriviaGame:
 
     async def _end(self, *, won: bool, reason: str) -> None:
         self._phase = TriviaPhase.OFF
+        self._follow_pending = False
+        # Lo que no llegó a salir en pantalla se tira: Unity ignora el final sin trivia.
+        self._held = None
         self._cancel_tasks()
         self._screen.clear_sticky(STICKY_START)
         self._screen.clear_sticky(STICKY_QUESTION)
         await self._screen.broadcast_json(
             p.msg_trivia_end(self._score, self._total, won=won, reason=reason)
         )
+
+    async def _show(self, key: str, msg: dict[str, Any]) -> None:
+        """Manda un mensaje fijo de la pantalla, o lo guarda si la pantalla espera."""
+        if self._held is not None:
+            self._held[key] = msg
+            return
+        await self._screen.set_sticky(key, msg)
+
+    async def show_screen(self) -> None:
+        """Saca a la pantalla la trivia retenida mientras se preguntaba lo de Sonnet Code."""
+        held, self._held = self._held, None
+        if held is None:
+            return
+        logger.info("Trivia: sale en pantalla")
+        with contextlib.suppress(Exception):
+            await self._screen.hide_image()
+            for key in (STICKY_START, STICKY_QUESTION):
+                if key in held:
+                    await self._screen.set_sticky(key, held[key])
+
+    async def on_assistant_text(self, text: str) -> None:
+        """Lo que va diciendo Sonia: si arranca la trivia retenida, sale en pantalla.
+
+        Arranca al decir cuántos aciertos hacen falta (:data:`KICKOFF_TEXT`) o al
+        leer buena parte de la primera pregunta. Nunca lanza.
+        """
+        question = self._current
+        if self._held is None or question is None:
+            return
+        self._heard |= _words(text)
+        wanted = _words(question.text)
+        said = len(wanted & self._heard)
+        if self._heard & KICKOFF_WORDS or (
+            said >= min(2, len(wanted)) and said >= QUESTION_HEARD_SHARE * len(wanted)
+        ):
+            await self.show_screen()
 
     async def _ask(self, index: int) -> None:
         """Pone la pregunta ``index`` en pantalla."""
@@ -380,7 +534,7 @@ class TriviaGame:
         self._phase = TriviaPhase.ASKING
         self._asked_at = time.monotonic()
         self._reminded = False
-        await self._screen.set_sticky(
+        await self._show(
             STICKY_QUESTION,
             p.msg_trivia_question(
                 index + 1, self._total, question.text, list(question.options), self._score
@@ -389,7 +543,8 @@ class TriviaGame:
         a, b, c = question.options
         with contextlib.suppress(Exception):
             await self._host.instruct(
-                OPTIONS_TEXT.format(
+                (WAIT_OPTIONS_TEXT if self._follow_pending else "")
+                + OPTIONS_TEXT.format(
                     number=index + 1, total=self._total, question=question.text, a=a, b=b, c=c
                 )
             )
@@ -411,7 +566,8 @@ class TriviaGame:
     def on_user_text(self, now: float) -> None:
         """Se oye al visitante: sigue ahí (para no dar la partida por abandonada)."""
         if self.active:
-            self._last_user_at = now
+            # Sin pisar el margen de :data:`FOLLOW_GRACE_S` mientras sigue a Sonnet Code.
+            self._last_user_at = max(self._last_user_at, now)
 
     def on_user_turn_end(self, now: float, started_at: float) -> None:
         """Terminó un turno del visitante (empezó en ``started_at``): si no delega nada, empujón.
@@ -419,7 +575,7 @@ class TriviaGame:
         GPT-Live suele delegar antes de que llegue el final de la transcripción:
         lo delegado desde que empezó a hablar ya cuenta.
         """
-        if self.active and self._delegated_at < started_at - 0.5:
+        if self.active and not self._follow_pending and self._delegated_at < started_at - 0.5:
             self._nudge_at = now + NUDGE_S
 
     def on_delegation(self, now: float) -> None:
@@ -443,7 +599,9 @@ class TriviaGame:
             return False, "No hay ninguna pregunta de trivia esperando respuesta."
         if choice not in (0, 1, 2, PASS):
             return False, "Respuesta no válida: A, B, C o que no lo sabe."
+        await self.show_screen()
         self._phase = TriviaPhase.REVEALING
+        self._follow_pending = False
         self._last_user_at = time.monotonic()
         right = choice == question.correct
         if right:
@@ -565,6 +723,9 @@ class TriviaGame:
             return
         settings = self._settings
         quiet = self._host.quiet_for()
+        if self._held is not None and now >= self._asked_at:
+            logger.info("Trivia: pasó el margen para seguir a Sonnet Code; sale en pantalla")
+            await self.show_screen()
         if self._nudge_at and now >= self._nudge_at and quiet >= 0.5:
             # Ya contestó sin delegar: que lo decida ella. Va por commentary porque una
             # instrucción silenciosa no le abre turno y no delegaba (probado con la API).
@@ -609,3 +770,9 @@ class TriviaGame:
         for task in list(self._tasks):
             if task is not current and not task.done():
                 task.cancel()
+
+
+def _words(text: str) -> set[str]:
+    """Palabras de cuatro letras o más, en minúsculas y sin tildes, para comparar lo dicho."""
+    plain = text.lower().translate(str.maketrans("áéíóúü", "aeiouu"))
+    return {w for w in re.findall(r"\w+", plain) if len(w) >= 4}

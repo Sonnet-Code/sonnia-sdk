@@ -492,7 +492,7 @@ async def test_mientras_habla_sonia_no_recuerda_ni_abandona(tmp_path: Path) -> N
 
 
 async def test_acciones_de_la_trivia(tmp_path: Path) -> None:
-    game, _, screen = make_game(tmp_path)
+    game, host, screen = make_game(tmp_path)
     registry = build_default_registry(include_look=False, include_trivia=True)
     assert registry.names() == [
         "show_image",
@@ -506,18 +506,28 @@ async def test_acciones_de_la_trivia(tmp_path: Path) -> None:
     ]
     ctx = ActionContext(camera=None, avatar=None, gallery_dir="", extra={"trivia": game})
 
-    # Sin saber si sigue a Sonnet Code ni el nivel, no abre nada: dice qué preguntar.
+    # El nivel es obligatorio, pero puede ir sin elegir: el backend ponía «fácil» por su cuenta.
     result = await registry.execute("start_trivia", {}, ctx)
-    assert result.text.startswith(f"{SCRIPT_PREFIX} Aún no empieza: para jugar hay que seguir")
-    assert "qué nivel quiere" in result.text and not game.active
-    result = await registry.execute("start_trivia", {"sigue_a_sonnet_code": True}, ctx)
-    assert "Aún no empieza: pregúntale qué nivel quiere" in result.text and not game.active
+    assert result.text.startswith("Error") and not game.active
 
+    # Sin saber si sigue a Sonnet Code, la prepara y se lo pregunta antes de empezar; la
+    # pantalla espera (el QR sigue a la vista) y GPT-Live ya tiene la primera pregunta.
+    result = await registry.execute("start_trivia", {"nivel": "sin_elegir"}, ctx)
+    assert result.text.startswith(f"{SCRIPT_PREFIX} La trivia está preparada, nivel intermedio")
+    assert "pregúntale solo si ya sigue a Sonnet Code" in result.text
+    question = game._current
+    assert question is not None and game.active
+    assert result.text.index("Sonnet Code") < result.text.index(question.text)
+    assert screen.sticky == {} and screen.of_type("trivia_start") == []
+    # La nota con la pregunta le dice que primero espere el «ya las sigo».
+    assert host.instructions[-1].startswith("TRIVIA PREPARADA, AÚN SIN EMPEZAR")
+
+    # Si GPT-Live vuelve a delegar empezarla («ya las sigo»), la partida sigue y le dice cómo.
     result = await registry.execute(
-        "start_trivia", {"nivel": "fácil", "sigue_a_sonnet_code": True}, ctx
+        "start_trivia", {"nivel": "sin_elegir", "sigue_a_sonnet_code": True}, ctx
     )
-    assert result.text.startswith(SCRIPT_PREFIX) and "nivel fácil" in result.text
-    assert current(screen)["question"] in result.text
+    assert result.text.startswith(SCRIPT_PREFIX) and "ya está en marcha" in result.text
+    assert current(screen)["question"] in result.text and current(screen)["number"] == 1
 
     letter = "ABC"[correct_index(game)]
     result = await registry.execute("trivia_answer", {"option": letter}, ctx)
@@ -538,9 +548,69 @@ async def test_acciones_de_la_trivia(tmp_path: Path) -> None:
     assert "terminada" in result.text
     assert not game.active
 
+    result = await registry.execute(
+        "start_trivia", {"nivel": "fácil", "sigue_a_sonnet_code": True}, ctx
+    )
+    assert result.text.startswith(f"{SCRIPT_PREFIX} La trivia está en tu pantalla, nivel fácil")
+    assert "Sonnet Code" not in result.text
+    assert current(screen)["question"] in result.text
+
     sin_partida = ActionContext(camera=None, avatar=None, gallery_dir="")
-    result = await registry.execute("start_trivia", {}, sin_partida)
+    result = await registry.execute("start_trivia", {"nivel": "sin_elegir"}, sin_partida)
     assert "no está disponible" in result.text
+
+
+async def test_mientras_sigue_a_sonnet_code_no_hay_empujon_ni_prisa(tmp_path: Path) -> None:
+    """Su «ya las sigo» no es una respuesta: el empujón la hacía disculparse (8 de octubre)."""
+    from sonia.trivia.game import FOLLOW_GRACE_S, NUDGE_S, NUDGE_TEXT
+
+    game, host, _ = make_game(tmp_path, remind_seconds=10.0, abandon_seconds=20.0)
+    await game.start("voice", ask_follow=True)
+    host.spoken.clear()
+    host.quiet = 30.0
+    start = game._asked_at - FOLLOW_GRACE_S
+    # «Ya las sigo» sin delegar nada: ni empujón, ni recordatorio, ni partida abandonada.
+    game.on_user_text(start + 3)
+    game.on_user_turn_end(start + 4, start + 3)
+    for t in (start + 4 + NUDGE_S + 1, start + 30, start + FOLLOW_GRACE_S):
+        await game.tick(t)
+        await settle()
+    assert host.spoken == [] and game.active
+    # Pasado el margen, el recordatorio de siempre.
+    await game.tick(start + FOLLOW_GRACE_S + 11)
+    await settle()
+    assert len(host.spoken) == 1 and "pregunta 1" in host.spoken[0]
+
+    # Contestada la primera, el empujón vuelve a funcionar.
+    await game.answer(correct_index(game), "voice")
+    await game.next("voice")
+    now = game._asked_at + 1
+    game.on_user_turn_end(now, now - 1)
+    await game.tick(now + NUDGE_S + 1)
+    await settle()
+    assert host.spoken[-1] == NUDGE_TEXT
+
+
+async def test_otro_nivel_antes_de_contestar_cambia_las_preguntas_sin_cerrar(
+    tmp_path: Path,
+) -> None:
+    game, _, screen = make_game(tmp_path)
+    await game.start("voice", "fácil", ask_follow=True)
+    ok, script = await game.restart("voice", "difícil")
+    assert ok and "nivel difícil" in script and "sigue a Sonnet Code" in script
+    assert screen.sticky == {}  # aún pregunta por Sonnet Code: la pantalla espera
+    await game.show_screen()
+    assert current(screen)["question"] in script and current(screen)["number"] == 1
+    # Unity no recibe ningún final: la gorra se queda puesta.
+    assert screen.of_type("trivia_end") == []
+    assert screen.sticky[STICKY_START]["level"] == "difícil"
+    assert game.snapshot()["level"] == "difícil"
+
+    # Ya contestada una, reiniciar sí es una partida nueva.
+    await game.answer(correct_index(game), "voice")
+    ok, script = await game.restart("voice")
+    assert ok and script.startswith("Trivia nueva desde cero.")
+    assert screen.of_type("trivia_end")[-1]["reason"] == "cancelled"
 
 
 def test_sin_trivia_no_se_anuncian_sus_acciones() -> None:
@@ -603,3 +673,45 @@ async def test_cada_pregunta_le_pasa_las_opciones_a_gpt_live(tmp_path: Path) -> 
     await game.answer(correct_index(game), "voice")
     await game.next("voice")
     assert any(i.startswith("TRIVIA, pregunta 2 de") for i in host.instructions)
+
+
+async def test_la_trivia_sale_en_pantalla_cuando_sonia_arranca(tmp_path: Path) -> None:
+    """Mientras pide seguir a Sonnet Code no sale nada: el QR de la pantalla sigue a la vista."""
+    for said in (
+        [
+            "¿Ya sigues a Sonnet Code en Instagram y LinkedIn?",
+            "Perfecto. Son tres preguntas y con dos aciertos",
+        ],
+        ["¿Ya nos sigues?", "Genial. Primera: {question}"],
+    ):
+        game, _, screen = make_game(tmp_path)
+        await game.start("voice", ask_follow=True)
+        question = game._current
+        assert question is not None
+        await game.on_assistant_text(said[0])
+        assert screen.sticky == {} and screen.hidden == 0
+        await game.on_assistant_text(said[1].format(question=question.text))
+        assert current(screen)["question"] == question.text
+        assert screen.sticky[STICKY_START]["type"] == "trivia_start"
+        assert screen.hidden == 1
+
+    # Si no arranca (o lo dice con otras palabras), sale al acabar el margen.
+    game, _, screen = make_game(tmp_path)
+    await game.start("voice", ask_follow=True)
+    await game.tick(game._asked_at - 1)
+    assert screen.sticky == {}
+    await game.tick(game._asked_at + 0.1)
+    assert current(screen)["number"] == 1
+
+    # Contestar también la saca, antes de enseñar el resultado.
+    game, _, screen = make_game(tmp_path)
+    await game.start("voice", ask_follow=True)
+    await game.answer(correct_index(game), "voice")
+    assert list(screen.sticky) == [STICKY_START, STICKY_QUESTION]
+    assert screen.of_type("trivia_answer")
+
+    # Si se cancela antes de salir, Unity no ve nada.
+    game, _, screen = make_game(tmp_path)
+    await game.start("voice", ask_follow=True)
+    await game.stop("voice")
+    assert screen.of_type("trivia_start") == [] and screen.sticky == {}

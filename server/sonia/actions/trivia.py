@@ -31,26 +31,17 @@ ANSWER_CHOICES = {"A": 0, "B": 1, "C": 2, "no_lo_sabe": PASS}
 
 _NO_ARGS: dict[str, Any] = {"type": "object", "properties": {}, "required": []}
 
-#: Lo que le falta saber a Sonia antes de abrir la trivia (``start_trivia``).
-FOLLOW_TEXT = (
-    "Aún no empieza: para jugar hay que seguir a Sonnet Code en Instagram y LinkedIn "
-    "(@sonnetcode). Pregúntale si ya las sigue; si no, que escanee el QR de la pantalla y las "
-    "siga (no puedes comprobarlo: créele)."
-)
-LEVEL_TEXT = " Pregúntale también qué nivel quiere: fácil, intermedio o difícil."
-ONLY_LEVEL_TEXT = "Aún no empieza: pregúntale qué nivel quiere: fácil, intermedio o difícil."
-THEN_START_TEXT = (
-    " Cuando te conteste, vuelve a delegar empezar la trivia con lo que te diga (si le da igual "
-    "el nivel, intermedio). No digas ninguna pregunta todavía: salen del backend."
-)
+#: Nivel de ``start_trivia`` cuando el visitante no ha elegido: el de ``TRIVIA_DEFAULT_LEVEL``.
+#: Con el nivel opcional, el backend ponía «fácil» aunque nadie lo hubiera dicho.
+NO_LEVEL = "sin_elegir"
 
 _START_ARGS: dict[str, Any] = {
     "type": "object",
     "properties": {
         "nivel": {
             "type": "string",
-            "enum": [],
-            "description": "Nivel que eligió el visitante. Si no lo ha dicho, no lo pongas.",
+            "enum": [NO_LEVEL, *LEVELS],
+            "description": f"Nivel que eligió el visitante, o {NO_LEVEL} si no ha dicho ninguno.",
         },
         "sigue_a_sonnet_code": {
             "type": "boolean",
@@ -60,7 +51,7 @@ _START_ARGS: dict[str, Any] = {
             ),
         },
     },
-    "required": [],
+    "required": ["nivel"],
 }
 
 _LEVEL_ARGS: dict[str, Any] = {
@@ -74,7 +65,6 @@ _LEVEL_ARGS: dict[str, Any] = {
     },
     "required": [],
 }
-_START_ARGS["properties"]["nivel"]["enum"] = list(LEVELS)
 
 
 def _game(ctx: ActionContext) -> TriviaGame | None:
@@ -83,23 +73,27 @@ def _game(ctx: ActionContext) -> TriviaGame | None:
 
 
 async def start_trivia(ctx: ActionContext, arguments: dict[str, Any]) -> ActionResult:
-    """Empieza una partida de trivia en la pantalla, o dice qué falta preguntar antes.
+    """Empieza una partida de trivia en la pantalla, con la primera pregunta.
 
     GPT-Live la delega en cuanto el visitante quiere jugar, sin preguntar nada
-    antes: el requisito (seguir a Sonnet Code) y el nivel los pide este guion.
-    Con el procedimiento en el prompt de GPT-Live, se ponía a jugar por su
-    cuenta con preguntas inventadas (registro del 7 de octubre de 2026).
+    antes: con el procedimiento en su prompt se ponía a jugar por su cuenta con
+    preguntas inventadas (registro del 7 de octubre de 2026). La partida empieza
+    ya, aunque no se sepa si sigue a Sonnet Code: el guion le pide preguntarlo
+    antes de leer la primera. Con «aún no empieza, vuelve a delegar» GPT-Live no
+    volvía a delegar si el visitante le contestaba mientras hablaba (pruebas con
+    la API real del 8 de octubre de 2026).
     """
     game = _game(ctx)
     if game is None:
         return ActionResult(text=NO_TRIVIA)
+    if game.active:
+        return ActionResult(text=f"{SCRIPT_PREFIX} {await game.resume()}")
     level = arguments.get("nivel")
-    if not game.active and arguments.get("sigue_a_sonnet_code") is not True:
-        missing = FOLLOW_TEXT + ("" if level else LEVEL_TEXT)
-        return ActionResult(text=f"{SCRIPT_PREFIX} {missing}{THEN_START_TEXT}")
-    if not game.active and not level:
-        return ActionResult(text=f"{SCRIPT_PREFIX} {ONLY_LEVEL_TEXT}{THEN_START_TEXT}")
-    ok, script = await game.start("voice", level)
+    ok, script = await game.start(
+        "voice",
+        None if level == NO_LEVEL else level,
+        ask_follow=arguments.get("sigue_a_sonnet_code") is not True,
+    )
     if not ok:
         return ActionResult(text=f"No se pudo empezar la trivia: {script}")
     return ActionResult(text=f"{SCRIPT_PREFIX} {script}")
@@ -113,7 +107,7 @@ async def restart_trivia(ctx: ActionContext, arguments: dict[str, Any]) -> Actio
     ok, script = await game.restart("voice", arguments.get("nivel"))
     if not ok:
         return ActionResult(text=f"No se pudo reiniciar la trivia: {script}")
-    return ActionResult(text=f"{SCRIPT_PREFIX} Trivia nueva desde cero. {script}")
+    return ActionResult(text=f"{SCRIPT_PREFIX} {script}")
 
 
 async def trivia_answer(ctx: ActionContext, arguments: dict[str, Any]) -> ActionResult:
@@ -155,8 +149,9 @@ START_TRIVIA = ActionSpec(
     name="start_trivia",
     description=(
         "Empieza una trivia de preguntas sobre el DevFest y la tecnología, con tres opciones "
-        "en tu pantalla. Úsala en cuanto el visitante quiera jugar, aunque aún no sepas su "
-        "nivel ni si sigue a Sonnet Code: si falta algo, devuelve qué preguntarle."
+        "en tu pantalla, y devuelve cómo arrancarla. Úsala en cuanto el visitante quiera jugar, "
+        "aunque aún no sepas su nivel ni si sigue a Sonnet Code: lo que haya que preguntarle "
+        "viene en el guion."
     ),
     parameters=_START_ARGS,
     handler=start_trivia,
