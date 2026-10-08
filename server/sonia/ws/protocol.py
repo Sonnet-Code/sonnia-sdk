@@ -116,7 +116,7 @@ MAX_AVATAR_DEFINITION = 64 * 1024
 
 
 Role = Literal["user", "assistant"]
-ImageSource = Literal["gallery", "camera", "agenda"]
+ImageSource = Literal["gallery", "agenda"]
 
 
 # ---------------------------------------------------------------------------
@@ -431,17 +431,14 @@ def msg_trivia_answer(
     }
 
 
-def msg_trivia_end(
-    score: int, total: int, *, won: bool, reason: str, prize: str = ""
-) -> dict[str, Any]:
-    """Fin de la trivia: ``reason`` es ``finished`` (con ``won`` y el premio) o ``cancelled``."""
+def msg_trivia_end(score: int, total: int, *, won: bool, reason: str) -> dict[str, Any]:
+    """Fin de la trivia: ``reason`` es ``finished`` (con ``won``) o ``cancelled``."""
     return {
         "type": MSG_TRIVIA_END,
         "score": int(score),
         "total": int(total),
         "won": bool(won),
         "reason": str(reason),
-        "prize": str(prize),
     }
 
 

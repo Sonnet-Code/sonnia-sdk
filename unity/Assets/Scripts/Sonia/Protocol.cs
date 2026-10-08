@@ -110,7 +110,6 @@ namespace Sonia
     public static class ImageSources
     {
         public const string Gallery = "gallery";
-        public const string Camera = "camera";
     }
 
     // ------------------------------------------------------------------
@@ -347,9 +346,6 @@ namespace Sonia
         [JsonProperty("won")] public bool Won;
 
         [JsonProperty("reason")] public string Reason = "finished";
-
-        /// <summary>Lo que se lleva el visitante (vacío: no se anuncia premio).</summary>
-        [JsonProperty("prize")] public string Prize = "";
     }
 
     /// <summary>Un trozo de la voz del invitado (frame binario "SNGU"), envuelto para la cola del cliente.</summary>

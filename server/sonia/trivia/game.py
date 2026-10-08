@@ -137,7 +137,11 @@ LOST_TEXT = (
     " Con esto termina la trivia: ha acertado {score} de {total} y le faltaron aciertos para "
     "los {threshold}. Anímale con cariño a intentarlo otra vez."
 )
-PRIZE_TEXT = " Dile que pase por el staff del stand a recoger {prize}."
+#: Sonia no sabe qué premios hay: a quien gana lo manda con el equipo del stand.
+WIN_CONTACT_TEXT = (
+    " Dile que pase a hablar con {contact} aquí en el stand. No sabes qué premios hay: no "
+    "prometas ninguno y, si pregunta, que se lo cuenten ellos."
+)
 BACK_TO_TALK_TEXT = " Luego sigue conversando con normalidad."
 
 #: Respuesta que llega con el resultado aún en pantalla (no se pidió la siguiente).
@@ -360,21 +364,14 @@ class TriviaGame:
                     await self._host.speak(text)
         return True, "Trivia terminada."
 
-    async def _end(self, *, won: bool, reason: str, prize: str = "") -> None:
+    async def _end(self, *, won: bool, reason: str) -> None:
         self._phase = TriviaPhase.OFF
         self._cancel_tasks()
         self._screen.clear_sticky(STICKY_START)
         self._screen.clear_sticky(STICKY_QUESTION)
         await self._screen.broadcast_json(
-            p.msg_trivia_end(self._score, self._total, won=won, reason=reason, prize=prize)
+            p.msg_trivia_end(self._score, self._total, won=won, reason=reason)
         )
-
-    def _prize(self, won: bool) -> str:
-        """Lo que se lleva: la gorra si gana en difícil; si no, el premio por participar."""
-        settings = self._settings
-        if won and self._level == "difícil" and settings.prize_hard_win.strip():
-            return settings.prize_hard_win.strip()
-        return settings.prize_participation.strip()
 
     async def _ask(self, index: int) -> None:
         """Pone la pregunta ``index`` en pantalla."""
@@ -474,11 +471,11 @@ class TriviaGame:
             script += template.format(
                 score=self._score, total=self._total, threshold=self._threshold
             )
-            prize = self._prize(won)
-            if prize:
-                script += PRIZE_TEXT.format(prize=prize)
+            contact = self._settings.win_contact.strip()
+            if won and contact:
+                script += WIN_CONTACT_TEXT.format(contact=contact)
             script += BACK_TO_TALK_TEXT
-            self._spawn(self._finish_when_told(self._game, won, prize), "trivia-final")
+            self._spawn(self._finish_when_told(self._game, won), "trivia-final")
         else:
             script += ASK_NEXT_TEXT
         if source == "voice":
@@ -513,7 +510,7 @@ class TriviaGame:
         self._spawn(self._speak_when_quiet(self._game, "TRIVIA: " + script), "trivia-next")
         return True, f"Pregunta {self._index + 1} de {self._total} en pantalla."
 
-    async def _finish_when_told(self, game: int, won: bool, prize: str) -> None:
+    async def _finish_when_told(self, game: int, won: bool) -> None:
         """Tras la última respuesta, la pantalla final cuando Sonia termina de contarlo.
 
         El resultado se queda al menos ``reveal_seconds``; luego se espera a que
@@ -536,7 +533,7 @@ class TriviaGame:
         logger.info(
             "Trivia terminada: %d de %d (%s)", self._score, self._total, "gana" if won else "pierde"
         )
-        await self._end(won=won, reason="finished", prize=prize)
+        await self._end(won=won, reason="finished")
         with contextlib.suppress(Exception):
             await self._host.instruct(OFF_TEXT)
 

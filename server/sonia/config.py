@@ -443,9 +443,9 @@ class TriviaSettings(BaseSettings):
     final_wait_seconds: float = 20.0
     #: Nivel si el visitante no elige: fácil, intermedio o difícil.
     default_level: str = "intermedio"
-    #: Premio por jugar (vacío: no se anuncia) y el de ganar en difícil.
-    prize_participation: str = "un sticker o un pin de Sonnet Code"
-    prize_hard_win: str = "una gorra de Sonnet Code"
+    #: Con quién del stand manda Sonia a hablar a quien gana (vacío: a nadie). Sonia no sabe
+    #: qué premios hay: los da el equipo (decisión de Jean del 8 de octubre de 2026).
+    win_contact: str = "Brian o Mariel"
 
 
 class AgendaSettings(BaseSettings):

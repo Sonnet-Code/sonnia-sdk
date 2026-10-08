@@ -270,7 +270,7 @@ Un clip de una sola vez en el avatar del invitado (los mismos del catálogo de `
 
 Modo trivia (`docs/trivia.md`). Lo conduce GPT-Live y el orquestador guarda la clave: la pantalla manda. Mientras dura la partida, `trivia_start` y la pregunta en curso son fijos y se repiten tras `hello`, así que una Unity que se reconecta vuelve a pintar la partida. Al terminar dejan de repetirse.
 
-`trivia_start` abre la partida: Sonia se pone el gorro de fiesta, la escena pasa al tema de la trivia y sale el marcador a cero. `threshold` son los aciertos que hacen falta para ganar y `level` el nivel (fácil, intermedio o difícil), que sale en el contador. La pregunta siguiente solo llega cuando el visitante la pide (acción `trivia_next`); `trivia_end` lleva `prize`, lo que se lleva el visitante, y la pantalla final lo muestra.
+`trivia_start` abre la partida: Sonia se pone el gorro de fiesta, la escena pasa al tema de la trivia y sale el marcador a cero. `threshold` son los aciertos que hacen falta para ganar y `level` el nivel (fácil, intermedio o difícil), que sale en el contador. La pregunta siguiente solo llega cuando el visitante la pide (acción `trivia_next`). `trivia_end` no lleva premio: Sonia no sabe cuáles hay y a quien gana lo manda con el equipo del stand.
 
 ```json
 {"type": "trivia_start", "total": 5, "threshold": 3, "level": "intermedio"}
@@ -299,7 +299,7 @@ La siguiente `trivia_question` llega `TRIVIA_REVEAL_SECONDS` después.
 En los dos casos Unity quita el gorro y el tema al acabar.
 
 ```json
-{"type": "trivia_end", "score": 4, "total": 5, "won": true, "reason": "finished", "prize": "un sticker o un pin de Sonnet Code"}
+{"type": "trivia_end", "score": 4, "total": 5, "won": true, "reason": "finished"}
 ```
 
 ### `error`

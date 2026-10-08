@@ -249,7 +249,9 @@ async def test_partida_ganada_por_voz(tmp_path: Path) -> None:
             assert current(screen)["number"] == number + 1
         else:
             assert "HA GANADO" in script
-            assert "un sticker o un pin" in script
+            # Sonia no sabe qué premios hay: manda a quien gana con el equipo del stand.
+            assert "hablar con Brian o Mariel" in script
+            assert "premios" in script and "sticker" not in script
         await settle()
 
     end = screen.of_type("trivia_end")[-1]
@@ -259,7 +261,6 @@ async def test_partida_ganada_por_voz(tmp_path: Path) -> None:
         "total": 3,
         "won": True,
         "reason": "finished",
-        "prize": "un sticker o un pin de Sonnet Code",
     }
     assert not game.active
     assert screen.sticky == {}
@@ -329,17 +330,18 @@ async def test_partida_perdida_dice_la_buena_y_anima(tmp_path: Path) -> None:
     await settle()
     end = screen.of_type("trivia_end")[-1]
     assert end["won"] is False and end["score"] == 1 and end["reason"] == "finished"
-    assert end["prize"] == "un sticker o un pin de Sonnet Code"
+    # Quien pierde no va con el equipo del stand: solo quien gana.
+    assert "Brian" not in script
 
 
-async def test_ganar_en_dificil_se_lleva_la_gorra(tmp_path: Path) -> None:
-    game, _, screen = make_game(tmp_path)
+async def test_ganar_sin_contacto_no_manda_a_nadie(tmp_path: Path) -> None:
+    game, _, screen = make_game(tmp_path, win_contact="")
     ok, script = await game.start("voice", "Difícil")
     assert ok and "nivel difícil" in script
     for _ in range(3):
         last = await answer_and_next(game, correct_index(game))
-    assert "una gorra de Sonnet Code" in last
-    assert screen.of_type("trivia_end")[-1]["prize"] == "una gorra de Sonnet Code"
+    assert "HA GANADO" in last and "hablar con" not in last
+    assert screen.of_type("trivia_end")[-1]["won"] is True
 
 
 def test_niveles_del_banco() -> None:

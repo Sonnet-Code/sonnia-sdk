@@ -570,7 +570,7 @@ namespace Sonia
 
             _score = Mathf.Clamp(message.Score, 0, Mathf.Max(1, message.Total));
             _total = Mathf.Max(1, message.Total);
-            ShowResult(message.Won, message.Prize);
+            ShowResult(message.Won);
             _ending = true;
             _endAt = _clock + endScreenSeconds;
             if (message.Won)
@@ -1057,7 +1057,7 @@ namespace Sonia
             LayoutRebuilder.ForceRebuildLayoutImmediate(_banner);
         }
 
-        private void ShowResult(bool won, string prize = "")
+        private void ShowResult(bool won)
         {
             Build();
             if (_result == null)
@@ -1070,12 +1070,9 @@ namespace Sonia
                 ? new VertexGradient(new Color(1f, 0.93f, 0.55f), new Color(1f, 0.93f, 0.55f), Yellow, new Color(1f, 0.62f, 0.1f))
                 : new VertexGradient(Color.white, Color.white, new Color(0.75f, 0.85f, 1f), new Color(0.75f, 0.85f, 1f));
             _resultScore.text = _score + " de " + _total + (_score == 1 ? " acierto" : " aciertos");
-            _resultLine.text = (won
+            _resultLine.text = won
                 ? "¡Eres un crack del DevFest!"
-                : "Hacían falta " + _threshold + ". ¡Pídeme otra trivia y lo intentas otra vez!")
-                + (string.IsNullOrWhiteSpace(prize)
-                    ? string.Empty
-                    : "\nTu premio: " + prize.Trim() + ". ¡Recógelo con el staff del stand!");
+                : "Hacían falta " + _threshold + ". ¡Pídeme otra trivia y lo intentas otra vez!";
             for (int i = 0; i < _resultStars.Count; i++)
             {
                 bool lit = i < _score;

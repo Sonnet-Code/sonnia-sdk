@@ -1530,7 +1530,6 @@ async def test_trivia_por_voz_de_principio_a_fin(tmp_path: Path) -> None:
             "total": 2,
             "won": True,
             "reason": "finished",
-            "prize": "un sticker o un pin de Sonnet Code",
         }
         assert rig.hub.sticky("trivia_question") is None
         assert rig.engine.trivia is not None and not rig.engine.trivia.active
