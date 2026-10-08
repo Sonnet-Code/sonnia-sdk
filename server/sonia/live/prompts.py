@@ -224,6 +224,14 @@ _FACES_RULE = (
     "ponentes del evento por sus fotos públicas, y que la cara de los demás no la guardas."
 )
 
+#: «¿Me reconoces?» sin nota: mirar antes de contestar. El 8 de octubre de 2026 contestó «no sé
+#: quién eres» a Jean sin mirar, y la nota con su nombre llegó diez segundos después.
+_FACES_LOOK_WHEN = (
+    "- Te pregunten si les reconoces o si sabes quiénes son y no te haya llegado una nota "
+    '"[Cámara]" con su nombre: mira antes de contestar. Si el resultado tampoco lo trae, di que '
+    "no les reconoces y pregúntales cómo se llaman.\n"
+)
+
 _FACES_BACKEND_RULE = (
     '- Si el resultado de mirar por la cámara trae "Personas conocidas en la foto", son del '
     "equipo de Sonnet Code o ponentes del DevFest: díselo a Sonia con su nombre, y también si "
@@ -536,6 +544,7 @@ def build_live_instructions(
             look_when = _MEETING_LOOK_WHEN
     if faces:
         camera_rule += "\n" + _FACES_RULE
+        look_when += _FACES_LOOK_WHEN
     rules = LIVE_RULES.format(
         capabilities=capabilities or "- Ninguna en este momento: no delegues.",
         clock_rule=_CLOCK_RULE + (_CLOCK_ASK_RULE if "check_agenda" in names else ""),

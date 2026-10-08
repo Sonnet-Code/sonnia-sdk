@@ -135,6 +135,14 @@ def encode_frame(bgr: Any, max_width: int, quality: int) -> Frame | None:
     )
 
 
+def _small_buffer(cv2: Any, device: Any) -> None:
+    """Buffer mínimo: queremos el frame de ahora, no el de hace medio segundo."""
+    try:
+        device.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    except Exception:  # noqa: BLE001 - no todos los backends lo soportan
+        logger.debug("El backend no soporta CAP_PROP_BUFFERSIZE")
+
+
 def _release_quietly(device: Any) -> None:
     """Libera un ``VideoCapture`` sin propagar nada (ya vamos por el mal camino)."""
     try:
@@ -172,6 +180,8 @@ class OpenCVCamera:
         #: Lecturas colgadas cuyo hilo sigue vivo. Se guardan para que su
         #: ``VideoCapture`` no lo libere el recolector mientras se está leyendo.
         self._abandoned: set[asyncio.Task[Any]] = set()
+        #: Con la resolución pedida no dio imagen: no se vuelve a pedir en las reaperturas.
+        self._keep_resolution = False
         # Serializa los accesos: el objeto VideoCapture no es seguro entre hilos.
         self._lock = asyncio.Lock()
 
@@ -191,22 +201,70 @@ class OpenCVCamera:
         # La configurada y, si no abre (en este equipo no existe), la de por defecto.
         for candidate in dict.fromkeys((index, 0)):
             for backend in backends:
-                device = cv2.VideoCapture(candidate, backend)
-                if device.isOpened():
-                    # Buffer mínimo: queremos el frame de ahora, no el de hace medio segundo.
-                    try:
-                        device.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    except Exception:  # noqa: BLE001 - no todos los backends lo soportan
-                        logger.debug("El backend no soporta CAP_PROP_BUFFERSIZE")
+                device = self._open_device(cv2, candidate, backend)
+                if device is not None:
                     if candidate != index:
                         logger.warning(
                             "No se pudo abrir la cámara %s: se usa la de por defecto (0)", index
                         )
                     return device
-                device.release()
 
         logger.warning("No se pudo abrir la cámara con índice %s", index)
         return None
+
+    def _open_device(self, cv2: Any, index: int, backend: int) -> Any | None:
+        """Un ``VideoCapture`` abierto, con buffer mínimo y la resolución pedida si se puede."""
+        device = cv2.VideoCapture(index, backend)
+        if not device.isOpened():
+            device.release()
+            return None
+        _small_buffer(cv2, device)
+        if self._raise_resolution(cv2, device):
+            return device
+        # Con la resolución pedida no dio imagen: se abre otra vez tal como venía.
+        device.release()
+        self._keep_resolution = True
+        device = cv2.VideoCapture(index, backend)
+        if not device.isOpened():
+            device.release()
+            return None
+        _small_buffer(cv2, device)
+        return device
+
+    def _raise_resolution(self, cv2: Any, device: Any) -> bool:
+        """Pide ``VISION_CAPTURE_WIDTH`` x ``VISION_CAPTURE_HEIGHT`` si la cámara abre por debajo.
+
+        Muchas webcams abren a 640x480 en Windows aunque den 1080p, y a esa resolución
+        una cara a dos metros se queda en unos 35 px (docs/caras.md). La del Mac ya abre a
+        1920x1080 y no se toca. Devuelve ``False`` si con la nueva resolución no da imagen
+        (hay que reabrirla como venía); si no se puede preguntar o cambiar, ``True``.
+        """
+        want_w = self._settings.capture_width
+        want_h = self._settings.capture_height
+        if want_w <= 0 or want_h <= 0 or self._keep_resolution:
+            return True
+        try:
+            width = int(device.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+            height = int(device.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+            if width <= 0 or width >= want_w:
+                return True
+            if sys.platform != "darwin":
+                # MJPG: por USB 2, 1080p en crudo (YUY2) se queda en unos 5 fotogramas por segundo.
+                device.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+            device.set(cv2.CAP_PROP_FRAME_WIDTH, want_w)
+            device.set(cv2.CAP_PROP_FRAME_HEIGHT, want_h)
+            ok, frame = device.read()
+        except Exception:  # noqa: BLE001 - un backend raro: se queda con la que tenía
+            logger.debug("No se pudo cambiar la resolución de la cámara", exc_info=True)
+            return True
+        if not ok or frame is None:
+            logger.warning(
+                "La cámara no da imagen a %dx%d: se queda a %dx%d", want_w, want_h, width, height
+            )
+            return False
+        got_h, got_w = int(frame.shape[0]), int(frame.shape[1])
+        logger.info("Cámara a %dx%d (abría a %dx%d)", got_w, got_h, width, height)
+        return True
 
     async def set_index(self, index: int) -> None:
         """Cambia de cámara: suelta la abierta y la siguiente captura abre ``index``."""

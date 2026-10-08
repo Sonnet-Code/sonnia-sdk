@@ -740,6 +740,99 @@ def test_si_la_camara_configurada_no_abre_se_usa_la_0(
     assert "se usa la de por defecto" in caplog.text
 
 
+class _SizedCv2:
+    """``cv2`` falso con resolución: las cámaras abren a ``start`` y, a la pedida, dan imagen
+    o no según ``works``."""
+
+    CAP_ANY = 0
+    CAP_PROP_FRAME_WIDTH = 3
+    CAP_PROP_FRAME_HEIGHT = 4
+    CAP_PROP_FOURCC = 6
+    CAP_PROP_BUFFERSIZE = 38
+
+    def __init__(self, start: tuple[int, int], *, works: bool = True) -> None:
+        self.start = start
+        self.works = works
+        self.devices: list[Any] = []
+
+    @staticmethod
+    def VideoWriter_fourcc(*chars: str) -> int:  # noqa: N802 - como cv2
+        return 1196444237
+
+    def VideoCapture(self, index: int, backend: int = 0) -> Any:  # noqa: N802 - como cv2
+        cv2 = self
+
+        class _Device(_FakeDevice):
+            def __init__(self) -> None:
+                super().__init__()
+                self.size = list(cv2.start)
+                self.changed = False
+
+            def isOpened(self) -> bool:  # noqa: N802 - como cv2
+                return True
+
+            def get(self, prop: int) -> float:
+                sizes = {
+                    cv2.CAP_PROP_FRAME_WIDTH: self.size[0],
+                    cv2.CAP_PROP_FRAME_HEIGHT: self.size[1],
+                }
+                return float(sizes.get(prop, 0))
+
+            def set(self, prop: int, value: Any) -> bool:
+                if prop in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT):
+                    self.size[prop == cv2.CAP_PROP_FRAME_HEIGHT] = int(value)
+                    self.changed = True
+                return True
+
+            def read(self) -> tuple[bool, Any]:
+                self.reads += 1
+                if self.changed and not cv2.works:
+                    return False, None
+                return True, make_bgr(self.size[0], self.size[1])
+
+        device = _Device()
+        self.devices.append(device)
+        return device
+
+
+def test_si_la_camara_abre_con_poca_resolucion_se_le_pide_mas(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Windows abre muchas webcams a 640x480: una cara a dos metros no llegaba a 40 px.
+    fake = _SizedCv2((640, 480))
+    monkeypatch.setitem(sys.modules, "cv2", fake)
+    caplog.set_level("INFO", logger="sonia.vision.camera")
+    device = OpenCVCamera(VisionSettings(source="opencv"))._open_sync()
+    assert device is fake.devices[0] and device.size == [1920, 1080]
+    assert "Cámara a 1920x1080 (abría a 640x480)" in caplog.text
+
+
+def test_si_a_la_resolucion_pedida_no_da_imagen_se_reabre_como_venia(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _SizedCv2((640, 480), works=False)
+    monkeypatch.setitem(sys.modules, "cv2", fake)
+    camera = OpenCVCamera(VisionSettings(source="opencv"))
+    device = camera._open_sync()
+    assert len(fake.devices) == 2 and fake.devices[0].released
+    assert device is fake.devices[1] and device.size == [640, 480]
+    # En las reaperturas ya no se vuelve a pedir.
+    again = camera._open_sync()
+    assert again is fake.devices[2] and not again.changed
+
+
+@pytest.mark.parametrize(
+    ("start", "width"), [((1920, 1080), 1920), ((640, 480), 0)], ids=["ya-1080p", "apagado"]
+)
+def test_la_resolucion_no_se_toca_si_ya_llega_o_esta_apagado(
+    monkeypatch: pytest.MonkeyPatch, start: tuple[int, int], width: int
+) -> None:
+    fake = _SizedCv2(start)
+    monkeypatch.setitem(sys.modules, "cv2", fake)
+    device = OpenCVCamera(VisionSettings(source="opencv", capture_width=width))._open_sync()
+    assert device is not None and not device.changed and device.reads == 0
+
+
 async def test_se_puede_cambiar_de_camara_en_marcha(monkeypatch: pytest.MonkeyPatch) -> None:
     primera, segunda = _FakeDevice(), _FakeDevice()
     settings = VisionSettings(source="opencv")

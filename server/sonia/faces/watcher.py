@@ -3,10 +3,10 @@
 Dos caminos (docs/caras.md):
 
 - **Revisión sola.** Con sesión abierta, el motor mira la cámara cada
-  ``FACES_SCAN_SECONDS``. Quien sale en ``FACES_CONFIRM_SCANS`` revisiones
-  seguidas se le avisa a Sonia una vez, y de esa persona no se vuelve a avisar
-  en ``FACES_COOLDOWN_MINUTES``: Brian pasa el día en el stand y no puede llenar
-  la conversación de notas.
+  ``FACES_SCAN_SECONDS``. Quien sale en ``FACES_CONFIRM_SCANS`` revisiones de
+  los últimos ``FACES_CONFIRM_SECONDS`` (seguidas o no) se le avisa a Sonia una
+  vez, y de esa persona no se vuelve a avisar en ``FACES_COOLDOWN_MINUTES``:
+  Brian pasa el día en el stand y no puede llenar la conversación de notas.
 - **Sonia usa la cámara** (``look`` o la nota automática ``[Cámara]``). Se le dice
   quién sale en esa foto aunque se lo hayan dicho hace poco, y su plazo vuelve a
   empezar.
@@ -55,14 +55,29 @@ from sonia.faces.book import (
 from sonia.faces.book import speakers_from as _speakers_from
 from sonia.faces.model import FaceAnalyzer, FaceModel, ensure_models
 from sonia.faces.visits import Visit, VisitLog, same_day_as
-from sonia.types import Frame
+from sonia.types import CameraSource, Frame
+from sonia.vision.camera import OpenCVCamera
 
 __all__ = ["FaceWatcher", "Probe", "Sighting", "arrival_text", "join_labels", "known_text"]
 
 logger = logging.getLogger(__name__)
 
-#: Caras de una misma foto que se comparan como mucho (las más grandes).
-MAX_FACES = 4
+#: Caras de una misma foto que se comparan como mucho (las más grandes). Con la foto a
+#: resolución completa salen también las del fondo: un ponente puede estar detrás del visitante.
+MAX_FACES = 6
+
+#: Lo que vio la revisión sola hace este tiempo cuenta como «en la foto» de ``look``: la
+#: revisión mira a resolución completa y ve más lejos que esa foto, reducida para la visión.
+RECENT_S = 3.0
+
+#: Una cara cuya persona más parecida se queda a menos de esto del umbral se apunta en el
+#: registro («se parece a ... pero no llega»), una vez por minuto y persona como mucho: sin
+#: esto, el registro no dice por qué no se reconoce a alguien (8 de octubre de 2026).
+NEAR_MISS = 0.12
+NEAR_MISS_LOG_S = 60.0
+
+#: Calidad JPEG de la foto a resolución completa en la que se buscan caras.
+CAPTURE_QUALITY = 90
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,8 +326,13 @@ class FaceWatcher:
         self._schedule: Schedule | None = None
         self._agenda: Callable[[], Schedule | None] | None = None
         self._analyzer: FaceAnalyzer | None = None
-        #: Revisiones seguidas en que ha salido cada persona.
-        self._streak: dict[str, int] = {}
+        #: Cuándo ha salido cada persona en las revisiones de la ventana de confirmación
+        #: (``time.monotonic()``).
+        self._hits: dict[str, list[float]] = {}
+        #: Lo último que vio de cada persona la revisión sola, y cuándo (para ``look``).
+        self._seen: dict[str, tuple[Sighting, float]] = {}
+        #: Cuándo se apuntó en el registro que alguien se parecía sin llegar, por nombre.
+        self._miss_logged: dict[str, float] = {}
         #: Cuándo se le avisó a Sonia de cada persona (``time.monotonic()``).
         self._noticed: dict[str, float] = {}
         self.last_report: EnrollReport | None = None
@@ -328,6 +348,15 @@ class FaceWatcher:
     @property
     def cooldown_s(self) -> float:
         return max(0.0, self._settings.cooldown_minutes) * 60.0
+
+    @property
+    def confirm_window_s(self) -> float:
+        """Segundos en que tienen que caer las revisiones que confirman a alguien.
+
+        Nunca menos de dos revisiones seguidas (con su retraso): mirar más despacio
+        no puede dejar sin confirmar a quien sale en todas.
+        """
+        return max(self._settings.confirm_seconds, 2.0 * self.scan_seconds)
 
     # -- preparar ------------------------------------------------------------
 
@@ -439,29 +468,104 @@ class FaceWatcher:
 
     # -- reconocer -------------------------------------------------------------
 
+    async def capture(self, camera: CameraSource) -> Frame | None:
+        """La foto en la que buscar caras: a la resolución de la cámara (hasta
+        ``FACES_ANALYSIS_WIDTH``), no la de 768 px de la visión.
+
+        Reducida, una cara a dos metros se quedaba en unos 40 px y la de más de un metro
+        no llegaba al mínimo; a 1920 px mide más del doble (docs/caras.md, 8-oct-2026).
+        Las demás fuentes (Unity, OBS, la pantalla) dan la foto que tienen.
+        """
+        if isinstance(camera, OpenCVCamera):
+            width = max(0, self._settings.analysis_width)
+            return await camera.capture(max_width=width, quality=CAPTURE_QUALITY)
+        return await camera.capture()
+
     async def identify(self, frame: Frame) -> list[Sighting]:
-        """Las personas conocidas en ``frame`` (en un hilo). Sin preparar, nadie."""
+        """Las personas conocidas en ``frame`` (en un hilo). Sin preparar, nadie.
+
+        De quien se queda cerca sin pasar queda una línea en el registro.
+        """
         if not self.ready:
             return []
-        return await asyncio.to_thread(self._identify_sync, frame.data)
+        sightings, misses = await asyncio.to_thread(self._identify_sync, frame.data)
+        self._log_near_misses(misses)
+        return sightings
 
-    def _identify_sync(self, data: bytes) -> list[Sighting]:
+    async def seen_in(self, frame: Frame) -> list[Sighting]:
+        """Quién conocido sale en una foto que pidió Sonia, y quién vio la revisión sola hace un
+        momento (``RECENT_S``): esa mira a resolución completa y ve más lejos que la foto."""
+        found = {s.person_id: s for s in await self.identify(frame)}
+        for sighting in self.recent():
+            found.setdefault(sighting.person_id, sighting)
+        return sorted(found.values(), key=lambda s: s.width, reverse=True)
+
+    def recent(self, within_s: float = RECENT_S, now: float | None = None) -> list[Sighting]:
+        """Quién reconoció la revisión sola en los últimos ``within_s`` segundos."""
+        now = time.monotonic() if now is None else now
+        return [s for s, at in self._seen.values() if now - at <= within_s]
+
+    def _why_not(self, found: Match, width: int) -> str:
+        """Por qué no se acepta: ``pequeña``, ``umbral`` o ``margen`` (vacío si se acepta)."""
+        cfg = self._settings
+        if width < cfg.min_face_px:
+            return "pequeña"
+        if found.score < cfg.threshold:
+            return "umbral"
+        if found.score - found.runner_up < cfg.margin:
+            return "margen"
+        return ""
+
+    def _identify_sync(self, data: bytes) -> tuple[list[Sighting], list[Probe]]:
         analyzer = self._analyzer
         if analyzer is None:
-            return []
+            return [], []
         image = analyzer.decode(data)
         if image is None:
-            return []
+            return [], []
         cfg = self._settings
         best: dict[str, Sighting] = {}
+        misses: list[Probe] = []
         for face in analyzer.faces(image, min_width=cfg.min_face_px, limit=MAX_FACES):
-            found = self.book.match(face.embedding, threshold=cfg.threshold, margin=cfg.margin)
+            found = self.book.best(face.embedding)
             if found is None:
+                continue
+            why = self._why_not(found, face.width)
+            if why:
+                if found.score >= cfg.threshold - NEAR_MISS:
+                    name = found.person.name
+                    misses.append(Probe(face.width, name, found.score, found.runner_up, False, why))
                 continue
             seen = best.get(found.person.id)
             if seen is None or found.score > seen.match.score:
                 best[found.person.id] = Sighting(found, face.width)
-        return sorted(best.values(), key=lambda s: s.width, reverse=True)
+        return sorted(best.values(), key=lambda s: s.width, reverse=True), misses
+
+    def _log_near_misses(self, misses: list[Probe]) -> None:
+        """«Se parece a Jean Calderon pero no llega»: una vez por minuto y persona como mucho."""
+        now = time.monotonic()
+        for miss in misses:
+            last = self._miss_logged.get(miss.name)
+            if last is not None and now - last < NEAR_MISS_LOG_S:
+                continue
+            self._miss_logged[miss.name] = now
+            if miss.why == "margen":
+                logger.info(
+                    "Caras: se parece a %s pero también a otra persona (%.2f frente a %.2f; "
+                    "cara de %d px)",
+                    miss.name,
+                    miss.score,
+                    miss.runner_up,
+                    miss.width,
+                )
+            else:
+                logger.info(
+                    "Caras: se parece a %s pero no llega (%.2f de %.2f; cara de %d px)",
+                    miss.name,
+                    miss.score,
+                    self._settings.threshold,
+                    miss.width,
+                )
 
     async def probe(self, frame: Frame) -> list[Probe]:
         """Todas las caras de la foto con su mejor candidato, se acepten o no (para calibrar)."""
@@ -474,19 +578,12 @@ class FaceWatcher:
         image = analyzer.decode(data)
         if image is None:
             return []
-        cfg = self._settings
         result: list[Probe] = []
         for face in analyzer.faces(image, limit=MAX_FACES):
             found = self.book.best(face.embedding)
             if found is None:
                 continue
-            why = ""
-            if face.width < cfg.min_face_px:
-                why = "pequeña"
-            elif found.score < cfg.threshold:
-                why = "umbral"
-            elif found.score - found.runner_up < cfg.margin:
-                why = "margen"
+            why = self._why_not(found, face.width)
             result.append(
                 Probe(face.width, found.person.name, found.score, found.runner_up, not why, why)
             )
@@ -497,17 +594,32 @@ class FaceWatcher:
     def due(self, sightings: list[Sighting], now: float | None = None) -> list[Sighting]:
         """De una revisión sola: a quién hay que avisar ya (confirmado y fuera de su plazo).
 
+        Confirmado es salir en ``FACES_CONFIRM_SCANS`` revisiones de los últimos
+        ``FACES_CONFIRM_SECONDS``, seguidas o no. Quien habla moviendo la cabeza pasa
+        el umbral a ratos (de lado no se parece a su foto): con revisiones seguidas,
+        Jean tardó 75 s en salir el 8 de octubre de 2026 (docs/caras.md).
+
         Los devueltos se dan por avisados: si el aviso no llega a la sesión, se
         llama a :meth:`retract`.
         """
         now = time.monotonic() if now is None else now
-        present = {s.person_id for s in sightings}
-        self._streak = {pid: self._streak.get(pid, 0) + 1 for pid in present}
+        window = self.confirm_window_s
+        hits: dict[str, list[float]] = {}
+        for pid, times in self._hits.items():
+            recent = [t for t in times if now - t <= window]
+            if recent:
+                hits[pid] = recent
+        for pid in {s.person_id for s in sightings}:
+            hits.setdefault(pid, []).append(now)
+        self._hits = hits
+        self._seen = {pid: seen for pid, seen in self._seen.items() if now - seen[1] <= RECENT_S}
+        for sighting in sightings:
+            self._seen[sighting.person_id] = (sighting, now)
         confirm = max(1, self._settings.confirm_scans)
         fresh: list[Sighting] = []
         for sighting in sightings:
             pid = sighting.person_id
-            if self._streak[pid] < confirm:
+            if len(hits[pid]) < confirm:
                 continue
             last = self._noticed.get(pid)
             if last is not None and now - last < self.cooldown_s:

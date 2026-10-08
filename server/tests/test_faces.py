@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import time
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,7 @@ import numpy as np
 import pytest
 
 from sonia import cli
+from sonia.actions import build_default_registry
 from sonia.agenda.schedule import Schedule, Talk
 from sonia.config import FaceSettings, Settings, VisionSettings
 from sonia.faces import (
@@ -39,9 +42,11 @@ from sonia.faces import (
     speakers_from,
 )
 from sonia.faces.book import enroll
+from sonia.faces.watcher import RECENT_S
 from sonia.live.prompts import build_session_config
 from sonia.paths import REPO_ROOT, SEEDED
 from sonia.types import Frame
+from sonia.vision.camera import OpenCVCamera
 from tests.helpers import FakeCamera
 from tests.test_cli import make_settings as cli_make_settings
 from tests.test_live import make_rig, make_settings, tool_names, wait_until
@@ -357,7 +362,7 @@ async def test_prepare_da_de_alta_y_reconoce_solo_caras_grandes_y_conocidas(
     analyzer = reference_analyzer(
         camara=[
             face(near(0, 0.66), width=180),  # Brian, delante
-            face(near(1, 0.9), width=40),  # Jean, al fondo: no cuenta
+            face(near(1, 0.9), width=30),  # Jean, a más de cuatro metros: no cuenta
             face(axis(9), width=200),  # un visitante
         ]
     )
@@ -388,11 +393,106 @@ async def test_avisa_tras_dos_revisiones_y_calla_veinte_minutos(tmp_path: Path) 
         "Brian James (del equipo de Sonnet Code, gerente de Operaciones)"
     ]
     assert faces.due(brian, now=6.0) == []
-    assert faces.due(brian, now=3.0 + 19 * 60) == []
+    # Sigue delante (confirmado otra vez): en su plazo no se repite.
+    assert faces.due(brian, now=19 * 60) == []
+    assert faces.due(brian, now=19 * 60 + 1) == []
     # Se fue y volvió: hace falta confirmar otra vez, y el plazo sigue mandando.
-    assert faces.due([], now=3.0 + 19.5 * 60) == []
-    assert faces.due(brian, now=3.0 + 19.6 * 60) == []
+    assert faces.due([], now=19.5 * 60) == []
+    assert faces.due(brian, now=3.0 + 20 * 60 - 1) == []
     assert len(faces.due(brian, now=3.0 + 20 * 60)) == 1
+
+
+async def test_confirma_con_revisiones_salteadas_dentro_de_la_ventana(tmp_path: Path) -> None:
+    # Quien habla moviendo la cabeza pasa el umbral a ratos (registro del 8 de octubre).
+    faces = watcher(tmp_path, reference_analyzer(camara=[face(axis(0))]))
+    await faces.prepare(None)
+    brian = await faces.identify(CAMERA_FRAME)
+
+    assert faces.due(brian, now=0.0) == []
+    assert faces.due([], now=1.0) == []
+    assert faces.due([], now=2.0) == []
+    assert len(faces.due(brian, now=3.0)) == 1
+
+
+async def test_dos_aciertos_lejanos_no_confirman(tmp_path: Path) -> None:
+    faces = watcher(tmp_path, reference_analyzer(camara=[face(axis(0))]))
+    await faces.prepare(None)
+    brian = await faces.identify(CAMERA_FRAME)
+
+    assert faces.confirm_window_s == 4.0
+    assert faces.due(brian, now=0.0) == []
+    for second in range(1, 5):
+        assert faces.due([], now=float(second)) == []
+    assert faces.due(brian, now=4.5) == []  # el primero ya quedó fuera de la ventana
+    assert len(faces.due(brian, now=5.5)) == 1
+
+
+async def test_mirando_despacio_dos_revisiones_seguidas_siempre_confirman(tmp_path: Path) -> None:
+    faces = watcher(tmp_path, reference_analyzer(camara=[face(axis(0))]), scan_seconds=5.0)
+    await faces.prepare(None)
+    brian = await faces.identify(CAMERA_FRAME)
+
+    assert faces.confirm_window_s == 10.0
+    assert faces.due(brian, now=0.0) == []
+    assert len(faces.due(brian, now=5.3)) == 1  # la revisión siguiente, con su retraso
+
+
+async def test_quien_se_queda_cerca_del_umbral_queda_en_el_registro(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Sin esto, el registro no decía por qué no reconocía a Jean (8 de octubre).
+    a, b = 0.60, 0.57
+    both = axis(0) * a + axis(1) * b + axis(127) * float(np.sqrt(1 - a * a - b * b))
+    analyzer = reference_analyzer(
+        cerca=[face(near(1, 0.45), width=98)],
+        lejos=[face(near(1, 0.30))],
+        dudosa=[face(both)],
+    )
+    faces = watcher(tmp_path, analyzer)
+    await faces.prepare(None)
+    caplog.set_level(logging.INFO, logger="sonia.faces.watcher")
+
+    assert await faces.identify(Frame(data=b"cerca")) == []
+    assert await faces.identify(Frame(data=b"cerca")) == []  # una vez por minuto como mucho
+    assert await faces.identify(Frame(data=b"lejos")) == []  # ni se parece: no se apunta
+    assert await faces.identify(Frame(data=b"dudosa")) == []
+    assert [r.getMessage() for r in caplog.records if "se parece" in r.getMessage()] == [
+        "Caras: se parece a Jean Calderon pero no llega (0.45 de 0.52; cara de 98 px)",
+        "Caras: se parece a Brian James pero también a otra persona (0.60 frente a 0.57; "
+        "cara de 150 px)",
+    ]
+
+
+async def test_look_cuenta_a_quien_vio_la_revision_hace_un_momento(tmp_path: Path) -> None:
+    # La revisión sola mira a resolución completa y ve más lejos que la foto de look.
+    analyzer = reference_analyzer(camara=[face(axis(0))], look=[])
+    faces = watcher(tmp_path, analyzer)
+    await faces.prepare(None)
+    faces.due(await faces.identify(CAMERA_FRAME))
+
+    seen = await faces.seen_in(Frame(data=b"look"))
+    assert [s.match.person.name for s in seen] == ["Brian James"]
+    assert faces.recent(now=time.monotonic() + RECENT_S + 1) == []
+
+
+async def test_las_caras_se_buscan_a_la_resolucion_de_la_camara(tmp_path: Path) -> None:
+    class Usb(OpenCVCamera):
+        def __init__(self) -> None:
+            super().__init__(VisionSettings(source="opencv"))
+            self.asked: list[tuple[int | None, int | None]] = []
+
+        async def capture(
+            self, *, max_width: int | None = None, quality: int | None = None
+        ) -> Frame | None:
+            self.asked.append((max_width, quality))
+            return CAMERA_FRAME
+
+    faces = watcher(tmp_path, reference_analyzer())
+    usb = Usb()
+    assert await faces.capture(usb) is CAMERA_FRAME
+    assert usb.asked == [(1920, 90)]  # no la de 768 px de la visión
+    unity = FakeCamera(data=b"camara")
+    assert await faces.capture(unity) is not None and unity.captures == 1
 
 
 async def test_si_sonia_usa_la_camara_se_le_dice_igual_y_el_plazo_empieza_de_nuevo(
@@ -407,6 +507,8 @@ async def test_si_sonia_usa_la_camara_se_le_dice_igual_y_el_plazo_empieza_de_nue
     assert len(faces.used(brian, now=600.0)) == 1
     # ...y los 20 minutos cuentan desde ahí.
     assert faces.due(brian, now=3.0 + 20 * 60) == []
+    assert faces.due(brian, now=3.0 + 20 * 60 + 1) == []  # confirmado, pero en su plazo
+    assert faces.due(brian, now=600.0 + 20 * 60 - 1) == []
     assert len(faces.due(brian, now=600.0 + 20 * 60)) == 1
 
 
@@ -807,6 +909,13 @@ def test_las_reglas_de_caras_solo_van_si_reconoce_y_sin_marcas(tmp_path: Path) -
     assert "Personas conocidas en la foto" in backend
     assert "reconoce al equipo de Sonnet Code y a los ponentes" in with_faces["instructions"]
     assert "Tu cámara reconoce sola" not in without["instructions"]
+    # «¿Me reconoces?» sin nota: mira antes de contestar (8 de octubre: «no sé quién eres»).
+    registry = build_default_registry(include_look=True)
+    with_look = build_session_config(settings, registry=registry, gallery_ids=[], faces=True)
+    delegate = with_look["instructions"].split("Delegate to the backend when:")[1]
+    assert "Te pregunten si les reconoces" in delegate.split("Do not delegate")[0]
+    plain = build_session_config(settings, registry=registry, gallery_ids=[])
+    assert "Te pregunten si les reconoces" not in plain["instructions"]
     # Quién ya pasó por el stand y el saludo propio.
     assert "ya pasó hoy por el stand" in with_faces["instructions"]
     assert "Para saludar a" in with_faces["instructions"]

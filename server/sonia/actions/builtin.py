@@ -76,7 +76,7 @@ async def _known_faces(ctx: ActionContext, frame: Frame) -> str:
     if not isinstance(faces, FaceWatcher):
         return ""
     try:
-        sightings = faces.used(await faces.identify(frame))
+        sightings = faces.used(await faces.seen_in(frame))
     except Exception as exc:  # noqa: BLE001 - sin caras, la foto sigue valiendo
         logger.warning("No se pudieron reconocer caras en la foto: %s", exc)
         return ""

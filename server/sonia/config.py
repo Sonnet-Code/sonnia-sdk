@@ -275,6 +275,11 @@ class VisionSettings(BaseSettings):
     #: Con ``source=screen``, qué pantalla se captura: 1 = la principal, 2, 3… las
     #: demás y 0 = todas juntas (numeración de mss).
     screen_monitor: int = 1
+    #: Resolución que se le pide a la cámara USB si abre por debajo (muchas webcams abren a
+    #: 640x480 en Windows aunque den 1080p). Las caras se buscan a esa resolución (docs/caras.md).
+    #: Si no da imagen así, se queda con la suya. 0 = la que dé la cámara.
+    capture_width: int = 1920
+    capture_height: int = 1080
     max_width: int = 768
     jpeg_quality: int = 80
     #: Describir la cámara cuando el visitante empieza a hablar (nota [Cámara]).
@@ -504,12 +509,22 @@ class FaceSettings(BaseSettings):
     threshold: float = 0.52
     #: Ventaja mínima sobre la segunda persona más parecida; si no, no se arriesga.
     margin: float = 0.06
-    #: Ancho mínimo de la cara en la foto de la cámara (768 px): quien pasa al fondo no cuenta.
-    min_face_px: int = 64
+    #: Ancho mínimo de la cara, en píxeles de la foto en la que se buscan (la de la cámara,
+    #: hasta ``analysis_width``). Hasta 40 px el tamaño apenas quita parecido (medido con las
+    #: fotos de referencia: 0,84 de media frente a 0,92); por debajo cae deprisa. A 1920 px son
+    #: unos cuatro metros con una webcam normal.
+    min_face_px: int = 40
+    #: Ancho máximo de la foto en la que se buscan caras (0 = la de la cámara): no la de 768 px
+    #: de la visión, que dejaba fuera a quien estaba a más de un metro (docs/caras.md).
+    analysis_width: int = 1920
     #: Cada cuánto mira la cámara por su cuenta, con sesión abierta (0 = solo cuando Sonia mira).
-    scan_seconds: float = 3.0
-    #: Revisiones seguidas en que tiene que salir alguien antes de avisar a Sonia.
+    #: Cada segundo: con una sola foto de referencia, solo pasa el umbral quien mira de frente
+    #: a la cámara, y cuanto más se mira, antes se le pilla así (docs/caras.md, 8-oct-2026).
+    scan_seconds: float = 1.0
+    #: Revisiones en que tiene que salir alguien antes de avisar a Sonia, seguidas o no...
     confirm_scans: int = 2
+    #: ...dentro de estos segundos (nunca menos de dos revisiones seguidas).
+    confirm_seconds: float = 4.0
     #: Minutos sin volver a avisar de la misma persona, salvo que Sonia use la cámara.
     cooldown_minutes: float = 20.0
     #: Tope de la descarga de cada foto de referencia y de los modelos.

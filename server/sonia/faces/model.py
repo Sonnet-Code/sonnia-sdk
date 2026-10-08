@@ -61,8 +61,10 @@ RECOGNIZER = ModelFile(
 )
 MODEL_FILES = (DETECTOR, RECOGNIZER)
 
-#: Confianza mínima del detector (la de los ejemplos de OpenCV).
-DETECT_SCORE = 0.8
+#: Confianza mínima del detector. Los ejemplos de OpenCV usan 0,8, pero con la webcam del Mac
+#: dejaba sin detectar ocho de cada veinte fotos de alguien sentado delante, algo girado
+#: (8-oct-2026). Una «cara» que no lo es no se parece a nadie: el umbral de parecido manda.
+DETECT_SCORE = 0.6
 
 
 @dataclass(frozen=True, slots=True)

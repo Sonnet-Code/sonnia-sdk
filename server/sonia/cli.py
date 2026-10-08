@@ -1244,8 +1244,12 @@ async def _probe_faces(settings: Settings, faces: FaceWatcher) -> int:
         f"{cfg.min_face_px} px). Ctrl+C para salir. No se guarda nada."
     )
     try:
+        size = ""
         while True:
-            frame = await asyncio.wait_for(camera.capture(), timeout=10.0)
+            frame = await asyncio.wait_for(faces.capture(camera), timeout=10.0)
+            if frame is not None and f"{frame.width}x{frame.height}" != size:
+                size = f"{frame.width}x{frame.height}"
+                print(f"  (foto de {size})")
             probes = await faces.probe(frame) if frame is not None else []
             if frame is None:
                 print("  sin imagen de la cámara")

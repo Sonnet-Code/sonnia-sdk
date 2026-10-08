@@ -36,8 +36,10 @@ guarda. No nombra OpenCV ni ningún modelo, igual que con el resto de su stack.
 Hay dos caminos (`FaceWatcher` en `server/sonia/faces/watcher.py`):
 
 1. **Revisión sola.** Con una sesión de GPT-Live abierta, el motor mira la
-   cámara cada `FACES_SCAN_SECONDS` (3 s). Quien sale en `FACES_CONFIRM_SCANS`
-   revisiones seguidas (2) genera una nota:
+   cámara cada `FACES_SCAN_SECONDS` (1 s), a la resolución de la cámara (hasta
+   `FACES_ANALYSIS_WIDTH`, 1920 px), no a la de 768 px de la visión. Quien sale
+   en `FACES_CONFIRM_SCANS` revisiones (2) de los últimos `FACES_CONFIRM_SECONDS`
+   (4 s), seguidas o no, genera una nota:
    `[Cámara] Acaba de ponerse delante de la cámara Brian James (del equipo de Sonnet Code, gerente de Operaciones y Servicios).`
    De esa persona no se vuelve a avisar en `FACES_COOLDOWN_MINUTES` (20). Así
    Brian o Mariel pueden pasar el día en el stand sin llenar la conversación
@@ -45,7 +47,9 @@ Hay dos caminos (`FaceWatcher` en `server/sonia/faces/watcher.py`):
 2. **Sonnia usa la cámara**, con `look` o con la nota automática `[Cámara]` si
    está activada. Al resultado se le añade
    `Personas conocidas en la foto: ...` aunque ya se le dijera hace poco, y el
-   plazo de 20 minutos de esas personas empieza de nuevo.
+   plazo de 20 minutos de esas personas empieza de nuevo. Cuenta también quien
+   reconoció la revisión sola en los últimos 3 s: esa mira a resolución
+   completa y ve más lejos que la foto de `look`.
 
 Otros detalles:
 - En «Solo saludos» y «Fuera» no hay sesión, así que no se mira.
@@ -58,6 +62,15 @@ Otros detalles:
 - Sus instrucciones le dicen que la nota cuenta quién se vio en ese momento,
   no quién le habla después. Si no encaja, no da por hecho que es esa
   persona, y si le dicen que no son quien cree, se disculpa y sigue.
+- Si le preguntan «¿me reconoces?» o «¿sabes quién soy?» y no le ha llegado la
+  nota, mira con `look` antes de contestar (es una de sus reglas de delegación).
+  El 8 de octubre contestó «no sé quién eres» sin mirar, y la nota llegó diez
+  segundos después.
+- Quien se parece a alguien conocido sin llegar al umbral queda en el registro,
+  una vez por minuto y persona como mucho:
+  `Caras: se parece a Jean Calderon pero no llega (0.47 de 0.52; cara de 98 px)`
+  o `... pero también a otra persona (0.55 frente a 0.51; ...)`. Antes el
+  registro no decía por qué no se reconocía a alguien.
 
 ## Preparar
 
@@ -186,9 +199,12 @@ cara de  48 px -> Jean Calderon: 0.44 (segunda 0.30) no (pequeña)
 | `FACES_ENABLED` | `true` | `false` apaga el reconocimiento. |
 | `FACES_THRESHOLD` | `0.52` | Similitud mínima. Súbela si confunde a gente; bájala (no de 0,47) si no reconoce al equipo. |
 | `FACES_MARGIN` | `0.06` | Ventaja mínima sobre la segunda persona más parecida. |
-| `FACES_MIN_FACE_PX` | `64` | Ancho mínimo de la cara en la foto de 768 px. Con una webcam normal son algo más de un metro: quien pasa por detrás no cuenta. |
-| `FACES_SCAN_SECONDS` | `3` | Cada cuánto mira sola (0 = solo cuando Sonnia usa la cámara). |
-| `FACES_CONFIRM_SCANS` | `2` | Revisiones seguidas antes de avisar. |
+| `FACES_MIN_FACE_PX` | `40` | Ancho mínimo de la cara en la foto de la cámara. A 1920 px son unos cuatro metros con una webcam normal; a 640 px, metro y medio. |
+| `FACES_ANALYSIS_WIDTH` | `1920` | Ancho máximo de la foto en la que se buscan caras (0 = la de la cámara). |
+| `FACES_SCAN_SECONDS` | `1` | Cada cuánto mira sola (0 = solo cuando Sonnia usa la cámara). |
+| `FACES_CONFIRM_SCANS` | `2` | Revisiones en que tiene que salir antes de avisar, seguidas o no... |
+| `FACES_CONFIRM_SECONDS` | `4` | ...dentro de estos segundos (nunca menos de dos revisiones seguidas). |
+| `VISION_CAPTURE_WIDTH` y `_HEIGHT` | `1920` y `1080` | Resolución que se le pide a la cámara USB si abre por debajo (en Windows muchas webcams abren a 640x480). Si así no da imagen, se queda con la suya. 0 = no pedir. |
 | `FACES_COOLDOWN_MINUTES` | `20` | Minutos sin repetir el aviso de la misma persona. |
 | `FACES_SPEAKERS` | `true` | `false` reconoce solo al equipo. |
 | `FACES_STAFF_FILE` | `assets/faces/staff.json` | Otra lista del equipo. |
@@ -214,6 +230,42 @@ eventos (gente de espaldas, un grupo, un stand, una sala vacía):
 Con la cámara real las similitudes de la misma persona suelen bajar (otra
 luz, otro ángulo), así que el umbral se confirma en el stand con
 `--probar`.
+
+### Por qué tardó 75 segundos en reconocer a Jean (8 de octubre)
+
+En la app del Mac, la cámara dio imagen a las 13:10:57 y el aviso de Jean llegó
+a las 13:12:12, con 0,55 de parecido. Entre medias Sonnia miró con `look` y
+tampoco le reconoció, y a «¿sabes quién soy?» contestó que no. No se perdió
+ninguna nota: ninguna revisión le dio por encima del umbral dos veces seguidas.
+Las causas:
+
+- **La foto se reducía a 768 px.** La cámara del Mac da 1920x1080, pero las
+  caras se buscaban en la foto de la visión (768x432). Con el mínimo de 64 px,
+  quien estaba a más de un metro ni se comparaba.
+- **Revisiones seguidas cada 3 s.** Sentado delante del Mac y mirando a otras
+  pantallas, Jean daba entre 0,26 y 0,43 (lo que da un desconocido). Solo
+  pasaba de 0,52 en alguna foto suelta mirando a la cámara, y hacían falta dos
+  seguidas, con 3 s entre ellas.
+- **Una sola foto de referencia** (la de la web): con otra luz y de lado, se
+  parece poco a la de la cámara.
+
+Cuánto quita el tamaño se midió con las 46 fotos de referencia, reducidas hasta
+que la cara mide N px y pasadas por JPEG como la cámara:
+
+| Cara | Parecido con su huella (media, peor 10 %) | Pasa el umbral | Impostor más alto |
+|---|---|---|---|
+| 140 px | 0,95, 0,90 | 100 % | 0,43 |
+| 48 px | 0,88, 0,79 | 100 % | 0,45 |
+| 40 px | 0,84, 0,70 | 98 % | 0,43 |
+| 32 px | 0,76, 0,51 | 89 % | 0,41 |
+| 24 px | 0,65, 0,44 | 87 % | 0,43 |
+
+Hasta 40 px el tamaño apenas quita parecido, y los impostores no suben al
+encoger la cara. Por eso las caras se buscan a resolución completa con un
+mínimo de 40 px. Además, YuNet detecta desde 0,6 de confianza en vez de 0,8:
+con 0,8, ocho de cada veinte fotos de Jean sentado delante, algo girado, salían
+sin cara. Una «cara» que no lo es no se parece a nadie: el umbral de parecido
+manda.
 
 ## Si algo falla
 

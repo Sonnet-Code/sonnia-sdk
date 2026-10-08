@@ -1568,7 +1568,7 @@ class LiveEngine:
         if faces is None:
             return []
         try:
-            sightings = await faces.identify(frame)
+            sightings = await faces.seen_in(frame)
         except Exception as exc:  # noqa: BLE001 - sin caras, la foto sigue valiendo
             logger.warning("No se pudieron reconocer caras: %s", exc)
             return []
@@ -1614,7 +1614,7 @@ class LiveEngine:
             # Sin sesión no hay a quién avisar: en «Solo saludos» y «Fuera» no se mira.
             return
         try:
-            frame = await asyncio.wait_for(self._camera.capture(), timeout=CAPTURE_TIMEOUT_S)
+            frame = await asyncio.wait_for(faces.capture(self._camera), timeout=CAPTURE_TIMEOUT_S)
         except Exception:  # noqa: BLE001 - la cámara falla a ratos; la próxima revisión, otra
             return
         if frame is None:
