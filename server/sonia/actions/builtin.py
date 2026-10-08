@@ -19,9 +19,6 @@ from sonia.types import ActionContext, ActionResult, ActionSpec, Frame
 
 logger = logging.getLogger(__name__)
 
-#: Id reservado que significa "la última captura de la cámara".
-CAMERA_ID = "camera"
-
 #: Tope de espera de una captura pedida por el modelo. Un driver de cámara
 #: colgado no puede dejar el turno en ``thinking`` para siempre: mejor decirle
 #: al modelo que no se pudo mirar y seguir la conversación.
@@ -103,10 +100,7 @@ SHOW_IMAGE_SPEC_PARAMETERS: dict[str, Any] = {
     "properties": {
         "image_id": {
             "type": "string",
-            "description": (
-                "Id de una imagen de la galería local (nombre de archivo sin extensión) "
-                "o 'camera' para mostrar la última captura de la cámara."
-            ),
+            "description": "Id de una imagen de la galería local (nombre de archivo sin extensión).",
         },
         "caption": {
             "type": "string",
@@ -124,21 +118,6 @@ async def show_image(ctx: ActionContext, arguments: dict[str, Any]) -> ActionRes
 
     if ctx.avatar is None:
         return ActionResult(text=NO_AVATAR)
-
-    if image_id == CAMERA_ID:
-        frame = ctx.last_frame
-        if frame is None:
-            frame = await _capture(ctx)
-        if frame is None:
-            return ActionResult(text="No hay ninguna captura de la cámara que mostrar.")
-        await ctx.avatar.show_image(
-            image_id=CAMERA_ID,
-            source="camera",
-            mime=frame.mime,
-            data=frame.data,
-            caption=caption,
-        )
-        return ActionResult(text="Mostrando la última captura de la cámara.")
 
     gallery = Gallery(ctx.gallery_dir)
     loaded = gallery.load(image_id)
@@ -194,10 +173,7 @@ LOOK = ActionSpec(
 
 SHOW_IMAGE = ActionSpec(
     name="show_image",
-    description=(
-        "Muestra una imagen en tu pantalla, junto a ti. Usa un id de la galería local "
-        "o 'camera' para enseñar la última foto de la cámara."
-    ),
+    description="Muestra una imagen de la galería local en tu pantalla, junto a ti.",
     parameters=SHOW_IMAGE_SPEC_PARAMETERS,
     handler=show_image,
 )

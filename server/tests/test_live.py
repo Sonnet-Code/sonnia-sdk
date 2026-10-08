@@ -24,7 +24,7 @@ import pytest
 
 import sonia.live.engine as engine_module
 import sonia.live.oneshot as oneshot_module
-from sonia.actions import build_default_registry
+from sonia.actions import Gallery, build_default_registry
 from sonia.agenda import AgendaBook
 from sonia.clock import Clock
 from sonia.config import (
@@ -42,7 +42,7 @@ from sonia.live.audio import ComfortNoise, NoiseGate, pcm16_from_float, rms
 from sonia.live.client import LiveClient, LiveError
 from sonia.live.engine import DELEGATION_FAILED_TEXT, INTERRUPT_TEXT, LiveEngine
 from sonia.live.oneshot import probe_session, speak_text
-from sonia.live.prompts import build_session_config, describe_live_stack
+from sonia.live.prompts import build_session_config, describe_live_stack, gallery_note
 from sonia.live.vision import VisionNarrator
 from sonia.showcase import ATTENTION_DANCE, Showcase
 from sonia.types import Frame, LLMEvent, Message, TextDelta, TurnDone
@@ -251,6 +251,7 @@ def make_settings(
     idle_reset: float = 120.0,
     showcase_settings: ShowcaseSettings | None = None,
     image_auto_hide: float = 0.0,
+    gallery_watch: float = 0.0,
     **live: Any,
 ) -> Settings:
     gallery = tmp_path / "gallery"
@@ -283,6 +284,7 @@ def make_settings(
         log_level="DEBUG",
         idle_reset_seconds=idle_reset,
         image_auto_hide_seconds=image_auto_hide,
+        gallery_watch_seconds=gallery_watch,
     )
 
 
@@ -929,6 +931,53 @@ async def test_una_accion_desconocida_devuelve_el_error_al_backend(tmp_path: Pat
         await conn.wait_type("response.create")
         output = conn.of_type("response.item.create")[0]["item"]["output"]
         assert output.startswith("Error")
+
+
+async def test_lo_que_se_anade_o_quita_de_la_galeria_llega_en_una_nota_silenciosa(
+    tmp_path: Path,
+) -> None:
+    # Jean (8-oct): la galería va vacía y Brian la llena en pleno evento, sin reiniciar.
+    async with make_rig(tmp_path, gallery_watch=0.05) as rig:
+        conn = await rig.conn()
+        instructions = conn.start["session"]["instructions"]
+        assert "La galería de imágenes está vacía" in instructions
+        assert '"[Galería]"' in instructions
+
+        (tmp_path / "gallery" / "oficinas.png").write_bytes(b"\x89PNG")
+        await conn.wait_type("session.thinking.append")
+        note = conn.of_type("session.thinking.append")[0]["content"]
+        assert note.startswith("[Galería] El equipo ha añadido a tu galería: oficinas.")
+        assert "ids exactos): oficinas." in note
+
+        (tmp_path / "gallery" / "oficinas.png").unlink()
+        await conn.wait_type("session.thinking.append", count=2)
+        note = conn.of_type("session.thinking.append")[1]["content"]
+        assert note.startswith("[Galería] Ha quitado: oficinas.")
+        assert "se ha quedado vacía" in note
+        # Silenciosa: no abre turno ni hace hablar a Sonia.
+        assert conn.of_type("session.commentary.append") == []
+        assert conn.of_type("response.create") == []
+
+
+async def test_un_cambio_que_se_deshace_antes_de_contarlo_no_manda_nota(tmp_path: Path) -> None:
+    async with make_rig(tmp_path, gallery_watch=3600.0) as rig:
+        await rig.conn()
+        gallery = Gallery(tmp_path / "gallery")
+        (tmp_path / "gallery" / "oficinas.png").write_bytes(b"\x89PNG")
+        await rig.engine._check_gallery(gallery)
+        assert rig.engine._pending_gallery is not None
+        (tmp_path / "gallery" / "oficinas.png").unlink()
+        await rig.engine._check_gallery(gallery)
+        assert rig.engine._pending_gallery is None
+
+
+def test_la_nota_de_galeria_cabe_en_un_append() -> None:
+    ids = [f"imagen-numero-{n:03d}" for n in range(200)]
+    note = gallery_note(ids, [], ids, max_chars=1_200)
+    assert len(note) <= 1_200
+    assert note.startswith("[Galería] El equipo ha añadido a tu galería: imagen-numero-000")
+    assert " más." in note
+    assert note.endswith("No lo anuncies: enséñalas cuando vengan a cuento.")
 
 
 # ---------------------------------------------------------------------------

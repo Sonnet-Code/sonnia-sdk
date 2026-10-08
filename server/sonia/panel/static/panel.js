@@ -172,9 +172,8 @@
     return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
   }
 
-  /** "logo-sonnet" -> "Logo sonnet". */
+  /** "oficinas-sonnet" -> "Oficinas sonnet". */
   function prettyImageName(id) {
-    if (id === "camera") return "Foto de la cámara";
     return capitalize(String(id).replace(/[-_]+/g, " ").trim());
   }
 
@@ -281,7 +280,7 @@
       "instances", "instance-list",
       "dup-conversing", "dup-conversing-title", "dup-conversing-text", "keep-one-btn", "hero-kicker", "hero-disconnected", "cache-error", "offline-banner", "offline-detail", "slow-banner", "auth-banner",
       "reload-btn", "hero", "hero-mode", "hero-activity", "activity-dot", "hero-health", "hero-muted",
-      "away-sign", "away-sign-text", "edit-sign-btn", "stop-btn", "greet-btn", "dance-btn", "logo-btn",
+      "away-sign", "away-sign-text", "edit-sign-btn", "stop-btn", "greet-btn", "dance-btn",
       "hide-btn", "mute-btn", "mute-label", "now-showing", "thumbs", "caption-input", "say-form",
       "say-input", "say-btn", "notes-form", "notes-input", "notes-btn", "notes-state", "volume-input",
       "volume-value", "gate-input", "gate-value", "gate-meter-fill", "gate-meter-mark",
@@ -769,7 +768,6 @@
       const cache = app.status && app.status.voice_cache;
       return !cache || (!cache.busy && cache.ready < cache.total);
     },
-    logo: () => app.galleryState !== "ready" || Boolean(logoImageId()),
     voice: () => Boolean(ui.voiceSelect.value) && ui.voiceSelect.value !== (app.status && app.status.voice),
     // Con el Modo Jean en marcha el orquestador no abre el editor.
     avatar_closed: () => !avatarInfo().editor_open && !guestActive(),
@@ -1374,12 +1372,6 @@
 
   // ------------------------------------------------------------ galería
 
-  function logoImageId() {
-    const ids = app.gallery.map((image) => image.id);
-    if (ids.includes("logo-sonnet")) return "logo-sonnet";
-    return ids.find((id) => /logo/i.test(id)) || null;
-  }
-
   async function loadGallery() {
     const requested = app.instanceId;
     app.galleryState = "loading";
@@ -1466,7 +1458,7 @@
     if (!image) return null;
     if (typeof image === "string") return { id: image, caption: "" };
     if (typeof image !== "object") return null;
-    const id = image.image_id || image.id || (image.source === "camera" ? "camera" : "") || "imagen";
+    const id = image.image_id || image.id || "imagen";
     return { id: String(id), caption: typeof image.caption === "string" ? image.caption : "" };
   }
 
@@ -1474,7 +1466,7 @@
     const image = currentImage(status);
     let text = "No hay ninguna imagen en pantalla.";
     if (image) {
-      text = image.id === "camera" ? "En pantalla ahora: una foto de la cámara" : `En pantalla ahora: «${prettyImageName(image.id)}»`;
+      text = `En pantalla ahora: «${prettyImageName(image.id)}»`;
       if (image.caption) text += `, con el texto «${image.caption}»`;
     }
     setText(ui.nowShowing, text);
@@ -2336,12 +2328,7 @@
         addSystemLine("Sonnia se calló", "", message.time);
         break;
       case "show_image": {
-        const id = message.image_id || (message.source === "camera" ? "camera" : "");
-        addSystemLine(
-          id === "camera" ? "En pantalla: una foto de la cámara" : `En pantalla: «${prettyImageName(id || "imagen")}»`,
-          "",
-          message.time,
-        );
+        addSystemLine(`En pantalla: «${prettyImageName(message.image_id || "imagen")}»`, "", message.time);
         break;
       }
       case "hide_image":
@@ -2536,9 +2523,6 @@
       );
     }
     ui.danceBtn.addEventListener("click", () => sendAction("gesture", { category: "dance" }, { button: ui.danceBtn }));
-    ui.logoBtn.addEventListener("click", () =>
-      sendAction("show_image", { image_id: logoImageId() || "logo-sonnet" }, { button: ui.logoBtn }),
-    );
     ui.hideBtn.addEventListener("click", () => sendAction("hide_image", {}, { button: ui.hideBtn }));
     ui.muteBtn.addEventListener("click", onMuteClick);
 

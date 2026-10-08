@@ -63,7 +63,7 @@ Definidas una sola vez en `server/sonia/actions`; de ese registro salen las herr
 | Acción | Qué hace |
 |---|---|
 | `look` | Toma una captura fresca de la cámara y se la manda al backend como imagen; si sale alguien del equipo de Sonnet Code o un ponente, añade su nombre (`docs/caras.md`). |
-| `show_image` | Muestra una imagen en el panel de la escena de Unity. Acepta un id de la galería local o `camera` para la última captura. Opcionalmente un pie de texto. |
+| `show_image` | Muestra una imagen de la galería local (`assets/gallery`, vacía por defecto) en el panel de la escena de Unity. Opcionalmente un pie de texto. Las fotos de la cámara no se enseñan nunca en pantalla (decisión de Jean del 8 de octubre de 2026). |
 | `hide_image` | Retira el panel de imágenes. |
 | `play_animation` | Baila o hace un gesto cuando se lo piden: los de una lista fija (bailar, saludar, paz, pulgares arriba...) o cualquier gesto de Sage descrito con palabras («tocarse un ojo»), que elige el modelo del director de gestos con las fichas de Genies que ya tiene en caché, sin cargar el contexto de GPT-Live ni del backend. Lanza el clip entero (`whole`), aunque Sonia hable mientras tanto (`server/sonia/actions/moves.py`, `docs/gestos.md`). |
 | `check_agenda` | Vuelve a leer la agenda en la web del DevFest y devuelve, calculado en código, qué cambió respecto a la que tenía la sesión y qué hay ahora y qué viene (`docs/agenda.md`). |
@@ -141,4 +141,4 @@ uv run --no-sync pytest -q         # sin hardware, sin red, sin APIs reales
 - Stand: Sonnet Code (https://www.sonnetcode.com/es).
 - Sonia debe poder presentarse, explicar qué es Sonnet Code brevemente si se lo preguntan y mantener una conversación casual en español con acento y registro naturales para el Caribe.
 - Debe usar la cámara con naturalidad: saludar a quien se acerca, notar si hay varias personas, comentar algo que le enseñen. Sin describir a la gente de forma invasiva ni hacer comentarios sobre aspecto físico.
-- Debe apoyarse en el panel de imágenes cuando ayude a explicar algo, por ejemplo mostrar el logo o un diagrama de Sonnet Code, y retirarlo cuando cambie de tema.
+- Puede apoyarse en el panel de imágenes cuando ayude a explicar algo y retirarlo cuando cambie de tema. La galería (`assets/gallery`) va vacía y la llena el equipo del stand el día del evento, sin reiniciar: el motor la mira cada `GALLERY_WATCH_SECONDS` y le cuenta a GPT-Live lo que se añade o quita con una nota silenciosa `[Galería]`. No hace falta que enseñe el logo de Sonnet Code, que ya sale en la pantalla.

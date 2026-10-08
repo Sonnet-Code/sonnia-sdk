@@ -584,6 +584,10 @@ class Settings(BaseSettings):
     #: Retirar sola una imagen mostrada tras N segundos (0 = nunca). El modelo
     #: la retira al cambiar de tema, pero si se olvida no se queda ahí.
     image_auto_hide_seconds: float = 30.0
+    #: ``GALLERY_WATCH_SECONDS``: cada cuánto se mira ``assets/gallery``; lo que el
+    #: equipo añade o quita se le cuenta a la sesión abierta con una nota silenciosa
+    #: ``[Galería]`` (0 = no mirar: la lista nueva llega con la siguiente sesión).
+    gallery_watch_seconds: float = 5.0
     #: ``MEETING``: Sonia está en una videollamada (Google Meet), no en el stand.
     #: Lo pone ``sonia reunion``; cambia sus instrucciones (``live/prompts.py``) y
     #: quita la animación de stand (docs/reunion.md).

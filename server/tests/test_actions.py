@@ -369,34 +369,16 @@ async def test_show_image_sin_avatar(gallery_dir: Path) -> None:
     assert result.text == "El avatar no está conectado."
 
 
-async def test_show_image_camera_usa_last_frame() -> None:
-    frame = make_frame(b"foto")
+async def test_show_image_nunca_ensena_la_camara(gallery_dir: Path) -> None:
+    """Las fotos de la cámara no salen en pantalla: ``camera`` es un id más que no existe."""
     avatar = FakeAvatar()
-    camera = FakeCamera()
-    ctx = make_ctx(camera=camera, avatar=avatar, last_frame=frame)
+    camera = FakeCamera(frames=[make_frame(b"foto")])
+    ctx = make_ctx(
+        camera=camera, avatar=avatar, gallery_dir=gallery_dir, last_frame=make_frame(b"vieja")
+    )
     result = await build_default_registry().execute("show_image", {"image_id": "camera"}, ctx)
-    assert "cámara" in result.text
-    assert camera.calls == 0  # ya había una captura: no se pide otra
-    assert avatar.shown[0]["source"] == "camera"
-    assert avatar.shown[0]["data"] == b"foto"
-
-
-async def test_show_image_camera_captura_si_no_hay_last_frame() -> None:
-    frame = make_frame(b"nueva")
-    avatar = FakeAvatar()
-    camera = FakeCamera(frames=[frame])
-    ctx = make_ctx(camera=camera, avatar=avatar)
-    await build_default_registry().execute("show_image", {"image_id": "camera"}, ctx)
-    assert camera.calls == 1
-    assert ctx.last_frame is frame
-    assert avatar.shown[0]["data"] == b"nueva"
-
-
-async def test_show_image_camera_sin_ninguna_captura() -> None:
-    avatar = FakeAvatar()
-    ctx = make_ctx(avatar=avatar)
-    result = await build_default_registry().execute("show_image", {"image_id": "camera"}, ctx)
-    assert "No hay ninguna captura" in result.text
+    assert "No existe la imagen 'camera'" in result.text
+    assert camera.calls == 0
     assert avatar.shown == []
 
 

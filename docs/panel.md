@@ -175,7 +175,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
 
 - `health.*.ok` es `true`, `false` o `null` (no aplica, por ejemplo la cámara desactivada o GPT-Live en modo saludos). `label` es una frase corta para el operador y `hint`, si no está bien, qué hacer.
 - `capabilities` dice qué controles funcionan; la página desactiva los que no estén en la lista y muestra una nota junto a ellos.
-- `image` es `null` o `{"id": "logo-sonnet", "caption": "..."}`; `last_error` es `null` o un texto.
+- `image` es `null` o `{"id": "oficinas", "caption": "..."}`; `last_error` es `null` o un texto.
 - `animations` es la lista que mandó Unity al conectar (vacía si la app de Unity es anterior a este mensaje o aún no se ha conectado). `current_animation` es el clip que suena según `animation_playing` (`null` si ninguno o sin pantalla) y `disabled_animations`, los que Sonia no usa por su cuenta.
 - `health.mic.level` es el nivel RMS del micrófono (0 a 1, con decaimiento rápido), la misma escala que `mic_gate`. Llega con el estado cada medio segundo.
 - `mic_presence` es la parte de la cámara de la puerta del micro (`null` si esta Sonnia no tiene cámara USB; entonces tampoco está la capacidad `mic_presence`). Arranca con `enabled` según `LIVE_PRESENCE_GATE` (apagada por defecto) o lo último que se eligió en el panel. `status`: `alguien` (una cara cerca en los últimos 10 s: la raya del ruido baja a `near_gate_scale`), `hace poco` (sin nadie desde hace `idle_s`, pero menos de `hold_s`), `nadie` (GPT-Live no oye el micro hasta que llega alguien), `sin caras aún` (la cámara no ha visto ninguna cara desde que arrancó: no cuenta), `sin imagen` (con `watching` en `false`, porque no hay sesión; si no, la cámara no da imagen: no cuenta) o `apagada`. `ready` es `false` mientras falta el modelo YuNet. Con `nadie`, `health.mic.label` lo dice.
@@ -204,7 +204,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
 ### `GET /api/gallery`
 
 ```json
-{"images": [{"id": "logo-sonnet", "url": "/api/gallery/logo-sonnet"}]}
+{"images": [{"id": "oficinas", "url": "/api/gallery/oficinas"}]}
 ```
 
 `GET /api/gallery/{id}` devuelve la imagen (para las miniaturas).

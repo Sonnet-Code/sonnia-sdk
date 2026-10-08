@@ -22,12 +22,14 @@ from sonia.persona import SYSTEM_PROMPT, KnowledgeSource, host_of, is_local_host
 __all__ = [
     "CAMERA_NOTE_PREFIX",
     "CLOCK_NOTE_PREFIX",
+    "GALLERY_NOTE_PREFIX",
     "LIVE_RULES",
     "build_backend_instructions",
     "build_live_instructions",
     "build_session_config",
     "camera_mode",
     "describe_live_stack",
+    "gallery_note",
     "in_meeting",
 ]
 
@@ -36,6 +38,9 @@ CAMERA_NOTE_PREFIX = "[Cámara]"
 
 #: Prefijo de las notas silenciosas con la hora (unos minutos antes de cada charla).
 CLOCK_NOTE_PREFIX = "[Reloj]"
+
+#: Prefijo de las notas silenciosas con las imágenes que el equipo añade o quita de la galería.
+GALLERY_NOTE_PREFIX = "[Galería]"
 
 LIVE_RULES = """\
 CÓMO FUNCIONAS (voz a voz en tiempo real):
@@ -56,7 +61,7 @@ Backend tools:
 {capabilities}
 
 Delegate to the backend when:
-- Quieras enseñar o retirar una imagen en tu pantalla. Cuando hables de Sonnet Code, enseña su logo; cuando cambies de tema, retíralo.
+- Quieras enseñar o retirar una imagen en tu pantalla. Cuando cambies de tema, retírala.
 {look_when}{moves_when}{trivia_when}{agenda_when}{search_when}- La pregunta necesite razonar con cuidado y la respuesta no esté clara en tu base de conocimiento.
 - Una corrección cambie lo que ya le pediste al backend.
 
@@ -69,10 +74,7 @@ Delegate before giving an answer that depends on backend work.
 Do not guess the result while waiting. Mientras el backend trabaja, di algo breve y natural ("mira, te lo enseño", "déjame ver")."""
 
 _CAPABILITIES = {
-    "show_image": (
-        "- Pantalla: mostrar junto a ti una imagen de la galería (por ejemplo el logo de "
-        "Sonnet Code) o la última foto de la cámara."
-    ),
+    "show_image": "- Pantalla: mostrar junto a ti una imagen de la galería.",
     "hide_image": "- Retirar la imagen que estás mostrando.",
     "play_animation": (
         "- Moverte en la pantalla: bailar, saludar con la mano, la señal de paz, un saludo "
@@ -328,7 +330,7 @@ Reglas:
 - Haz lo que pide la tarea con las herramientas que tengas y responde en español con una o dos frases cortas y factuales, sin markdown ni listas: Sonia las usará para seguir hablando.
 - Todo lo que devuelves lo dice Sonia en voz alta: nada de código, direcciones web, tablas ni listas. Si piden un script o un programa, explica en dos o tres frases cómo se haría, sin escribirlo.
 - No saludes ni te presentes: Sonia ya está hablando con el visitante.
-- Para mostrar imágenes usa solo los ids exactos de la galería, o "camera" para la última foto de la cámara.
+- Para mostrar imágenes usa solo los ids exactos de la galería.
 - Si miras por la cámara, describe solo lo útil para conversar: cuántas personas hay, ropa y colores, gafas, gorras, gafetes, logos o textos legibles, y objetos que estén enseñando. Nunca hables del cuerpo, el peso, la edad o la piel, ni supongas origen, género o profesión.
 - Usa solo los datos de la base de conocimiento y de tus herramientas. Si algo no está, dilo; nunca inventes datos, cifras ni nombres.
 - No nombres marcas, empresas, productos ni modelos de la tecnología con la que está hecha Sonia (ni de su voz, ni tuya, ni de su avatar): si te lo preguntan, en términos generales.
@@ -564,9 +566,17 @@ def build_live_instructions(
     if notes.strip():
         parts.append(_notes_section(notes))
     if gallery_ids:
-        parts.append(
-            "Imágenes que el backend puede mostrar en tu pantalla: " + ", ".join(gallery_ids)
+        gallery = "Imágenes que el backend puede mostrar en tu pantalla: " + ", ".join(gallery_ids)
+    else:
+        gallery = (
+            "La galería de imágenes está vacía: no tienes imágenes que enseñar en tu pantalla."
         )
+    if settings.gallery_watch_seconds > 0:
+        gallery += (
+            f' Si el equipo añade o quita imágenes, te llegará una nota interna "{GALLERY_NOTE_PREFIX}" '
+            "con la lista nueva: manda esa."
+        )
+    parts.append(gallery)
     parts.append(describe_live_stack(settings, action_names=names, faces=faces))
     reminder = _reminder_section(names, web_search=web_search, mode=mode)
     if reminder:
@@ -610,7 +620,12 @@ def build_backend_instructions(
             f"Fecha y hora al empezar la conversación: {clock_text}. Si la tarea trae una hora "
             "más reciente, manda esa."
         )
-    parts.append("Imágenes de la galería (ids exactos): " + (", ".join(gallery_ids) or "ninguna"))
+    parts.append(
+        "Imágenes de la galería al empezar (ids exactos): "
+        + (", ".join(gallery_ids) or "ninguna")
+        + ". El equipo puede añadir o quitar imágenes durante la conversación: si la tarea nombra "
+        "una que no está en esta lista, pruébala igual; show_image dice cuáles hay."
+    )
     knowledge = load_knowledge(knowledge_dir)
     if knowledge:
         parts.append("BASE DE CONOCIMIENTO:\n\n" + knowledge)
@@ -699,3 +714,34 @@ def build_session_config(
         },
         "delegation": {"type": "responses", "responses": responses},
     }
+
+
+def gallery_note(added: list[str], removed: list[str], ids: list[str], *, max_chars: int) -> str:
+    """Nota ``[Galería]`` para la sesión abierta: qué cambió y qué imágenes quedan.
+
+    Va por ``thinking``, que no la hace hablar. Si no cabe en ``max_chars`` (el
+    límite de un append), la lista se corta con «y N más».
+    """
+
+    def listed(items: list[str], budget: int) -> str:
+        shown: list[str] = []
+        for index, item in enumerate(items):
+            rest = len(items) - index - 1
+            tail = f" y {rest} más" if rest else ""
+            if len(", ".join([*shown, item])) + len(tail) > budget:
+                return ", ".join(shown) + f" y {len(items) - index} más"
+            shown.append(item)
+        return ", ".join(shown)
+
+    budget = max(40, (max_chars - 260) // 3)
+    parts = [GALLERY_NOTE_PREFIX]
+    if added:
+        parts.append(f"El equipo ha añadido a tu galería: {listed(added, budget)}.")
+    if removed:
+        parts.append(f"Ha quitado: {listed(removed, budget)}.")
+    if ids:
+        parts.append(f"Imágenes que puedes enseñar ahora (ids exactos): {listed(ids, budget)}.")
+        parts.append("No lo anuncies: enséñalas cuando vengan a cuento.")
+    else:
+        parts.append("Tu galería se ha quedado vacía: ya no tienes imágenes que enseñar.")
+    return " ".join(parts)[:max_chars]

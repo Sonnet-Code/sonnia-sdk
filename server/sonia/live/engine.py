@@ -55,6 +55,7 @@ from sonia.live.prompts import (
     CAMERA_NOTE_PREFIX,
     CLOCK_NOTE_PREFIX,
     build_session_config,
+    gallery_note,
     in_meeting,
 )
 from sonia.live.vision import VisionNarrator
@@ -396,6 +397,11 @@ class LiveEngine:
         self._last_vision_at = float("-inf")
         self._camera_ok: bool | None = None
         self._image_hide_task: asyncio.Task[None] | None = None
+        #: Imágenes de la galería que conoce la sesión abierta y las de la última mirada.
+        self._session_gallery: list[str] | None = None
+        self._gallery_seen: list[str] | None = None
+        #: Nota ``[Galería]`` a la espera de un momento de calma, con la lista que cuenta.
+        self._pending_gallery: tuple[str, list[str]] | None = None
         #: Reconocer al equipo de Sonnet Code y a los ponentes (``sonia.faces``, docs/caras.md).
         self._faces = faces
 
@@ -603,6 +609,11 @@ class LiveEngine:
         faces: asyncio.Task[None] | None = None
         if self._faces is not None and self._camera is not None:
             faces = asyncio.create_task(self._faces_loop(self._faces), name="sonia-faces")
+        gallery: asyncio.Task[None] | None = None
+        if self._settings.gallery_watch_seconds > 0:
+            gallery = asyncio.create_task(
+                self._gallery_loop(self._settings.gallery_watch_seconds), name="sonia-gallery"
+            )
         presence: asyncio.Task[None] | None = None
         if self._presence is not None:
             presence = asyncio.create_task(
@@ -636,7 +647,7 @@ class LiveEngine:
                 await asyncio.sleep(delay)
                 delay = min(max(delay * 2, live.reconnect_min_seconds), live.reconnect_max_seconds)
         finally:
-            extra = [task for task in (watcher, faces, presence) if task is not None]
+            extra = [task for task in (watcher, faces, gallery, presence) if task is not None]
             for task in (ticker, *extra):
                 task.cancel()
             await asyncio.gather(ticker, *extra, return_exceptions=True)
@@ -647,10 +658,11 @@ class LiveEngine:
         client = LiveClient(self._live, connect=self._connect)
         clock_text = spoken_now(self._now(), self._place)
         agenda = self._agenda
+        gallery_ids = Gallery(self._settings.gallery_dir).ids()
         config = build_session_config(
             self._settings,
             registry=self._registry,
-            gallery_ids=Gallery(self._settings.gallery_dir).ids(),
+            gallery_ids=gallery_ids,
             knowledge_dir=self._knowledge_dir,
             notes=self._notes,
             agenda=agenda.text() if agenda is not None else "",
@@ -660,6 +672,8 @@ class LiveEngine:
         self._session_agenda = agenda.schedule if agenda is not None else None
         self._clock_noted = None
         self._pending_agenda_note = ""
+        self._session_gallery = self._gallery_seen = gallery_ids
+        self._pending_gallery = None
         if len(config["instructions"]) > INSTRUCTIONS_WARN_CHARS:
             logger.warning(
                 "Las instrucciones de GPT-Live ocupan %d caracteres: pueden pasar del límite de "
@@ -1782,7 +1796,64 @@ class LiveEngine:
                 _log_stage_failure("No se pudo pasar el cambio de agenda a GPT-Live: %s", exc)
             else:
                 logger.info("Cambios de agenda pasados a GPT-Live: %s", text)
+        await self._gallery_note()
         await self._clock_note()
+
+    async def _gallery_loop(self, interval: float) -> None:
+        """Mira la galería cada ``interval`` s para contarle a la sesión lo que cambie.
+
+        El equipo añade o quita imágenes de ``assets/gallery`` en pleno evento: así
+        Sonia las conoce sin reiniciar. El directorio se lee en un hilo para no
+        frenar el bucle (el micrófono va a tiempo real).
+        """
+        gallery = Gallery(self._settings.gallery_dir)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await self._check_gallery(gallery)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("No se pudo mirar la galería")
+
+    async def _check_gallery(self, gallery: Gallery) -> None:
+        """Compara la galería con la que conoce la sesión y deja preparada la nota."""
+        known = self._session_gallery
+        if self._client is None or known is None:
+            return  # sin sesión: la siguiente ya trae la lista en sus instrucciones
+        ids = await asyncio.to_thread(gallery.ids)
+        if self._session_gallery is not known or ids == self._gallery_seen:
+            return  # se abrió otra sesión mientras tanto, o nada nuevo
+        self._gallery_seen = ids
+        added = [i for i in ids if i not in known]
+        removed = [i for i in known if i not in ids]
+        logger.info(
+            "La galería cambió (añadidas: %s; quitadas: %s)",
+            ", ".join(added) or "ninguna",
+            ", ".join(removed) or "ninguna",
+        )
+        if ids == known:
+            self._pending_gallery = None  # volvió a como la conoce la sesión
+            return
+        note = gallery_note(added, removed, ids, max_chars=APPEND_MAX_CHARS)
+        self._pending_gallery = (note, ids)
+
+    async def _gallery_note(self) -> None:
+        """Nota silenciosa ``[Galería]`` con lo que cambió (por ``thinking``, no la hace hablar)."""
+        client = self._client
+        if client is None or self._pending_gallery is None:
+            return
+        note, ids = self._pending_gallery
+        self._pending_gallery = None
+        try:
+            await client.append_thinking(note)
+        except Exception as exc:  # noqa: BLE001 - la sesión se reconecta sola
+            logger.debug("No se pudo pasar el cambio de galería a GPT-Live: %s", exc)
+            if self._pending_gallery is None:
+                self._pending_gallery = (note, ids)  # se reintenta en la siguiente calma
+            return
+        self._session_gallery = ids
+        logger.info("Nota de galería: %s", note)
 
     async def _clock_note(self) -> None:
         """Nota ``[Reloj]`` unos minutos antes de cada charla: la hora y lo que empieza.
