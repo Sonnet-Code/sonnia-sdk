@@ -1,6 +1,6 @@
 # Modo trivia
 
-Sonia hace una trivia de preguntas sobre el DevFest, el GDG, la biblioteca, Sonnet Code y tecnología. Por defecto son 5 preguntas de tres opciones (A, B y C), que salen en la pantalla vertical, y se gana con 3 aciertos. Sonia se pone la gorra Noogler al empezar y se la quita al terminar.
+Sonia hace una trivia de preguntas sobre el DevFest, el GDG, la biblioteca y tecnología. Por defecto son 5 preguntas de tres opciones (A, B y C), que salen en la pantalla vertical, y se gana con 3 aciertos. Sonia se pone la gorra Noogler al empezar y se la quita al terminar.
 
 ## Cómo se lanza
 
@@ -63,9 +63,9 @@ Al empezar, las reglas de la trivia entran en la sesión con `session.instructio
 
 ## Preguntas
 
-El banco está en `assets/trivia/preguntas.md` y se edita sin tocar código. El formato está explicado al principio del archivo. El orquestador lo relee al empezar cada partida. Las preguntas mal formadas se saltan con un aviso, y si no hay suficientes la trivia no se ofrece.
+El banco está en `assets/trivia/preguntas.md` y se edita sin tocar código. Tiene 50 preguntas (16 fáciles, 18 intermedias y 16 difíciles) y ninguna sobre Sonnet Code (decisión de Jean del 8 de octubre de 2026). El formato está explicado al principio del archivo. El orquestador lo relee al empezar cada partida. Las preguntas mal formadas se saltan con un aviso, y si no hay suficientes la trivia no se ofrece.
 
-**Jean debe revisar las preguntas antes del evento.**
+Jean las revisó y aprobó el 8 de octubre de 2026; si se cambian, que las vuelva a revisar.
 
 ## Pantalla y animación
 
