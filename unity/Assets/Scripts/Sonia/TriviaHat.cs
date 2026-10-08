@@ -1356,13 +1356,6 @@ namespace Sonia
             if (_rig.propeller != null)
             {
                 _propellerRest = _rig.propeller.localRotation;
-                // La hélice no proyecta sombra: con la luz principal delante a la derecha, al
-                // girar dejaba una mancha granulada que iba y venía por el lado izquierdo de la
-                // copa (8-oct-2026). La copa sí la proyecta: su sombra en la frente le da volumen.
-                foreach (Renderer blade in _rig.propeller.GetComponentsInChildren<Renderer>(true))
-                {
-                    blade.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                }
             }
 
             _renderers = root.GetComponentsInChildren<Renderer>(true);

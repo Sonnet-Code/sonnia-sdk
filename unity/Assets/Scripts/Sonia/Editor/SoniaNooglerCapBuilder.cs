@@ -165,6 +165,11 @@ namespace Sonia.EditorTools
             // A dos caras, como el material original (el ala y las palas son finas).
             material.SetFloat("_Cull", 0f);
             material.doubleSidedGI = true;
+            // Sin recibir sombras: fina y a dos caras, la copa se hacía sombra a sí misma con la
+            // luz principal casi rasante y salía una mancha a rayas en el amarillo (8-oct-2026).
+            // Sigue proyectando la suya: la de la visera en la frente le da volumen.
+            material.SetFloat("_ReceiveShadows", 0f);
+            material.EnableKeyword("_RECEIVE_SHADOWS_OFF");
             EditorUtility.SetDirty(material);
             AssetDatabase.SaveAssets();
             return material;
