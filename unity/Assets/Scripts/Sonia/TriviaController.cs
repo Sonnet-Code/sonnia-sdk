@@ -1,6 +1,6 @@
 // Modo trivia en la pantalla: la pregunta con sus opciones A, B y C, el acierto
 // en verde y el fallo en rojo con confeti, el marcador, la pantalla final, el
-// gorro de fiesta y el tema de colores de la escena (docs/trivia.md).
+// gorro de fiesta (docs/trivia.md).
 //
 // La partida la llevan el orquestador y GPT-Live; aquí solo se pinta lo que
 // llega por el protocolo (trivia_start, trivia_question, trivia_answer y
@@ -21,8 +21,8 @@
 //    un rótulo "¡Correcto!" y una ráfaga de confeti y destellos desde ella.
 //  - Fallo: la elegida se pone roja y tiembla, la buena se marca en verde.
 //  - Final: tarjeta grande con el resultado; si gana, lluvia de confeti.
-//  - Tema: un marco de luz en los bordes que va pasando por los colores de
-//    Google, y el halo y los contraluces de la escena se tiñen igual.
+//  - Sin marco de luz de colores en los bordes ni escena teñida (decisión de
+//    Jean del 8 de octubre de 2026).
 
 using System.Collections.Generic;
 using TMPro;
@@ -189,10 +189,8 @@ namespace Sonia
         // Construcción.
         private RectTransform _root;
         private CanvasGroup _rootGroup;
-        private Image _frame;
         private RectTransform _card;
         private CanvasGroup _cardGroup;
-        private Image _cardGlow;
         private TextMeshProUGUI _eyebrow;
         private TextMeshProUGUI _counter;
 
@@ -217,7 +215,6 @@ namespace Sonia
         private Sprite _roundSprite;
         private Sprite _glowSprite;
         private Sprite _dotSprite;
-        private Sprite _frameSprite;
         private Sprite _checkSprite;
         private Sprite _crossSprite;
         private Sprite _sparkleSprite;
@@ -253,15 +250,6 @@ namespace Sonia
         private float _rainAccumulator;
         private readonly List<Piece> _pieces = new List<Piece>();
         private readonly Stack<Piece> _pool = new Stack<Piece>();
-
-        // Tema de la escena.
-        private float _theme;
-        private Renderer _halo;
-        private string _haloColorProperty;
-        private Color _haloOriginal;
-        private readonly List<Light> _rims = new List<Light>();
-        private readonly List<Color> _rimOriginals = new List<Color>();
-        private bool _sceneThemeCaptured;
 
         /// <summary>Cierto mientras hay una trivia en pantalla (también la pantalla final).</summary>
         public bool IsActive
@@ -318,7 +306,6 @@ namespace Sonia
 
         private void OnDestroy()
         {
-            RestoreSceneTheme();
             foreach (Sprite sprite in _sprites)
             {
                 if (sprite != null)
@@ -400,7 +387,6 @@ namespace Sonia
                 _choreographer.GreetingSuppressed = true;
             }
 
-            CaptureSceneTheme();
             PlayClip(startClip, null);
             ShowEmotion(FacialExpressionController.Emotion.Joy, 2f);
             Burst(new Vector2(0f, 300f), 40, 900f);
@@ -723,7 +709,7 @@ namespace Sonia
                 Finish();
             }
 
-            bool visible = _active || _cardAlpha > 0.001f || _resultAlpha > 0.001f || _pieces.Count > 0 || _theme > 0.001f;
+            bool visible = _active || _cardAlpha > 0.001f || _resultAlpha > 0.001f || _pieces.Count > 0;
             if (!visible)
             {
                 if (_root.gameObject.activeSelf)
@@ -731,7 +717,6 @@ namespace Sonia
                     _root.gameObject.SetActive(false);
                 }
 
-                RestoreSceneTheme();
                 return;
             }
 
@@ -743,31 +728,12 @@ namespace Sonia
             _rootAlpha = Mathf.MoveTowards(_rootAlpha, 1f, dt * 3f);
             _rootGroup.alpha = _rootAlpha;
 
-            AnimateTheme(dt);
             AnimateCard(dt);
             AnimateOptions(dt);
             AnimateDots();
             AnimateBanner();
             AnimateResult(dt);
             AnimatePieces(dt);
-        }
-
-        private void AnimateTheme(float dt)
-        {
-            _theme = Mathf.MoveTowards(_theme, _active ? 1f : 0f, dt / 0.8f);
-            float eased = _theme * _theme * (3f - (2f * _theme));
-            Color cycle = CycleColor(_clock * 0.25f);
-            if (_frame != null)
-            {
-                _frame.color = WithAlpha(cycle, 0.55f * eased);
-            }
-
-            if (_cardGlow != null)
-            {
-                _cardGlow.color = WithAlpha(cycle, 0.3f * _cardAlpha);
-            }
-
-            ApplySceneTheme(cycle, eased);
         }
 
         private void AnimateCard(float dt)
@@ -1128,107 +1094,6 @@ namespace Sonia
         }
 
         // ------------------------------------------------------------------
-        // Tema de la escena
-        // ------------------------------------------------------------------
-
-        private void CaptureSceneTheme()
-        {
-            if (_sceneThemeCaptured)
-            {
-                return;
-            }
-
-            _sceneThemeCaptured = true;
-            _halo = null;
-            _rims.Clear();
-            _rimOriginals.Clear();
-            GameObject stage = GameObject.Find("SoniaStage");
-            if (stage != null)
-            {
-                Transform halo = stage.transform.Find("Halo");
-                Renderer renderer = halo != null ? halo.GetComponent<Renderer>() : null;
-                if (renderer != null)
-                {
-                    Material material = renderer.material;
-                    foreach (string property in new[] { "_BaseColor", "_Color", "_TintColor" })
-                    {
-                        if (material.HasProperty(property))
-                        {
-                            _halo = renderer;
-                            _haloColorProperty = property;
-                            _haloOriginal = material.GetColor(property);
-                            break;
-                        }
-                    }
-                }
-            }
-
-            foreach (Light light in FindObjectsByType<Light>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
-            {
-                if (light != null && light.name.IndexOf("Rim", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    _rims.Add(light);
-                    _rimOriginals.Add(light.color);
-                }
-            }
-        }
-
-        private void ApplySceneTheme(Color cycle, float amount)
-        {
-            if (!_sceneThemeCaptured)
-            {
-                return;
-            }
-
-            if (_halo != null)
-            {
-                Color tinted = Color.Lerp(_haloOriginal, cycle * Mathf.Max(1f, _haloOriginal.maxColorComponent), 0.75f * amount);
-                tinted.a = _haloOriginal.a;
-                _halo.material.SetColor(_haloColorProperty, tinted);
-            }
-
-            for (int i = 0; i < _rims.Count; i++)
-            {
-                if (_rims[i] != null)
-                {
-                    _rims[i].color = Color.Lerp(_rimOriginals[i], cycle, 0.6f * amount);
-                }
-            }
-        }
-
-        private void RestoreSceneTheme()
-        {
-            if (!_sceneThemeCaptured)
-            {
-                return;
-            }
-
-            if (_halo != null)
-            {
-                _halo.material.SetColor(_haloColorProperty, _haloOriginal);
-            }
-
-            for (int i = 0; i < _rims.Count; i++)
-            {
-                if (_rims[i] != null)
-                {
-                    _rims[i].color = _rimOriginals[i];
-                }
-            }
-
-            _sceneThemeCaptured = false;
-        }
-
-        private static Color CycleColor(float t)
-        {
-            float x = Mathf.Repeat(t, GoogleColors.Length);
-            int i = Mathf.FloorToInt(x);
-            float f = x - i;
-            f = f * f * (3f - (2f * f));
-            return Color.Lerp(GoogleColors[i], GoogleColors[(i + 1) % GoogleColors.Length], f);
-        }
-
-        // ------------------------------------------------------------------
         // Construcción
         // ------------------------------------------------------------------
 
@@ -1268,12 +1133,6 @@ namespace Sonia
                 _root.SetSiblingIndex(1);
             }
 
-            // Marco de luz en los bordes (tema).
-            GameObject frame = MakeImage("Marco", _root, _frameSprite, Color.clear);
-            _frame = frame.GetComponent<Image>();
-            _frame.type = Image.Type.Sliced;
-            Stretch((RectTransform)frame.transform);
-
             BuildCard();
             BuildResult();
 
@@ -1298,14 +1157,6 @@ namespace Sonia
             _card.sizeDelta = new Vector2(cardWidth, 0f);
             _cardGroup = cardRoot.GetComponent<CanvasGroup>();
             _cardGroup.alpha = 0f;
-
-            GameObject glow = MakeImage("Halo", _card, _glowSprite, Color.clear);
-            _cardGlow = glow.GetComponent<Image>();
-            RectTransform glowRect = (RectTransform)glow.transform;
-            glowRect.anchorMin = Vector2.zero;
-            glowRect.anchorMax = Vector2.one;
-            glowRect.offsetMin = new Vector2(-70f, -70f);
-            glowRect.offsetMax = new Vector2(70f, 70f);
 
             GameObject border = MakeImage("Borde", _card, _roundSprite, WithAlpha(new Color(0.44f, 0.66f, 1f), 0.55f));
             Stretch((RectTransform)border.transform);
@@ -1761,17 +1612,6 @@ namespace Sonia
             });
             float glowBorder = glowSpread + CornerRadius + 2f;
             _glowSprite = MakeSprite(glow, new Vector4(glowBorder, glowBorder, glowBorder, glowBorder));
-
-            // Marco: transparente en el centro y con luz en los bordes de la pantalla.
-            const int frameSize = 256;
-            const float frameSpread = 110f;
-            Texture2D frame = MakeTexture("TriviaFrame", frameSize, (x, y) =>
-            {
-                float edge = Mathf.Min(Mathf.Min(x, frameSize - 1 - x), Mathf.Min(y, frameSize - 1 - y));
-                float t = Mathf.Clamp01(1f - (edge / frameSpread));
-                return t * t * t;
-            });
-            _frameSprite = MakeSprite(frame, new Vector4(frameSpread + 4f, frameSpread + 4f, frameSpread + 4f, frameSpread + 4f));
 
             const int dotSize = 64;
             Texture2D dot = MakeTexture("TriviaDot", dotSize, (x, y) =>
