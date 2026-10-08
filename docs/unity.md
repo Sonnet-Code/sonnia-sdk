@@ -636,11 +636,11 @@ mide algo distinto, así que recalcularlo cambia un poco el plano.
   sobre el `.env` copiado (`sonia/paths.py`), así que la app no manda ni la cámara ni
   el micrófono al panel de Cloudflare: quien la prueba en casa no puede ser visto ni
   oído desde el panel (no hay «Ver cámara» ni Modo Jean);
-- y `TRIAL_LIMIT_MINUTES=240`: cuatro horas de conversación en total, sumando todas las veces
+- y `TRIAL_LIMIT_MINUTES=300`: cinco horas de conversación en total, sumando todas las veces
   que se abra.
   - Cuenta el tiempo con la sesión de GPT-Live abierta, que es lo que cuesta.
   - Se guarda en `SONIA_HOME` (`trial_seconds` del estado del panel).
-  - Al llegar a las cuatro horas, GPT-Live se apaga y Sonnia se va con el letrero «La prueba de
+  - Al llegar a las cinco horas, GPT-Live se apaga y Sonnia se va con el letrero «La prueba de
     Sonnia ha terminado». Ni el panel ni volver a abrir la app la devuelven a conversar
     (`server/sonia/panel/control.py`, `trial_over`).
   - Es un candado local: borrando el estado del panel se reinicia, y la clave de OpenAI va

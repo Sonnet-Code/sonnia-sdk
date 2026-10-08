@@ -65,8 +65,8 @@ namespace Sonia.EditorTools
         public const string TesterBuildEnv =
             "# Build de prueba: la cámara y el micrófono no se mandan al panel de Cloudflare.\n"
             + "PANEL_CAMERA_STREAM=false\n"
-            + "# Cuatro horas de conversación en total; después Sonnia se queda fuera con un letrero.\n"
-            + "TRIAL_LIMIT_MINUTES=240\n";
+            + "# Cinco horas de conversación en total; después Sonnia se queda fuera con un letrero.\n"
+            + "TRIAL_LIMIT_MINUTES=300\n";
 
         /// <summary>Después de los de Genies (el suyo, XcodePostProcess, es el 0).</summary>
         public int callbackOrder => 1000;

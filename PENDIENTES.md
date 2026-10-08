@@ -87,7 +87,7 @@ Leyenda: 🐞 bug · ✨ mejora · 📦 build o reparto · 🗒️ decisión o t
   - [x] macOS (Apple Silicon): `unity/Build/Sonnia-macOS.zip` y `Sonnia-pruebas-macOS.zip`. Probada en silencio con el orquestador falso.
   - [x] Windows: `unity/Build/Sonnia-Windows.zip` y `Sonnia-pruebas-Windows.zip`, con el orquestador del workflow `orquestador-windows.yml`. Sin probar en un PC de verdad.
   - [x] Mac Intel: no se puede (ver bugs).
-  - [x] Rehacer los zips de `unity/Build/`. Las de pruebas llevan `build.env` con `PANEL_CAMERA_STREAM=false` y `TRIAL_LIMIT_MINUTES=60` (240 desde el 8 de octubre): una hora de conversación en total (ahora cuatro) y después se quedan fuera con el letrero «La prueba de Sonnia ha terminado».
+  - [x] Rehacer los zips de `unity/Build/`. Las de pruebas llevan `build.env` con `PANEL_CAMERA_STREAM=false` y `TRIAL_LIMIT_MINUTES=60` (300 desde el 8 de octubre): una hora de conversación en total (ahora cinco) y después se quedan fuera con el letrero «La prueba de Sonnia ha terminado».
   - [x] Instrucciones para el equipo: `docs/pruebas-equipo.md` y, para mandarlas con los zips, `unity/Build/Instrucciones-pruebas-Sonnia.docx`.
   - [ ] 🗒️ Probar la build de Windows en un PC con Windows (Jean o el equipo).
   - [ ] 🗒️ Repartir las de pruebas por un canal privado: llevan la clave de OpenAI en el `.env`.

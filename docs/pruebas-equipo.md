@@ -6,7 +6,7 @@ Hace falta internet:
 Sonnia habla de verdad con GPT-Live, que cuesta unos 3 USD por hora mientras la
 app está abierta. **Ciérrala cuando acabes de probar.**
 
-Cada copia tiene **cuatro horas de conversación en total**, sumando todas las veces que
+Cada copia tiene **cinco horas de conversación en total**, sumando todas las veces que
 la abras. Cuando se acaba, Sonnia se va de la pantalla y deja un letrero: «La prueba
 de Sonnia ha terminado». A partir de ahí ya no conversa.
 
