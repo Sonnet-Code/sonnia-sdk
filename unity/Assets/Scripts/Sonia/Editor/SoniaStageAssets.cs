@@ -1,7 +1,8 @@
 // Ajustes de importación de los recursos de la pantalla del stand
 // (Resources/Stage, los genera scripts/stage_assets.py): sprites sin mipmaps ni
-// compresión para que los bordes, el texto del QR y el degradado del fondo salgan
-// limpios, y con su corte en 9 las formas redondeadas y la sombra.
+// compresión para que los bordes y el degradado del fondo salgan limpios, y con su
+// corte en 9 las formas redondeadas y la sombra. El QR sí lleva mipmaps: se pinta a
+// 4x y sin ellos sus curvas salían dentadas al reducirlo a los 176 px de pantalla.
 
 using UnityEditor;
 using UnityEngine;
@@ -23,10 +24,11 @@ namespace Sonia.EditorTools
             TextureImporter importer = (TextureImporter)assetImporter;
             importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.Single;
-            importer.mipmapEnabled = false;
+            bool qr = assetPath.EndsWith("stage-qr.png");
+            importer.mipmapEnabled = qr;
             importer.alphaIsTransparency = true;
             importer.wrapMode = TextureWrapMode.Clamp;
-            importer.filterMode = FilterMode.Bilinear;
+            importer.filterMode = qr ? FilterMode.Trilinear : FilterMode.Bilinear;
             importer.textureCompression = TextureImporterCompression.Uncompressed;
             importer.npotScale = TextureImporterNPOTScale.None;
             importer.maxTextureSize = 2048;
