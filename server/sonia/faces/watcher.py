@@ -46,6 +46,7 @@ from sonia.faces.book import (
     FaceBook,
     Match,
     Person,
+    book_path,
     enroll,
     known_people,
     load_greetings,
@@ -53,7 +54,7 @@ from sonia.faces.book import (
     name_key,
 )
 from sonia.faces.book import speakers_from as _speakers_from
-from sonia.faces.model import FaceAnalyzer, FaceModel, ensure_models
+from sonia.faces.model import FaceAnalyzer, FaceModel, ensure_models, print_model
 from sonia.faces.visits import Visit, VisitLog, same_day_as
 from sonia.types import CameraSource, Frame
 from sonia.vision.camera import OpenCVCamera
@@ -311,11 +312,15 @@ class FaceWatcher:
         self._bundled_book = bundled_book
         #: Hora de pared (con zona) para apuntar las visitas; la del stand en ``build_faces``.
         self._clock: Clock = clock or (lambda: datetime.now().astimezone())
-        self._factory: AnalyzerFactory = analyzer_factory or FaceModel
+        self._factory: AnalyzerFactory = analyzer_factory or (
+            lambda folder: FaceModel(folder, settings.model)
+        )
         self._transport = transport
         #: Bajar los modelos de OpenCV (los tests con un analizador falso no los necesitan).
         self._models = models
-        self.book = FaceBook(self._folder / "huellas" / "caras.json")
+        self.book = FaceBook(
+            book_path(self._folder / "huellas", settings.model), print_model(settings.model).name
+        )
         #: Quién ya pasó por el stand (no viaja en la build: es de cada equipo).
         self.visits = VisitLog(self._folder / "visitas.json")
         #: Contexto para saludar por id de persona (``saludos.json``): el propio o el de su grupo.
@@ -344,6 +349,12 @@ class FaceWatcher:
     @property
     def scan_seconds(self) -> float:
         return max(0.0, self._settings.scan_seconds)
+
+    @property
+    def threshold(self) -> float:
+        """La similitud mínima del modelo en uso (``FACES_ARCFACE_THRESHOLD`` o ``FACES_THRESHOLD``)."""
+        cfg = self._settings
+        return cfg.arcface_threshold if cfg.model == "arcface" else cfg.threshold
 
     @property
     def cooldown_s(self) -> float:
@@ -377,6 +388,7 @@ class FaceWatcher:
         if self._models:
             downloaded = await ensure_models(
                 self._folder / "modelos",
+                recognizer=cfg.model,
                 timeout_s=max(cfg.download_timeout_seconds, 30.0),
                 transport=self._transport,
             )
@@ -427,7 +439,7 @@ class FaceWatcher:
         bundled = self._bundled_book
         if bundled is None or bundled.resolve() == self.book.path.resolve():
             return
-        source = FaceBook(bundled)
+        source = FaceBook(bundled, self.book.model)
         await asyncio.to_thread(source.load)
         adopted = self.book.adopt(source, people)
         if adopted:
@@ -510,7 +522,7 @@ class FaceWatcher:
         cfg = self._settings
         if width < cfg.min_face_px:
             return "pequeña"
-        if found.score < cfg.threshold:
+        if found.score < self.threshold:
             return "umbral"
         if found.score - found.runner_up < cfg.margin:
             return "margen"
@@ -532,7 +544,7 @@ class FaceWatcher:
                 continue
             why = self._why_not(found, face.width)
             if why:
-                if found.score >= cfg.threshold - NEAR_MISS:
+                if found.score >= self.threshold - NEAR_MISS:
                     name = found.person.name
                     misses.append(Probe(face.width, name, found.score, found.runner_up, False, why))
                 continue
@@ -563,7 +575,7 @@ class FaceWatcher:
                     "Caras: se parece a %s pero no llega (%.2f de %.2f; cara de %d px)",
                     miss.name,
                     miss.score,
-                    self._settings.threshold,
+                    self.threshold,
                     miss.width,
                 )
 

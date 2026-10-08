@@ -41,7 +41,8 @@ from sonia.faces import (
     load_staff,
     speakers_from,
 )
-from sonia.faces.book import enroll
+from sonia.faces.book import book_path, enroll
+from sonia.faces.model import ARCFACE, RECOGNIZER, model_files
 from sonia.faces.watcher import RECENT_S
 from sonia.live.prompts import build_session_config
 from sonia.paths import REPO_ROOT, SEEDED
@@ -370,7 +371,8 @@ async def test_prepare_da_de_alta_y_reconoce_solo_caras_grandes_y_conocidas(
     assert not faces.ready
     report = await faces.prepare(None)
     assert report.added == 2 and faces.ready
-    assert (tmp_path / "faces" / "huellas" / "caras.json").is_file()
+    assert faces.book.path == tmp_path / "faces" / "huellas" / "caras-arcface.json"
+    assert faces.book.path.is_file()
 
     seen = await faces.identify(CAMERA_FRAME)
     assert [s.match.person.name for s in seen] == ["Brian James"]
@@ -437,6 +439,27 @@ async def test_mirando_despacio_dos_revisiones_seguidas_siempre_confirman(tmp_pa
     assert len(faces.due(brian, now=5.3)) == 1  # la revisión siguiente, con su retraso
 
 
+def test_cada_modelo_tiene_sus_huellas_y_su_umbral(tmp_path: Path) -> None:
+    # ArcFace por defecto; con FACES_MODEL=sface se vuelve a lo de antes sin rehacer nada.
+    arcface = watcher(tmp_path, reference_analyzer())
+    assert arcface.book.path.name == "caras-arcface.json"
+    assert arcface.book.model == "w600k_r50.onnx" and arcface.threshold == 0.40
+    sface = watcher(tmp_path, reference_analyzer(), model="sface")
+    assert sface.book.path.name == "caras.json"
+    assert sface.book.model == RECOGNIZER.name and sface.threshold == 0.52
+    assert ARCFACE in model_files("arcface") and ARCFACE not in model_files("sface")
+    assert book_path(tmp_path, "arcface") != book_path(tmp_path, "sface")
+
+
+async def test_las_huellas_de_otro_modelo_no_se_mezclan(tmp_path: Path) -> None:
+    sface_book = FaceBook(tmp_path / "caras.json")
+    sface_book.add_print(Person("staff:brian", "Brian James", "staff"), "foto", axis(0))
+    sface_book.save()
+    arcface_book = FaceBook(tmp_path / "caras.json", "w600k_r50.onnx")
+    arcface_book.load()  # el archivo es de SFace: no se usa
+    assert len(arcface_book) == 0
+
+
 async def test_quien_se_queda_cerca_del_umbral_queda_en_el_registro(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -444,8 +467,8 @@ async def test_quien_se_queda_cerca_del_umbral_queda_en_el_registro(
     a, b = 0.60, 0.57
     both = axis(0) * a + axis(1) * b + axis(127) * float(np.sqrt(1 - a * a - b * b))
     analyzer = reference_analyzer(
-        cerca=[face(near(1, 0.45), width=98)],
-        lejos=[face(near(1, 0.30))],
+        cerca=[face(near(1, 0.33), width=98)],
+        lejos=[face(near(1, 0.20))],
         dudosa=[face(both)],
     )
     faces = watcher(tmp_path, analyzer)
@@ -457,7 +480,7 @@ async def test_quien_se_queda_cerca_del_umbral_queda_en_el_registro(
     assert await faces.identify(Frame(data=b"lejos")) == []  # ni se parece: no se apunta
     assert await faces.identify(Frame(data=b"dudosa")) == []
     assert [r.getMessage() for r in caplog.records if "se parece" in r.getMessage()] == [
-        "Caras: se parece a Jean Calderon pero no llega (0.45 de 0.52; cara de 98 px)",
+        "Caras: se parece a Jean Calderon pero no llega (0.33 de 0.40; cara de 98 px)",
         "Caras: se parece a Brian James pero también a otra persona (0.60 frente a 0.57; "
         "cara de 150 px)",
     ]
@@ -812,7 +835,7 @@ async def test_la_app_trae_las_huellas_de_quien_se_dio_de_alta_con_fotos_locales
     guests = [{"name": "Victor Duran", "photos": ["fotos/victor.jpg"]}]
     built = watcher(dev, analyzer, guests=guests)
     await built.prepare(None)
-    bundled = dev / "faces" / "huellas" / "caras.json"
+    bundled = built.book.path
     assert "guest:victor-duran" in {p.id for p in built.book.people}
 
     # En el equipo del stand ya había huellas de antes (la app no las pisa) y no está su foto.

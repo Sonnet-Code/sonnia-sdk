@@ -15,13 +15,16 @@ Código en `server/sonia/faces`; integración en `server/sonia/live/engine.py`
 ## Qué ve y qué no
 
 - **Todo corre en el equipo del stand**, con OpenCV: YuNet encuentra las caras y
-  SFace saca la huella de cada una (128 números). Ninguna foto sale del equipo
-  por esto y no se llama a ningún modelo de pago.
+  ArcFace R50 (el `w600k_r50` de InsightFace) saca la huella de cada una (512
+  números). SFace, el modelo de antes del 8 de octubre, queda de respaldo
+  (`FACES_MODEL=sface`) y es el que alinea la cara para los dos. Ninguna foto
+  sale del equipo por esto y no se llama a ningún modelo de pago.
 - **Solo hay huellas de las personas conocidas**: el equipo de
   `assets/faces/staff.json` (fotos de https://www.sonnetcode.com/es/about), los
   ponentes de la agenda (la foto que publica la web del DevFest) y las personas
   de `assets/faces/invitados.json` (fotos locales). Se guardan en
-  `cache/faces/huellas/caras.json`, sin las fotos.
+  `cache/faces/huellas/caras-arcface.json` (las de SFace, en `caras.json`),
+  sin las fotos.
 - **De los visitantes no se guarda nada**: su cara se compara en memoria y se
   olvida. Nunca se da de alta a nadie desde la cámara.
 - Las sesiones con varios ponentes no dan de alta a nadie: la web trae la foto
@@ -77,12 +80,13 @@ Otros detalles:
 Desde `server/`:
 
 ```bash
-uv run --no-sync sonia caras            # baja los modelos (37 MB) y da de alta a todos
+uv run --no-sync sonia caras            # baja los modelos (210 MB) y da de alta a todos
 uv run --no-sync sonia caras --probar   # además, cada segundo dice a quién ve la cámara
 ```
 
-- No gasta: solo descarga los dos modelos de OpenCV (comprobados por SHA-256)
-  y las fotos públicas.
+- No gasta: solo descarga los modelos (YuNet y SFace del OpenCV Model Zoo y
+  ArcFace de InsightFace, de Hugging Face, comprobados por SHA-256) y las fotos
+  públicas.
 - Solo baja lo nuevo: con todo hecho, no toca la red.
 - `sonia run` hace lo mismo solo al arrancar, en segundo plano. Hasta que
   termina, no reconoce a nadie.
@@ -190,14 +194,17 @@ Usa `sonia caras --probar` con la cámara ya colocada. Por cada cara imprime
 algo así:
 
 ```
-cara de 132 px -> Brian James: 0.61 (segunda 0.31) SÍ
-cara de  48 px -> Jean Calderon: 0.44 (segunda 0.30) no (pequeña)
+  (foto de 1920x1080)
+  cara de 212 px -> Brian James: 0.58 (segunda 0.12) SÍ
+  cara de  31 px -> Jean Calderon: 0.44 (segunda 0.10) no (pequeña)
 ```
 
 | Variable | Por defecto | Qué hace |
 |---|---|---|
 | `FACES_ENABLED` | `true` | `false` apaga el reconocimiento. |
-| `FACES_THRESHOLD` | `0.52` | Similitud mínima. Súbela si confunde a gente; bájala (no de 0,47) si no reconoce al equipo. |
+| `FACES_MODEL` | `arcface` | `sface` vuelve al modelo de antes, con sus huellas y su umbral, sin rehacer nada. |
+| `FACES_ARCFACE_THRESHOLD` | `0.40` | Similitud mínima con ArcFace. Súbela si confunde a gente; bájala (no de 0,35) si no reconoce al equipo. |
+| `FACES_THRESHOLD` | `0.52` | Similitud mínima con SFace. |
 | `FACES_MARGIN` | `0.06` | Ventaja mínima sobre la segunda persona más parecida. |
 | `FACES_MIN_FACE_PX` | `40` | Ancho mínimo de la cara en la foto de la cámara. A 1920 px son unos cuatro metros con una webcam normal; a 640 px, metro y medio. |
 | `FACES_ANALYSIS_WIDTH` | `1920` | Ancho máximo de la foto en la que se buscan caras (0 = la de la cámara). |
@@ -230,6 +237,50 @@ eventos (gente de espaldas, un grupo, un stand, una sala vacía):
 Con la cámara real las similitudes de la misma persona suelen bajar (otra
 luz, otro ángulo), así que el umbral se confirma en el stand con
 `--probar`.
+
+### ArcFace en vez de SFace (8 de octubre)
+
+Medido con fotos que no son de nadie del stand: CPLFW, el banco público de
+caras con pose cruzada (las mismas personas de frente y de perfil; 1776 fotos
+de 683 personas, la copia de Hugging Face `marcelohaps/cplfw`). A la foto de
+«la cámara» se le aplicó lo del stand: cara de 40 px en JPEG (lejos) y gamma
+2,2 con ruido (contraluz). La referencia quedó como está, igual que las fotos
+de la web.
+
+Un stand simulado: 200 sorteos de 41 personas conocidas con una foto cada una,
+y las fotos de todas las demás como desconocidos:
+
+| Modelo y umbral | Conocidos reconocidos (normal / lejos y oscuro) | Desconocidos tomados por otro, por foto |
+|---|---|---|
+| SFace 0,52 (el de antes) | 38 % / 23 % | 0,004 % / 0,003 % |
+| ArcFace R50 0,40 | 74 % / 57 % | 0,007 % / 0,011 % |
+| ArcFace R50 0,35 | 82 % / 70 % | 0,014 % / 0,018 % |
+| ArcFace MobileFaceNet 0,40 | 46 % / 30 % | 0,011 % / 0,007 % |
+
+Cada foto suelta; además hacen falta dos aciertos en 4 s. Con nuestras 46 fotos
+de referencia, las dos personas distintas más parecidas dan 0,27 con ArcFace
+(José Aquino Cepeda y Jose Elias) y 0,46 con SFace (Wagner Luciano y Alexander
+Vegazo, casi en su umbral). Reducidas a 24 px, ArcFace acepta el 100 % con 0,69
+de media y nadie más pasa de 0,28; SFace, el 87 %.
+
+ArcFace tarda 34 ms por cara en el Mac de desarrollo (SFace, 6 ms): con una
+revisión por segundo y como mucho seis caras, va de sobra. El modelo pesa
+174 MB y su licencia es solo para uso no comercial, como esta demo.
+
+También se probó a «entrenar» mejor a cada persona, con R50 y umbral 0,40
+(427 personas de CPLFW con tres fotos o más):
+
+| Cómo se da de alta | Normal | Lejos y oscuro |
+|---|---|---|
+| 1 foto (los ponentes) | 74 % | 62 % |
+| 1 foto + variaciones (espejo, más oscura, más pequeña) | 75 % | 65 % |
+| 1 foto + variaciones, huella media | 71 % | 63 % |
+| 2 fotos reales | 89 % | 77 % |
+
+Las variaciones sintéticas apenas ayudan; una segunda foto real, distinta de
+la primera, sube unos 15 puntos. Normalizar la luz de la cara (CLAHE o gamma)
+tampoco ayudó con la webcam del Mac. Para el equipo, lo que funciona es tener
+varias fotos suyas en `cache/faces/fotos` (ver «Añadir a alguien»).
 
 ### Por qué tardó 75 segundos en reconocer a Jean (8 de octubre)
 

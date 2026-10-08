@@ -40,7 +40,8 @@ from sonia.clock import clock_for, resolve_timezone
 from sonia.config import Settings, VisionSettings, is_gemini_url, is_openai_url, load_settings
 from sonia.devices import DeviceManager, apply_choice, load_choice
 from sonia.faces import FaceBook, FaceWatcher, load_greetings, models_ready, name_key
-from sonia.faces.model import DETECTOR
+from sonia.faces.book import book_path
+from sonia.faces.model import DETECTOR, print_model
 from sonia.gestures.director import GestureDirector
 from sonia.guest.link import FrameGrabber
 from sonia.live.audio import silence_blocks
@@ -396,7 +397,7 @@ def build_faces(settings: Settings, vision: VisionSettings | None = None) -> Fac
     if importlib.util.find_spec("cv2") is None:
         logger.warning("Reconocimiento de caras apagado: falta OpenCV (uv sync --extra camera)")
         return None
-    bundled = BUNDLE_ROOT / "cache" / "faces" / "huellas" / "caras.json"
+    bundled = book_path(BUNDLE_ROOT / "cache" / "faces" / "huellas", settings.faces.model)
     return FaceWatcher(
         settings.faces,
         staff_file=settings.faces_staff_file,
@@ -990,9 +991,9 @@ async def check_faces(settings: Settings) -> CheckResult:
         return CheckResult("Caras", True, "sin cámara u OpenCV: no reconoce a nadie", False)
     folder = Path(cfg.dir)
     prepare = "uv run --no-sync sonia caras (o se prepara sola al arrancar, con internet)"
-    if not await asyncio.to_thread(models_ready, folder / "modelos"):
+    if not await asyncio.to_thread(models_ready, folder / "modelos", cfg.model):
         return CheckResult("Caras", False, f"faltan los modelos: {prepare}", False)
-    book = FaceBook(folder / "huellas" / "caras.json")
+    book = FaceBook(book_path(folder / "huellas", cfg.model), print_model(cfg.model).name)
     await asyncio.to_thread(book.load)
     people = book.people
     if not people:
@@ -1240,7 +1241,7 @@ async def _probe_faces(settings: Settings, faces: FaceWatcher) -> int:
     cfg = settings.faces
     camera = build_camera(settings.vision)
     print(
-        f"\nMirando la cámara (umbral {cfg.threshold}, margen {cfg.margin}, cara de al menos "
+        f"\nMirando la cámara ({cfg.model}, umbral {faces.threshold}, margen {cfg.margin}, cara de al menos "
         f"{cfg.min_face_px} px). Ctrl+C para salir. No se guarda nada."
     )
     try:

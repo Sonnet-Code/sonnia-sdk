@@ -13,7 +13,8 @@ distribuyen con el proyecto. Ver también las
 |---|---|---|---|---|
 | uLipSync | hecomi | MIT | https://github.com/hecomi/uLipSync | Lip-sync por fonemas en tiempo real en Unity |
 | YuNet (`face_detection_yunet_2023mar.onnx`) | Shiqi Yu y otros, OpenCV Model Zoo | MIT | https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet | Encontrar caras en la foto de la cámara (`docs/caras.md`); se descarga a `cache/faces/modelos` |
-| SFace (`face_recognition_sface_2021dec.onnx`) | Yaoyao Zhong y otros, OpenCV Model Zoo | Apache 2.0 | https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface | Huella de cada cara para reconocer al equipo y a los ponentes |
+| SFace (`face_recognition_sface_2021dec.onnx`) | Yaoyao Zhong y otros, OpenCV Model Zoo | Apache 2.0 | https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface | Alinear cada cara y, con `FACES_MODEL=sface`, sacar su huella |
+| ArcFace R50 (`w600k_r50.onnx`, buffalo_l) | InsightFace (Jiankang Deng y otros) | Solo uso no comercial y de investigación | https://github.com/deepinsight/insightface/tree/master/model_zoo (copia en https://huggingface.co/deepghs/insightface) | Huella de cada cara para reconocer al equipo y a los ponentes (`docs/caras.md`) |
 | Modelo/avatar 3D | _pendiente_ | _pendiente_ | _pendiente_ | Personaje de Sonia en Unity |
 | Animaciones del avatar | _pendiente_ | _pendiente_ | _pendiente_ | Animaciones de escucha, pensamiento y habla |
 | Gorra con hélice «HAT - Propeller Silly Hat - PBR Game Ready» | Dekogon | _por confirmar_ (Sketchfab) | https://sketchfab.com/3d-models/hat-propeller-silly-hat-pbr-game-ready-7640ad5df75841999065a474f83b76f2 | Gorro Noogler de la trivia (recoloreado y con el texto «Noogler»; `scripts/gorro_noogler`) |

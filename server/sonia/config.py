@@ -505,7 +505,15 @@ class FaceSettings(BaseSettings):
     guests_file: str = ""
     #: Contexto para saludar (por persona y por grupo); vacío = ``assets/faces/saludos.json``.
     greetings_file: str = ""
-    #: Similitud mínima (coseno de SFace) para dar a alguien por reconocido.
+    #: ``FACES_MODEL``: qué modelo saca las huellas. ``arcface`` (ArcFace R50 de InsightFace,
+    #: 174 MB) reconoce el doble que ``sface`` (el de OpenCV, el de antes del 8-oct-2026) de
+    #: lado, lejos y a oscuras con las mismas falsas alarmas (docs/caras.md). Cada uno tiene
+    #: sus huellas y su umbral: volver a SFace no rehace nada.
+    model: Literal["arcface", "sface"] = "arcface"
+    #: Similitud mínima con ArcFace para dar a alguien por reconocido (medida con CPLFW: unas
+    #: 7 falsas alarmas por cada 100 000 fotos de desconocidos con 41 personas conocidas).
+    arcface_threshold: float = 0.40
+    #: Similitud mínima con SFace (``FACES_MODEL=sface``).
     threshold: float = 0.52
     #: Ventaja mínima sobre la segunda persona más parecida; si no, no se arriesga.
     margin: float = 0.06

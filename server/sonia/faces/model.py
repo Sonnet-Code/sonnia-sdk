@@ -1,11 +1,17 @@
-"""Caras con OpenCV en este equipo: YuNet las encuentra y SFace saca la huella de cada una.
+"""Caras con OpenCV en este equipo: YuNet las encuentra y ArcFace (o SFace) saca la huella.
 
-Nada sale del equipo: cada foto se analiza en memoria y se olvida. Los dos
-modelos son los ONNX del OpenCV Model Zoo (YuNet, licencia MIT; SFace, Apache
-2.0); se descargan una vez a ``cache/faces/modelos`` y se comprueban por SHA-256.
+Nada sale del equipo: cada foto se analiza en memoria y se olvida. YuNet y SFace
+son los ONNX del OpenCV Model Zoo (licencias MIT y Apache 2.0); ArcFace R50 es el
+``w600k_r50`` de InsightFace (buffalo_l, solo para uso no comercial, como esta
+demo). Se descargan una vez a ``cache/faces/modelos`` y se comprueban por SHA-256.
 
-Medido el 7-oct-2026 en el Mac de desarrollo: 7-13 ms para encontrar las caras
-de una foto de 768 px y unos 5 ms por huella, en la CPU.
+SFace alinea siempre la cara (``alignCrop``, la plantilla de cinco puntos de
+ArcFace); la huella la saca el modelo de ``FACES_MODEL``. ArcFace reconoce el
+doble que SFace de lado, lejos y a oscuras con las mismas falsas alarmas
+(medido con CPLFW el 8-oct-2026, docs/caras.md).
+
+Tiempos en el Mac de desarrollo: 7-13 ms para encontrar las caras de una foto de
+768 px (unos 30 ms a 1920 px), 5 ms por huella con SFace y 34 ms con ArcFace.
 """
 
 from __future__ import annotations
@@ -16,21 +22,24 @@ import logging
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import httpx
 import numpy as np
 
 __all__ = [
+    "ARCFACE",
     "DETECTOR",
-    "MODEL_FILES",
     "RECOGNIZER",
     "Face",
     "FaceAnalyzer",
     "FaceModel",
     "FaceModelError",
+    "Recognizer",
     "ensure_models",
+    "model_files",
     "models_ready",
+    "print_model",
 ]
 
 logger = logging.getLogger(__name__)
@@ -59,7 +68,27 @@ RECOGNIZER = ModelFile(
     f"{_ZOO}/face_recognition_sface/face_recognition_sface_2021dec.onnx",
     "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
 )
-MODEL_FILES = (DETECTOR, RECOGNIZER)
+ARCFACE = ModelFile(
+    "w600k_r50.onnx",
+    "https://huggingface.co/deepghs/insightface/resolve/main/buffalo_l/w600k_r50.onnx",
+    "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43",
+)
+
+#: Qué modelo saca las huellas (``FACES_MODEL``).
+Recognizer = Literal["arcface", "sface"]
+
+
+def model_files(recognizer: Recognizer = "arcface") -> tuple[ModelFile, ...]:
+    """Los modelos que hacen falta: YuNet y SFace siempre (SFace alinea) y ArcFace si se usa."""
+    if recognizer == "arcface":
+        return (DETECTOR, RECOGNIZER, ARCFACE)
+    return (DETECTOR, RECOGNIZER)
+
+
+def print_model(recognizer: Recognizer = "arcface") -> ModelFile:
+    """El modelo que saca las huellas: las de uno no valen para el otro."""
+    return ARCFACE if recognizer == "arcface" else RECOGNIZER
+
 
 #: Confianza mínima del detector. Los ejemplos de OpenCV usan 0,8, pero con la webcam del Mac
 #: dejaba sin detectar ocho de cada veinte fotos de alguien sentado delante, algo girado
@@ -75,7 +104,8 @@ class Face:
     width: int
     #: Confianza del detector (0-1).
     score: float
-    #: Huella de SFace (128 valores), normalizada: la similitud es el producto escalar.
+    #: Huella (512 valores con ArcFace, 128 con SFace), normalizada: la similitud es el
+    #: producto escalar.
     embedding: np.ndarray[Any, Any]
 
 
@@ -99,13 +129,17 @@ def _valid(path: Path, sha256: str) -> bool:
     return path.is_file() and _sha256(path) == sha256
 
 
-def models_ready(folder: Path) -> bool:
-    """¿Están los dos modelos en ``folder`` y sin corromper? Lee los archivos: va en un hilo."""
-    return all(_valid(folder / model.name, model.sha256) for model in MODEL_FILES)
+def models_ready(folder: Path, recognizer: Recognizer = "arcface") -> bool:
+    """¿Están los modelos en ``folder`` y sin corromper? Lee los archivos: va en un hilo."""
+    return all(_valid(folder / model.name, model.sha256) for model in model_files(recognizer))
 
 
 async def ensure_models(
-    folder: Path, *, timeout_s: float = 60.0, transport: httpx.AsyncBaseTransport | None = None
+    folder: Path,
+    *,
+    recognizer: Recognizer = "arcface",
+    timeout_s: float = 60.0,
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> list[str]:
     """Descarga los modelos que falten o no cuadren por SHA-256. Devuelve los que bajó.
 
@@ -118,7 +152,7 @@ async def ensure_models(
         follow_redirects=True,
         transport=transport,
     ) as client:
-        for model in MODEL_FILES:
+        for model in model_files(recognizer):
             path = folder / model.name
             if await asyncio.to_thread(_valid, path, model.sha256):
                 continue
@@ -142,14 +176,14 @@ async def ensure_models(
 
 
 class FaceModel:
-    """YuNet y SFace cargados desde ``folder``.
+    """YuNet, SFace y, si se usa, ArcFace, cargados desde ``folder``.
 
     Sus métodos hacen milisegundos de CPU: se llaman desde un hilo
     (``asyncio.to_thread``), nunca desde el bucle de audio. Los objetos de OpenCV
     no son seguros entre hilos, así que van con un candado.
     """
 
-    def __init__(self, folder: Path) -> None:
+    def __init__(self, folder: Path, recognizer: Recognizer = "arcface") -> None:
         import cv2
 
         if not hasattr(cv2, "FaceDetectorYN") or not hasattr(cv2, "FaceRecognizerSF"):
@@ -160,9 +194,26 @@ class FaceModel:
                 str(folder / DETECTOR.name), "", (320, 320), DETECT_SCORE, 0.3, 5000
             )
             self._recognizer = cv2.FaceRecognizerSF.create(str(folder / RECOGNIZER.name), "")
+            self._arcface = (
+                cv2.dnn.readNetFromONNX(str(folder / ARCFACE.name))
+                if recognizer == "arcface"
+                else None
+            )
         except cv2.error as exc:
             raise FaceModelError(f"no se pudieron cargar los modelos de caras: {exc}") from exc
         self._lock = threading.Lock()
+
+    def _print(self, crop: Any) -> np.ndarray[Any, Any]:
+        """La huella de una cara ya alineada (112x112)."""
+        net = self._arcface
+        if net is None:
+            return np.asarray(self._recognizer.feature(crop), dtype=np.float32).reshape(-1)
+        # ArcFace de InsightFace: RGB, (x - 127,5) / 127,5.
+        blob = self._cv2.dnn.blobFromImage(
+            crop, 1 / 127.5, (112, 112), (127.5, 127.5, 127.5), swapRB=True
+        )
+        net.setInput(blob)
+        return np.asarray(net.forward(), dtype=np.float32).reshape(-1)
 
     def decode(self, data: bytes, max_side: int = 0) -> Any | None:
         """JPEG, PNG o WebP a imagen BGR, reducida a ``max_side`` si es más grande."""
@@ -192,8 +243,7 @@ class FaceModel:
                 rows = rows[:limit]
             result: list[Face] = []
             for row in rows:
-                crop = self._recognizer.alignCrop(image, row)
-                vector = np.asarray(self._recognizer.feature(crop), dtype=np.float32).reshape(-1)
+                vector = self._print(self._recognizer.alignCrop(image, row))
                 norm = float(np.linalg.norm(vector))
                 if norm > 0:
                     result.append(

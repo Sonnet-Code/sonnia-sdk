@@ -9,7 +9,7 @@ y las personas conocidas que el equipo añade a mano.
   equipo, con fotos locales recortadas a su cara).
 
 De cada foto se guarda solo la huella (128 números) en
-``cache/faces/huellas/caras.json``; la foto no se guarda. Nunca hay huellas de
+``cache/faces/huellas/caras-arcface.json`` (``caras.json`` con SFace); la foto no se guarda. Nunca hay huellas de
 visitantes: a ellos solo se les compara en memoria y se les olvida.
 """
 
@@ -28,11 +28,12 @@ import httpx
 import numpy as np
 
 from sonia.agenda.schedule import Schedule
-from sonia.faces.model import RECOGNIZER, FaceAnalyzer
+from sonia.faces.model import RECOGNIZER, FaceAnalyzer, Recognizer
 
 __all__ = [
     "EnrollReport",
     "FaceBook",
+    "book_path",
     "Greetings",
     "Match",
     "Person",
@@ -256,15 +257,26 @@ class EnrollReport:
     failed: list[tuple[str, str]] = field(default_factory=list)
 
 
+def book_path(folder: Path, recognizer: Recognizer = "arcface") -> Path:
+    """Dónde se guardan las huellas de cada modelo en ``folder`` (``cache/faces/huellas``).
+
+    Cada modelo tiene las suyas: así se puede volver a SFace (``FACES_MODEL=sface``) sin
+    rehacer nada, y la app trae las de los dos.
+    """
+    return folder / ("caras-arcface.json" if recognizer == "arcface" else "caras.json")
+
+
 class FaceBook:
-    """Las huellas de las personas conocidas, en memoria y en ``caras.json``.
+    """Las huellas de las personas conocidas, en memoria y en ``caras-arcface.json``.
 
     No es seguro entre hilos: se modifica solo al dar de alta (antes de empezar
     a reconocer) y después solo se lee.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, model: str = RECOGNIZER.name) -> None:
         self.path = path
+        #: El modelo de las huellas (su archivo): las de otro modelo no valen.
+        self.model = model
         self._people: dict[str, Person] = {}
         #: Por persona: de qué foto sale cada huella.
         self._prints: dict[str, dict[str, np.ndarray[Any, Any]]] = {}
@@ -301,7 +313,7 @@ class FaceBook:
         except (OSError, ValueError) as exc:
             logger.warning("No se pudo leer %s (se rehará): %s", self.path, exc)
             return
-        if not isinstance(data, dict) or data.get("model") != RECOGNIZER.name:
+        if not isinstance(data, dict) or data.get("model") != self.model:
             logger.info("Las huellas guardadas son de otro modelo: se rehacen")
             return
         for entry in data.get("people") or ():
@@ -333,7 +345,7 @@ class FaceBook:
                 source: [round(float(x), 6) for x in vector] for source, vector in prints.items()
             }
             people.append(entry)
-        data = {"version": _STORE_VERSION, "model": RECOGNIZER.name, "people": people}
+        data = {"version": _STORE_VERSION, "model": self.model, "people": people}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         partial = self.path.with_name(self.path.name + ".part")
         partial.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -391,6 +403,8 @@ class FaceBook:
         owners: list[str] = []
         for pid, prints in self._prints.items():
             for vector in prints.values():
+                if rows and vector.size != rows[0].size:
+                    continue  # de otro modelo: no se puede comparar
                 rows.append(vector)
                 owners.append(pid)
         self._matrix = (
@@ -425,9 +439,10 @@ class FaceBook:
 
 
 def _normalized(vector: Any) -> np.ndarray[Any, Any] | None:
+    """La huella con norma 1 (512 valores con ArcFace, 128 con SFace), o ``None`` si no vale."""
     array = np.asarray(vector, dtype=np.float32).reshape(-1)
     norm = float(np.linalg.norm(array))
-    if array.size != 128 or not np.isfinite(norm) or norm <= 0:
+    if array.size not in (128, 512) or not np.isfinite(norm) or norm <= 0:
         return None
     return array / norm
 
