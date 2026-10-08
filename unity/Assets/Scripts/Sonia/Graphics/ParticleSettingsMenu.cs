@@ -240,7 +240,7 @@ namespace Sonia
                 case StageEffect.Trivia:
                     return "Vista previa de la trivia, con la explosión de un acierto cada pocos segundos. Sale sola durante la trivia.";
                 case StageEffect.Matrix:
-                    return "Vista previa de Matrix. Sale sola cuando Sonnia busca en internet o una tarea tarda.";
+                    return "Vista previa de Matrix. Sale sola cuando Sonnia busca en internet.";
                 default:
                     return "Vista previa del ambiente: las motas de siempre.";
             }

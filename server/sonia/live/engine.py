@@ -95,10 +95,11 @@ RESPONSE_WAIT_S = 4.0
 DELEGATION_TIMEOUT_S = 90.0
 
 #: Una tarea delegada que lleva más que esto se le cuenta a Unity (``activity``
-#: ``think``) para la lluvia estilo Matrix. En los registros del 7 de octubre de
-#: 2026 las tareas con acciones tardaban 3,4 s de mediana (4,8 s el percentil
-#: 75): con menos, la lluvia saldría en casi todas (enseñar una imagen, la
-#: agenda) y no solo en las que tardan de verdad.
+#: ``think``) para que piense con la mano en la barbilla (la lluvia estilo Matrix
+#: es solo para buscar en internet). En los registros del 7 de octubre de 2026
+#: las tareas con acciones tardaban 3,4 s de mediana (4,8 s el percentil 75):
+#: con menos, el gesto saldría en casi todas (enseñar una imagen, la agenda) y
+#: no solo en las que tardan de verdad.
 SLOW_TASK_S = 5.0
 
 #: Ventana en la que la próxima voz de Sonia se considera el número del stand pedido.

@@ -17,7 +17,9 @@
 //             clip de MotionPlayer (baile, caminar, reacciones de la trivia)
 //   acciones  clips de cuerpo entero de una sola vez sobre el reposo:
 //             aburrimiento, saludo, gestos hacia el público, movimientos
-//             pedidos de viva voz y la vista previa del panel
+//             pedidos de viva voz y la vista previa del panel. Una acción
+//             puede ir sostenida: entra a mitad del clip y va y viene en un
+//             tramo hasta que se suelta (la mano en la barbilla al pensar)
 //   gestos    gestos al hablar, solo el torso (columna, cabeza, brazos y manos),
 //             que elige el director de gestos del orquestador
 //
@@ -162,6 +164,18 @@ namespace Sonia
             public float StopLeft = 1f;
             public float StopSpeed;
             public float Weight;
+
+            // Segundos desde que entró (el fundido de entrada; Time puede empezar a
+            // mitad del clip) y fundido de entrada si no es el de siempre (Fade).
+            public float Age;
+            public float FadeIn = -1f;
+
+            // Acción sostenida: va y viene entre HoldFrom y HoldTo hasta que se suelta.
+            public bool Holding;
+            public float HoldFrom;
+            public float HoldTo;
+            public float HoldPhase;
+            public float HoldRate;
 
             public float Ratio
             {
@@ -497,6 +511,84 @@ namespace Sonia
             return true;
         }
 
+        /// <summary>
+        /// Acción sostenida: entra ya en el segundo <paramref name="from"/> del clip
+        /// (el fundido la lleva desde la pose de antes) y va y viene entre
+        /// <paramref name="from"/> y <paramref name="to"/> con vaivén suave, a
+        /// <paramref name="speed"/> de su velocidad, hasta <see cref="ReleaseHold"/>.
+        /// Para poses que duran lo que dure algo, como la mano en la barbilla
+        /// mientras una tarea tarda.
+        /// </summary>
+        public bool PlayHeldAction(string gestureName, float from, float to, float speed, float fadeSeconds = -1f, bool? mirror = null)
+        {
+            if (!PlayAction(gestureName, fadeSeconds, mirror))
+            {
+                return false;
+            }
+
+            Track track = _actions[_actions.Count - 1];
+            float last = Mathf.Max(0f, track.Clip.Duration - track.Fade - 0.05f);
+            track.HoldFrom = Mathf.Clamp(Mathf.Min(from, to), 0f, last);
+            track.HoldTo = Mathf.Clamp(Mathf.Max(from, to), track.HoldFrom, last);
+            track.Time = track.HoldFrom;
+            track.HoldPhase = 0f;
+            track.HoldRate = track.HoldTo > track.HoldFrom
+                ? Mathf.PI * Mathf.Max(0.05f, speed) / (track.HoldTo - track.HoldFrom)
+                : 0f;
+            track.Holding = true;
+            return true;
+        }
+
+        /// <summary>Cierto mientras una acción sostenida sigue sostenida.</summary>
+        public bool IsHolding
+        {
+            get
+            {
+                foreach (Track track in _actions)
+                {
+                    if (track.Holding && !track.Stopping)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Suelta las acciones sostenidas: del punto del vaivén en que vayan pasan
+        /// con un fundido de <paramref name="fadeSeconds"/> al final del tramo
+        /// sostenido (la misma pose, más o menos) y desde ahí el clip sigue hasta
+        /// el final. Seguir desde donde iba dejaba la mano en la barbilla hasta 1,5 s
+        /// más, ya hablando.
+        /// </summary>
+        public void ReleaseHold(float fadeSeconds = 0.35f)
+        {
+            int count = _actions.Count;
+            for (int i = 0; i < count; i++)
+            {
+                Track held = _actions[i];
+                if (!held.Holding)
+                {
+                    continue;
+                }
+
+                held.Holding = false;
+                if (held.Stopping)
+                {
+                    continue;
+                }
+
+                Track exit = NewTrack(Channel.Action, held.Gesture, held.Clip, held.Mirror, held.Fade);
+                exit.Time = held.HoldTo;
+                exit.FadeIn = Mathf.Max(0.05f, fadeSeconds);
+                _actions.Add(exit);
+                held.Stopping = true;
+                held.StopSpeed = 1f / exit.FadeIn;
+            }
+        }
+
         /// <summary>Funde hacia fuera las acciones.</summary>
         public void StopActions(float fadeSeconds = -1f)
         {
@@ -682,7 +774,18 @@ namespace Sonia
             for (int i = tracks.Count - 1; i >= 0; i--)
             {
                 Track track = tracks[i];
-                track.Time += dt;
+                track.Age += dt;
+                if (track.Holding)
+                {
+                    // Vaivén con coseno: frena y cambia de sentido sin tirones en los extremos.
+                    track.HoldPhase += dt * track.HoldRate;
+                    track.Time = track.HoldFrom + (track.HoldTo - track.HoldFrom) * (0.5f - 0.5f * Mathf.Cos(track.HoldPhase));
+                }
+                else
+                {
+                    track.Time += dt;
+                }
+
                 if (track.Stopping)
                 {
                     track.StopLeft = Mathf.Max(0f, track.StopLeft - dt * track.StopSpeed);
@@ -695,7 +798,8 @@ namespace Sonia
                     continue;
                 }
 
-                float fadeIn = track.Fade > 0f ? Ease(track.Time / track.Fade) : 1f;
+                float fadeInSeconds = track.FadeIn > 0f ? track.FadeIn : track.Fade;
+                float fadeIn = fadeInSeconds > 0f ? Ease(track.Age / fadeInSeconds) : 1f;
                 float fadeOut = track.Fade > 0f ? Ease((duration - track.Time) / track.Fade) : 1f;
                 track.Weight = Mathf.Min(fadeIn, Mathf.Min(fadeOut, Ease(track.StopLeft)));
             }

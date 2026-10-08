@@ -256,6 +256,15 @@ tiene tres canales, como el grafo de Genies:
 
 - **Espejo:** acciones y gestos salen en espejo la mitad de las veces
   (`mirrorChance`, como en Genies).
+- **Pensar con la mano en la barbilla:** si una tarea delegada tarda
+  (`activity` `think`, más de 5 s), mientras piensa suena `touchBeard` como
+  acción sostenida (`GeniesGestureLayer.PlayHeldAction`): entra en el segundo
+  1,75 del clip, con la mano ya en la barbilla (antes se la pasa por la boca:
+  es de un personaje con barba), y va y viene entre 1,75 y 3,2 s hasta que la
+  tarea acaba o Sonnia cambia de estado. Al soltarla (`ReleaseHold`) pasa en
+  0,35 s al final del tramo y la mano baja con el final del clip. Lo lleva
+  `AvatarChoreographer` (`ponderGesture`, `ponderHold`, `ponderSpeed`). La
+  búsqueda en internet (`search`) sigue siendo la lluvia estilo Matrix.
 - **Lo que Sage no tiene** (bailar, caminar en el modo Fuera, señalar una
   imagen, las reacciones de la trivia) sigue con `MotionPlayer`; mientras
   suena, el coreógrafo baja el peso del reposo de Sage.

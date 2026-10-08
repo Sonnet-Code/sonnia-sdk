@@ -980,10 +980,12 @@ partículas a la vez y funde de uno a otro en algo menos de un segundo:
 |---|---|---|
 | Ambiente | Por defecto | Las `Motes` de `SoniaStage`, adoptadas tal cual y reescaladas con los ajustes. |
 | Trivia | Mientras hay una trivia en pantalla (también la pantalla final) | Destellos que suben y símbolos («?», «!», estrellas) en los colores de Google, entre Sonia y el halo; una explosión de destellos desde su pecho en cada acierto y otra mayor al ganar. Mezcla con alfa, no aditiva: sobre el azul del fondo se ven los colores. |
-| Matrix | Con `activity` `search` o `think` del orquestador (busca en internet o una tarea delegada pasa de 5 s), al menos 2,5 s | Columnas de glifos verdes que caen detrás de Sonia, a la distancia del halo y del tamaño de lo que ve la cámara; la cabeza de cada gota nace casi blanca y deja un rastro que se apaga en verde. El fondo de la marca se oscurece un 30 % (queda al 70 % de su brillo y se sigue viendo detrás; `StageScreen.BackdropShade`). |
+| Matrix | Con `activity` `search` del orquestador (busca en internet), al menos 2,5 s | Columnas de glifos verdes que caen detrás de Sonia, a la distancia del halo y del tamaño de lo que ve la cámara; la cabeza de cada gota nace casi blanca y deja un rastro que se apaga en verde. El fondo de la marca se oscurece un 30 % (queda al 70 % de su brillo y se sigue viendo detrás; `StageScreen.BackdropShade`). |
 
 Si coinciden, manda la trivia: sus respuestas pasan por el backend y no deben
-encender la lluvia cada vez. Los glifos son dos atlas en
+encender la lluvia cada vez. Con `activity` `think` (una tarea delegada pasa de
+5 s sin buscar en internet) no hay efecto de partículas: Sonia se lleva la mano a
+la barbilla (ver la tabla del coreógrafo). Los glifos son dos atlas en
 `Assets/Resources/Particles` (katakana en espejo, cifras y símbolos para Matrix;
 los símbolos de la trivia), generados con `scripts/particulas_glifos.py` (usa
 fuentes de macOS para el katakana). Los materiales se clonan del de las motas,
@@ -1094,6 +1096,7 @@ serializados, ajustables en el inspector):
 | idle | bucle base; con el stand en calma (`attentionQuietDelay`, 25 s en idle sin conversación: entre turnos el estado también es idle) un gesto de atención (baile, cuarta pared o suave) cada 10-20 s, repartidos 45/30/25 % sin repetir, y las variaciones de reposo |
 | listening, thinking, speaking | con `singleConversationLoop` (por defecto) un solo reposo largo: el bucle de idle sigue sin reiniciarse ni cambiar de clip, sin variaciones, asentimientos de clip ni gesticulación, como Mia en genies.com. Apagado: cada estado con su bucle, asentimientos (fundido 0,3 s), variaciones de pensar y clips de habla encadenados |
 | saludo | `PlayGreeting()` al primer listening tras 25 s sola (y 20 s entre saludos); se deja terminar salvo que toque pensar o hablar |
+| pensar con la mano en la barbilla | con `activity` `think` (una tarea delegada pasa de 5 s) y en thinking, `touchBeard` de Sage como acción sostenida (`ponderGesture`): entra ya en 1,75 s (antes, la mano del clip le tapa la boca), va y viene despacio entre 1,75 y 3,2 s (`ponderHold`, `ponderSpeed` 0,5) mientras dure la tarea y, al acabar o al cambiar de estado, pasa en 0,35 s al final del tramo y la mano baja con el final del clip (~1,2 s) |
 
 Los gestos (atención, saludo, variaciones) entran y salen en `gestureFade`
 (0,8 s) y `MotionPlayer` pasa el peso de cada fundido por una curva suave
@@ -1694,7 +1697,7 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `SoniaAnimations.cs` | Catálogo de clips por estado y gestos de atención con su categoría; carpetas y rutas |
 | `SoniaMotionSet.cs` | ScriptableObject con los clips ya resueltos, generado por el menú |
 | `MotionPlayer.cs` | Reproductor de clips con la Playables API: fundidos por código, capa de cuerpo y capa de torso con máscara |
-| `AvatarChoreographer.cs` | Decide qué clip suena en cada estado: idle con variaciones y atención, escuchar con asentimientos, pensar, hablar encadenando gestos, saludo |
+| `AvatarChoreographer.cs` | Decide qué clip suena en cada estado: idle con variaciones y atención, escuchar con asentimientos, pensar (con la mano en la barbilla si una tarea tarda), hablar encadenando gestos, saludo |
 | `Gestures/GeniesOzzClip.cs` | Lector de los clips OZZ de Genies (huesos y curvas de cara) |
 | `Gestures/GeniesOzzAsset.cs` | Bytes de un `.ozz` importado (`Editor/GeniesOzzImporter.cs`) |
 | `Gestures/GeniesGestureSet.cs` | Gestos de un personaje de Genies (Sage) con su ficha para el director de gestos |
@@ -1709,7 +1712,7 @@ Todos en `unity/Assets/Scripts/Sonia/`, namespace `Sonia`.
 | `Graphics/GraphicsQuality*.cs` | Calidad gráfica: niveles y opciones, el controlador que los aplica sobre lo montado y su menú |
 | `Graphics/SoniaOptionsMenu.cs` | Menú de opciones de Esc: calidad gráfica, editor de personaje de Sonia, micrófono, cámara y pantalla, y partículas |
 | `Graphics/ParticleSettingsMenu.cs` | Menú **Partículas**: efecto con vista previa, cantidad, velocidad, tamaño y brillo, y si cambian solos |
-| `StageParticles.cs` | Partículas del escenario: motas, efecto de la trivia y lluvia estilo Matrix (con `activity`), con fundidos |
+| `StageParticles.cs` | Partículas del escenario: motas, efecto de la trivia y lluvia estilo Matrix (con `activity` `search`), con fundidos |
 | `ParticleSettings.cs` | Ajustes de las partículas por efecto, guardados en PlayerPrefs |
 | `Editor/SoniaParticlePreview.cs` | Menú **Sonia > Partículas**: fuerza un efecto en Play o una demostración que alterna Matrix y la trivia |
 | `SoniaBootstrap.cs` | Enlaza todo y aplica los ajustes de kiosco |

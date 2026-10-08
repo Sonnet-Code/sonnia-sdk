@@ -18,7 +18,7 @@ namespace Sonia
         /// <summary>Destellos y símbolos de colores mientras hay una trivia.</summary>
         Trivia = 1,
 
-        /// <summary>Lluvia de glifos verdes mientras Sonia busca en internet o tarda en pensar.</summary>
+        /// <summary>Lluvia de glifos verdes mientras Sonia busca en internet.</summary>
         Matrix = 2
     }
 
@@ -79,7 +79,7 @@ namespace Sonia
         public static readonly int[] SizeSteps = { 50, 75, 100, 125, 150, 200, 300, 400, 500 };
         public static readonly int[] BrightnessSteps = { 25, 50, 75, 100, 125, 150, 200, 300 };
 
-        [Tooltip("Cambio automático: el efecto de la trivia durante la trivia y Matrix cuando Sonia busca o tarda.")]
+        [Tooltip("Cambio automático: el efecto de la trivia durante la trivia y Matrix cuando Sonia busca en internet.")]
         public bool contextual = true;
 
         public EffectTuning ambient = new EffectTuning();

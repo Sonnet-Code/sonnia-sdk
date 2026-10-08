@@ -162,6 +162,7 @@ namespace Sonia
                 client.OnAttention += HandleAttention;
                 client.OnPlayAnimation += HandlePlayAnimation;
                 client.OnGesture += HandleGesture;
+                client.OnActivity += HandleActivity;
                 client.OnSetDisabledAnimations += HandleSetDisabledAnimations;
                 client.OnSetDebug += HandleSetDebug;
                 client.OnSetTuning += HandleSetTuning;
@@ -197,6 +198,7 @@ namespace Sonia
                 client.OnAttention -= HandleAttention;
                 client.OnPlayAnimation -= HandlePlayAnimation;
                 client.OnGesture -= HandleGesture;
+                client.OnActivity -= HandleActivity;
                 client.OnSetDisabledAnimations -= HandleSetDisabledAnimations;
                 client.OnSetDebug -= HandleSetDebug;
                 client.OnSetTuning -= HandleSetTuning;
@@ -359,6 +361,11 @@ namespace Sonia
             if (lipSync != null)
             {
                 lipSync.StopAndClose();
+            }
+
+            if (choreographer != null)
+            {
+                choreographer.SetPondering(false);
             }
 
             ApplyAvatarState(AvatarState.Idle);
@@ -698,6 +705,19 @@ namespace Sonia
         /// terminó se descarta, y uno de apertura (sin frase) espera a la
         /// siguiente. Ninguno espera más de <see cref="GestureWaitSeconds"/>.
         /// </summary>
+        /// <summary>
+        /// Una tarea delegada tarda (<c>think</c>): Sonia piensa con la mano en la
+        /// barbilla. La búsqueda en internet (<c>search</c>) es la lluvia estilo
+        /// Matrix de StageParticles.
+        /// </summary>
+        private void HandleActivity(ActivityMessage message)
+        {
+            if (choreographer != null)
+            {
+                choreographer.SetPondering(message != null && message.Activity == ActivityNames.Think);
+            }
+        }
+
         private void HandleGesture(GestureMessage message)
         {
             if (message == null || gestureLayer == null)

@@ -445,7 +445,8 @@ def msg_trivia_end(score: int, total: int, *, won: bool, reason: str) -> dict[st
 def msg_activity(activity: str) -> dict[str, Any]:
     """Qué hace Sonia por detrás: ``search`` (busca en internet), ``think`` (una tarea tarda) o ``none``.
 
-    Unity lo usa para los efectos de la escena (la lluvia estilo Matrix).
+    Con ``search`` Unity enseña la lluvia estilo Matrix y con ``think`` Sonia piensa
+    con la mano en la barbilla.
     """
     if activity not in ACTIVITIES:
         raise ValueError(f"actividad desconocida: {activity!r}")

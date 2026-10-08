@@ -30,6 +30,8 @@
 // hacia el público. Lo que el personaje no tiene (bailar, caminar, señalar una
 // imagen, las reacciones de la trivia) sigue en MotionPlayer y el reposo de
 // Genies se aparta con fundido mientras suena (al señalar, solo el brazo).
+// Si una tarea delegada tarda (activity think del orquestador), al pensar se
+// lleva la mano a la barbilla (touchBeard de Sage, sostenido) hasta que acaba.
 //
 // Todo es opcional: sin MotionPlayer o sin set de clips no hace nada.
 
@@ -49,7 +51,9 @@ namespace Sonia
             Attention,
             Greeting,
             // Reacción de la trivia: suena entera aunque cambie el estado.
-            Reaction
+            Reaction,
+            // Mano en la barbilla mientras una tarea tarda (acción de Genies sostenida).
+            Ponder
         }
 
         [Header("Referencias")]
@@ -148,6 +152,19 @@ namespace Sonia
         [Tooltip("Segundos mínimo y máximo entre variaciones mientras piensa.")]
         private Vector2 thinkingVariationInterval = new Vector2(4f, 8f);
 
+        [SerializeField]
+        [Tooltip("Gesto de Genies del set con el que se lleva la mano a la barbilla mientras una tarea tarda (activity think del orquestador). Vacío: no lo hace.")]
+        private string ponderGesture = "touchBeard";
+
+        [SerializeField]
+        [Tooltip("Tramo del gesto, en segundos, con la mano en la barbilla: entra ahí directamente (antes, la mano de touchBeard le tapa la boca) y va y viene en él mientras dure la tarea.")]
+        private Vector2 ponderHold = new Vector2(1.75f, 3.2f);
+
+        [SerializeField]
+        [Range(0.1f, 1f)]
+        [Tooltip("Velocidad del vaivén con la mano en la barbilla (1: la del clip).")]
+        private float ponderSpeed = 0.5f;
+
         [Header("Hablar")]
         [SerializeField]
         [Range(0f, 1f)]
@@ -199,6 +216,9 @@ namespace Sonia
         private float _wideUntil = -1f;
         private bool _started;
         private bool _suspended;
+
+        // El orquestador dice que una tarea tarda (activity think): mano en la barbilla al pensar.
+        private bool _ponderWanted;
 
         // Segundos en idle desde la última conversación (escuchar, pensar o hablar).
         private float _quietSeconds;
@@ -445,6 +465,58 @@ namespace Sonia
             return StartGenieAction(name, Phase.Reaction, "movimiento de Genies");
         }
 
+        /// <summary>
+        /// El orquestador dice si una tarea delegada tarda (<c>activity</c>
+        /// <c>think</c>). Mientras tanto, pensando y sin otra cosa en el cuerpo,
+        /// Sonia se lleva la mano a la barbilla (<see cref="ponderGesture"/>) y la
+        /// deja ahí hasta que acaba la tarea o cambia de estado.
+        /// </summary>
+        public void SetPondering(bool pondering)
+        {
+            _ponderWanted = pondering;
+            if (!pondering && _phase == Phase.Ponder)
+            {
+                // La mano baja con el final del clip; EndOneShot vuelve a la base.
+                ReleasePonder();
+            }
+        }
+
+        /// <summary>Cierto mientras la mano está en la barbilla (sostenida o bajando).</summary>
+        public bool IsPondering
+        {
+            get { return !_suspended && _phase == Phase.Ponder; }
+        }
+
+        private bool TryStartPonder()
+        {
+            if (!_ponderWanted || _state != AvatarState.Thinking || IsPresenting || !GenieBody
+                || string.IsNullOrEmpty(ponderGesture) || _gestures.CurrentAction == ponderGesture)
+            {
+                return false;
+            }
+
+            StopTalkGesture();
+            if (!_gestures.PlayHeldAction(ponderGesture, ponderHold.x, ponderHold.y, ponderSpeed, gestureFade))
+            {
+                return false;
+            }
+
+            _phase = Phase.Ponder;
+            _genieAction = true;
+            _lastGenieAction = ponderGesture;
+            _gestures.SetRestWeight(1f, gestureFade);
+            Log("mano en la barbilla: " + ponderGesture);
+            return true;
+        }
+
+        private void ReleasePonder()
+        {
+            if (_gestures != null)
+            {
+                _gestures.ReleaseHold();
+            }
+        }
+
         private void Start()
         {
             _started = true;
@@ -496,6 +568,15 @@ namespace Sonia
             if (!_started || _suspended)
             {
                 return;
+            }
+
+            // Deja de pensar con la mano en la barbilla: la mano baja con el final
+            // del clip mientras entra el estado nuevo (sin cortarla de golpe).
+            if (_phase == Phase.Ponder)
+            {
+                ReleasePonder();
+                _genieAction = false;
+                _phase = Phase.Base;
             }
 
             // El saludo se deja terminar si solo cambia entre idle y escuchar;
@@ -1091,6 +1172,10 @@ namespace Sonia
             }
 
             EnsureGenieRest(stateFade);
+            if (TryStartPonder())
+            {
+                return;
+            }
 
             switch (_state)
             {

@@ -33,7 +33,7 @@ Valores: `idle`, `listening`, `thinking`, `speaking`. GPT-Live no emite eventos 
 
 ### `activity`
 
-Qué hace Sonia por detrás, para los efectos de la escena: `search` mientras el backend busca en internet (`web_search`), `think` si una tarea delegada en el backend lleva más de `SLOW_TASK_S` (5 s; las normales tardan unos 3,4 s) y `none` cuando no pasa nada de eso. Se manda solo al cambiar, también mientras Sonia habla (si dice «déjame buscarlo» mientras el backend sigue). Unity enseña la lluvia estilo Matrix con `search` o `think` (`StageParticles`, al menos 2,5 s) salvo durante la trivia. No es fijo: no se repite tras `hello`. Una Unity que no lo conoce lo ignora.
+Qué hace Sonia por detrás, para los efectos de la escena: `search` mientras el backend busca en internet (`web_search`), `think` si una tarea delegada en el backend lleva más de `SLOW_TASK_S` (5 s; las normales tardan unos 3,4 s) y `none` cuando no pasa nada de eso. Se manda solo al cambiar, también mientras Sonia habla (si dice «déjame buscarlo» mientras el backend sigue). Con `search` Unity enseña la lluvia estilo Matrix (`StageParticles`, al menos 2,5 s) salvo durante la trivia; con `think` no hay efecto de partículas: mientras está en `thinking`, Sonia se lleva la mano a la barbilla (`AvatarChoreographer`, el gesto `touchBeard` de Sage sostenido) y la baja al acabar la tarea o al cambiar de estado. No es fijo: no se repite tras `hello`. Una Unity que no lo conoce lo ignora.
 
 ```json
 {"type": "activity", "activity": "search"}

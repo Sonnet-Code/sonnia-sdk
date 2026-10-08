@@ -466,17 +466,18 @@ namespace Sonia
         /// <summary>Nada especial: el efecto de partículas de siempre.</summary>
         public const string None = "none";
 
-        /// <summary>Una tarea delegada en el backend tarda (más de un par de segundos).</summary>
+        /// <summary>Una tarea delegada en el backend tarda (más de 5 s): Sonia piensa con la mano en la barbilla.</summary>
         public const string Think = "think";
 
-        /// <summary>El backend está buscando en internet.</summary>
+        /// <summary>El backend está buscando en internet: la lluvia estilo Matrix.</summary>
         public const string Search = "search";
     }
 
     /// <summary>
-    /// Qué está haciendo Sonia por detrás, para los efectos de la escena: con
-    /// <c>search</c> o <c>think</c> sale la lluvia estilo Matrix (StageParticles).
-    /// No es fijo: llega cada vez que cambia.
+    /// Qué está haciendo Sonia por detrás: con <c>search</c> sale la lluvia
+    /// estilo Matrix (StageParticles) y con <c>think</c> se lleva la mano a la
+    /// barbilla mientras piensa (AvatarChoreographer). No es fijo: llega cada vez
+    /// que cambia.
     /// </summary>
     [Serializable]
     public class ActivityMessage

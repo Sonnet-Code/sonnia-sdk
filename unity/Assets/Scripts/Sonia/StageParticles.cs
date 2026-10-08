@@ -7,9 +7,11 @@
 //    Google mientras hay una trivia en pantalla (también la pantalla final), una
 //    explosión de destellos en cada acierto y otra mayor al ganar.
 //  - Matrix: lluvia de glifos verdes en columnas detrás de Sonia, con el fondo
-//    oscurecido, mientras el orquestador dice que busca en internet o que una
-//    tarea tarda (mensaje activity). Se queda al menos matrixMinSeconds. El
-//    fondo se oscurece un 30 %: se sigue viendo, más apagado.
+//    oscurecido, mientras el orquestador dice que busca en internet (mensaje
+//    activity, search). Se queda al menos matrixMinSeconds. El fondo se
+//    oscurece un 30 %: se sigue viendo, más apagado. Cuando una tarea solo
+//    tarda (think) no hay efecto: Sonia se lleva la mano a la barbilla
+//    (AvatarChoreographer).
 //
 // Si coinciden, manda la trivia: sus respuestas pasan por el backend y no deben
 // encender la lluvia cada vez. Con el «Cambio automático» apagado siempre
@@ -134,10 +136,10 @@ namespace Sonia
         /// <summary>Efecto que toca ahora (el que está apareciendo o ya se ve).</summary>
         public StageEffect Showing { get; private set; }
 
-        /// <summary>Lo último que dijo el orquestador: <c>none</c>, <c>think</c> o <c>search</c>.</summary>
-        public string Activity
+        /// <summary>Cierto mientras el orquestador dice que Sonia busca en internet (<c>search</c>).</summary>
+        public bool Searching
         {
-            get { return _activity; }
+            get { return _searching; }
         }
 
         private SoniaClient _client;
@@ -152,8 +154,8 @@ namespace Sonia
         private ParticleSettings _settings;
         private StageEffect? _preview;
         private float _nextPreviewBurst;
-        private string _activity = ActivityNames.None;
-        private float _activitySince = -100f;
+        private bool _searching;
+        private float _searchSince = -100f;
         private float _matrixUntil = -100f;
         private float _shade = -1f;
 
@@ -299,7 +301,7 @@ namespace Sonia
                 {
                     effect = StageEffect.Trivia;
                 }
-                else if (_activity != ActivityNames.None || Time.time < _matrixUntil)
+                else if (_searching || Time.time < _matrixUntil)
                 {
                     effect = StageEffect.Matrix;
                 }
@@ -311,32 +313,31 @@ namespace Sonia
 
         private void HandleActivity(ActivityMessage message)
         {
-            SetActivity(message != null ? message.Activity : ActivityNames.None);
+            SetSearching(message != null && message.Activity == ActivityNames.Search);
         }
 
         private void HandleDisconnected()
         {
-            SetActivity(ActivityNames.None);
+            SetSearching(false);
         }
 
-        private void SetActivity(string activity)
+        private void SetSearching(bool searching)
         {
-            activity = activity == ActivityNames.Search || activity == ActivityNames.Think ? activity : ActivityNames.None;
-            if (activity == _activity)
+            if (searching == _searching)
             {
                 return;
             }
 
-            if (_activity == ActivityNames.None)
+            if (searching)
             {
-                _activitySince = Time.time;
+                _searchSince = Time.time;
             }
-            else if (activity == ActivityNames.None)
+            else
             {
-                _matrixUntil = Mathf.Max(Time.time, _activitySince + matrixMinSeconds);
+                _matrixUntil = Mathf.Max(Time.time, _searchSince + matrixMinSeconds);
             }
 
-            _activity = activity;
+            _searching = searching;
         }
 
         private void HandleTriviaAnswer(TriviaAnswerMessage message)

@@ -3,7 +3,7 @@
 Salen en unity/Assets/Resources/Particles y las carga StageParticles en Play:
 
 - matrix-glyphs.png: 64 glifos blancos (8 x 8 celdas de 64 px) para la lluvia
-  estilo Matrix que sale cuando Sonnia busca en internet o tarda en pensar:
+  estilo Matrix que sale cuando Sonnia busca en internet:
   katakana de media anchura en espejo, como en la película, cifras y unos
   cuantos símbolos. Cada glifo lleva un brillo suave alrededor, para que se vea
   luminoso aunque el bloom esté apagado.
