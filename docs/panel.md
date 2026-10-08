@@ -30,7 +30,7 @@ La caché de voces guarda cada frase fija (saludos, frases y cantos del stand) l
 
 Con `PANEL_CAMERA_STREAM=false` la Sonia no manda ni la cámara ni el micrófono al panel: sin «Ver cámara» ni Modo Jean. Lo llevan las builds de prueba que se reparten al equipo (`build.env`, ver `docs/unity.md`, «Builds de prueba»), para que nadie del panel vea ni oiga a quien la prueba en casa.
 
-Con `TRIAL_LIMIT_MINUTES` (las builds de prueba llevan 60), la Sonia tiene ese tiempo de conversación en total, sumando todos sus arranques. Al acabarse:
+Con `TRIAL_LIMIT_MINUTES` (las builds de prueba llevan 240), la Sonia tiene ese tiempo de conversación en total, sumando todos sus arranques. Al acabarse:
 - se queda en «Fuera» con el letrero «La prueba de Sonnia ha terminado» y no vuelve a abrir GPT-Live;
 - el panel rechaza devolverla a otro modo.
 
