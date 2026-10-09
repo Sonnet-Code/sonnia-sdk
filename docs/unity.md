@@ -333,6 +333,28 @@ se copia entera al equipo.
     `gh workflow run orquestador-windows.yml` y `gh run download -n sonia-orquestador-windows -D unity/Build/orquestador/Windows/sonia-orquestador`).
     Congela el código que haya en GitHub, así que antes hay que subir los
     cambios.
+  - Sin Windows ni Actions (el 9 de octubre de 2026 `gh` daba 404 en las
+    Actions del repo), `scripts/parchea_orquestador_windows.py` sobre la
+    carpeta de una build de Windows anterior: el bytecode de Python 3.12 es el
+    mismo en todos los sistemas, así que cambia dentro del `.exe` solo los
+    módulos `sonia.*` por los del repo, recalcula la suma PE y copia los
+    `assets/` y estáticos del panel que cambiaron. Desde `server/`:
+    `uv run --no-sync python ../scripts/parchea_orquestador_windows.py ../unity/Build/orquestador/Windows/sonia-orquestador`
+    (`--probar` escribe el exe al lado sin tocar nada). No sirve si cambian las
+    dependencias de terceros: entonces hay que congelar en Windows. Así salió
+    la 1.0.197.
+
+  Si desde la última build solo cambiaron `server/` o `assets/` (Unity no), la
+  versión nueva se puede montar sobre los zips anteriores sin recompilar: se
+  cambia el orquestador de dentro (`Sonnia_Data/orquestador/` en Windows,
+  `Sonnia.app/Contents/Resources/orquestador/` en macOS, conservando el `.env` y
+  el `cache/` que puso la build), la versión (`1.0.N` sale una vez en
+  `Sonnia_Data/globalgamemanagers` como cadena con su longitud delante, así que
+  se cambia por otra del mismo largo, y en macOS también en el `Info.plist`),
+  se vuelve a firmar la app de macOS (`codesign --force --deep --sign -`) y se
+  comprime como `SoniaBuild.Zip` (`ditto -c -k --keepParent` en macOS;
+  `COPYFILE_DISABLE=1 tar -a -c -f` sin `.DS_Store` en Windows). Así salió la
+  1.0.197 sin cerrar el editor, que tenía abierto otra sesión.
 
   Sin esa carpeta la build sale igual, pero sin orquestador (lo avisa la
   consola) y la app espera uno externo en el puerto 8765 (`uv run sonia run` en
