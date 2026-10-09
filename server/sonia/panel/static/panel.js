@@ -268,6 +268,7 @@
     galleryState: "loading", // loading | ready | error
     galleryAttemptAt: 0,
     notesBase: null, // último texto de avisos que vino del servidor y está en la caja
+    triviaBankBase: null, // banco de preguntas cargado en la caja (null: sin cargar)
     lastPresence: null,
   };
 
@@ -295,6 +296,8 @@
       "away-title", "away-help", "away-text", "away-ok",
       "trivia-state", "trivia-question", "trivia-q", "trivia-opt-a", "trivia-opt-b", "trivia-opt-c",
       "trivia-start-btn", "trivia-restart-btn", "trivia-stop-btn", "trivia-note", "trivia-next-btn", "trivia-level",
+      "trivia-bank-info", "trivia-bank-load-btn", "trivia-bank-editor", "trivia-bank-input", "trivia-bank-save-btn",
+      "trivia-bank-reset-btn", "trivia-bank-state",
     ];
     for (const id of ids) {
       // "topbar-status" -> ui.topbarStatus
@@ -946,6 +949,7 @@
     app.capsKnown = false;
     app.notesBase = null;
     app.lastPresence = null;
+    closeTriviaBank();
     resetChat();
     ui.log.replaceChildren();
     clearDevLog();
@@ -1363,6 +1367,91 @@
     setText(ui.triviaOptB, options[1] || "");
     setText(ui.triviaOptC, options[2] || "");
     setHidden(ui.triviaNote, status.mode === "conversation" || playing);
+    renderTriviaBankInfo(trivia);
+  }
+
+  // ------------------------------------------------------------ banco de preguntas
+
+  /** Resumen del banco en uso (las Sonnias anteriores al banco en la nube no lo mandan). */
+  function renderTriviaBankInfo(trivia) {
+    let text = "";
+    if (trivia.bank_source) {
+      const levels = trivia.bank_levels || {};
+      const where = trivia.bank_source === "cloud" ? "De la nube" : "El de la app";
+      text = `${where} · ${trivia.bank} preguntas (${levels["fácil"] || 0} fáciles, ` +
+        `${levels.intermedio || 0} intermedias, ${levels["difícil"] || 0} difíciles)`;
+    }
+    setText(ui.triviaBankInfo, text);
+  }
+
+  function renderTriviaBankState() {
+    const node = ui.triviaBankState;
+    if (ui.triviaBankSaveBtn.classList.contains("is-busy") || ui.triviaBankResetBtn.classList.contains("is-busy")) {
+      node.dataset.state = "saving";
+      setText(node, "Guardando…");
+    } else if (app.triviaBankBase !== null && ui.triviaBankInput.value.trim() !== app.triviaBankBase) {
+      node.dataset.state = "dirty";
+      setText(node, "Cambios sin guardar");
+    } else {
+      node.dataset.state = "saved";
+      setText(node, "");
+    }
+  }
+
+  /** Cierra el editor sin guardar (al cambiar de Sonnia). */
+  function closeTriviaBank() {
+    app.triviaBankBase = null;
+    ui.triviaBankInput.value = "";
+    setHidden(ui.triviaBankEditor, true);
+    renderTriviaBankState();
+  }
+
+  /** Trae el banco en uso de la Sonnia elegida: viene entero en el mensaje de la acción. */
+  async function loadTriviaBank() {
+    const result = await sendAction("trivia_bank", {}, { button: ui.triviaBankLoadBtn, silent: true });
+    if (!result.ok) {
+      showToast(result.message, "error");
+      return;
+    }
+    ui.triviaBankInput.value = result.message;
+    app.triviaBankBase = result.message.trim();
+    setHidden(ui.triviaBankEditor, false);
+    renderTriviaBankState();
+  }
+
+  async function onTriviaBankLoad() {
+    if (app.triviaBankBase !== null && ui.triviaBankInput.value.trim() !== app.triviaBankBase) {
+      const ok = await confirmAction({
+        title: "¿Cargar el banco otra vez?",
+        text: "Se pierden los cambios que no has guardado.",
+        confirmLabel: "Cargar",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    await loadTriviaBank();
+  }
+
+  async function onTriviaBankSave() {
+    const text = ui.triviaBankInput.value.trim();
+    const promise = sendAction("set_trivia_bank", { text }, { button: ui.triviaBankSaveBtn });
+    renderTriviaBankState();
+    const result = await promise;
+    if (result.ok) app.triviaBankBase = text;
+    renderTriviaBankState();
+  }
+
+  async function onTriviaBankReset() {
+    const ok = await confirmAction({
+      title: "¿Volver al banco de la app?",
+      text: "Se borra de la nube el banco guardado y todas las Sonnias vuelven a las preguntas que trae su app.",
+      confirmLabel: "Volver al de la app",
+      danger: true,
+    });
+    if (!ok) return;
+    const result = await sendAction("set_trivia_bank", { text: "" }, { button: ui.triviaBankResetBtn });
+    if (result.ok) await loadTriviaBank();
+    else renderTriviaBankState();
   }
 
   function onMuteClick() {
@@ -2537,6 +2626,11 @@
 
     ui.notesForm.addEventListener("submit", onNotesSubmit);
     ui.notesInput.addEventListener("input", renderNotesState);
+
+    ui.triviaBankLoadBtn.addEventListener("click", onTriviaBankLoad);
+    ui.triviaBankSaveBtn.addEventListener("click", onTriviaBankSave);
+    ui.triviaBankResetBtn.addEventListener("click", onTriviaBankReset);
+    ui.triviaBankInput.addEventListener("input", renderTriviaBankState);
 
     trackDragging(ui.volumeInput);
     ui.volumeInput.addEventListener("input", () => {

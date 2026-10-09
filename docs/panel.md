@@ -14,7 +14,7 @@ El orquestador sigue sirviendo el mismo panel en `http://127.0.0.1:8780/` como r
 
 ## Dónde se guardan los ajustes
 
-Los ajustes son de Sonia, no de un equipo: el texto del letrero, los avisos del día, el volumen, la sensibilidad del micrófono, la voz, la animación de stand, los subtítulos, las animaciones que no usa por su cuenta, los de «Developer» (boca, cámara y movimiento en reposo) y los personajes guardados en el editor (el de Sonia y el de Jean del Modo Jean) se guardan **en la nube** y valen para todas las Sonias (`SHARED_SETTINGS` en `server/sonia/panel/control.py`). Da igual desde dónde se cambien, el panel de Cloudflare o el local (`http://127.0.0.1:8780`): el orquestador los aplica al momento y los sube a la nube, que los reparte a las demás Sonias conectadas.
+Los ajustes son de Sonia, no de un equipo: el texto del letrero, los avisos del día, el volumen, la sensibilidad del micrófono, la voz, la animación de stand, los subtítulos, las animaciones que no usa por su cuenta, los de «Developer» (boca, cámara y movimiento en reposo), los personajes guardados en el editor (el de Sonia y el de Jean del Modo Jean) y el banco de preguntas de la trivia se guardan **en la nube** y valen para todas las Sonias (`SHARED_SETTINGS` en `server/sonia/panel/control.py`). Da igual desde dónde se cambien, el panel de Cloudflare o el local (`http://127.0.0.1:8780`): el orquestador los aplica al momento y los sube a la nube, que los reparte a las demás Sonias conectadas.
 
 Cada orquestador guarda además una copia en `cache/panel_state.json`, así que sin internet arranca con lo último que supo y lo que se cambie desde el panel local queda apuntado como pendiente (`pending_settings`) hasta que la nube lo confirma al volver la conexión. Si con la red caída se cambia algo aquí y otra Sonia cambia lo mismo, gana el último cambio que llega a la nube.
 
@@ -197,7 +197,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   - `viewers`: cuántos navegadores miran.
   - `live`: si la cámara sale ahora del stand (sala conectada y alguien mirando).
   - `video`: las estadísticas del vídeo.
-- `trivia` (modo trivia, ver `docs/trivia.md`): `available`, si hay preguntas suficientes en `assets/trivia/preguntas.md` (si la trivia está apagada con `TRIVIA_ENABLED=false`, no aparece `trivia` en `capabilities`); `active`; `phase` (`off`, `asking` esperando respuesta o `revealing` con el resultado en pantalla); `number` y `total`; `threshold`, los aciertos para ganar; `score`, y la pregunta en curso con sus tres `options`.
+- `trivia` (modo trivia, ver `docs/trivia.md`): `available`, si hay preguntas suficientes en `assets/trivia/preguntas.md` (si la trivia está apagada con `TRIVIA_ENABLED=false`, no aparece `trivia` en `capabilities`); `active`; `phase` (`off`, `asking` esperando respuesta o `revealing` con el resultado en pantalla); `number` y `total`; `threshold`, los aciertos para ganar; `score`, y la pregunta en curso con sus tres `options`. Además `bank` (preguntas válidas del banco en uso), `bank_source` (`cloud` si es el guardado desde el panel, `app` si es el archivo de la app) y `bank_levels` (cuántas hay de cada nivel); las Sonias anteriores al banco en la nube no los mandan ni tienen la capacidad `trivia_bank`.
 - `gesture_director` (gestos al hablar, ver `docs/gestos.md`): `null` si está apagado (`GESTURES_ENABLED=false` o sin clave para su modelo). Si no, contadores desde que arrancó el orquestador: `catalog`, cuántos gestos mandó Unity; `requests`, peticiones al modelo; `gestures`, gestos mandados a Unity (de ellos, `fallbacks` de relleno); `none`, frases en las que eligió no gesticular (incluidos `unknown`, respuestas que no eran un gesto, y `vetoed`, gestos que tiró la regla de frecuencia); `late`, gestos que llegaban tarde; `failures`, fallos o esperas agotadas del modelo; `avg_latency_s`, lo que tarda de media, y `last`, el último gesto. Solo informativo: la página aún no lo muestra.
 - `settings_sync`: `cloud` es `off` (sin `PANEL_CLOUD_TOKEN`), `offline` u `online`; `synced`, si ya llegaron los ajustes de la nube en esta conexión; `pending`, los ajustes cambiados aquí que la nube aún no ha confirmado, y `rev`, la última revisión de la nube aplicada.
 
@@ -249,6 +249,8 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `trivia_restart` | | Reinicia la trivia: una partida nueva desde la primera pregunta (corta la que haya). |
 | `trivia_answer` | `option`: `A`, `B`, `C` o `pass` | Contesta por el visitante (si con el ruido Sonia no le entiende); `pass` es «no lo sabe». |
 | `trivia_stop` | | Termina la trivia en curso. |
+| `trivia_bank` | | Devuelve en `message` el banco de preguntas en uso, entero y con el formato de `assets/trivia/preguntas.md` (el de la nube o el de la app), para editarlo. |
+| `set_trivia_bank` | `text` (hasta 100 000 caracteres) | Guarda el banco en la nube (ajuste compartido `trivia_bank`) para todas las Sonias actualizadas, desde su próxima partida. Se rechaza si no llega a las preguntas de una partida; avisa de las mal formadas y de los niveles cortos. Vacío vuelve al banco de la app. |
 
 ### `WS /api/events`
 
@@ -309,7 +311,8 @@ El Durable Object guarda un único documento de ajustes (clave `settings` de su 
 - Al recibir un `hello` con `settings`, si aún no hay documento, esa Sonia lo siembra con todos sus `values`; si ya lo hay, solo se mezclan sus `pending` (lo que cambió sin conexión). Siempre se le contesta con `settings`.
 - Al recibir `settings` con `changes`, los mezcla, sube `rev` y lo guarda (una escritura) si algo cambió de verdad; contesta a esa Sonia con su `ack` y reparte el documento a las demás conectadas.
 - Una Sonia anterior a esto (su `hello` sin `settings`) ni siembra ni recibe ajustes.
-- Tope de 256 KB en JSON.
+- Tope de 256 KB en JSON (el banco de la trivia, el ajuste más grande, se limita a 100 000 caracteres).
+- Las Sonias ignoran los ajustes que no conocen: una app anterior al banco de la trivia en la nube recibe `trivia_bank` y sigue con su archivo.
 
 ### API del navegador en Cloudflare
 
@@ -318,7 +321,7 @@ Es la misma API del panel local con un parámetro `instance` (el `id` de la Soni
 - `GET /api/instances` → `{"instances": [...], "conflicts": {"connected": ["id1", "id2"], "conversing": ["id1", "id2"]}}`. Cada instancia: `id`, `name`, `host`, `connected`, `last_seen` (ms desde 1970), `mode`, `state`, `engine`, `healthy` (bool), `issues` (frases de lo que falla), `cost_usd`. Incluye las desconectadas vistas en las últimas 2 horas.
 - `GET /api/status?instance=<id>` → la instantánea de esa Sonia más `"instance": {...}`. 404 si no se conoce.
 - `GET /api/gallery?instance=<id>` → `{"images": [{"id", "url"}]}`: ids que mandó esa Sonia; las imágenes se sirven desde los estáticos del Worker (`/gallery/<archivo>`, copiadas de `assets/gallery` al desplegar). Un id sin archivo en Cloudflare sale sin miniatura.
-- `POST /api/action` con `{"instance": "<id>", "action": ..., ...}` y la cabecera `X-Sonia-Panel: 1` → `{"ok", "message"}`. 503 si esa Sonia no está conectada, 504 si no contesta en 15 s.
+- `POST /api/action` con `{"instance": "<id>", "action": ..., ...}` y la cabecera `X-Sonia-Panel: 1` → `{"ok", "message"}`. Cuerpo de hasta 320 KB (cabe el banco de la trivia). 503 si esa Sonia no está conectada, 504 si no contesta en 15 s.
 - `WS /api/events?instance=<id>` → igual que el local (`history`, `status`, `message`, `log` de esa Sonia) más `{"type": "instances", ...}` (misma forma que `GET /api/instances`) al conectar y cada vez que cambia la lista o el modo de alguna. El navegador puede mandar `{"type": "select", "instance": "<id>"}` para cambiar de Sonia sin reconectar.
 - `WS /api/guest?instance=<id>` → sala de vídeo de esa Sonia (Durable Object `GuestRoom`, uno por Sonia), para el Modo Jean y para «Ver cámara». Recibe:
   - la cámara del stand en JPEG;

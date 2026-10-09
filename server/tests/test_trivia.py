@@ -10,7 +10,14 @@ from typing import Any
 from sonia.actions import build_default_registry
 from sonia.actions.trivia import SCRIPT_PREFIX
 from sonia.config import TriviaSettings
-from sonia.trivia import PASS, TriviaBank, TriviaGame, TriviaPhase, parse_questions
+from sonia.trivia import (
+    PASS,
+    TriviaBank,
+    TriviaGame,
+    TriviaPhase,
+    count_headings,
+    parse_questions,
+)
 from sonia.trivia.game import STICKY_QUESTION, STICKY_START
 from sonia.types import ActionContext
 
@@ -151,6 +158,78 @@ def test_barajar_conserva_la_respuesta_correcta() -> None:
         shuffled = question.shuffled(rng)
         assert sorted(shuffled.options) == sorted(question.options)
         assert shuffled.options[shuffled.correct] == "Correcta dos"
+
+
+def test_cuenta_las_preguntas_mal_formadas_pero_no_las_comentadas() -> None:
+    assert count_headings(BANK) == 5
+    assert len(TriviaBank.from_text(BANK, source="prueba")) == 3
+    assert TriviaBank.from_text(BANK, source="prueba").levels() == {
+        "fácil": 0,
+        "intermedio": 3,
+        "difícil": 0,
+    }
+
+
+def test_el_sorteo_no_repite_hasta_agotar_el_nivel() -> None:
+    text = (
+        "".join(f"## [fácil] ¿Fácil {i}?\n- [x] Sí\n- [ ] No\n- [ ] Quizá\n\n" for i in range(7))
+        + "## [difícil] ¿Difícil?\n- [x] Sí\n- [ ] No\n- [ ] Quizá\n"
+    )
+    bank = TriviaBank.from_text(text, source="prueba")
+    rng = random.Random(3)
+    recent: dict[str, int] = {}
+    seen: list[set[str]] = []
+    for game in range(3):
+        drawn = bank.draw(3, rng, "fácil", recent=recent)
+        assert all(q.level == "fácil" for q in drawn)
+        seen.append({q.text for q in drawn})
+        recent.update({q.text: game for q in drawn})
+    # Las seis primeras son distintas y la tercera partida trae la que faltaba más dos
+    # de la primera, las que llevan más tiempo sin salir.
+    assert len(seen[0] | seen[1]) == 6
+    missing = {f"¿Fácil {i}?" for i in range(7)} - seen[0] - seen[1]
+    assert len(missing) == 1 and missing <= seen[2]
+    assert seen[2] - missing <= seen[0]
+
+
+async def test_la_partida_no_repite_preguntas_entre_partidas(tmp_path: Path) -> None:
+    six = "".join(f"## ¿Pregunta {i}?\n- [x] Sí\n- [ ] No\n- [ ] Quizá\n\n" for i in range(6))
+    game, _, _ = make_game(tmp_path)
+    (tmp_path / "preguntas.md").write_text(six, encoding="utf-8")
+    asked: list[str] = []
+    for _ in range(2):
+        ok, _ = await game.start("panel")
+        assert ok
+        asked += [q.text for q in game._questions]
+        await game.stop("panel")
+    assert len(set(asked)) == 6
+
+
+def test_el_banco_de_la_nube_manda_y_uno_corto_no_se_usa(tmp_path: Path) -> None:
+    game, _, _ = make_game(tmp_path)
+    assert game.snapshot()["bank_source"] == "app" and game.snapshot()["bank"] == 3
+    cloud = "".join(f"## ¿Nube {i}?\n- [x] Sí\n- [ ] No\n- [ ] Quizá\n\n" for i in range(4))
+    assert game.use_cloud_bank(cloud)
+    snap = game.snapshot()
+    assert snap["bank_source"] == "cloud" and snap["bank"] == 4
+    assert snap["bank_levels"]["intermedio"] == 4
+    assert game.bank_text() == cloud
+    # Con menos preguntas que una partida (3) sigue el de la app.
+    short = "## ¿Sola?\n- [x] Sí\n- [ ] No\n- [ ] Quizá\n"
+    assert not game.use_cloud_bank(short)
+    assert game.snapshot()["bank_source"] == "app" and game.snapshot()["bank"] == 3
+    assert game.bank_text() == BANK
+    assert game.use_cloud_bank(cloud) and not game.use_cloud_bank(None)
+    assert game.snapshot()["bank_source"] == "app"
+
+
+async def test_con_banco_de_la_nube_la_partida_no_relee_el_archivo(tmp_path: Path) -> None:
+    game, _, _ = make_game(tmp_path)
+    cloud = "".join(f"## ¿Nube {i}?\n- [x] Sí\n- [ ] No\n- [ ] Quizá\n\n" for i in range(3))
+    game.use_cloud_bank(cloud)
+    ok, _ = await game.start("panel")
+    assert ok
+    assert {q.text for q in game._questions} == {"¿Nube 0?", "¿Nube 1?", "¿Nube 2?"}
 
 
 def test_el_banco_del_repo_tiene_preguntas_validas_y_cortas() -> None:

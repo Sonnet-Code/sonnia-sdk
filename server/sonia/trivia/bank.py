@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import random
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +26,7 @@ __all__ = [
     "OPTION_LETTERS",
     "TriviaBank",
     "TriviaQuestion",
+    "count_headings",
     "normalize_level",
 ]
 
@@ -96,20 +98,50 @@ class TriviaBank:
             return cls([])
         return cls(parse_questions(text, source=path.name))
 
+    @classmethod
+    def from_text(cls, text: str, *, source: str) -> TriviaBank:
+        """Las preguntas válidas de un texto con el formato del archivo (el banco de la nube)."""
+        return cls(parse_questions(text, source=source))
+
+    def levels(self) -> dict[str, int]:
+        """Cuántas preguntas hay de cada nivel."""
+        counts = dict.fromkeys(LEVELS, 0)
+        for question in self.questions:
+            counts[question.level] = counts.get(question.level, 0) + 1
+        return counts
+
     def draw(
-        self, count: int, rng: random.Random, level: str | None = None
+        self,
+        count: int,
+        rng: random.Random,
+        level: str | None = None,
+        *,
+        recent: Mapping[str, int] | None = None,
     ) -> list[TriviaQuestion]:
         """``count`` preguntas distintas al azar, con las opciones barajadas.
 
         Con ``level``, primero las de ese nivel y, si no llegan, las de los niveles
-        más cercanos.
+        más cercanos. Con ``recent`` (pregunta -> partida en que salió por última
+        vez), dentro de cada nivel primero las que nunca han salido y después las
+        que hace más que salieron: no se repite ninguna hasta agotar las del nivel.
         """
         pool = list(self.questions)
         rng.shuffle(pool)
-        if level in LEVELS:
-            target = LEVELS.index(level)
-            pool.sort(key=lambda q: abs(LEVELS.index(q.level) - target))
+        target = LEVELS.index(level) if level in LEVELS else None
+        seen = recent or {}
+
+        def order(question: TriviaQuestion) -> tuple[int, int]:
+            distance = 0 if target is None else abs(LEVELS.index(question.level) - target)
+            return distance, seen.get(question.text, -1)
+
+        pool.sort(key=order)
         return [q.shuffled(rng) for q in pool[: min(count, len(pool))]]
+
+
+def count_headings(text: str) -> int:
+    """Cuántas preguntas (líneas ``## ``) tiene un texto, válidas o no."""
+    lines = _COMMENT.sub("", text).splitlines()
+    return sum(1 for line in lines if line.strip().startswith("## "))
 
 
 def parse_questions(text: str, *, source: str = "preguntas.md") -> list[TriviaQuestion]:

@@ -341,3 +341,28 @@ async def test_el_avatar_de_jean_viaja_con_los_ajustes_de_la_nube(tmp_path: Path
         )
         assert rig.control.status()["avatar"]["custom"] is False
     assert PanelState.load(tmp_path / "cache" / "panel_state.json").guest_avatar == JEAN
+
+
+async def test_el_banco_de_la_trivia_viaja_con_los_ajustes_de_la_nube(tmp_path: Path) -> None:
+    from tests.test_panel import TRIVIA_BANK
+
+    (tmp_path / "trivia").mkdir()
+    (tmp_path / "trivia" / "preguntas.md").write_text(TRIVIA_BANK, encoding="utf-8")
+    cloud = "".join(f"## ¿Nube {i}?\n- [x] Sí\n- [ ] No\n- [ ] Quizá\n\n" for i in range(6))
+    room = FakeRoom()
+    async with linked(tmp_path, room) as (rig, _):
+        await room.wait_for(lambda: bool(room.of_type("hello")))
+        values = room.of_type("hello")[0]["settings"]["values"]
+        assert values["trivia_bank"] is None
+        assert rig.control.status()["trivia"]["bank_source"] == "app"
+        await room.send(
+            {"type": "settings", "settings": {**values, "trivia_bank": cloud}, "rev": 7, "ack": 0}
+        )
+        await wait_until(lambda: rig.control.status()["trivia"]["bank_source"] == "cloud")
+        assert rig.control.status()["trivia"]["bank"] == 6
+        # Si la nube lo borra (vuelve al de la app), se deja de usar.
+        await room.send(
+            {"type": "settings", "settings": {**values, "trivia_bank": None}, "rev": 8, "ack": 0}
+        )
+        await wait_until(lambda: rig.control.status()["trivia"]["bank_source"] == "app")
+    assert PanelState.load(tmp_path / "cache" / "panel_state.json").trivia_bank is None

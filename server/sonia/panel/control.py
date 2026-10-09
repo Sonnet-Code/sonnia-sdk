@@ -117,6 +117,7 @@ SHARED_SETTINGS: tuple[str, ...] = (
     "tuning",
     "avatar",
     "guest_avatar",
+    "trivia_bank",
 )
 
 #: Ajustes de «Developer»: grupo -> valor -> (mínimo, máximo, por defecto). La
@@ -149,6 +150,10 @@ NOTES_MAX_LEN = 1_000
 
 #: Tope del texto del letrero de «Fuera».
 AWAY_MESSAGE_MAX_LEN = 140
+
+#: Tope del banco de preguntas de la trivia guardado en la nube (unas 450 preguntas):
+#: la nube guarda todos los ajustes compartidos en un documento de 256 KB.
+TRIVIA_BANK_MAX_LEN = 100_000
 
 #: Primer saludo al entrar en el modo saludos.
 GREETER_FIRST_DELAY_S = 4.0
@@ -228,6 +233,9 @@ class PanelState:
     avatar: str | None = None
     #: Lo mismo para el invitado del Modo Jean; ``None``: su avatar de prueba.
     guest_avatar: str | None = None
+    #: Banco de preguntas de la trivia guardado desde el panel (formato de
+    #: ``assets/trivia/preguntas.md``); ``None``: el que trae la app.
+    trivia_bank: str | None = None
     #: Modo debug: Sonnia quieta (sin GPT-Live ni nada automático) para pruebas visuales.
     debug: bool = False
     #: Gasto del día: segundos de sesión de GPT-Live acumulados en ``usage_date``
@@ -263,6 +271,8 @@ class PanelState:
             state.avatar = _normalize_shared("avatar", raw.get("avatar"))
         with contextlib.suppress(ValueError):
             state.guest_avatar = _normalize_shared("guest_avatar", raw.get("guest_avatar"))
+        with contextlib.suppress(ValueError):
+            state.trivia_bank = _normalize_shared("trivia_bank", raw.get("trivia_bank"))
         for name in ("volume", "mic_gate", "usage_seconds", "trial_seconds"):
             value = raw.get(name)
             if _is_number(value):
@@ -401,7 +411,7 @@ class StandControl:
         if self._room is not None and self._room.can_watch:
             caps.append("camera_watch")
         if self._engine.trivia is not None:
-            caps.append("trivia")
+            caps.extend(("trivia", "trivia_bank"))
         if self._engine.presence_available:
             caps.append("mic_presence")
         return caps
@@ -441,6 +451,8 @@ class StandControl:
             engine.set_showcase_enabled(state.showcase)
         if state.notes:
             await engine.set_notes(state.notes)
+        if state.trivia_bank and engine.trivia is not None:
+            engine.trivia.use_cloud_bank(state.trivia_bank)
         await self._hub.set_sticky("volume", p.msg_set_volume(state.volume))
         await self._hub.set_sticky("subtitles", p.msg_set_subtitles(state.subtitles))
         await self._hub.set_sticky(
@@ -640,7 +652,10 @@ class StandControl:
             return False, f"No se pudo: {exc}"
         # Las renovaciones periódicas (el visor de «Ver cámara») no llenan el registro.
         level = logging.DEBUG if params.get("keepalive") is True else logging.INFO
-        logger.log(level, "Panel: %s %s -> %s", action, _summary(params), result[1])
+        message = result[1]
+        if action == "trivia_bank" and result[0]:
+            message = f"banco de {len(message)} caracteres"  # el banco entero no va al registro
+        logger.log(level, "Panel: %s %s -> %s", action, _summary(params), message)
         return result
 
     def _need_present(self) -> None:
@@ -926,6 +941,53 @@ class StandControl:
             raise _BadRequest(message)
         return True, message
 
+    async def _act_trivia_bank(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """El banco de preguntas en uso, para editarlo en el panel: va entero en el mensaje."""
+        trivia = self._engine.trivia
+        if trivia is None:
+            raise _BadRequest("La trivia está desactivada en esta Sonnia (TRIVIA_ENABLED).")
+        return True, await asyncio.to_thread(trivia.bank_text)
+
+    async def _act_set_trivia_bank(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Guardar en la nube»: el banco de todas las Sonnias. Vacío vuelve al de la app."""
+        from sonia.trivia import TriviaBank, count_headings
+
+        trivia = self._engine.trivia
+        if trivia is None:
+            raise _BadRequest("La trivia está desactivada en esta Sonnia (TRIVIA_ENABLED).")
+        text = _text(params, "text", max_len=TRIVIA_BANK_MAX_LEN)
+        if not text:
+            await self._set_shared("trivia_bank", None)
+            return True, "Vuelve el banco que trae la app, desde la próxima partida."
+        bank = TriviaBank.from_text(text, source="banco del panel")
+        needed = trivia.questions_per_game
+        if len(bank) < needed:
+            raise _BadRequest(
+                f"Solo hay {len(bank)} preguntas válidas y una partida necesita {needed}: "
+                "revisa el formato (## pregunta y tres opciones, una con [x])."
+            )
+        await self._set_shared("trivia_bank", text)
+        levels = bank.levels()
+        message = (
+            f"Banco guardado en la nube: {len(bank)} preguntas ({levels['fácil']} fáciles, "
+            f"{levels['intermedio']} intermedias y {levels['difícil']} difíciles). Sale desde "
+            "la próxima partida en todas las Sonnias actualizadas."
+        )
+        skipped = count_headings(text) - len(bank)
+        if skipped == 1:
+            message += " Se saltó 1 mal formada: necesita tres opciones y una sola [x]."
+        elif skipped > 1:
+            message += (
+                f" Se saltaron {skipped} mal formadas: necesitan tres opciones y una sola [x]."
+            )
+        short = [name for name, count in levels.items() if count < needed]
+        if short:
+            message += (
+                f" El nivel {', '.join(short)} tiene menos de {needed}: se completa con el"
+                " más cercano."
+            )
+        return True, message
+
     async def _act_greet(self, params: dict[str, Any]) -> tuple[bool, str]:
         self._need_sonia_on_stage()
         return await self.greet("greeting")
@@ -1101,6 +1163,10 @@ class StandControl:
         elif key == "guest_avatar":
             state.guest_avatar = value
             await hub.set_sticky("guest_avatar", p.msg_set_guest_avatar(value))
+        elif key == "trivia_bank":
+            state.trivia_bank = value
+            if engine.trivia is not None:
+                engine.trivia.use_cloud_bank(value)
         else:  # pragma: no cover - SHARED_SETTINGS y esto van juntos
             raise ValueError(f"Ajuste desconocido: {key}")
 
@@ -1513,6 +1579,12 @@ def _normalize_shared(key: str, value: Any) -> Any:
         if definition is None:
             raise ValueError(key)
         return definition
+    if key == "trivia_bank":
+        if value is None:
+            return None
+        if not isinstance(value, str) or len(value) > TRIVIA_BANK_MAX_LEN:
+            raise ValueError(key)
+        return value.strip() or None
     raise ValueError(key)
 
 

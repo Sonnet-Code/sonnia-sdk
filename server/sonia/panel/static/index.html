@@ -180,6 +180,23 @@
         </div>
         <p class="note" id="trivia-note" hidden>La trivia necesita a Sonnia en «Conversando».</p>
         <p class="cap-note" data-cap-note="trivia" hidden>Esta Sonnia no tiene trivia: actualiza su orquestador o revisa assets/trivia/preguntas.md.</p>
+        <details class="trivia-bank" id="trivia-bank">
+          <summary><span class="trivia-bank-title">Banco de preguntas</span> <span class="summary-hint" id="trivia-bank-info"></span></summary>
+          <p class="help">Lo que guardes aquí va a la nube y lo usan todas las Sonnias actualizadas desde su próxima partida, sin reiniciar. Cada pregunta es una línea <code>## [fácil] ¿…?</code> (o <code>[intermedio]</code>, <code>[difícil]</code>), tres opciones con <code>- [x]</code> en la correcta y <code>- [ ]</code> en las otras, y si quieres una línea <code>&gt;</code> con un dato para cuando la revele. Mejor opciones cortas, de menos de 35 letras.</p>
+          <div class="row">
+            <button type="button" class="btn" id="trivia-bank-load-btn" data-cap="trivia_bank">Cargar el banco para editarlo</button>
+          </div>
+          <div class="stack" id="trivia-bank-editor" hidden>
+            <label class="visually-hidden" for="trivia-bank-input">Banco de preguntas</label>
+            <textarea id="trivia-bank-input" class="trivia-bank-input" rows="18" maxlength="100000" spellcheck="false" data-cap="trivia_bank"></textarea>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="trivia-bank-save-btn" data-cap="trivia_bank">Guardar en la nube</button>
+              <button type="button" class="btn" id="trivia-bank-reset-btn" data-cap="trivia_bank">Volver al de la app</button>
+              <span class="save-state" id="trivia-bank-state" data-state="saved"></span>
+            </div>
+          </div>
+          <p class="cap-note" data-cap-note="trivia_bank" hidden>Esta Sonnia no tiene el banco en la nube: hay que instalarle una versión más nueva de la app.</p>
+        </details>
       </section>
 
       <!-- ===== Imágenes de la galería ===== -->

@@ -971,6 +971,51 @@ async def test_trivia_desde_el_panel(tmp_path: Path) -> None:
         assert ok and "No hay" in message
 
 
+async def test_banco_de_la_trivia_desde_el_panel(tmp_path: Path) -> None:
+    (tmp_path / "trivia").mkdir()
+    (tmp_path / "trivia" / "preguntas.md").write_text(TRIVIA_BANK, encoding="utf-8")
+    async with make_panel_rig(tmp_path) as rig:
+        rig.settings.trivia.questions = 2
+        assert "trivia_bank" in rig.control.capabilities
+        status = rig.control.status()["trivia"]
+        assert status["bank_source"] == "app" and status["bank"] == 2
+
+        ok, text = await rig.control.act("trivia_bank", {})
+        assert ok and text == TRIVIA_BANK
+
+        ok, message = await rig.control.act(
+            "set_trivia_bank", {"text": "## ¿Una?\n- [x] Sí\n- [ ] No\n- [ ] Quizá\n"}
+        )
+        assert not ok and "Solo hay 1" in message
+        assert rig.control.status()["settings_sync"]["pending"] == []
+
+        cloud = TRIVIA_BANK + "\n## [difícil] ¿Tercera?\n- [x] Sí\n- [ ] No\n\n## ¿Cuarta?\n"
+        cloud += "- [ ] No\n- [x] Sí\n- [ ] Quizá\n"
+        ok, message = await rig.control.act("set_trivia_bank", {"text": cloud})
+        assert ok and "3 preguntas" in message and "Se saltó 1 mal formada" in message, message
+        assert "fácil" in message and "difícil" in message  # niveles con menos de 2
+        status = rig.control.status()
+        assert status["trivia"]["bank_source"] == "cloud" and status["trivia"]["bank"] == 3
+        assert status["settings_sync"]["pending"] == ["trivia_bank"]
+        ok, text = await rig.control.act("trivia_bank", {})
+        assert ok and text == cloud.strip()
+
+        ok, message = await rig.control.act("set_trivia_bank", {"text": "  "})
+        assert ok and "app" in message
+        assert rig.control.status()["trivia"]["bank_source"] == "app"
+    assert PanelState.load(tmp_path / "cache" / "panel_state.json").trivia_bank is None
+
+
+async def test_el_banco_de_la_nube_sobrevive_al_reinicio(tmp_path: Path) -> None:
+    (tmp_path / "trivia").mkdir()
+    (tmp_path / "trivia" / "preguntas.md").write_text(TRIVIA_BANK, encoding="utf-8")
+    cloud = "".join(f"## ¿Nube {i}?\n- [x] Sí\n- [ ] No\n- [ ] Quizá\n\n" for i in range(6))
+    async with make_panel_rig(tmp_path, state=PanelState(trivia_bank=cloud)) as rig:
+        await rig.conn()
+        status = rig.control.status()["trivia"]
+        assert status["bank_source"] == "cloud" and status["bank"] == 6
+
+
 async def test_sin_banco_la_trivia_no_esta_disponible(tmp_path: Path) -> None:
     async with make_panel_rig(tmp_path) as rig:
         await rig.conn()

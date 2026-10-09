@@ -8,6 +8,7 @@ from sonia.trivia.bank import (
     OPTION_LETTERS,
     TriviaBank,
     TriviaQuestion,
+    count_headings,
     normalize_level,
     parse_questions,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "TriviaPhase",
     "TriviaQuestion",
     "TriviaScreen",
+    "count_headings",
     "normalize_level",
     "parse_questions",
 ]

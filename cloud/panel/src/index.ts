@@ -26,8 +26,8 @@ const PANEL_HOST = "sonia.sonnetcode.com";
 const ALIAS_HOSTS = new Set(["sonnia.sonnetcode.com"]);
 /** Estáticos que se ven sin sesión (los usa la página de entrada). */
 const PUBLIC_PATHS = new Set(["/static/sonnet-code-logo.svg", "/static/favicon.svg", "/favicon.ico"]);
-/** Tamaño máximo del cuerpo de `POST /api/action`. */
-const MAX_ACTION_BYTES = 64 * 1024;
+/** Tamaño máximo del cuerpo de `POST /api/action`: cabe el banco de preguntas de la trivia (`set_trivia_bank`). */
+const MAX_ACTION_BYTES = 320 * 1024;
 /** Ids de Sonnia válidos (el agente los manda en `[a-z0-9-]`; se admite algo más). */
 const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 

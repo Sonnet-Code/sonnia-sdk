@@ -260,6 +260,11 @@ class TriviaGame:
         self._screen = screen
         self._rng = rng or random.Random()
         self._bank = TriviaBank.from_file(bank_file)
+        #: Banco guardado en la nube desde el panel (ajuste compartido ``trivia_bank``);
+        #: ``None``: el archivo que trae la app.
+        self._cloud_text: str | None = None
+        #: Pregunta -> partida en que salió por última vez: no se repiten hasta agotar el nivel.
+        self._asked: dict[str, int] = {}
         self._phase = TriviaPhase.OFF
         self._game = 0
         self._questions: list[TriviaQuestion] = []
@@ -300,6 +305,11 @@ class TriviaGame:
         return self._phase
 
     @property
+    def questions_per_game(self) -> int:
+        """Preguntas de una partida: un banco necesita al menos estas."""
+        return self._total
+
+    @property
     def _total(self) -> int:
         return max(1, self._settings.questions)
 
@@ -319,6 +329,8 @@ class TriviaGame:
         return {
             "available": self.available,
             "bank": len(self._bank),
+            "bank_source": "cloud" if self._cloud_text is not None else "app",
+            "bank_levels": self._bank.levels(),
             "active": self.active,
             "phase": str(self._phase),
             "number": self._index + 1 if question is not None else 0,
@@ -329,6 +341,49 @@ class TriviaGame:
             "question": question.text if question is not None else "",
             "options": list(question.options) if question is not None else [],
         }
+
+    # -- banco de preguntas -------------------------------------------------
+
+    def use_cloud_bank(self, text: str | None) -> bool:
+        """Usa el banco guardado en la nube desde el panel (``None``: el de la app).
+
+        Si no llega a las preguntas de una partida, sigue el de la app: un error al
+        editarlo no puede dejar a Sonia sin trivia. La partida en marcha sigue con sus
+        preguntas; el banco nuevo sale en la siguiente. Devuelve si se usa el de la nube.
+        """
+        if text:
+            bank = TriviaBank.from_text(text, source="banco de la nube")
+            if len(bank) >= self._total:
+                self._cloud_text = text
+                self._bank = bank
+                logger.info("Trivia: banco de la nube con %d preguntas", len(bank))
+                return True
+            logger.warning(
+                "El banco de la nube tiene %d preguntas válidas y hacen falta %d: "
+                "sigue el de la app",
+                len(bank),
+                self._total,
+            )
+        self._cloud_text = None
+        self._bank = TriviaBank.from_file(self._bank_file)
+        return False
+
+    def bank_text(self) -> str:
+        """El banco en uso, en el formato del archivo (para editarlo en el panel). Lee disco."""
+        if self._cloud_text is not None:
+            return self._cloud_text
+        try:
+            return self._bank_file.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.warning("No se pudo leer el banco de la trivia %s: %s", self._bank_file, exc)
+            return ""
+
+    def _draw(self) -> list[TriviaQuestion]:
+        """Las preguntas de la partida, empezando por las que hace más que no salen."""
+        questions = self._bank.draw(self._total, self._rng, self._level, recent=self._asked)
+        for question in questions:
+            self._asked[question.text] = self._game
+        return questions
 
     # -- arranque y final ---------------------------------------------------
 
@@ -349,10 +404,12 @@ class TriviaGame:
             return False, "Ya hay una trivia en marcha."
         if not self._host.connected:
             return False, "Sonnia no está conectada a GPT-Live ahora mismo."
-        # Se relee el banco: se puede editar durante el evento sin reiniciar.
-        bank = TriviaBank.from_file(self._bank_file)
-        if len(bank) >= self._total:
-            self._bank = bank
+        # Se relee el archivo: se puede editar durante el evento sin reiniciar. El banco
+        # de la nube, si lo hay, manda y llega por el panel.
+        if self._cloud_text is None:
+            bank = TriviaBank.from_file(self._bank_file)
+            if len(bank) >= self._total:
+                self._bank = bank
         if len(self._bank) < self._total:
             return False, (
                 f"No hay preguntas suficientes: hay {len(self._bank)} y hacen falta {self._total}."
@@ -361,7 +418,7 @@ class TriviaGame:
         self._level = (
             normalize_level(level) or normalize_level(self._settings.default_level) or DEFAULT_LEVEL
         )
-        self._questions = self._bank.draw(self._total, self._rng, self._level)
+        self._questions = self._draw()
         self._score = 0
         self._final = False
         self._last_user_at = time.monotonic()
@@ -422,7 +479,7 @@ class TriviaGame:
     async def _change_level(self, source: str, level: str | None) -> tuple[bool, str]:
         """Otras preguntas del nivel ``level`` antes de contestar la primera."""
         self._level = normalize_level(level) or self._level
-        self._questions = self._bank.draw(self._total, self._rng, self._level)
+        self._questions = self._draw()
         logger.info("Trivia: nivel %s antes de la primera (%s)", self._level, source)
         self._host.touch()
         await self._show(
