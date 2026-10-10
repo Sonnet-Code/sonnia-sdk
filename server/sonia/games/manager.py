@@ -18,8 +18,9 @@ Lleva un juego a la vez y todo lo común, para que cada juego solo haga lo suyo:
   cambia el modo o la Unity que se conecta no sabe pintarlo.
 - **Reconexión de Unity.** El ``start`` de la partida y su último estado son mensajes
   fijos del hub: se repiten tras ``hello``.
-- **Estado y órdenes del panel**: :meth:`snapshot`, :meth:`capabilities`, ``games_off``
-  y los bancos editables (``game_banks``).
+- **Estado y órdenes del panel**: :meth:`snapshot`, :meth:`capabilities`, ``games_off``,
+  los bancos editables (``game_banks``) y el modelo de poses (``games_pose_model``,
+  :meth:`set_pose_model`).
 
 Nada de lo que pase aquí tumba el motor: los fallos de un juego van al registro.
 """
@@ -46,6 +47,7 @@ from sonia.games.base import (
 )
 from sonia.types import ActionResult
 from sonia.vision.contracts import GameVision
+from sonia.vision.models import DEFAULT_POSE_VARIANT, POSE_VARIANTS, pose_variant
 from sonia.ws import protocol as p
 
 if TYPE_CHECKING:
@@ -61,6 +63,7 @@ __all__ = [
     "VoiceClips",
     "normalize_game_banks",
     "normalize_games_off",
+    "normalize_pose_model",
 ]
 
 logger = logging.getLogger(__name__)
@@ -225,6 +228,9 @@ class GameManager:
             host = ManagedGameHost(self, cls.id)
             self._hosts[cls.id] = host
             self._games[cls.id] = cls(host)
+        #: Modelo de poses pedido desde el panel (ajuste compartido ``games_pose_model``);
+        #: ``None``: el de ``GAME_POSES_MODEL``. Se guarda por si la visión llega después.
+        self._pose_model_request: str | None = None
         #: Apagados desde el panel (ajuste compartido ``games_off``).
         self._off: frozenset[str] = frozenset()
         #: Bancos guardados en la nube desde el panel (``game_banks``): ``{banco: texto}``.
@@ -252,6 +258,8 @@ class GameManager:
     def attach_vision(self, vision: GameVision) -> None:
         """La visión de los juegos (``build_game_vision``), que se monta después del manager."""
         self._vision = vision
+        if self._pose_model_request is not None:
+            self._apply_pose_model()
 
     @property
     def vision(self) -> GameVision:
@@ -394,6 +402,7 @@ class GameManager:
             "banks": self.bank_list(),
             "unity_games": sorted(self._unity_games) if self._unity_games is not None else None,
             "preview": self.preview_supported(),
+            "pose_model": self._pose_model_state(),
         }
 
     def capabilities(self) -> list[str]:
@@ -408,7 +417,55 @@ class GameManager:
         caps.extend(f"game:{gid}" for gid in self._games if gid in shown)
         if any(type(g).banks() for g in self._games.values()):
             caps.append("game_banks")
+        if self._pose_model_setter() is not None:
+            caps.append("game_pose_model")
         return caps
+
+    # -- panel: modelo de poses -------------------------------------------------
+
+    def set_pose_model(self, variant: str | None) -> None:
+        """El modelo de poses que pide el panel (ajuste compartido ``games_pose_model``).
+
+        ``n`` (ligero) o ``s`` (preciso); ``None`` (o algo que no es ninguno) vuelve al de
+        ``GAME_POSES_MODEL``. No bloquea: el detector carga el nuevo en un hilo y sigue con
+        el viejo mientras tanto, también con una partida en marcha. Sin un detector que lo
+        admita (``set_variant``), no hace nada.
+        """
+        self._pose_model_request = normalize_pose_model(variant)
+        self._apply_pose_model()
+
+    def _pose_model_default(self) -> str:
+        """El de ``GAME_POSES_MODEL``."""
+        games = getattr(self._settings, "games", None)
+        poses = getattr(games, "poses", None)
+        return normalize_pose_model(getattr(poses, "model", None)) or DEFAULT_POSE_VARIANT
+
+    def _pose_model_setter(self) -> Callable[[str], None] | None:
+        """``set_variant`` del detector de poses, si lo tiene (por duck typing)."""
+        setter = getattr(self._vision.poses, "set_variant", None)
+        return setter if callable(setter) else None
+
+    def _apply_pose_model(self) -> None:
+        setter = self._pose_model_setter()
+        if setter is None:
+            return
+        wanted = self._pose_model_request or self._pose_model_default()
+        try:
+            setter(wanted)
+        except Exception:  # noqa: BLE001 - el panel no tumba el motor
+            logger.exception("No se pudo cambiar el modelo de poses a %s", wanted)
+
+    def _pose_model_state(self) -> dict[str, Any] | None:
+        """``{"current", "default", "options"}`` para el panel, o ``None`` si no se puede cambiar."""
+        if self._pose_model_setter() is None:
+            return None
+        default = self._pose_model_default()
+        current = normalize_pose_model(getattr(self._vision.poses, "variant", None))
+        return {
+            "current": current or default,
+            "default": default,
+            "options": list(POSE_VARIANTS),
+        }
 
     # -- panel: interruptores -------------------------------------------------
 
@@ -511,7 +568,8 @@ class GameManager:
         self._last_activity = now
         self._screen_started = False
         self._nudge_at = 0.0
-        self._delegated_at = float("-inf")
+        # ``_delegated_at`` no se olvida: el turno que pidió el juego delegó start_game y,
+        # si se olvidara, su final de turno daría un empujón de más (banco de pruebas).
         self._tick_failures = 0
         self._pending = None
         self._engine.touch()
@@ -1130,6 +1188,11 @@ def normalize_games_off(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return sorted({v for v in value if p.is_game_name(v)})
+
+
+def normalize_pose_model(value: Any) -> str | None:
+    """``games_pose_model`` tal como llega de la nube: ``n``, ``s`` o ``None`` (el de los ajustes)."""
+    return pose_variant(value)
 
 
 def normalize_game_banks(value: Any) -> dict[str, str] | None:

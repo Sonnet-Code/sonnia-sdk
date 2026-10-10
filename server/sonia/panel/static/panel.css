@@ -764,6 +764,123 @@ summary:focus-visible,
   margin-top: 4px;
 }
 
+/* ---------- Juegos ---------- */
+
+/* Un juego por fila: su botón de empezar, su interruptor y, si no se puede, por qué */
+.game-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.game-list:empty {
+  display: none;
+}
+
+.game-item {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.game-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+
+/* El título arriba y, si usa la cámara, la etiqueta debajo: así no se parten las palabras */
+.game-play {
+  flex: 1 1 150px;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  text-align: left;
+}
+
+.game-title {
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.game-badge {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--na-bg);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.game-switch {
+  flex: none;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.game-reason {
+  margin: 0;
+  color: var(--warn);
+  font-size: 14px;
+}
+
+/* Apagado desde el panel: no se ofrece ni se puede empezar */
+.game-item.is-off .game-play {
+  border-style: dashed;
+  color: var(--na);
+  text-decoration: line-through;
+}
+
+/* El que está en la pantalla ahora */
+.game-item.is-playing {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(3, 113, 245, 0.18);
+}
+
+.game-item.is-playing .game-play,
+.game-item.is-playing .game-play:disabled {
+  opacity: 1;
+  background: var(--blue);
+  border-color: var(--blue-strong);
+  color: #fff;
+}
+
+.game-item.is-playing .game-badge {
+  background: rgb(255 255 255 / 0.22);
+  color: #fff;
+}
+
+.game-bank-detail {
+  margin: 8px 0 0;
+}
+
+.game-pose {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.game-pose-label {
+  font-weight: 700;
+}
+
+.game-pose-help {
+  margin: 8px 0 0;
+  font-size: 15px;
+}
+
+#juegos > .row {
+  margin-top: 4px;
+}
+
 /* ---------- Imágenes ---------- */
 
 .now-showing {

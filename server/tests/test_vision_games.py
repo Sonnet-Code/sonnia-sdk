@@ -15,6 +15,7 @@ from sonia.vision.camera import OpenCVCamera, UnityCamera
 from sonia.vision.games import NoJudge, build_game_vision
 from sonia.vision.hands import MediaPipeHandDetector
 from sonia.vision.judge import ModelJudge
+from sonia.vision.models import HAND_LANDMARKS, PALM_DETECTOR, POSE_MODELS
 from sonia.vision.poses import YoloPoseDetector
 from sonia.vision.stream import LivePreview, OpenCVCameraStream
 
@@ -110,7 +111,32 @@ async def test_si_faltan_los_modelos_se_bajan_en_un_hilo(
     build(settings, OpenCVCamera(settings.vision), download_models=True)
     assert await asyncio.to_thread(done.wait, 2.0)
     assert calls[0][0] == tmp_path
-    assert calls[0][1][0].startswith("yolov8")
+    # Al arrancar solo se exigen el de GAME_POSES_MODEL (n por defecto) y los de manos.
+    assert calls[0][1] == (
+        POSE_MODELS["n"].name,
+        PALM_DETECTOR.name,
+        HAND_LANDMARKS.name,
+    )
+
+
+async def test_al_arrancar_no_se_exige_el_otro_modelo_de_poses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Con el de GAME_POSES_MODEL y los de manos ya en su sitio, no se baja nada más."""
+    for model in (POSE_MODELS["s"], PALM_DETECTOR, HAND_LANDMARKS):
+        with (tmp_path / model.name).open("wb") as handle:
+            handle.truncate(model.size)  # disperso: no ocupa disco
+    calls: list[Any] = []
+    preloaded = threading.Event()
+    monkeypatch.setattr(models_module, "download_game_models", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(YoloPoseDetector, "preload", lambda self: preloaded.set() or True)
+    monkeypatch.setattr(MediaPipeHandDetector, "preload", lambda self: True)
+    settings = make_settings(tmp_path)
+    settings.games.poses.model = "s"
+    vision = build(settings, OpenCVCamera(settings.vision), download_models=True)
+    assert await asyncio.to_thread(preloaded.wait, 2.0)
+    assert calls == []
+    assert vision.poses.variant == "s"
 
 
 def test_si_algo_falla_al_montar_no_lanza(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

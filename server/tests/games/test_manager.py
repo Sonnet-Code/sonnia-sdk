@@ -491,6 +491,21 @@ async def test_empujon_si_el_visitante_habla_y_no_se_delega() -> None:
     assert len(engine.spoken) == 1
 
 
+async def test_el_turno_que_pide_el_juego_no_da_empujon() -> None:
+    # GPT-Live delega start_game antes de que se cierre el turno del visitante que lo pidió.
+    manager, engine, _, clock = await make_manager([ProbeGame])
+    started = clock()
+    manager.on_delegation(clock())
+    await manager.start("sonda", "voice")
+    probe(manager).nudge_text = "SONDA: delega su jugada."
+    clock.advance(1)
+    manager.on_user_turn_end(clock(), started)
+    clock.advance(5)
+    await manager.tick(clock())
+    await settle()
+    assert engine.spoken == []
+
+
 async def test_un_tick_que_falla_sin_parar_cancela_la_partida() -> None:
     manager, _, _, clock = await make_manager([ProbeGame])
     await manager.start("sonda", "voice")
