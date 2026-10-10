@@ -82,8 +82,6 @@ CALM_QUIET_S = 0.6
 #: Con Sonia ya callada, se espera además a que nadie hable como mucho esto: en un stand con
 #: barullo (el grupo ríe tras cada ronda) la sesión casi nunca queda del todo en calma.
 CALM_IDLE_MAX_S = 4.0
-#: De que Sonnia empieza a demostrar la pose (evento ``round``) a la orden.
-DEMO_LEAD_S = 1.4
 #: La orden tiene que empezar a sonar en esto (si no, se sigue igual)...
 PHRASE_START_MAX_S = 4.5
 #: ...y como mucho dura esto.
@@ -435,13 +433,17 @@ class PosesGame(Game):
             await self._wait_calm()
         self._index = index
         entry, simon = self._plan[index]
-        self._order = ""
-        self._count = self._total = 0
-        await self._show("round")
-        await self._pause(DEMO_LEAD_S)
         self._order = entry.order(simon)
+        self._count = self._total = 0
+        # En la pantalla sigue lo anterior hasta que suene la orden: si Sonia alarga la
+        # explicación o vuelve a hablar, el pictograma, la demostración y el rótulo salen
+        # con la frase grabada, no antes (con GPT-Live real salían 5,9 s antes). Mientras,
+        # la fase ya es la de la ronda para que los esqueletos sigan en gris.
+        self._phase = "round"
+        said = await self._say(self._order)
+        await self._show("round")
         await self._show("command")
-        if await self._say(self._order):
+        if said:
             await self._wait_phrase()
         self._seconds = max(0.3, float(self._cfg().window_seconds))
         await self._show("window")
