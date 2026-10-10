@@ -729,13 +729,22 @@ async def test_unity_que_se_reconecta_recibe_la_rejilla_y_el_tablero() -> None:
     assert all(m["game"] == "wordle" for m in replay)
 
 
-async def test_stop_game_cancela_la_partida() -> None:
+async def test_stop_game_ensena_la_palabra_y_se_la_pasa_a_sonia() -> None:
+    # Terminarlo por voz con la partida en marcha ya no cancela a secas: se enseña la palabra
+    # con su pista (la pantalla de la derrota) y GPT-Live recibe cuál era para decirla.
     manager, engine, screen, _, registry, ctx = await rig()
     await registry.execute("start_game", {"juego": "wordle"}, ctx)
     await registry.execute("wordle_guess", {"palabra": "LINUX"}, ctx)
+    secret = secret_of(manager)
+    hint = {e.word: e.hint for e in parse_words(bank_text()).entries}[secret]
     result = await registry.execute("stop_game", {}, ctx)
-    assert "terminado" in result.text
-    assert screen.game_msgs("end")[-1]["data"] == {"result": "cancel"}
+    assert result.text.startswith(f"{SCRIPT_PREFIX} Lo dejan aquí: la palabra era {secret}.")
+    assert hint in result.text
+    last = screen.game_msgs("guess")[-1]["data"]
+    assert (last["result"], last["word"], last["hint"]) == ("lose", secret, hint)
+    assert [row["letters"] for row in last["board"]] == ["LINUX"]
+    await settle()
+    assert screen.game_msgs("end")[-1]["data"] == {"word": secret, "attempts": 1, "result": "lose"}
     assert not manager.active and screen.replay() == []
     assert "vuelve a conversar con normalidad" in engine.instructions[-1]
     late = await registry.execute("wordle_guess", {"palabra": "REACT"}, ctx)
@@ -754,7 +763,9 @@ async def test_cancelar_en_pleno_intento_no_rompe_nada() -> None:
     screen.set_sticky = slow  # type: ignore[method-assign]
     guess = asyncio.create_task(registry.execute("wordle_guess", {"palabra": "LINUX"}, ctx))
     await asyncio.sleep(0)
-    await manager.stop("panel")
+    # Se cae la sesión a mitad del intento: se cancela (terminarla por voz o desde el panel
+    # enseña la palabra; ver test_wordle_parar.py).
+    await manager.on_session_lost()
     result = await guess
     assert not result.text.startswith("Error")
     await settle()
