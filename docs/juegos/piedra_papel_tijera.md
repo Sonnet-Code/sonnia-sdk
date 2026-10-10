@@ -60,6 +60,17 @@ No hay jugadas delegadas: la jugada del visitante no se entiende por voz, la lee
 ronda no depende de que GPT-Live delegue a tiempo. Lo que tiene que decir le llega por `speak`
 (`commentary`): «sacaste tijera y el jugador piedra: gana el jugador; marcador...».
 
+## Control a mano (panel)
+
+Por si falla la voz o la cámara, el equipo lleva la partida desde el panel (`panel_controls`, `panel_control`; «Reiniciar» y «Terminar» los pone el manager para todos):
+
+| Control | Cuándo | Qué hace |
+|---|---|---|
+| «Piedra» / «Papel» / «Tijera» | Durante la tirada (`ready`, `countdown` y `reading`, también con el juez mirando) | La jugada del visitante en esa tirada: manda sobre la lectura local y sobre el juez, que ya no mira; la lectura se corta en cuanto se pulsa. |
+| «Otra ronda» | Entre tiradas (`intro`, `waiting` y `result`) | La tirada siguiente ya, sin esperar a que Sonia termine ni a que la cámara vea a alguien delante: con la cámara que no detecta a nadie, «Otra ronda» y la jugada del panel llevan la partida entera. |
+
+Fuera de esas fases, `GameError` con el motivo para el equipo. Ninguno tiene guion para Sonia: el resultado se lo cuenta el juego como siempre. Tests en `server/tests/games/test_controles_camara.py`.
+
 ## Pantalla
 
 Sus eventos están en `docs/protocolo.md` («Eventos de cada juego», `piedra_papel_tijera`). En
@@ -100,7 +111,10 @@ Todo en el equipo del stand, en hilos y sin guardar nada (`docs/juegos-vision.md
   el puño que se agita antes del «ya» se lee piedra y manda lo que viene después. Si al acabar no
   hay tramo estable, o la última lectura lo contradice, se alarga hasta 0,6 s más.
 - **Juez de Gemini** (`GAMES_JUDGE=gemini`). La lectura local sigue igual y elige el momento: el
-  frame de la muestra estable o, si no la hay, el último leído. Ese frame, solo en memoria, va a
+  frame más reciente de la lectura en el que vio una mano, aunque no la entendiera (en el stand
+  agitan el puño con la cuenta y sacan la mano tarde: el puño va al principio y la forma final se
+  sostiene al final). Si no vio ninguna, el de `soft_end` (el último leído al acabar la lectura sin
+  alargar), aunque no viera ni a la persona. Ese frame, solo en memoria, va a
   Gemini (`host.referee.hands`) con la pastilla «Mirando tu mano…» (`busy`, tipo `judge`) mientras
   mira. Gemini manda aunque lo local dijera otra cosa:
   - con gestos, el primero es la jugada del jugador;
@@ -224,8 +238,9 @@ músculos del puño y de la tijera salieron de una galería de 16 variantes (pul
 - `server/tests/games/test_ppt_juez.py`, con un juez falso (`FakeReferee`): el veredicto manda
   sobre la lectura local (también cuando no ve jugada), sin veredicto o si el juez falla decide lo
   local, la pastilla «Mirando tu mano…» se enciende y se apaga, sin juez no hay foto ni aviso, al
-  juez va el frame de la lectura estable (o el último sin ella) y la caja de la mano sigue siendo la
-  local.
+  juez va el frame más reciente con una mano vista (con el puño estable de la cuenta al principio y
+  el papel al final, el del papel) o, sin ninguna, el de `soft_end`, y la caja de la mano sigue
+  siendo la local.
 - Orquestador falso: `server/sonia/games/ppt/demo.py`, con una captura por estado (`ppt-1-empezar`,
   `ppt-4-acierto`, `ppt-5-fallo`, `ppt-6-sin-mano`, `ppt-7-final`) y varias seguidas de la mano de
   Sonnia en el plano real: el puño arriba y la cuenta (`ppt-2a` a `ppt-2d`) y cada forma en el «ya»
