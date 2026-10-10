@@ -875,14 +875,14 @@ enseña la pastilla del mensaje `busy` (`docs/protocolo.md`; los textos están e
 - **Tiempos.** Entra en 0,14 s (fundido, escala con un pequeño rebote y una
   caída corta), se queda al menos 0,6 s desde cada `on` aunque llegue antes el
   `off`, cambia el texto en el sitio (un latido y el ancho que se acomoda) y sale
-  en 0,2 s. En las capturas está entera a los 0,1 s del `on` y, con un `off`
-  inmediato, se retira a los 0,87 s.
+  en 0,2 s. En las capturas sale entera entre 0,1 y 0,2 s después del `on` y,
+  con un `off` inmediato, se retira a los 0,9 s.
 - **Robustez.** Se retira sola si se cae el orquestador o llega otro `hello` (el
   orquestador repite el aviso al reconectarse si sigue) y a los 90 s sin `off`.
   Un fallo dentro se registra una vez y la apaga; sin el Canvas del HUD monta uno
   propio. `Show(texto)` y `Hide()` sirven para probarla sin orquestador, y el
-  registro apunta cada aviso («Aviso de espera: «Pensando…»» y «retirado tras
-  0,87 s»).
+  registro apunta cada aviso («Aviso de espera: «Pensando…»» y «Aviso de
+  espera retirado tras 0.94 s.»).
 - **Cómo probarla.** La secuencia `espera` del orquestador falso
   (`server/sonia/games/espera_demo.py`) la pinta en reposo, conversando, en una
   entrada y salida seguidas, con el texto que cambia y en Simón dice, piedra,
