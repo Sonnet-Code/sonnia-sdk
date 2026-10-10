@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 import pytest
 
 from sonia.actions import build_default_registry
-from sonia.actions.games import STOP_GAME, build_start_game
+from sonia.actions.games import STOP_GAME, build_start_game, game_actions
 from sonia.games import NOT_SAID, BankParse, Game, GameBank, GameError, StopReason
 from sonia.games.banks import BANK_MAX_CHARS
 from sonia.games.manager import (
@@ -146,6 +146,35 @@ def slow(manager: Any) -> SlowCameraGame:
     game = manager.game("lenta")
     assert isinstance(game, SlowCameraGame)
     return game
+
+
+class BrokenInitGame(ProbeGame):
+    """Un juego roto: lanza al crearse."""
+
+    id: ClassVar[str] = "rota"
+
+    def __init__(self, host: Any) -> None:
+        raise RuntimeError("rota al crearse")
+
+
+class BrokenActionsGame(ProbeGame):
+    """Un juego roto: sus jugadas no se pueden crear."""
+
+    id: ClassVar[str] = "rota_jugadas"
+
+    @classmethod
+    def actions(cls) -> list[Any]:
+        raise RuntimeError("jugadas rotas")
+
+
+class BrokenBanksGame(ProbeGame):
+    """Un juego roto: sus bancos no se pueden declarar."""
+
+    id: ClassVar[str] = "rota_bancos"
+
+    @classmethod
+    def banks(cls) -> list[GameBank[Any]]:
+        raise RuntimeError("bancos rotos")
 
 
 class JudgeGame(Game):
@@ -671,6 +700,31 @@ async def test_start_game_y_stop_game() -> None:
 def test_sin_juegos_no_hay_acciones_de_juegos() -> None:
     names = build_default_registry(include_look=False).names()
     assert "start_game" not in names and "stop_game" not in names
+
+
+async def test_un_juego_roto_se_queda_fuera_y_el_manager_sigue() -> None:
+    """Si un juego lanza al crearse, en ``actions()`` o en ``banks()``, no tumba el arranque:
+    se apunta y se deja fuera; los demás siguen."""
+    manager, _, _, _ = await make_manager(
+        [BrokenInitGame, BrokenActionsGame, BrokenBanksGame, ProbeGame]
+    )
+    assert [g.id for g in manager.games()] == ["sonda"]
+    assert "games" in manager.capabilities() and "game_banks" in manager.capabilities()
+    assert [g["id"] for g in manager.snapshot()["games"]] == ["sonda"]
+    ok, text = await manager.start("rota", "voice")
+    assert not ok and "«rota»" in text
+    ok, _ = await manager.start("sonda", "voice")
+    assert ok
+
+
+def test_un_juego_con_las_jugadas_rotas_no_entra_en_start_game() -> None:
+    specs = game_actions([BrokenActionsGame, ProbeGame])
+    names = [spec.name for spec in specs]
+    assert names == ["start_game", "stop_game"]
+    assert specs[0].parameters["properties"]["juego"]["enum"] == [NOT_SAID, "sonda"]
+    assert game_actions([BrokenActionsGame]) == []
+    registry = build_default_registry(include_look=False, games=[BrokenActionsGame, ProbeGame])
+    assert "start_game" in registry.names()
 
 
 async def test_ningun_texto_para_gpt_live_nombra_el_stack() -> None:
