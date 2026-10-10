@@ -47,6 +47,9 @@ DATA_DIRS = [
         for name in ("knowledge", "gallery", "showcase", "trivia", "agenda", "faces", "fonts")
     ),
     (SERVER / "sonia" / "panel" / "static", Path("sonia") / "panel" / "static"),
+    # Modelos de poses y manos de los juegos (python -m sonia.vision.models): si una build
+    # anterior no los traía, van ahora; la app los copia a su carpeta de datos al arrancar.
+    (REPO / "cache" / "games" / "modelos", Path("cache") / "games" / "modelos"),
 ]
 
 COOKIE_MAGIC = b"MEI\014\013\012\013\016"
