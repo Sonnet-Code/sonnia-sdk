@@ -872,11 +872,14 @@ enseña la pastilla del mensaje `busy` (`docs/protocolo.md`; los textos están e
   los brazos arriba de Simón dice ni en el resultado de piedra, papel o tijera.
   Va en un Canvas anidado en el del HUD con su orden 50 por encima: delante del
   escenario, los juegos, la vista en vivo, el confeti y los subtítulos.
-- **Tiempos.** Entra en 0,14 s (fundido, escala con un pequeño rebote y una
-  caída corta), se queda al menos 0,6 s desde cada `on` aunque llegue antes el
-  `off`, cambia el texto en el sitio (un latido y el ancho que se acomoda) y sale
-  en 0,2 s. En las capturas sale entera entre 0,1 y 0,2 s después del `on` y,
-  con un `off` inmediato, se retira a los 0,9 s.
+- **Tiempos.** Entra en 0,14 s y sale en 0,2 s con la misma curva y sin rebote
+  (fundido, un poco de escala y unos píxeles de caída): sale en cada delegación,
+  también en las rápidas, y un `on` que llega mientras sale la devuelve desde
+  donde está, sin saltos. Se queda al menos 0,6 s desde cada `on` aunque llegue
+  antes el `off`. Si cambia el texto estando encendida («Preparando el juego…»,
+  «Encendiendo la cámara…», «Pensando…»), el nuevo se funde en 0,18 s y el ancho
+  se acomoda, sin volver a entrar. En las capturas sale entera entre 0,1 y 0,2 s
+  después del `on` y, con un `off` inmediato, se retira a los 0,9 s.
 - **Robustez.** Se retira sola si se cae el orquestador o llega otro `hello` (el
   orquestador repite el aviso al reconectarse si sigue) y a los 90 s sin `off`.
   Un fallo dentro se registra una vez y la apaga; sin el Canvas del HUD monta uno
