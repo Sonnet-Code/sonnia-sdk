@@ -885,7 +885,9 @@ namespace Sonia
                 return;
             }
 
-            _resultEyebrow.text = GameUi.ColoredWord(GameUi.Plain(_gameTitle).ToUpperInvariant()) + "  DEVFEST";
+            // Solo el nombre del juego: el «DEVFEST» que lleva la trivia, detrás de un
+            // título largo, parecía parte de él.
+            _resultEyebrow.text = GameUi.ColoredWord(GameUi.Plain(_gameTitle).ToUpperInvariant());
             _resultTitle.text = GameUi.Plain(title ?? string.Empty);
             _resultTitle.colorGradient = won
                 ? new VertexGradient(GameColors.Gold, GameColors.Gold, GameColors.Yellow, new Color(1f, 0.62f, 0.1f))
