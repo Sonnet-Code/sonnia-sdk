@@ -454,7 +454,10 @@ class PptGame(Game):
         hard_end = soft_end + READ_EXTEND_S
         samples: list[Sample] = []
         #: El frame de cada muestra (``None`` si no había), solo en memoria: uno va al juez.
+        #: Las muestras sin mano ni persona también llevan el suyo: ahí es donde más aporta.
         frames: list[np.ndarray | None] = []
+        #: La muestra con la que se llegó a ``soft_end`` (el final de la lectura sin alargar).
+        soft_index: int | None = None
         while True:
             began = host.now()
             sample, frame = await self._sample()
@@ -463,6 +466,8 @@ class PptGame(Game):
             shapes = [s.shape for s in samples]
             now = host.now()
             if now >= soft_end:
+                if soft_index is None:
+                    soft_index = len(samples) - 1
                 found = settle(shapes)
                 if (found is not None and not contradicted(shapes, found)) or now >= hard_end:
                     break
@@ -474,13 +479,18 @@ class PptGame(Game):
         if found is None:
             reason = "unclear" if any(s.seen for s in samples) else "no_hand"
             box = next((s.box for s in reversed(samples) if s.box is not None), None)
-            local, photo = Sample(None, reason == "unclear", box), last_frame
+            # Sin jugada estable (tampoco si lo local no vio persona ni mano), el último frame
+            # leído al llegar a ``soft_end``: la mano ya quieta tras el «¡ya!» y antes de que
+            # la bajen durante el alargue.
+            upto = frames if soft_index is None else frames[: soft_index + 1]
+            soft_frame = next((f for f in reversed(upto) if f is not None), None)
+            local, photo = Sample(None, reason == "unclear", box), soft_frame
         else:
             index = max(i for i, s in enumerate(samples) if s.shape is found)
             reason = ""
             local, photo = samples[index], frames[index]
-        # Al juez, el frame de la lectura estable (la jugada ya quieta tras el «¡ya!»); sin
-        # jugada estable, el último que se leyó, el más alejado del puño de la cuenta.
+        # Al juez, el frame de la lectura estable (la jugada ya quieta tras el «¡ya!») o el de
+        # ``soft_end``; solo sin ningún frame de la cámara se queda lo local sin preguntar.
         return await self._judged(
             local, reason, samples, photo if photo is not None else last_frame
         )

@@ -208,15 +208,68 @@ async def test_al_juez_va_el_frame_de_la_lectura_estable() -> None:
     assert [int(frame[0, 0, 0]) for frame in referee.frames] == [3]
 
 
-async def test_sin_jugada_estable_va_el_ultimo_frame() -> None:
+class TimedStream(CountingStream):
+    """Como ``CountingStream`` y apunta cuándo dio cada frame (con el reloj del juego)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.clock: Callable[[], float] = lambda: 0.0
+        self.times: list[float] = []
+
+    def latest(self) -> tuple[float, np.ndarray] | None:
+        self.times.append(self.clock())
+        return super().latest()
+
+
+async def read_with_soft_end(game: PptGame, host: FakeGameHost, stream: TimedStream) -> Any:
+    """``_read`` con el «¡ya!» ahora; devuelve lo leído y el número del frame de ``soft_end``."""
+    stream.clock = host.now
+    ya_at = host.now()
+    soft_end = ya_at + ppt_game.REACTION_S + max(0.2, float(host.settings.games.ppt.read_seconds))
+    result = await game._read(ya_at)
+    soft = next(index + 1 for index, at in enumerate(stream.times) if at >= soft_end)
+    return result, soft
+
+
+async def test_sin_jugada_estable_va_el_frame_de_soft_end() -> None:
     referee = PlanReferee(lambda game: HandVerdict((PAPER,)))
-    stream = CountingStream()
+    stream = TimedStream()
     game, host, _ = make_judged(nothing, referee, stream=stream)
     assert await host.stream.acquire(PptGame.id)
-    sample, reason = await game._read(host.now())
+    (sample, reason), soft = await read_with_soft_end(game, host, stream)
     # El juez ve papel aunque lo local no viera ninguna mano.
     assert (sample.shape, reason) == (PAPER, "")
-    assert [int(frame[0, 0, 0]) for frame in referee.frames] == [stream.count]
+    # El frame leído al llegar a soft_end, no el último del alargue.
+    assert [int(frame[0, 0, 0]) for frame in referee.frames] == [soft]
+    assert stream.count > soft
+
+
+async def test_sin_persona_ni_mano_el_juez_ve_el_frame_igual() -> None:
+    """Lo local no ve a nadie (anoche, tijera_1 y tijera_2): la foto va al juez igual."""
+    referee = PlanReferee(lambda game: HandVerdict((HandShape.SCISSORS,)))
+    stream = TimedStream()
+    hands = PlayerHands(nothing)
+    vision = FakeVision(
+        stream=stream, poses=FakePoses([pose_frame()]), hands=hands, referee=referee
+    )
+    host = FakeGameHost(PptGame.id, vision=vision)
+    game = PptGame(host)
+    hands.game = lambda: game
+    referee.game = lambda: game
+    assert await host.stream.acquire(PptGame.id)
+    (sample, reason), soft = await read_with_soft_end(game, host, stream)
+    assert (sample.shape, reason) == (HandShape.SCISSORS, "")
+    assert [int(frame[0, 0, 0]) for frame in referee.frames] == [soft]
+    assert host.busy == JUDGE_ON_OFF
+
+
+async def test_sin_ningun_frame_de_la_camara_no_se_pregunta() -> None:
+    referee = PlanReferee(lambda game: HandVerdict((PAPER,)))
+    game, host, _ = make_judged(nothing, referee)
+    # La cámara sin dueño no da frames (``stream.latest()`` es None).
+    sample, reason = await game._read(host.now())
+    assert (sample.shape, reason) == (None, "no_hand")
+    assert referee.photos == [] and host.busy == []
 
 
 async def test_la_caja_de_la_mano_sigue_siendo_la_local() -> None:
