@@ -592,7 +592,8 @@ class GamesSettings(BaseSettings):
     #: de 2026): una foto reducida por ronda de Simón dice y de piedra, papel o tijera a Gemini
     #: (con ``GEMINI_API_KEY``), y la búsqueda relámpago también; la detección local sigue para
     #: la vista en vivo y decide si Gemini no contesta a tiempo. ``local``: como antes, todo en
-    #: este equipo (y la búsqueda con el modelo de visión, ``LLM_*``).
+    #: este equipo (y la búsqueda con el modelo de visión, ``LLM_*``). Es el de arranque: el
+    #: panel lo cambia en caliente con el ajuste compartido ``games_judge``.
     judge: Literal["gemini", "local"] = "gemini"
     #: Plazo del juez de Gemini en Simón dice y en piedra, papel o tijera (la búsqueda usa el
     #: suyo). Medido el 10 de octubre de 2026: mediana 1,25 s, p90 1,7 s, máximo 2,8 s.
