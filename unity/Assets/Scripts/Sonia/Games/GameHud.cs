@@ -53,10 +53,22 @@ namespace Sonia
         [Tooltip("Diámetro del contador circular.")]
         private float countdownSize = 150f;
 
-        [Header("Cámara")]
+        [Header("Cámara (plano de panel automático)")]
         [SerializeField]
-        [Tooltip("Desplazamiento de la cámara sobre el plano de panel mientras hay juego (metros): más alta y más atrás para que Sonnia quepa bajo la tarjeta. El de la trivia.")]
-        private Vector3 panelShotExtra = new Vector3(0f, 0.3f, -0.8f);
+        [Tooltip("Borde de abajo de lo de la franja alta (px desde arriba) con el que se calibra el plano corto.")]
+        private float shortShotBottom = 650f;
+
+        [SerializeField]
+        [Tooltip("Desplazamiento de la cámara sobre el plano de panel (metros) cuando lo de arriba acaba en shortShotBottom.")]
+        private Vector3 shortShotExtra = new Vector3(0f, 0.3f, -0.8f);
+
+        [SerializeField]
+        [Tooltip("Borde de abajo de lo de la franja alta (px desde arriba) con el que se calibra el plano largo (vista en vivo y tarjeta).")]
+        private float tallShotBottom = 1100f;
+
+        [SerializeField]
+        [Tooltip("Desplazamiento de la cámara sobre el plano de panel (metros) cuando lo de arriba acaba en tallShotBottom.")]
+        private Vector3 tallShotExtra = new Vector3(0f, 0.75f, -2f);
 
         [Header("Tiempos")]
         [SerializeField]
@@ -152,7 +164,15 @@ namespace Sonia
         private bool _open;
         private string _game = string.Empty;
         private string _gameTitle = string.Empty;
-        private bool _panelRequested;
+        // Plano de panel: lo pide el juego abierto (auto o con un desplazamiento
+        // propio) o la vista en vivo; se aplica solo cuando cambia.
+        private bool _panelWanted;
+        private bool _panelCustom;
+        private Vector3 _panelExtra;
+        private bool _panelApplied;
+        private Vector3 _appliedExtra;
+        private float _reservedBottom;
+        private bool _cardTopCustom;
         private float _clock;
         private float _rootAlpha;
         private bool _cardShown;
@@ -533,6 +553,8 @@ namespace Sonia
             _card.anchorMin = new Vector2(0.5f, 1f - cardTop);
             _card.anchorMax = _card.anchorMin;
             _card.anchoredPosition = Vector2.zero;
+            _cardTopCustom = false;
+            PlaceCardAuto(true);
 
             RectTransform content = ContentOf(gameId);
             foreach (KeyValuePair<string, RectTransform> pair in _contents)
@@ -550,7 +572,8 @@ namespace Sonia
             SetCaption(string.Empty);
             _cardShown = true;
             _cardAppear = _clock;
-            RequestPanelShot(panelShotExtra);
+            _reservedBottom = 0f;
+            RequestPanelShot();
             Log("abre " + gameId + " (" + _gameTitle + ")");
             RaiseOpened(gameId);
             return content;
@@ -678,7 +701,11 @@ namespace Sonia
             _cardShown = visible;
         }
 
-        /// <summary>Mueve el borde de arriba de la tarjeta (fracción del alto, 0 arriba). Open la devuelve a su sitio.</summary>
+        /// <summary>
+        /// Mueve el borde de arriba de la tarjeta (fracción del alto, 0 arriba). Sin
+        /// llamarlo, la tarjeta va arriba y, con la vista en vivo puesta, justo debajo
+        /// de ella. Open la devuelve a lo automático.
+        /// </summary>
         public void SetCardTop(float topFraction)
         {
             EnsureBuilt();
@@ -687,7 +714,29 @@ namespace Sonia
                 return;
             }
 
+            _cardTopCustom = true;
             _card.anchorMin = new Vector2(0.5f, 1f - Mathf.Clamp01(topFraction));
+            _card.anchorMax = _card.anchorMin;
+        }
+
+        /// <summary>Tarjeta arriba o, con la vista en vivo, debajo de ella (si el juego no la colocó).</summary>
+        private void PlaceCardAuto(bool snap)
+        {
+            if (_card == null || _cardTopCustom)
+            {
+                return;
+            }
+
+            bool previewUp = _preview != null && _preview.IsVisible;
+            float top = previewUp ? _preview.BottomFraction + 0.015f : cardTop;
+            float current = 1f - _card.anchorMin.y;
+            if (Mathf.Abs(current - top) < 0.0005f)
+            {
+                return;
+            }
+
+            float next = snap ? top : Mathf.MoveTowards(current, top, Time.deltaTime * 1.2f);
+            _card.anchorMin = new Vector2(0.5f, 1f - next);
             _card.anchorMax = _card.anchorMin;
         }
 
@@ -841,6 +890,9 @@ namespace Sonia
             _resultAt = _clock + ResultDelay;
             _bannerAt = -1f;
             StopCountdown();
+            _result.anchorMin = _card.anchorMin;
+            _result.anchorMax = _card.anchorMax;
+            _result.anchoredPosition = _card.anchoredPosition;
             RectTransform body = (RectTransform)_result.Find("Contenido");
             bool wasActive = _result.gameObject.activeSelf;
             _result.gameObject.SetActive(true);
@@ -955,44 +1007,123 @@ namespace Sonia
         // Cámara
         // ------------------------------------------------------------------
 
-        /// <summary>Pide el plano de panel con el desplazamiento por defecto (el de la trivia). Open ya lo pide.</summary>
+        /// <summary>
+        /// Pide el plano de panel automático (Open ya lo pide): la cámara se aleja y
+        /// sube lo justo para que Sonnia quede debajo de lo que haya en la franja alta
+        /// (<see cref="TopStripBottom"/>), calibrado entre el plano corto (tarjeta de la
+        /// trivia) y el largo (vista en vivo más tarjeta).
+        /// </summary>
         public void RequestPanelShot()
         {
-            RequestPanelShot(panelShotExtra);
+            _panelWanted = true;
+            _panelCustom = false;
         }
 
         /// <summary>
-        /// Pide el plano de panel con otro desplazamiento (metros: x a la derecha, y
-        /// arriba, z hacia Sonnia; negativo la aleja). Para contenidos más altos que
-        /// la tarjeta de la trivia, más alta y más atrás.
+        /// Pide el plano de panel con un desplazamiento fijo (metros: x a la derecha, y
+        /// arriba, z hacia Sonnia; negativo la aleja), en vez del automático. Para lo
+        /// que el automático no ve (una capa propia que baja mucho, por ejemplo). Vale
+        /// hasta el siguiente RequestPanelShot() o Close.
         /// </summary>
         public void RequestPanelShot(Vector3 extra)
+        {
+            _panelWanted = true;
+            _panelCustom = true;
+            _panelExtra = extra;
+        }
+
+        /// <summary>Suelta el plano de panel (Close ya lo suelta). Con la vista en vivo puesta, sigue.</summary>
+        public void ReleasePanelShot()
+        {
+            _panelWanted = false;
+            _panelCustom = false;
+        }
+
+        /// <summary>
+        /// Avisa de que algo del juego (en su <see cref="LayerOf"/>) baja hasta
+        /// <paramref name="bottomPixels"/> (px desde arriba): el plano automático deja
+        /// a Sonnia debajo. 0 lo quita. Open lo pone a 0.
+        /// </summary>
+        public void ReserveTopStrip(float bottomPixels)
+        {
+            _reservedBottom = Mathf.Max(0f, bottomPixels);
+        }
+
+        /// <summary>
+        /// Borde de abajo de lo que hay ahora en la franja alta, en px de la referencia
+        /// desde arriba (0 si no hay nada): la tarjeta o el resultado, la vista en vivo y
+        /// lo reservado con <see cref="ReserveTopStrip"/>.
+        /// </summary>
+        public float TopStripBottom
+        {
+            get
+            {
+                float bottom = _open ? _reservedBottom : 0f;
+                if (_card != null && _cardShown && !_resultShown)
+                {
+                    bottom = Mathf.Max(bottom, BottomOf(_card));
+                }
+
+                if (_result != null && _resultShown)
+                {
+                    bottom = Mathf.Max(bottom, BottomOf(_result));
+                }
+
+                if (_preview != null && _preview.IsVisible)
+                {
+                    bottom = Mathf.Max(bottom, _preview.BottomFraction * ReferenceHeight);
+                }
+
+                return bottom;
+            }
+        }
+
+        /// <summary>El desplazamiento del plano automático para lo que acaba en <paramref name="bottomPixels"/>.</summary>
+        public Vector3 AutoPanelExtra(float bottomPixels)
+        {
+            // A saltos de 40 px: que un cambio pequeño de la tarjeta no mueva la cámara.
+            float quantized = Mathf.Round(bottomPixels / 40f) * 40f;
+            float t = Mathf.Clamp((quantized - shortShotBottom) / Mathf.Max(1f, tallShotBottom - shortShotBottom), 0f, 1.25f);
+            return Vector3.LerpUnclamped(shortShotExtra, tallShotExtra, t);
+        }
+
+        /// <summary>Borde de abajo (px desde arriba) de un rectángulo anclado arriba en el centro, como la tarjeta.</summary>
+        private static float BottomOf(RectTransform rect)
+        {
+            float top = ((1f - rect.anchorMin.y) * ReferenceHeight) - rect.anchoredPosition.y;
+            return top + (rect.sizeDelta.y * (1f - rect.pivot.y)) + (rect.sizeDelta.y * rect.pivot.y);
+        }
+
+        private void UpdatePanelShot()
         {
             if (_framing == null)
             {
                 _framing = GetComponentInChildren<CameraFramingController>(true);
+                if (_framing == null)
+                {
+                    return;
+                }
             }
 
-            if (_framing == null)
+            bool previewUp = _preview != null && _preview.IsVisible;
+            bool want = (_open && _panelWanted) || previewUp;
+            if (want)
             {
-                return;
+                Vector3 extra = _open && _panelCustom ? _panelExtra : AutoPanelExtra(TopStripBottom);
+                if (!_panelApplied || (extra - _appliedExtra).sqrMagnitude > 0.000001f || !_framing.PanelRequested)
+                {
+                    _framing.PanelRequestOffset = extra;
+                    _framing.PanelRequested = true;
+                    _panelApplied = true;
+                    _appliedExtra = extra;
+                }
             }
-
-            _framing.PanelRequestOffset = extra;
-            _framing.PanelRequested = true;
-            _panelRequested = true;
-        }
-
-        /// <summary>Suelta el plano de panel (Close ya lo suelta).</summary>
-        public void ReleasePanelShot()
-        {
-            if (_framing != null && _panelRequested)
+            else if (_panelApplied)
             {
                 _framing.PanelRequested = false;
                 _framing.PanelRequestOffset = Vector3.zero;
+                _panelApplied = false;
             }
-
-            _panelRequested = false;
         }
 
         // ------------------------------------------------------------------
@@ -1015,6 +1146,8 @@ namespace Sonia
 
             float dt = Time.deltaTime;
             _clock += dt;
+            PlaceCardAuto(_cardAlpha <= 0.001f);
+            UpdatePanelShot();
 
             bool visible = _open || _cardAlpha > 0.001f || _resultAlpha > 0.001f || _pieces.Count > 0 || _rootAlpha > 0.001f;
             if (!visible)
@@ -1569,7 +1702,9 @@ namespace Sonia
             glow.rectTransform.offsetMax = new Vector2(80f, 80f);
             Image border = NewImage("Borde", _result, _roundSprite, GameUi.WithAlpha(GameColors.Yellow, 0.75f));
             GameUi.Stretch(border.rectTransform);
-            Image fill = NewImage("Fondo", _result, _roundSprite, GameColors.CardFill);
+            // Opaco: la UI mezcla en espacio lineal y el 7 % del halo amarillo que se
+            // veía a través del de la tarjeta lo volvía marrón.
+            Image fill = NewImage("Fondo", _result, _roundSprite, GameUi.WithAlpha(GameColors.CardFill, 1f));
             GameUi.Stretch(fill.rectTransform);
             fill.rectTransform.offsetMin = new Vector2(4f, 4f);
             fill.rectTransform.offsetMax = new Vector2(-4f, -4f);

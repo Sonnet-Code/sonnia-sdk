@@ -17,7 +17,7 @@ from sonia.games import NEEDS, NOT_SAID_VALUES, Game
 from sonia.games.banks import is_bank_id
 from sonia.games.registry import GAMES, all_games, enabled_games, games_line
 from sonia.ws import protocol as p
-from tests.games.fakes import brands_in, game_settings
+from tests.games.fakes import brands_in, game_settings, make_game
 
 #: Los ids del plan (``docs/plan-juegos.md``, sección 1).
 PLAN_IDS = ["ruleta", "poses", "akinator", "piedra_papel_tijera", "wordle", "busqueda"]
@@ -65,6 +65,16 @@ def test_las_jugadas_son_estrictas_y_con_su_prefijo(cls: type[Game]) -> None:
         assert not brands_in(spec.description), spec.name
 
 
+@pytest.mark.parametrize("cls", GAME_CLASSES, ids=lambda c: c.id)
+def test_lo_que_lee_gpt_live_no_nombra_el_stack(cls: type[Game]) -> None:
+    assert not brands_in(cls.spoken)
+    if any(entry.game is cls and entry.on for entry in GAMES):
+        game, _ = make_game(cls)
+        for phrase in game.phrases():
+            assert not brands_in(phrase), phrase
+            assert "Sonnia" not in phrase, "las frases grabadas dicen «Sonia»"
+
+
 def test_las_jugadas_no_se_repiten_entre_juegos() -> None:
     names = [spec.name for cls in GAME_CLASSES for spec in cls.actions()]
     assert len(names) == len(set(names))
@@ -75,11 +85,8 @@ def test_los_bancos_tienen_id_unico_y_archivo(cls: type[Game]) -> None:
     settings = game_settings()
     on = {entry.game for entry in GAMES if entry.on}
     for bank in cls.banks():
-        assert (
-            is_bank_id(bank.id)
-            and bank.id.startswith(f"{cls.settings_key}_")
-            or (bank.id.startswith(f"{cls.id}_"))
-        ), bank.id
+        assert is_bank_id(bank.id), bank.id
+        assert bank.id.startswith((f"{cls.settings_key}_", f"{cls.id}_")), bank.id
         assert bank.min_entries >= 1
         if cls in on:
             path = settings.games_dir / cls.id / bank.file
