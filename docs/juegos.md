@@ -265,6 +265,7 @@ Cada juego escribe su secuencia en `server/sonia/games/<paquete>/demo.py` con un
 |---|---|
 | `GameMsg(event, data)` | Un mensaje `game` de tu juego; el orquestador falso pone `type`, `game` y `seq`. |
 | `Send(msg)` | Cualquier mensaje del protocolo tal cual (`speech_start`, `transcript`, `state`...). |
+| `Audio(frames)` | Frames binarios de voz de Sonia (`encode_audio_frame`), todos de una vez: Unity los encola y los reproduce a su ritmo. Entre un `speech_start` y un `speech_end`, para ver a Sonnia hablando con boca y gestos al hablar (`gesture`); la voz, sintética (ejemplo en `games/ppt/demo.py`). |
 | `Wait(segundos)` | Esperar (animaciones, giros, contadores). |
 | `WaitEvent(evento, timeout)` | Esperar un `game_event` de Unity (`wheel_stopped`). |
 | `Preview(segundos, source=..., draw=..., off=False)` | La vista en vivo **en segundo plano** (los pasos siguientes van a la vez, así puedes capturarla): `camera_preview` y unos 10 frames `SNCV` por segundo, en espejo, de una foto o un vídeo público de tu scratchpad (nunca del repo) o sintéticos; `draw(frame, en_espejo)` pinta encima como el overlay del juego; `off=True` la apaga al acabar. |
