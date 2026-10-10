@@ -17,6 +17,9 @@ Reparto (como la trivia, ``docs/trivia.md``):
   ``rules.py`` dicen quién hace la pose. La vista en vivo sale encima de Sonnia, en espejo,
   con los esqueletos (``overlay.py``). Nunca se guarda una imagen ni un dato de nadie y no
   se reconoce a nadie.
+- **El juez** (``GAMES_JUDGE=gemini``, ``host.referee``): el veredicto de cada ronda, trampas
+  incluidas, lo da con una sola foto de la ventana (la del mejor recuento local, en memoria);
+  si no contesta a tiempo, vale el recuento local, como antes.
 - **Colocación.** Antes de la primera ronda (y entre rondas, si alguien se pega), si hay
   alguien demasiado cerca o no se ve a nadie, Sonia lo pide en una frase.
 
@@ -31,6 +34,9 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
+import numpy as np
+
+from sonia.busy import TEXT_POSES
 from sonia.games.base import Game, GameError, GameHost, StopReason
 from sonia.games.poses.bank import POSES_BANK, PoseEntry
 from sonia.games.poses.overlay import Skeleton, Skeletons, Tint
@@ -98,6 +104,9 @@ REPLY_MAX_S = 15.0
 RESULT_HOLD_S = 1.2
 #: Rondas seguidas sin ver a nadie tras las que el juego se acaba.
 EMPTY_ROUNDS_TO_STOP = 2
+#: Margen sobre el plazo del juez (``GAMES_JUDGE_TIMEOUT_SECONDS``, que ya corta él): la ronda
+#: nunca se queda esperando más que esto.
+JUDGE_GRACE_S = 1.0
 
 # -- textos para GPT-Live («Sonia», sin marcas del stack) ------------------------------
 
@@ -455,7 +464,8 @@ class PosesGame(Game):
             await self._wait_phrase()
         self._seconds = max(0.3, float(self._cfg().window_seconds))
         await self._show("window")
-        count, total = await self._count_window(self._seconds)
+        count, total, photo = await self._count_window(self._seconds)
+        count, total = await self._judge(entry.id, count, total, photo)
         self._count, self._total = count, total
         result = RoundResult(entry.id, simon, count, total)
         self._results.append(result)
@@ -573,20 +583,97 @@ class PosesGame(Game):
                 return
             await host.sleep(POLL_S)
 
-    async def _count_window(self, seconds: float) -> tuple[int, int]:
-        """El mejor recuento de la ventana: ``(cuántos la hicieron, cuántos juegan)``."""
+    async def _count_window(self, seconds: float) -> tuple[int, int, np.ndarray | None]:
+        """El mejor recuento de la ventana: ``(cuántos la hicieron, cuántos juegan, foto)``.
+
+        La foto es para el juez (solo si hay, ``host.referee.available``; si no, ``None``): el
+        frame de la cámara del mejor recuento local de la ventana, y entre los empatados el
+        más reciente, porque la gente termina de colocarse en la pose según pasa la ventana.
+        Si lo local no vio a nadie haciéndola, todos empatan a cero y queda el último frame
+        de la ventana. Se coge al vuelo (``stream.latest()``) y solo vive en memoria.
+        """
         host = self.host
         best = players = 0
+        want_photo = host.referee.available
+        photo: np.ndarray | None = None
         end = host.now() + seconds
         while True:
             counted = self._poll()
             if counted is not None:
+                if want_photo and counted.doing >= best:
+                    frame = self._camera_frame()
+                    photo = frame if frame is not None else photo
                 best = max(best, counted.doing)
                 players = max(players, counted.players)
             if host.now() >= end:
                 break
             await host.sleep(WINDOW_POLL_S)
-        return min(best, players), players
+        if want_photo and photo is None:
+            photo = self._camera_frame()
+        return min(best, players), players, photo
+
+    async def _judge(
+        self, pose: str, count: int, total: int, photo: np.ndarray | None
+    ) -> tuple[int, int]:
+        """El veredicto de la ronda: el del juez con ``photo`` o, sin él, el recuento local.
+
+        Si el veredicto trae la pose, cuenta lo suyo: ``(cuántos la hacen, cuántas personas
+        ve)``. Mientras mira, la pastilla de espera; la vista en vivo sigue con los esqueletos.
+        Sin juez o sin foto, ni foto ni aviso: el recuento local, como antes.
+        """
+        host = self.host
+        if photo is None or not host.referee.available:
+            return count, total
+        verdict = None
+        await self._set_busy(TEXT_POSES)
+        task = asyncio.ensure_future(host.referee.poses(photo))
+        try:
+            limit = host.now() + float(host.settings.games.judge_timeout_seconds) + JUDGE_GRACE_S
+            while not task.done() and host.now() < limit:
+                self._poll()
+                await host.sleep(WINDOW_POLL_S)
+            if task.done():
+                verdict = task.result()
+            else:
+                logger.info("Simón dice: el juez no contestó a tiempo; vale el recuento local")
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - sin juez, decide lo local
+            logger.warning("Simón dice: falló el juez; vale el recuento local", exc_info=True)
+            verdict = None
+        finally:
+            if not task.done():
+                task.cancel()
+            await self._set_busy(None)
+        if verdict is None or pose not in verdict.counts:
+            return count, total
+        people = max(0, int(verdict.people))
+        judged = min(max(0, int(verdict.counts[pose])), people)
+        if (judged, people) != (count, total):
+            logger.info(
+                "Simón dice, %s: el juez ve %d de %d (lo local, %d de %d)",
+                pose,
+                judged,
+                people,
+                count,
+                total,
+            )
+        return judged, people
+
+    async def _set_busy(self, text: str | None) -> None:
+        """Enciende o apaga la pastilla de espera del juez; nunca tumba la ronda."""
+        try:
+            await self.host.set_busy("judge", text)
+        except Exception:  # noqa: BLE001
+            logger.debug("No se pudo cambiar el aviso de espera", exc_info=True)
+
+    def _camera_frame(self) -> np.ndarray | None:
+        """El último frame de la cámara (para la foto del juez), o ``None``."""
+        try:
+            latest = self.host.stream.latest()
+        except Exception:  # noqa: BLE001
+            return None
+        return latest[1] if latest is not None else None
 
     # -- cámara y vista en vivo ---------------------------------------------------------
 

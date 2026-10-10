@@ -5,8 +5,9 @@
 
 ## Qué es
 
-Uno contra Sonnia, de uno en uno (decisión de Jean). La cámara del stand lee la mano del jugador y
-Sonnia saca la suya con el avatar. Se juega al mejor de `GAME_PPT_ROUNDS` (3: gana quien llega a 2),
+Uno contra Sonnia, de uno en uno (decisión de Jean). La cámara del stand lee la mano del jugador
+(con `GAMES_JUDGE=gemini`, el de por defecto, la jugada la decide Gemini con una foto) y Sonnia saca
+la suya con el avatar. Se juega al mejor de `GAME_PPT_ROUNDS` (3: gana quien llega a 2),
 con el marcador «Sonnia 1 - 2 Tú» en pantalla y la vista en vivo encima de Sonnia para que el
 jugador sepa dónde poner la mano.
 
@@ -24,7 +25,9 @@ jugador sepa dónde poner la mano.
       tijera… ya!» (`countdown` justo antes). Unity agita el puño tres veces al ritmo de la frase y
       en el «ya» abre la mano con su jugada (`go`).
    4. El orquestador lee la mano del jugador desde 0,25 s después del «ya» (lo que se tarda en
-      reaccionar) durante `GAME_PPT_READ_SECONDS` y se queda con la lectura estable.
+      reaccionar) durante `GAME_PPT_READ_SECONDS` y se queda con la lectura estable. Con
+      `GAMES_JUDGE=gemini`, la foto de ese momento va a Gemini, con «Mirando tu mano…» en
+      pantalla, y su jugada es la que cuenta (ver «Cámara»).
    5. Las dos jugadas en grande y el marcador (`result`), y Sonia reacciona en una frase.
       - Empate: se repite la ronda, sin contar.
       - Sin lectura: «¡no te vi la mano!» (o «no te la entendí») y se repite la ronda
@@ -42,7 +45,8 @@ jugador sepa dónde poner la mano.
 |---|---|
 | GPT-Live | Explica el juego al empezar, reacciona a cada resultado que le pasa el juego y delega `start_game` y `stop_game`. No elige ni ve jugadas: las reglas le prohíben decir la cuenta o inventarse resultados. |
 | Backend Responses | Ejecuta `start_game` y `stop_game` y le pasa a Sonia el guion de arranque. |
-| Orquestador | Lleva la partida entera (`PptGame`): elige la jugada de Sonnia, lanza la frase grabada, mide dónde cae el «ya», elige al jugador, lee su mano, decide la tirada, lleva el marcador y le pasa a GPT-Live cada resultado por `speak`. |
+| Orquestador | Lleva la partida entera (`PptGame`): elige la jugada de Sonnia, lanza la frase grabada, mide dónde cae el «ya», elige al jugador, lee su mano (y, con `GAMES_JUDGE=gemini`, le pide la jugada al juez con una foto), decide la tirada, lleva el marcador y le pasa a GPT-Live cada resultado por `speak`. |
+| Gemini (juez) | Con `GAMES_JUDGE=gemini`, mira la foto de cada tirada y dice qué gesto enseña la mano de la persona más cercana (`docs/juegos-vision.md`, «Juez de Gemini»). |
 | Unity | La tarjeta con el marcador y las jugadas en grande, la vista en vivo y la mano de Sonnia (`PptController` y `SoniaHandPoser`). |
 
 ## Acciones de GPT-Live
@@ -79,7 +83,8 @@ si la saca tarde, parece que hace trampa. Por eso:
 
 ## Cámara
 
-Todo en el equipo del stand, en hilos y sin guardar nada (`docs/juegos-vision.md`):
+Todo en el equipo del stand, en hilos y sin guardar nada (`docs/juegos-vision.md`), salvo, con
+`GAMES_JUDGE=gemini`, una foto reducida por tirada hacia Gemini, que tampoco se guarda:
 
 - **Quién juega** (`logic.pick_player`): la persona más cercana y centrada, la de cuerpo más grande
   (área de su caja, rebajada hasta la mitad si está en el borde). Para no saltar entre dos personas
@@ -94,9 +99,24 @@ Todo en el equipo del stand, en hilos y sin guardar nada (`docs/juegos-vision.md
   sean del mismo instante). Vale el último tramo de dos lecturas iguales seguidas sin contar huecos:
   el puño que se agita antes del «ya» se lee piedra y manda lo que viene después. Si al acabar no
   hay tramo estable, o la última lectura lo contradice, se alarga hasta 0,6 s más.
+- **Juez de Gemini** (`GAMES_JUDGE=gemini`). La lectura local sigue igual y elige el momento: el
+  frame de la muestra estable o, si no la hay, el último leído. Ese frame, solo en memoria, va a
+  Gemini (`host.referee.hands`) con la pastilla «Mirando tu mano…» (`busy`, tipo `judge`) mientras
+  mira. Gemini manda aunque lo local dijera otra cosa:
+  - con gestos, el primero es la jugada del jugador;
+  - con la lista vacía, no hay jugada: «no te entendí la mano» (`unclear`) si lo local vio una
+    mano, «no te vi la mano» (`no_hand`) si no, y se repite la ronda como siempre;
+  - sin respuesta (no contesta en `GAMES_JUDGE_TIMEOUT_SECONDS`, 4 s; falla o el JSON no cuadra),
+    la lectura local de siempre;
+  - sin juez (`GAMES_JUDGE=local` o sin `GEMINI_API_KEY`), ni foto ni aviso.
+
+  En el banco de pruebas Gemini acertó 18 de 18 manos (lo local, 15 con `s` y 14 con `n`) y no se
+  inventó ningún gesto en las fotos sin ninguno (3 de 3; lo local, 1 y 1). Tarda 1,25 s de mediana:
+  la tirada se resuelve algo más de un segundo después que con lo local.
 - **Vista en vivo** (`overlay.py`, con numpy): en espejo, con esquinas amarillas alrededor del
   jugador (los demás no se marcan) y, durante la lectura y el resultado, una caja alrededor de la
-  mano que juega: verde si se entendió, roja si no.
+  mano que juega: verde si se entendió, roja si no. Con el juez, la caja es la de la lectura local
+  y el color, el del veredicto.
 
 ## Bancos
 
@@ -201,6 +221,11 @@ músculos del puño y de la tijera salieron de una galería de 16 variantes (pul
     marcas del stack) y la frase declarada;
   - de punta a punta con `GameManager`: `start_game`, la partida, `end` con su resultado,
     `stop_game` y lo que vuelve a pintar una Unity que se reconecta.
+- `server/tests/games/test_ppt_juez.py`, con un juez falso (`FakeReferee`): el veredicto manda
+  sobre la lectura local (también cuando no ve jugada), sin veredicto o si el juez falla decide lo
+  local, la pastilla «Mirando tu mano…» se enciende y se apaga, sin juez no hay foto ni aviso, al
+  juez va el frame de la lectura estable (o el último sin ella) y la caja de la mano sigue siendo la
+  local.
 - Orquestador falso: `server/sonia/games/ppt/demo.py`, con una captura por estado (`ppt-1-empezar`,
   `ppt-4-acierto`, `ppt-5-fallo`, `ppt-6-sin-mano`, `ppt-7-final`) y varias seguidas de la mano de
   Sonnia en el plano real: el puño arriba y la cuenta (`ppt-2a` a `ppt-2d`) y cada forma en el «ya»
@@ -222,4 +247,5 @@ músculos del puño y de la tijera salieron de una galería de 16 variantes (pul
 - Grabar la frase «¡Piedra, papel o tijera… ya!» con «Preparar voces» antes de jugar: sin grabar, el
   «ya» sale de la transcripción y la mano de Sonnia se abre con menos precisión.
 - Una partida con la API real (con permiso de Jean) para ver que GPT-Live no dice la cuenta por su
-  cuenta ni se inventa resultados.
+  cuenta ni se inventa resultados, y el juez de Gemini con la cámara del stand (lo hace la sesión
+  principal): cuánto tarda cada tirada y si acierta la mano con gente detrás.

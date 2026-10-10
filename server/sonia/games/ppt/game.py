@@ -16,7 +16,9 @@ Cada tirada:
    la transcripción de Sonia. En el «ya», ``go``.
 4. Se lee la mano del jugador durante ``GAME_PPT_READ_SECONDS`` (un poco después del
    «ya», lo que se tarda en reaccionar) y se queda con la lectura estable
-   (:func:`~sonia.games.ppt.logic.settle`).
+   (:func:`~sonia.games.ppt.logic.settle`). Con juez de rondas (``GAMES_JUDGE=gemini``),
+   el frame de esa lectura va al juez, que decide la jugada; si no contesta a tiempo,
+   decide la lectura local.
 5. ``result`` y la reacción de Sonia (``speak``). Sin lectura, «¡no te vi la mano!» y
    se repite la ronda (``GAME_PPT_RETRIES``); si tampoco, la ronda no cuenta.
 6. Al mejor de ``GAME_PPT_ROUNDS``: ``final`` y ``finish``. Si gana el visitante, se le
@@ -34,6 +36,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import numpy as np
 
+from sonia.busy import TEXT_HAND
 from sonia.games.base import Game, GameError, GameHost, StopReason
 from sonia.games.ppt.logic import (
     MOVES,
@@ -49,7 +52,7 @@ from sonia.games.ppt.logic import (
     ya_onset,
 )
 from sonia.games.ppt.overlay import OverlayState, draw_state
-from sonia.vision.contracts import HandShape, Person, PoseFrame
+from sonia.vision.contracts import HandShape, HandVerdict, Person, PoseFrame
 
 if TYPE_CHECKING:
     from sonia.config import PptSettings, Settings
@@ -439,6 +442,9 @@ class PptGame(Game):
 
         Devuelve la muestra elegida (jugada y caja) y, sin jugada, por qué: ``no_hand``
         (no se vio ninguna mano enseñándose) o ``unclear`` (se vio pero no se entendió).
+        Con juez de rondas, la jugada la decide él sobre el frame de esa lectura
+        (:meth:`_judged`); la lectura local solo elige el momento y decide si el juez no
+        contesta.
         """
         host = self.host
         self._phase = "reading"
@@ -447,10 +453,13 @@ class PptGame(Game):
         soft_end = start + max(0.2, float(self.options.read_seconds))
         hard_end = soft_end + READ_EXTEND_S
         samples: list[Sample] = []
+        #: El frame de cada muestra (``None`` si no había), solo en memoria: uno va al juez.
+        frames: list[np.ndarray | None] = []
         while True:
             began = host.now()
-            sample = await self._sample()
+            sample, frame = await self._sample()
             samples.append(sample)
+            frames.append(frame)
             shapes = [s.shape for s in samples]
             now = host.now()
             if now >= soft_end:
@@ -461,24 +470,87 @@ class PptGame(Game):
             await host.sleep(max(0.01, READ_STEP_S - (now - began)))
         shapes = [s.shape for s in samples]
         found = settle(shapes)
+        last_frame = next((f for f in reversed(frames) if f is not None), None)
         if found is None:
             reason = "unclear" if any(s.seen for s in samples) else "no_hand"
             box = next((s.box for s in reversed(samples) if s.box is not None), None)
-            return Sample(None, reason == "unclear", box), reason
-        chosen = next(s for s in reversed(samples) if s.shape is found)
-        return chosen, ""
+            local, photo = Sample(None, reason == "unclear", box), last_frame
+        else:
+            index = max(i for i, s in enumerate(samples) if s.shape is found)
+            reason = ""
+            local, photo = samples[index], frames[index]
+        # Al juez, el frame de la lectura estable (la jugada ya quieta tras el «¡ya!»); sin
+        # jugada estable, el último que se leyó, el más alejado del puño de la cuenta.
+        return await self._judged(
+            local, reason, samples, photo if photo is not None else last_frame
+        )
 
-    async def _sample(self) -> Sample:
+    async def _judged(
+        self, local: Sample, reason: str, samples: list[Sample], photo: np.ndarray | None
+    ) -> tuple[Sample, str]:
+        """La jugada que ve el juez de rondas en ``photo``; sin veredicto, la lectura local.
+
+        Con veredicto manda el juez aunque la lectura local dijera otra cosa: su primera
+        jugada es la del jugador y, si no ve ninguna, no hay jugada (``unclear`` si la
+        lectura local vio una mano, ``no_hand`` si no). La caja de la mano sigue siendo la
+        local (la vista en vivo la marca), o ninguna.
+        """
+        verdict = await self._ask_referee(photo)
+        if verdict is None:
+            return local, reason
+        box = local.box or next((s.box for s in reversed(samples) if s.box is not None), None)
+        plays = [shape for shape in verdict.shapes if shape in MOVES]
+        if plays:
+            judged = plays[0]
+            if judged is not local.shape:
+                logger.info(
+                    "Piedra, papel o tijera: el juez ve %s y la lectura local %s",
+                    judged.value,
+                    local.shape.value if local.shape is not None else f"nada ({reason})",
+                )
+            return Sample(judged, True, box), ""
+        judged_reason = "unclear" if any(s.seen for s in samples) else "no_hand"
+        if local.shape is not None:
+            logger.info(
+                "Piedra, papel o tijera: el juez no ve jugada y la lectura local %s",
+                local.shape.value,
+            )
+        return Sample(None, judged_reason == "unclear", box), judged_reason
+
+    async def _ask_referee(self, photo: np.ndarray | None) -> HandVerdict | None:
+        """El veredicto del juez sobre ``photo``, con el aviso de espera mientras mira.
+
+        ``None`` sin juez (``GAMES_JUDGE=local`` o sin clave: ni foto ni aviso), sin foto,
+        sin respuesta a tiempo o si falla. Nunca lanza.
+        """
+        host = self.host
+        referee = host.referee
+        if photo is None or not referee.available:
+            return None
+        try:
+            await host.set_busy("judge", TEXT_HAND)
+            return await referee.hands(photo)
+        except Exception:  # noqa: BLE001 - sin veredicto, decide la lectura local
+            logger.warning("Piedra, papel o tijera: el juez falló", exc_info=True)
+            return None
+        finally:
+            try:
+                await host.set_busy("judge", None)
+            except Exception:  # noqa: BLE001 - apagar el aviso nunca tumba nada
+                logger.debug("No se pudo apagar el aviso del juez", exc_info=True)
+
+    async def _sample(self) -> tuple[Sample, np.ndarray | None]:
         """Una lectura: el jugador y la mano que enseña, los dos del mismo frame.
 
         Las poses se detectan sobre el frame de ahora (``poses.detect``) para que la
         persona y su mano sean del mismo instante; si falla, la última detección continua.
+        Devuelve también ese frame (``None`` si la cámara no dio ninguno) para el juez.
         """
         host = self.host
         latest = host.stream.latest()
         if latest is None:
             self._track()
-            return NO_HAND
+            return NO_HAND, None
         at, frame = latest
         try:
             pose = await host.poses.detect(frame, at)
@@ -487,17 +559,17 @@ class PptGame(Game):
             pose = None
         person = self._track(pose) if pose is not None else self._track()
         if person is None:
-            return NO_HAND
+            return NO_HAND, frame
         try:
             readings = await host.hands.read(frame, person)
         except Exception:  # noqa: BLE001 - una lectura fallida es una muestra sin mano
             logger.debug("Falló una lectura de manos", exc_info=True)
-            return NO_HAND
+            return NO_HAND, frame
         sample = read_sample(readings, person)
         self._overlay = OverlayState(
             player=self._player_box, hand=sample.box, hand_ok=sample.shape is not None
         )
-        return sample
+        return sample, frame
 
     async def _resolve(self, move: HandShape, sample: Sample, reason: str, max_throws: int) -> bool:
         """Cuenta la tirada, la pinta y se la pasa a Sonia. ``True`` si la partida acabó."""

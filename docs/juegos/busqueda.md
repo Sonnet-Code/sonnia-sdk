@@ -6,15 +6,15 @@ Plan: `docs/plan-juegos.md`, sección 5.6. Contrato y cómo se hace un juego: `d
 
 «¡El primero que me enseñe algo azul!». Sonnia pide un objeto, el grupo corre a enseñarlo a la cámara y el stand comprueba si lo trae. Se juegan `GAME_BUSQUEDA_ROUNDS` rondas (3) de `GAME_BUSQUEDA_ROUND_SECONDS` (25 s). La imagen de la cámara sale en la franja alta, encima de Sonnia, para que sepan dónde enseñar el objeto («En vivo · no se graba»).
 
-Es el único juego que manda una foto fuera del equipo: una foto reducida cada `GAME_BUSQUEDA_CHECK_SECONDS` (2,5 s) al modelo de visión, con una pregunta cerrada y un tope de `GAME_BUSQUEDA_MAX_CHECKS` (10) por ronda. Nunca se guarda una imagen ni se describe a nadie: el modelo solo dice si se ve el objeto y cuál es.
+Manda fotos fuera del equipo: una foto reducida cada `GAME_BUSQUEDA_CHECK_SECONDS` (2,5 s) al juez, con una pregunta cerrada y un tope de `GAME_BUSQUEDA_MAX_CHECKS` (10) por ronda. El juez es Gemini con `GAMES_JUDGE=gemini` (el de por defecto desde el 10 de octubre de 2026) y el modelo de visión de Sonia (`LLM_*`) con `GAMES_JUDGE=local` o sin `GEMINI_API_KEY` (`docs/juegos-vision.md`, «Juez de Gemini»). Nunca se guarda una imagen ni se describe a nadie: el juez solo dice si se ve el objeto y cuál es.
 
-Necesita (`needs`): la cámara USB, la vista en vivo en la Unity (`camera_preview`) y el modelo de visión.
+Necesita (`needs`): la cámara USB, la vista en vivo en la Unity (`camera_preview`) y un juez (Gemini o el modelo de visión).
 
 ## Cómo se juega
 
 1. **Empezar.** GPT-Live delega `start_game(busqueda)` (o el equipo pulsa «Búsqueda relámpago» en el panel). El orquestador reserva la cámara, enciende la vista en vivo (sin dibujo encima), manda `start` y la ronda 1 lista (`round`), pasa las reglas por `instruct` (menos de 1200 caracteres) y devuelve el guion: explicar el juego en una frase y anunciar el objeto.
 2. **Ronda lista.** La pantalla enseña el objeto, el color y el tiempo entero parado («PREPÁRENSE…»). El orquestador sigue la transcripción de Sonia (`on_assistant_text`, solo para sincronizar la pantalla): cuando dice el objeto y calla un segundo, suena el **«¡Ya!»** grabado y arranca el contador (`go`). Si no la oye decirlo, da la salida al tope de espera (14 s la primera ronda, 9 s las demás).
-3. **Miradas.** Cada 2,5 s una foto al modelo de visión con la pregunta del objeto (`VisionJudge.ask`). Las miradas **no se solapan**: si una tarda, la siguiente espera a que acabe y sale enseguida. Cada mirada manda a la pantalla un `checking` (el barrido de «mirando»). Tope de 10 por ronda, contando las de `busqueda_check`; si el tope va justo (muchas delegaciones o un `MAX_CHECKS` bajo), la siguiente mirada se retrasa para repartir las que quedan por lo que queda de ronda, así el final también se mira.
+3. **Miradas.** Cada 2,5 s una foto al juez con la pregunta del objeto (`VisionJudge.ask`). Las miradas **no se solapan**: si una tarda, la siguiente espera a que acabe y sale enseguida. Cada mirada manda a la pantalla un `checking` (el barrido de «mirando») y, solo mientras la foto está en juicio, la pastilla de espera «Mirando lo que enseñas…» (`busy`, tipo `judge`), que se apaga en cuanto el juez contesta, falla o se acaba el plazo. Tope de 10 por ronda, contando las de `busqueda_check`; si el tope va justo (muchas delegaciones o un `MAX_CHECKS` bajo), la siguiente mirada se retrasa para repartir las que quedan por lo que queda de ronda, así el final también se mira.
 4. **¡Encontrado!** En cuanto el modelo ve el objeto: `found` (¡Encontrado!, confeti y lo que vio la cámara), suena el **«¡Lo veo!»** grabado y Sonia lo celebra en una frase **describiendo el objeto, nunca a la persona** (ver «Lo que dice el modelo»).
 5. **Se acaba el tiempo.** `timeout` (¡Tiempo!), suena el **«¡Tiempo!»** grabado y Sonia lo dice con humor, sin culpar a nadie.
 6. **Siguiente.** Cuando Sonia termina de contar el resultado, sale la ronda siguiente (otro `round` y otro anuncio). Tras la última ronda, `finish`: gana si encuentran la mitad o más (2 de 3) y se queda en pantalla hasta que Sonia termina de contarlo; la vista en vivo se retira 3 s después de la última ronda. A quien gana se le manda con `TRIVIA_WIN_CONTACT` (Brian o Mariel); Sonia no sabe de premios.
@@ -23,7 +23,7 @@ Nada de lo que oye el visitante se interpreta. Si alguien grita «¡aquí!», GP
 
 ### Cuando algo falla
 
-- **El modelo no contesta** (sin foto, plazo de 8 s, error): esa mirada cuenta contra el tope pero no pasa nada. Si en una ronda no contesta **ninguna**, Sonia no dice «nadie lo enseñó» sino que la cámara no contestó (`timeout` con `silent: true`). Con dos rondas seguidas así, se cancela el juego con una disculpa corta.
+- **El juez no contesta** (sin foto, plazo de 8 s, error): esa mirada cuenta contra el tope pero no pasa nada. Con Gemini, una mirada que falla no se repite con el modelo de visión: queda sin respuesta y la siguiente llega a los 2,5 s. Si en una ronda no contesta **ninguna**, Sonia no dice «nadie lo enseñó» sino que la cámara no contestó (`timeout` con `silent: true`). Con dos rondas seguidas así, se cancela el juego con una disculpa corta.
 - **Una mirada tarda más que la ronda:** la foto que va en el aire al acabar el tiempo aún cuenta durante 3 s; si no llega, la ronda se pierde y la respuesta tardía se ignora.
 - **Se cae GPT-Live, cambia el modo o se reconecta Unity:** como dice el contrato (`docs/juegos.md`). Cada mensaje de ronda (`round`, `go`, `found`, `timeout`) lleva el estado completo, así que el último que se repite tras `hello` repinta toda la pantalla.
 - **Abandono:** `GAMES_ABANDON_SECONDS` (60 s) sin voz ni actividad (que el modelo vea el objeto cuenta como actividad). Se cancela y suelta la cámara.
@@ -35,7 +35,8 @@ Nada de lo que oye el visitante se interpreta. Si alguien grita «¡aquí!», GP
 | GPT-Live | Anuncia cada ronda con ganas, celebra o lamenta el resultado en una frase y calla durante la ronda. Si oye «¡aquí!» o «¡ya lo tengo!», delega `busqueda_check` antes de decir nada. No ve nada: no dice que lo ve hasta que el sistema se lo cuenta. No usa `look` en este juego. |
 | Backend Responses | Llama a `start_game`, `busqueda_check` y `stop_game`, y pasa entero el guion `PARA SONIA:`. |
 | Orquestador | Elige los objetos, lleva las rondas y el contador, da la salida, pregunta a la cámara cada 2,5 s con tope, no deja que se solapen las miradas, filtra lo que dice el modelo, registra las fotos y cuenta el resultado. |
-| Unity | Muestra la vista en vivo, la tarjeta con el objeto y el contador, el barrido de «mirando», «¡Encontrado!» y el final. No manda nada al orquestador. |
+| Juez (Gemini o el modelo de visión) | Mira cada foto y contesta si se ve el objeto y cuál es, en JSON (`JUDGE_PROMPT`), sin describir a nadie. |
+| Unity | Muestra la vista en vivo, la tarjeta con el objeto y el contador, el barrido de «mirando», la pastilla de espera, «¡Encontrado!» y el final. No manda nada al orquestador. |
 
 ## Acciones de GPT-Live
 
@@ -64,7 +65,8 @@ Sus eventos están en `docs/protocolo.md` («Eventos de cada juego», `busqueda`
 ## Cámara
 
 - `host.stream.acquire` y `host.preview.start` (sin overlay) al empezar; el manager los suelta al terminar aunque se olvide. La vista en vivo se retira 3 s después de la última ronda, para que no acompañe a la tarjeta final.
-- **Una foto por mirada**, reducida (640 px de ancho) y fresca, al modelo de visión que ya usa Sonia, con una pregunta cerrada. Nunca a GPT-Live, nunca a disco. El juez (`ModelJudge`, `docs/juegos-vision.md`) lleva su propio tope por ronda (`start_round(max_checks)`, que el juego llama al abrir cada ronda) además del contador del juego.
+- **Una foto por mirada**, reducida (640 px de ancho) y fresca, al juez, con una pregunta cerrada. Nunca a GPT-Live, nunca a disco. El juez (`ModelJudge`, `docs/juegos-vision.md`) lleva su propio tope por ronda (`start_round(max_checks)`, que el juego llama al abrir cada ronda) además del contador del juego.
+- **Qué juez:** lo monta `build_game_vision` según `GAMES_JUDGE`. Con `gemini` (por defecto), `ModelJudge` con un cliente de Gemini (`gemini-3.1-flash-lite`, el del director de gestos, con `GEMINI_API_KEY`); con `local` o sin esa clave, `ModelJudge` con el modelo de visión de Sonia (`LLM_*`), como antes. El prompt (`JUDGE_PROMPT`), el plazo (8 s) y el tope son los mismos. En el banco de pruebas del 10 de octubre de 2026 Gemini acertó 25 de 25 fotos de la búsqueda (el modelo de visión, 24 de 25), con 1,25 s de mediana y unos 1.350 tokens de entrada por foto.
 - **Qué le pregunta:** la del objeto (`objetos.md`), cerrada y sin hablar de personas; sin pregunta propia, «En la foto, ¿se ve <objeto> bien a la vista, en una mano o frente a la cámara? No cuentan la ropa ni el fondo.». El prompt del juez ya prohíbe describir personas y dice que la ropa, las gafas o el pelo no cuentan.
 - **Coste.** Hasta 9 o 10 fotos por ronda si nadie lo trae (2,5 s en 25 s), menos si lo encuentran antes; el tope de 10 las acota. Cada ronda y la partida entera dejan una línea en el registro, por ejemplo: `Búsqueda: ronda 1/3 «algo azul»: encontrado. 5 fotos al modelo de visión (4 periódicas, 1 por busqueda_check; 5 con respuesta). Partida: 5 fotos, 1 de 3 encontrados` y, al terminar, `Búsqueda terminada (finished): 2 de 3 rondas encontradas, 14 fotos al modelo de visión (14 con respuesta) en 96 s`. Se mide en la primera prueba real.
 
@@ -117,6 +119,7 @@ Con tiempo exacto, por `say_fixed` (de `cache/voice` si están grabadas; si no, 
 - `server/tests/games/test_busqueda_azar.py`: 40 partidas al azar con semilla contra el `GameManager` (un juez y una Sonia caprichosos, delegaciones a destiempo, sesión caída): nunca cuelgan, nunca hay dos miradas a la vez, cada ronda se cuenta una vez, no sale ningún error al registro y la cámara y la pantalla acaban sueltas con un solo `end`.
 - `server/tests/games/test_busqueda_juez.py`: el juego con el juez de verdad (`ModelJudge`) sobre un servidor HTTP falso (`httpx.MockTransport`, nunca el modelo de verdad): la cuenta de fotos y su tope por ronda, la pregunta que llega al modelo, lo que vuelve en JSON por `clean_what`, el servidor caído y la cámara sin foto.
 - `server/tests/games/test_busqueda_demo.py`: la secuencia del orquestador falso manda lo mismo que el juego.
+- `server/tests/games/test_busqueda_aviso.py`: la pastilla de espera (`busy`, `judge`) se enciende solo mientras hay una foto en juicio y se apaga al contestar, sin respuesta o si el juez falla; si el aviso falla, la mirada sigue.
 - Ningún test llama a la API real ni usa la cámara de nadie.
 - Capturas 9:16 de cada estado con el orquestador falso (`server/sonia/games/busqueda/demo.py`; la vista en vivo sale de una foto pública si se da `BUSQUEDA_DEMO_FOTO`, o de una imagen sintética):
 
@@ -129,5 +132,5 @@ Con tiempo exacto, por `say_fixed` (de `cache/voice` si están grabadas; si no, 
 
 ## Pendiente
 
-- Probarla con la API real: que GPT-Live delegue `start_game` a la primera, que anuncie el objeto antes de la salida, que delegue `busqueda_check` con el barullo y que no se invente que lo ve. Y medir el coste de las fotos y lo que tarda cada mirada con el modelo de verdad.
+- Probarla con la API real: que GPT-Live delegue `start_game` a la primera, que anuncie el objeto antes de la salida, que delegue `busqueda_check` con el barullo y que no se invente que lo ve. Y medir el coste de las fotos y lo que tarda cada mirada con Gemini y la cámara del stand (en el banco de pruebas, con fotos públicas, 1,25 s de mediana).
 - Que Jean revise el banco de objetos.
