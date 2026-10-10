@@ -19,7 +19,7 @@ from __future__ import annotations
 RULES_TEXT = """\
 JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: {segments}.
 - La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.
-- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota o «ya está» sin haberlo delegado.
+- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.
 - Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.
 - Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».
 - Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.
@@ -266,13 +266,17 @@ NO_PREDICTION = (
 # Empujones tras un turno del visitante sin delegación (``nudge``)
 # ---------------------------------------------------------------------------
 
+#: Girar solo si lo pidieron: con «si pidió otra vuelta, delega girar», ante una charla entre
+#: ellos Sonia decía «Dale, la giro otra vez» sin delegar nada (pruebas con Unity, 10 de
+#: octubre de 2026): anunciaba una vuelta que no ocurría.
 NUDGE_CHALLENGE = (
-    "RULETA: si el visitante dio su respuesta al reto, delégala ya, sin decir si acierta; si "
-    "pidió otra vuelta, delega girar; si pidió parar o se despidió, delega terminar el juego."
+    "RULETA: si el visitante te dio su respuesta al reto, delégala ya, sin decir si acierta. "
+    "Solo si te pidió otra vuelta, delega girar; si pidió parar o se despidió, delega terminar "
+    "el juego. Nunca digas que gira o que terminas sin delegarlo."
 )
 NUDGE_RESULT = (
-    "RULETA: si el visitante pidió otra vuelta, delega girar; si no quiere seguir o se "
-    "despidió, delega terminar el juego."
+    "RULETA: solo si el visitante te pidió otra vuelta, delega girar; si no quiere seguir o se "
+    "despidió, delega terminar el juego. Nunca digas que gira o que terminas sin delegarlo."
 )
 #: Mientras gira la ruleta solo cuenta parar (el reto aún no ha salido).
 NUDGE_SPINNING = "RULETA: si el visitante pidió parar o se despidió, delega terminar el juego."
