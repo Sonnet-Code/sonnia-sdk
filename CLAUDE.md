@@ -133,7 +133,7 @@ uv run --no-sync python ../scripts/juegos_demo.py --juego wordle --puerto 8791  
 - No bloquear el bucle `asyncio` con llamadas síncronas (red, cámara, disco): el micrófono tiene que llegar a GPT-Live a tiempo real.
 - No enviar vídeo continuo ni capturas en cada frame a ningún modelo. Solo fotos puntuales, reducidas, cuando aporten.
 - No guardar en disco capturas de la cámara fuera del modo debug.
-- No enseñar la cámara en pantalla fuera de la vista en vivo de los juegos que la usan, ni guardarla, ni mandarla a la nube salvo las fotos reducidas y con tope de la búsqueda relámpago.
+- No enseñar la cámara en pantalla salvo la vista en vivo de los juegos que la usan, y solo mientras dura el juego. Esa vista no se guarda ni sale del equipo (va solo a Unity); de los juegos, solo la búsqueda relámpago manda fotos al modelo de visión, reducidas y con tope por ronda.
 - No reconocer ni guardar caras de visitantes: solo el equipo de Sonnet Code, los ponentes (desde sus fotos públicas) y las personas conocidas que el equipo añada a mano (`docs/caras.md`).
 - No implementar una acción sin su lado de Unity cuando le afecta: registro, handler, protocolo y Unity en el mismo commit.
 - No subir claves, builds de Unity ni la caché al repositorio.
