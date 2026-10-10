@@ -44,7 +44,7 @@ from sonia.vision.contracts import (
     Point,
     Side,
 )
-from sonia.vision.models import HAND_LANDMARKS, PALM_DETECTOR, model_present
+from sonia.vision.models import HAND_LANDMARKS, PALM_DETECTOR, load_onnx, model_present
 
 __all__ = [
     "FINGERS",
@@ -226,8 +226,8 @@ class HandModels:
         import cv2
 
         self._cv2 = cv2
-        self._palm = cv2.dnn.readNet(str(folder / PALM_DETECTOR.name))
-        self._hand = cv2.dnn.readNet(str(folder / HAND_LANDMARKS.name))
+        self._palm = load_onnx(folder / PALM_DETECTOR.name)
+        self._hand = load_onnx(folder / HAND_LANDMARKS.name)
         self._palm_out = list(self._palm.getUnconnectedOutLayersNames())
         self._hand_out = list(self._hand.getUnconnectedOutLayersNames())
         self._lock = threading.Lock()
@@ -322,7 +322,7 @@ class MediaPipeHandDetector:
         self._folder = folder
         self._models: HandModels | None = None
         self._broken = False
-        self._load_lock = asyncio.Lock()
+        self._preload_lock = threading.Lock()
 
     @property
     def available(self) -> bool:
@@ -344,17 +344,32 @@ class MediaPipeHandDetector:
             logger.exception("Fallo leyendo las manos")
             return []
 
+    def preload(self) -> bool:
+        """Carga los dos modelos y los calienta en vacío. ``True`` si están listos.
+
+        Bloquea: va en un hilo. Se llama al arrancar y, si no, en la primera lectura.
+        """
+        with self._preload_lock:
+            if self._models is not None:
+                return True
+            if self._broken or not self.available:
+                return False
+            try:
+                models = HandModels(self._folder)
+                blank = np.zeros((PALM_INPUT * 2, PALM_INPUT * 2, 3), dtype=np.uint8)
+                models.palms(blank)
+                models.landmarks(blank, (PALM_INPUT, PALM_INPUT), PALM_INPUT, 0.0)
+            except Exception:  # noqa: BLE001 - sin modelos, el juego no se ofrece
+                logger.exception("No se pudieron cargar los modelos de manos")
+                self._broken = True
+                return False
+            self._models = models
+            logger.info("Modelos de manos listos")
+            return True
+
     async def _ensure_models(self) -> HandModels | None:
-        if self._models is not None or self._broken:
-            return self._models
-        async with self._load_lock:
-            if self._models is None and not self._broken and self.available:
-                try:
-                    self._models = await asyncio.to_thread(HandModels, self._folder)
-                    logger.info("Modelos de manos listos")
-                except Exception:  # noqa: BLE001 - sin modelos, el juego no se ofrece
-                    logger.exception("No se pudieron cargar los modelos de manos")
-                    self._broken = True
+        if self._models is None and not self._broken:
+            await asyncio.to_thread(self.preload)
         return self._models
 
 
@@ -392,9 +407,38 @@ def read_hands(models: HandModels, frame: np.ndarray, person: Person) -> list[Ha
         reading = _read_one(models, frame, side, wrist, direction, hand)
         if reading is not None:
             readings.append((reading, float(wrist[1])))
+    if all(reading.shape is HandShape.UNKNOWN for reading, _ in readings):
+        # Sin muñecas a la vista (alguien muy cerca) o sin lectura por ellas: las palmas que
+        # haya dentro de la caja de la persona.
+        readings.extend(_read_in_box(models, frame, person))
     readings = _dedupe(readings)
     readings.sort(key=lambda item: (item[0].shape is HandShape.UNKNOWN, item[1]))
     return [reading for reading, _ in readings]
+
+
+def _read_in_box(
+    models: HandModels, frame: np.ndarray, person: Person
+) -> list[tuple[HandReading, float]]:
+    """Las manos de las palmas que se encuentren en la caja de la persona (dos como mucho)."""
+    height, width = int(frame.shape[0]), int(frame.shape[1])
+    x, y, w, h = person.box
+    margin_x, margin_y = w * 0.1, h * 0.05
+    x0, y0 = max(0, int((x - margin_x) * width)), max(0, int((y - margin_y) * height))
+    x1 = min(width, int((x + w + margin_x) * width))
+    y1 = min(height, int((y + h + margin_y) * height))
+    if x1 - x0 < 16 or y1 - y0 < 16:
+        return []
+    middle = (x + w / 2) * width
+    found: list[tuple[HandReading, float]] = []
+    for box, keypoints, _score in models.palms(frame[y0:y1, x0:x1])[:2]:
+        box = box + [x0, y0, x0, y0]
+        keypoints = keypoints + [x0, y0]
+        # De frente, la mano derecha de la persona sale a la izquierda de la imagen.
+        side: Side = "derecha" if float(keypoints[0][0]) < middle else "izquierda"
+        reading = _reading_from_roi(models, frame, side, _palm_roi(box, keypoints))
+        if reading is not None:
+            found.append((reading, float(keypoints[0][1])))
+    return found
 
 
 def _hand_size(shoulders: float, forearm: float, person: Person, width: int, height: int) -> float:
@@ -444,6 +488,17 @@ def _read_one(
             _rotation((float(direction[0]), float(direction[1]))),
         )
     # 3. Los 21 puntos.
+    return _reading_from_roi(models, frame, side, roi)
+
+
+def _reading_from_roi(
+    models: HandModels,
+    frame: np.ndarray,
+    side: Side,
+    roi: tuple[tuple[float, float], float, float],
+) -> HandReading | None:
+    """Los 21 puntos del recorte girado ``roi`` y su lectura, si hay una mano."""
+    height, width = int(frame.shape[0]), int(frame.shape[1])
     found = models.landmarks(frame, roi[0], roi[1], roi[2])
     if found is None:
         return None

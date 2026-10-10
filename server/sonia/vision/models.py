@@ -32,6 +32,7 @@ __all__ = [
     "download_game_models",
     "game_models",
     "games_models_dir",
+    "load_onnx",
     "model_present",
 ]
 
@@ -113,6 +114,24 @@ def model_present(folder: Path, model: GameModel) -> bool:
         return path.is_file() and path.stat().st_size == model.size
     except OSError:
         return False
+
+
+def load_onnx(path: Path) -> Any:
+    """Carga un ONNX con ``cv2.dnn``, con el motor clásico si lo hay.
+
+    En OpenCV 5 el motor clásico gasta bastante menos CPU con estos modelos que el nuevo
+    (medido el 10-oct-2026 en el Mac: YOLOv8s-pose, 300 ms de CPU por foto frente a 510, y
+    58 ms frente a 67 de reloj). Si no carga con él, se usa el de por defecto.
+    """
+    import cv2
+
+    classic = getattr(cv2.dnn, "ENGINE_CLASSIC", None)
+    if classic is not None:
+        try:
+            return cv2.dnn.readNetFromONNX(str(path), engine=classic)
+        except cv2.error:
+            logger.info("%s no carga con el motor clásico de OpenCV: se usa el nuevo", path.name)
+    return cv2.dnn.readNetFromONNX(str(path))
 
 
 def _sha256(path: Path) -> str:

@@ -19,6 +19,12 @@ from sonia.vision.poses import YoloPoseDetector
 from sonia.vision.stream import LivePreview, OpenCVCameraStream
 
 
+@pytest.fixture(autouse=True)
+def _sin_modelos_del_equipo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nunca los modelos de verdad de ``cache/games/modelos``: una carpeta vacía."""
+    monkeypatch.setattr(models_module, "games_models_dir", lambda settings=None: tmp_path)
+
+
 def make_settings(tmp_path: Path, source: str = "opencv") -> Settings:
     settings = Settings(_env_file=None)  # type: ignore[call-arg]
     settings.vision.source = source  # type: ignore[assignment]
@@ -47,7 +53,6 @@ def build(settings: Settings, camera: Any, **options: Any) -> Any:
 async def test_con_la_camara_usb_monta_la_vision_de_verdad(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(models_module, "games_models_dir", lambda settings=None: tmp_path)
     settings = make_settings(tmp_path)
     camera = OpenCVCamera(settings.vision)
     vision = build(settings, camera)
@@ -101,7 +106,6 @@ async def test_si_faltan_los_modelos_se_bajan_en_un_hilo(
         return []
 
     monkeypatch.setattr(models_module, "download_game_models", fake_download)
-    monkeypatch.setattr(models_module, "games_models_dir", lambda settings=None: tmp_path)
     settings = make_settings(tmp_path)
     build(settings, OpenCVCamera(settings.vision), download_models=True)
     assert await asyncio.to_thread(done.wait, 2.0)

@@ -11,8 +11,11 @@ los codos, las muñecas...).
   confianza y se quitan los duplicados con NMS.
 - Coordenadas de 0 a 1 sobre la imagen sin espejo (``sonia.vision.contracts``).
 
-Tiempos en el Mac de desarrollo (OpenCV 5.0): unos 30 ms con ``n`` y 70 ms con ``s``.
-OpenCV usa varios hilos por detección: se limitan (``DNN_THREADS``) para dejar CPU a Unity.
+Tiempos en el Mac de desarrollo (M1 Pro, OpenCV 5.0, motor clásico de ``cv2.dnn``, 10 de
+octubre de 2026): unos 30 ms con ``n`` (120 ms de CPU) y 60 ms con ``s`` (310 ms de CPU) por
+detección; con un solo hilo, 90 y 250 ms. OpenCV reparte cada detección en varios hilos: se
+limitan (``DNN_THREADS``) para dejar CPU a Unity. En macOS el reparto es de GCD y no hace caso
+del límite salvo con 1; en Windows sí (``docs/juegos-vision.md``).
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ from typing import Protocol
 import numpy as np
 
 from sonia.vision.contracts import CameraStream, Person, Point, PoseFrame
-from sonia.vision.models import POSE_MODELS, GameModel, model_present
+from sonia.vision.models import POSE_MODELS, GameModel, load_onnx, model_present
 
 __all__ = [
     "DNN_THREADS",
@@ -158,7 +161,7 @@ class PoseModel:
         if threads > 0:
             cv2.setNumThreads(threads)
         self._cv2 = cv2
-        self._net = cv2.dnn.readNetFromONNX(str(path))
+        self._net = load_onnx(path)
         self._lock = threading.Lock()
 
     def detect(self, frame_bgr: np.ndarray) -> tuple[Person, ...]:
@@ -201,7 +204,7 @@ class YoloPoseDetector:
         self._threads = threads
         self._model: PoseEstimator | None = model
         self._broken = False
-        self._load_lock = asyncio.Lock()
+        self._preload_lock = threading.Lock()
         self._owners: dict[str, float] = {}
         self._task: asyncio.Task[None] | None = None
         self._latest: PoseFrame | None = None
@@ -275,6 +278,29 @@ class YoloPoseDetector:
         self.detections += 1
         return PoseFrame(at=at, width=width, height=height, people=people)
 
+    def preload(self) -> bool:
+        """Carga el modelo y lo calienta con una detección en vacío. ``True`` si está listo.
+
+        Bloquea (unos cientos de milisegundos): va en un hilo. Se llama al arrancar, para
+        que la primera ronda no pague la carga, y si no, en el primer uso.
+        """
+        with self._preload_lock:
+            if self._model is not None:
+                return True
+            path = self._folder / self._model_file.name
+            if self._broken or not model_present(self._folder, self._model_file):
+                return False
+            try:
+                model = PoseModel(path, threads=self._threads)
+                model.detect(np.zeros((INPUT_SIZE // 2, INPUT_SIZE, 3), dtype=np.uint8))
+            except Exception:  # noqa: BLE001 - sin modelo, el juego no se ofrece
+                logger.exception("No se pudo cargar el modelo de poses %s", path)
+                self._broken = True
+                return False
+            self._model = model
+            logger.info("Modelo de poses listo (%s)", self._model_file.name)
+            return True
+
     async def _ensure_model(self) -> bool:
         if self._model is not None:
             return True
@@ -282,25 +308,10 @@ class YoloPoseDetector:
             return False
         try:
             async with asyncio.timeout(_LOAD_TIMEOUT_S):
-                async with self._load_lock:
-                    if self._model is None and not self._broken:
-                        await self._load()
+                return await asyncio.to_thread(self.preload)
         except TimeoutError:
             logger.warning("El modelo de poses tarda demasiado en cargar")
-        return self._model is not None
-
-    async def _load(self) -> None:
-        path = self._folder / self._model_file.name
-        if not model_present(self._folder, self._model_file):
-            logger.info("Falta el modelo de poses %s: los juegos de poses no se ofrecen", path)
-            return
-        try:
-            self._model = await asyncio.to_thread(PoseModel, path, threads=self._threads)
-        except Exception:  # noqa: BLE001 - sin modelo, el juego no se ofrece
-            logger.exception("No se pudo cargar el modelo de poses %s", path)
-            self._broken = True
-            return
-        logger.info("Modelo de poses listo (%s)", self._model_file.name)
+            return False
 
     async def _run(self) -> None:
         """Detecta sobre el último frame del stream a las ``fps`` pedidas."""

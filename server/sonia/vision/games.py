@@ -213,21 +213,25 @@ def _build(
         if vision_llm is not None and settings.llm.supports_vision
         else NoJudge()
     )
-    downloader: threading.Thread | None = None
-    if download_models and not (poses.available and hands.available):
+    missing = not (poses.available and hands.available)
+    if download_models or not missing:
         models = game_models(variant)
 
-        def download() -> None:
-            try:
-                fetched = download_game_models(folder, models)
-            except Exception as exc:  # noqa: BLE001 - sin red: se reintenta al volver a arrancar
-                logger.warning("No se pudieron bajar los modelos de los juegos: %s", exc)
-                return
-            if fetched:
-                logger.info("Modelos de los juegos listos en %s: %s", folder, ", ".join(fetched))
+        def prepare() -> None:
+            # Si faltan, se bajan; después se cargan y se calientan, para que la primera
+            # ronda no pague la carga. Todo en este hilo, fuera del bucle de audio.
+            if missing:
+                try:
+                    fetched = download_game_models(folder, models)
+                except Exception as exc:  # noqa: BLE001 - sin red: al volver a arrancar
+                    logger.warning("No se pudieron bajar los modelos de los juegos: %s", exc)
+                    return
+                if fetched:
+                    logger.info("Modelos de los juegos en %s: %s", folder, ", ".join(fetched))
+            poses.preload()
+            hands.preload()
 
-        downloader = threading.Thread(target=download, name="sonia-modelos-juegos", daemon=True)
-        downloader.start()
+        threading.Thread(target=prepare, name="sonia-modelos-juegos", daemon=True).start()
 
     async def close() -> None:
         await preview.close()

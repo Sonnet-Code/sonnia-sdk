@@ -296,13 +296,29 @@ def test_si_el_modelo_no_ve_una_mano_no_hay_lectura() -> None:
     assert read_hands(models, frame(), player()) == []  # type: ignore[arg-type]
 
 
-def test_sin_munecas_no_se_busca_nada() -> None:
-    models = FakeHandModels(ALL)
+def test_sin_munecas_se_buscan_las_palmas_en_la_caja_de_la_persona() -> None:
+    # Alguien muy cerca de la cámara: no se le ven las muñecas, pero sí la mano.
     nobody = Person(
-        box=(0.4, 0.1, 0.2, 0.5), score=0.8, points=tuple(Point(0.5, 0.5, 0.1) for _ in range(17))
+        box=(0.4, 0.1, 0.2, 0.5),
+        score=0.8,
+        points=tuple(Point(0.5, 0.5, 0.1) for _ in range(17)),
     )
-    assert read_hands(models, frame(), nobody) == []  # type: ignore[arg-type]
-    assert models.regions == []
+    models = FakeHandModels(ALL)
+    (reading,) = read_hands(models, frame(), nobody)  # type: ignore[arg-type]
+    assert reading.shape is HandShape.PAPER
+    assert len(models.regions) == 1  # una sola búsqueda, en la caja
+    region_w, region_h = models.regions[0]
+    assert region_w == pytest.approx(0.24 * WIDTH, abs=2)
+    assert region_h == pytest.approx(0.55 * HEIGHT, abs=2)
+    # Sin palmas en la caja, nada (sin muñecas no hay antebrazo del que tirar).
+    assert read_hands(FakeHandModels(ALL, palm=False), frame(), nobody) == []  # type: ignore[arg-type]
+
+
+def test_si_por_la_muneca_no_hay_lectura_se_mira_la_caja() -> None:
+    models = FakeHandModels({"indice"})  # un dedo: sin lectura
+    readings = read_hands(models, frame(), player())  # type: ignore[arg-type]
+    assert len(models.regions) == 2  # la zona de la muñeca y la caja de la persona
+    assert all(reading.shape is HandShape.UNKNOWN for reading in readings)
 
 
 async def test_sin_modelos_no_se_ofrece(tmp_path: Path) -> None:
