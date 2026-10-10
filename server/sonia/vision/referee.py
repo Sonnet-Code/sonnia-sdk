@@ -27,6 +27,7 @@ import numpy as np
 
 from sonia.config import is_gemini_url
 from sonia.llm.messages import system, user_with_image
+from sonia.prompts import BOOK, PromptSpec
 from sonia.vision.contracts import HandShape, HandVerdict, PoseVerdict
 
 if TYPE_CHECKING:
@@ -47,6 +48,7 @@ __all__ = [
     "gemini_llm_settings",
     "parse_hand_verdict",
     "parse_pose_verdict",
+    "prompt_specs",
 ]
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,48 @@ Eres el juez de piedra, papel o tijera en un stand de un evento de tecnología. 
 
 POSES_QUESTION = "Analiza la foto."
 HANDS_QUESTION = "¿Qué gestos de piedra, papel o tijera se ven?"
+
+#: Ids de los prompts en el panel (``sonia.prompts``): editables desde la nube.
+POSES_PROMPT_ID = "juez/poses"
+HANDS_PROMPT_ID = "juez/piedra_papel_tijera"
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """Los prompts del juez de Simón dice y de piedra, papel o tijera, editables desde el panel."""
+    pose_keys = tuple(f'"{key}"' for key in POSE_KEYS)
+    return [
+        PromptSpec(
+            id=POSES_PROMPT_ID,
+            group="Juez (Gemini)",
+            title="Simón dice: cuántas personas hacen cada pose",
+            default=lambda: POSES_PROMPT,
+            must_contain=("JSON", '"personas"', *pose_keys),
+            applies="peticion",
+            help=(
+                "Mensaje de sistema del juez de cada ronda de Simón dice (una foto por ronda). "
+                'Tiene que seguir pidiendo el JSON con "personas" y la cuenta de cada pose '
+                "con estas claves exactas: " + ", ".join(POSE_KEYS) + ". Si falta una, esa "
+                "pose la decide la detección local; si el JSON no se entiende, toda la ronda. "
+                "Sin marcadores."
+            ),
+        ),
+        PromptSpec(
+            id=HANDS_PROMPT_ID,
+            group="Juez (Gemini)",
+            title="Piedra, papel o tijera: qué gesto enseña la mano",
+            default=lambda: HANDS_PROMPT,
+            must_contain=("JSON", '"manos"', '"piedra"', '"papel"', '"tijera"'),
+            applies="peticion",
+            help=(
+                "Mensaje de sistema del juez de cada ronda de piedra, papel o tijera (una foto "
+                'por ronda). Tiene que seguir pidiendo el JSON con "manos": una lista con '
+                '"piedra", "papel" o "tijera", la primera la de la persona más cercana (la '
+                "que juega). Si el JSON no se entiende, decide la detección local. Sin "
+                "marcadores."
+            ),
+        ),
+    ]
+
 
 #: Cómo puede escribir Gemini cada jugada (sin tildes ni mayúsculas).
 _SHAPES: dict[str, HandShape] = {
@@ -148,7 +192,8 @@ class GeminiReferee:
         return self._llm is not None
 
     async def poses(self, frame_bgr: np.ndarray) -> PoseVerdict | None:
-        text = await self._ask("poses", POSES_PROMPT, POSES_QUESTION, frame_bgr)
+        prompt = BOOK.text(POSES_PROMPT_ID, POSES_PROMPT)
+        text = await self._ask("poses", prompt, POSES_QUESTION, frame_bgr)
         if text is None:
             return None
         verdict = parse_pose_verdict(text)
@@ -157,7 +202,8 @@ class GeminiReferee:
         return verdict
 
     async def hands(self, frame_bgr: np.ndarray) -> HandVerdict | None:
-        text = await self._ask("manos", HANDS_PROMPT, HANDS_QUESTION, frame_bgr)
+        prompt = BOOK.text(HANDS_PROMPT_ID, HANDS_PROMPT)
+        text = await self._ask("manos", prompt, HANDS_QUESTION, frame_bgr)
         if text is None:
             return None
         verdict = parse_hand_verdict(text)

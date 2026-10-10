@@ -14,11 +14,12 @@ from typing import Any
 import pytest
 
 from sonia.games.ppt import game as ppt_game
-from sonia.games.ppt.game import PptGame
+from sonia.games.ppt.game import PROMPT, PptGame
+from sonia.prompts import BOOK
 from sonia.vision.contracts import HandReading, HandShape
 from tests.games.fakes import FakeGameHost, FakePoses, game_settings, pose_frame
 from tests.games.test_ppt import by_throw, hand, loses, make_ppt, nothing, tie, wins
-from tests.prompt_snapshots import assert_snapshot
+from tests.prompt_snapshots import assert_snapshot, cloud_prompts
 
 
 @pytest.fixture(autouse=True)
@@ -69,3 +70,40 @@ async def ppt_texts() -> dict[str, Any]:
 
 async def test_con_los_textos_de_la_app_nada_cambia() -> None:
     assert_snapshot("prompts_ppt", await ppt_texts())
+
+
+def test_las_piezas_de_la_app_validan_y_son_los_textos_del_juego() -> None:
+    ids = [prompt_id for prompt_id in BOOK.ids() if prompt_id.startswith(PROMPT)]
+    assert len(ids) == 17
+    for prompt_id in ids:
+        assert BOOK.validate(prompt_id, BOOK.default(prompt_id)) == [], prompt_id
+        assert BOOK.spec(prompt_id).group == "Juego: Piedra, papel o tijera"
+    assert BOOK.default(PROMPT + "reglas") == ppt_game.RULES
+    assert BOOK.spec(PROMPT + "reglas").max_len == 1200
+    # Los trozos que van pegados se guardan sin el espacio de delante (la nube lo quitaría).
+    assert BOOK.default(PROMPT + "marcador") == ppt_game.GOES_ON.strip()
+    assert BOOK.default(PROMPT + "final_gana_jugador") == ppt_game.FINAL_PLAYER.strip()
+    # Sin decir quién ganó la ronda, no vale.
+    assert BOOK.validate(PROMPT + "ronda_ganada", "Ronda {round}: {sonnia} y {player}.")
+
+
+async def test_con_la_version_de_la_nube_se_usa_esa_y_no_la_de_la_app() -> None:
+    cloud = {
+        PROMPT + "reglas": "REGLAS DE LA NUBE: al mejor de {rounds}, gana quien llegue a {target}.",
+        PROMPT + "presentacion": "¡A jugar al mejor de {rounds}!",
+        PROMPT + "ronda_ganada": "Ronda {round}: {who}.",
+        PROMPT + "marcador": "Van {sonnia} a {player}.",
+        PROMPT + "final_gana_jugador": "¡Ganó {player} a {sonnia}! Que vea a {contact}.",
+    }
+    with cloud_prompts(cloud):
+        data = await match(wins)
+    assert data["instructions"] == ["REGLAS DE LA NUBE: al mejor de 3, gana quien llegue a 2."]
+    assert data["script"] == "¡A jugar al mejor de 3!"
+    assert data["spoken"] == [
+        "Ronda 1: gana el jugador. Van 0 a 1.",
+        "Ronda 2: gana el jugador. ¡Ganó 2 a 0! Que vea a Brian o Mariel.",
+    ]
+    joined = " ".join([*data["instructions"], data["script"], *data["spoken"]])
+    for app in ("JUEGO EN MARCHA", "Di en una o dos frases", "RESULTADO de la ronda", "Marcador:"):
+        assert app not in joined
+    assert BOOK.source(PROMPT + "reglas") == "app"

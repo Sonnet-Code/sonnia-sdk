@@ -27,6 +27,10 @@ lance. Por voz, el guion vuelve como resultado de la acción; desde el panel
 
 Nada de lo que pase aquí tumba el motor: los fallos van al registro y, si la
 sesión de GPT-Live se cae, la partida se cancela.
+
+Los textos para GPT-Live se editan desde el panel (``trivia/*``, :func:`prompt_specs`):
+cada uno se pide al registro (``BOOK``) al usarlo. Los que se encadenan en un guion van sin
+espacios en los bordes (la nube los recorta) y el código los une con un espacio.
 """
 
 from __future__ import annotations
@@ -43,6 +47,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from sonia.config import TriviaSettings
+from sonia.prompts import BOOK, PromptSpec
 from sonia.trivia.bank import (
     DEFAULT_LEVEL,
     OPTION_LETTERS,
@@ -81,15 +86,15 @@ OFF_TEXT = (
     "normalidad."
 )
 
-INTRO_TEXT = "La trivia está en tu pantalla, nivel {level}. "
+INTRO_TEXT = "La trivia está en tu pantalla, nivel {level}."
 READY_TEXT = (
     "La trivia está preparada, nivel {level}, pero aún no ha empezado ni sale en tu pantalla: "
-    "sale cuando arranques. "
+    "sale cuando arranques."
 )
-LEVEL_TEXT = "Si pide otro nivel (fácil, intermedio o difícil), delega reiniciarla con ese nivel. "
+LEVEL_TEXT = "Si pide otro nivel (fácil, intermedio o difícil), delega reiniciarla con ese nivel."
 KICKOFF_TEXT = (
     "{lead} con energía: di en una frase que son {total} preguntas y que con {threshold} "
-    "aciertos gana. "
+    "aciertos gana."
 )
 
 #: Para jugar hay que seguir a Sonnet Code, y se pide antes de empezar. La partida se prepara
@@ -102,7 +107,7 @@ FOLLOW_TEXT = (
     "(@sonnetcode); si no, que escanee el QR de la pantalla y las siga. No lo puedes comprobar: "
     "créele. Espera su respuesta: no digas todavía la pregunta ni cuántas son. Si no quiere "
     "seguirlas, dile con cariño que es lo único que pide la trivia y, si aun así no quiere, "
-    "delega terminarla. Cuando te diga que ya las sigue (no antes), "
+    "delega terminarla. Cuando te diga que ya las sigue (no antes),"
 )
 
 #: Margen de la primera pregunta mientras el visitante sigue a Sonnet Code con el móvil:
@@ -125,7 +130,7 @@ QUESTION_TEXT = (
 #: pregunta en la mano, GPT-Live la leía sin esperar el «ya las sigo» (8 de octubre de 2026).
 WAIT_OPTIONS_TEXT = (
     "TRIVIA PREPARADA, AÚN SIN EMPEZAR: primero pregúntale si sigue a Sonnet Code en Instagram "
-    "y LinkedIn y espera a que te diga que sí; no digas antes la pregunta ni cuántas son. "
+    "y LinkedIn y espera a que te diga que sí; no digas antes la pregunta ni cuántas son."
 )
 OPTIONS_TEXT = (
     "TRIVIA, pregunta {number} de {total}: «{question}». Opciones en la pantalla, para que "
@@ -158,26 +163,26 @@ WRONG_TEXT = (
     "«{right_option}». Díselo con cariño."
 )
 PASS_TEXT = "No lo sabe. La buena era la {right_letter}, «{right_option}». Díselo con cariño."
-EXPLAIN_TEXT = " Explica en una o dos frases por qué es la buena."
-FACT_TEXT = " Apóyate en este dato: {fact}"
+EXPLAIN_TEXT = "Explica en una o dos frases por qué es la buena."
+FACT_TEXT = "Apóyate en este dato: {fact}"
 ASK_NEXT_TEXT = (
-    " Luego pregúntale si quiere pasar a la siguiente pregunta y espera: cuando diga que sí, "
+    "Luego pregúntale si quiere pasar a la siguiente pregunta y espera: cuando diga que sí, "
     "delega «trivia: siguiente pregunta»; si no quiere seguir, delega terminar la trivia."
 )
 WON_TEXT = (
-    " Con esto termina la trivia: ha acertado {score} de {total} y HA GANADO. Felicítale a lo "
+    "Con esto termina la trivia: ha acertado {score} de {total} y HA GANADO. Felicítale a lo "
     "grande."
 )
 LOST_TEXT = (
-    " Con esto termina la trivia: ha acertado {score} de {total} y le faltaron aciertos para "
+    "Con esto termina la trivia: ha acertado {score} de {total} y le faltaron aciertos para "
     "los {threshold}. Anímale con cariño a intentarlo otra vez."
 )
 #: Sonia no sabe qué premios hay: a quien gana lo manda con el equipo del stand.
 WIN_CONTACT_TEXT = (
-    " Dile que pase a hablar con {contact} aquí en el stand. No sabes qué premios hay: no "
+    "Dile que pase a hablar con {contact} aquí en el stand. No sabes qué premios hay: no "
     "prometas ninguno y, si pregunta, que se lo cuenten ellos."
 )
-BACK_TO_TALK_TEXT = " Luego sigue conversando con normalidad."
+BACK_TO_TALK_TEXT = "Luego sigue conversando con normalidad."
 
 #: Respuesta que llega con el resultado aún en pantalla (no se pidió la siguiente).
 WAITING_NEXT_TEXT = (
@@ -198,6 +203,8 @@ CANCEL_TEXT = {
         "la trivia queda para otro momento."
     ),
 }
+#: La pieza editable de cada texto de :data:`CANCEL_TEXT`.
+CANCEL_PIECES = {"panel": "trivia/cancelada_panel", "abandoned": "trivia/cancelada_abandono"}
 
 
 class TriviaPhase(StrEnum):
@@ -458,22 +465,36 @@ class TriviaGame:
             STICKY_START, p.msg_trivia_start(self._total, self._threshold, self._level)
         )
         await self._host.instruct(
-            RULES_TEXT.format(total=self._total, threshold=self._threshold, level=self._level)
+            BOOK.render(
+                "trivia/reglas",
+                fallback=RULES_TEXT,
+                total=self._total,
+                threshold=self._threshold,
+                level=self._level,
+            )
         )
         self._follow_pending = ask_follow
         await self._ask(0)
-        intro = READY_TEXT if ask_follow else INTRO_TEXT
-        script = intro.format(level=self._level) + LEVEL_TEXT
+        intro_id, intro = (
+            ("trivia/preparada", READY_TEXT) if ask_follow else ("trivia/presentacion", INTRO_TEXT)
+        )
+        parts = [
+            BOOK.render(
+                intro_id,
+                fallback=intro,
+                level=self._level,
+                total=self._total,
+                threshold=self._threshold,
+            ),
+            BOOK.text("trivia/otro_nivel", LEVEL_TEXT),
+        ]
         if ask_follow:
             grace = time.monotonic() + FOLLOW_GRACE_S
             self._asked_at = self._last_user_at = grace
-            script += FOLLOW_TEXT
-        script += KICKOFF_TEXT.format(
-            lead="arranca" if ask_follow else "Arranca",
-            total=self._total,
-            threshold=self._threshold,
-        )
-        script += self._question_text(0, lead="Después di")
+            parts.append(BOOK.text("trivia/seguir_sonnet_code", FOLLOW_TEXT))
+        parts.append(self._kickoff_text("arranca" if ask_follow else "Arranca"))
+        parts.append(self._question_text(0, lead="Después di"))
+        script = " ".join(parts)
         if source == "voice":
             return True, script
         self._spawn(self._speak_when_quiet(self._game, "TRIVIA: " + script), "trivia-intro")
@@ -517,8 +538,7 @@ class TriviaGame:
             script += "Sigue sin salir en tu pantalla hasta que arranques. "
         if self._follow_pending:
             script += "Si aún no te ha dicho que sigue a Sonnet Code, pregúntaselo antes. "
-        script += KICKOFF_TEXT.format(lead="Arranca", total=self._total, threshold=self._threshold)
-        script += self._question_text(0, lead="Después di")
+        script += self._kickoff_text("Arranca") + " " + self._question_text(0, lead="Después di")
         if source == "voice":
             return True, script
         self._spawn(self._speak_when_quiet(self._game, "TRIVIA: " + script), "trivia-level")
@@ -534,16 +554,16 @@ class TriviaGame:
         await self.show_screen()
         question = self._current
         if not self.active or question is None:
-            return OFF_TEXT
+            return BOOK.text("trivia/fin", OFF_TEXT)
         if self._phase is TriviaPhase.REVEALING:
             if self._final:
                 return "Era la última pregunta: la trivia ya terminó, despídela."
-            return WAITING_NEXT_TEXT.format(number=self._index + 1)
+            return self._waiting_next_text()
         text = "La trivia ya está en marcha en tu pantalla, no hace falta empezarla. "
         if self._index > 0:
             return text + self._question_text(self._index, lead="Si no la has leído, lee")
-        text += KICKOFF_TEXT.format(lead="Arranca", total=self._total, threshold=self._threshold)
-        return text + self._question_text(0, lead="Después di")
+        text += self._kickoff_text("Arranca")
+        return text + " " + self._question_text(0, lead="Después di")
 
     async def stop(self, reason: str) -> tuple[bool, str]:
         """Cancela la partida. ``reason``: ``panel``, ``voice``, ``abandoned``, ``session``..."""
@@ -554,9 +574,9 @@ class TriviaGame:
         if self._host.connected and reason != "session":
             text = CANCEL_TEXT.get(reason)
             with contextlib.suppress(Exception):
-                await self._host.instruct(OFF_TEXT)
+                await self._host.instruct(BOOK.text("trivia/fin", OFF_TEXT))
                 if text:
-                    await self._host.speak(text)
+                    await self._host.speak(BOOK.text(CANCEL_PIECES[reason], text))
         return True, "Trivia terminada."
 
     async def _end(self, *, won: bool, reason: str) -> None:
@@ -622,18 +642,49 @@ class TriviaGame:
         )
         a, b, c = question.options
         with contextlib.suppress(Exception):
-            await self._host.instruct(
-                (WAIT_OPTIONS_TEXT if self._follow_pending else "")
-                + OPTIONS_TEXT.format(
-                    number=index + 1, total=self._total, question=question.text, a=a, b=b, c=c
-                )
+            note = BOOK.render(
+                "trivia/opciones",
+                fallback=OPTIONS_TEXT,
+                number=index + 1,
+                total=self._total,
+                question=question.text,
+                a=a,
+                b=b,
+                c=c,
             )
+            if self._follow_pending:
+                note = BOOK.text("trivia/opciones_espera", WAIT_OPTIONS_TEXT) + " " + note
+            await self._host.instruct(note)
 
     def _question_text(self, index: int, *, lead: str) -> str:
         question = self._questions[index]
         a, b, c = question.options
-        return QUESTION_TEXT.format(
-            lead=lead, number=index + 1, total=self._total, question=question.text, a=a, b=b, c=c
+        return BOOK.render(
+            "trivia/pregunta",
+            fallback=QUESTION_TEXT,
+            lead=lead,
+            number=index + 1,
+            total=self._total,
+            question=question.text,
+            a=a,
+            b=b,
+            c=c,
+        )
+
+    def _kickoff_text(self, lead: str) -> str:
+        """Que arranque diciendo cuántas preguntas son y con cuántos aciertos se gana."""
+        return BOOK.render(
+            "trivia/arranque",
+            fallback=KICKOFF_TEXT,
+            lead=lead,
+            total=self._total,
+            threshold=self._threshold,
+        )
+
+    def _waiting_next_text(self) -> str:
+        """Una respuesta o una petición de empezar con el resultado aún en pantalla."""
+        return BOOK.render(
+            "trivia/espera_siguiente", fallback=WAITING_NEXT_TEXT, number=self._index + 1
         )
 
     async def _speak_when_quiet(self, game: int, prompt: str) -> None:
@@ -675,7 +726,7 @@ class TriviaGame:
             if self._phase is TriviaPhase.REVEALING:
                 if self._final:
                     return False, "Era la última pregunta: la trivia ya terminó, despídela."
-                return False, WAITING_NEXT_TEXT.format(number=self._index + 1)
+                return False, self._waiting_next_text()
             return False, "No hay ninguna pregunta de trivia esperando respuesta."
         if choice not in (0, 1, 2, PASS):
             return False, "Respuesta no válida: A, B, C o que no lo sabe."
@@ -702,20 +753,29 @@ class TriviaGame:
         await self._screen.broadcast_json(
             p.msg_trivia_answer(number, choice, question.correct, right, self._score)
         )
-        script = self._result_text(question, choice)
+        parts = [self._result_text(question, choice)]
         if last:
             self._final = True
-            template = WON_TEXT if won else LOST_TEXT
-            script += template.format(
-                score=self._score, total=self._total, threshold=self._threshold
+            piece, template = ("trivia/gana", WON_TEXT) if won else ("trivia/pierde", LOST_TEXT)
+            parts.append(
+                BOOK.render(
+                    piece,
+                    fallback=template,
+                    score=self._score,
+                    total=self._total,
+                    threshold=self._threshold,
+                )
             )
             contact = self._settings.win_contact.strip()
             if won and contact:
-                script += WIN_CONTACT_TEXT.format(contact=contact)
-            script += BACK_TO_TALK_TEXT
+                parts.append(
+                    BOOK.render("trivia/contacto", fallback=WIN_CONTACT_TEXT, contact=contact)
+                )
+            parts.append(BOOK.text("trivia/volver_a_conversar", BACK_TO_TALK_TEXT))
             self._spawn(self._finish_when_told(self._game, won), "trivia-final")
         else:
-            script += ASK_NEXT_TEXT
+            parts.append(BOOK.text("trivia/siguiente", ASK_NEXT_TEXT))
+        script = " ".join(parts)
         if source == "voice":
             return True, script
         await self._host.speak(PANEL_ANSWER_TEXT + script)
@@ -773,26 +833,35 @@ class TriviaGame:
         )
         await self._end(won=won, reason="finished")
         with contextlib.suppress(Exception):
-            await self._host.instruct(OFF_TEXT)
+            await self._host.instruct(BOOK.text("trivia/fin", OFF_TEXT))
 
     def _result_text(self, question: TriviaQuestion, choice: int) -> str:
         right_letter = OPTION_LETTERS[question.correct]
         right_option = question.options[question.correct]
         if choice == PASS:
-            text = PASS_TEXT.format(right_letter=right_letter, right_option=right_option)
+            verdict = BOOK.render(
+                "trivia/no_lo_sabe",
+                fallback=PASS_TEXT,
+                right_letter=right_letter,
+                right_option=right_option,
+            )
         elif choice == question.correct:
-            text = CORRECT_TEXT.format(letter=right_letter, option=right_option)
+            verdict = BOOK.render(
+                "trivia/correcta", fallback=CORRECT_TEXT, letter=right_letter, option=right_option
+            )
         else:
-            text = WRONG_TEXT.format(
+            verdict = BOOK.render(
+                "trivia/incorrecta",
+                fallback=WRONG_TEXT,
                 letter=OPTION_LETTERS[choice],
                 option=question.options[choice],
                 right_letter=right_letter,
                 right_option=right_option,
             )
-        text += EXPLAIN_TEXT
+        parts = [verdict, BOOK.text("trivia/explicar", EXPLAIN_TEXT)]
         if question.fact:
-            text += FACT_TEXT.format(fact=question.fact)
-        return text
+            parts.append(BOOK.render("trivia/dato", fallback=FACT_TEXT, fact=question.fact))
+        return " ".join(parts)
 
     # -- ciclo --------------------------------------------------------------
 
@@ -811,7 +880,7 @@ class TriviaGame:
             # instrucción silenciosa no le abre turno y no delegaba (probado con la API).
             self._nudge_at = 0.0
             logger.info("Trivia: el visitante habló y no se delegó nada; se le recuerda")
-            self._spawn(self._host.speak(NUDGE_TEXT), "trivia-nudge")
+            self._spawn(self._host.speak(BOOK.text("trivia/empujon", NUDGE_TEXT)), "trivia-nudge")
         if now - self._last_user_at >= settings.abandon_seconds and quiet >= 1.0:
             await self.stop("abandoned")
             return
@@ -824,9 +893,13 @@ class TriviaGame:
             and now - self._asked_at >= settings.remind_seconds
         ):
             self._reminded = True
-            self._spawn(
-                self._host.speak(REMIND_TEXT.format(number=self._index + 1)), "trivia-remind"
+            remind = BOOK.render(
+                "trivia/recordatorio",
+                fallback=REMIND_TEXT,
+                number=self._index + 1,
+                total=self._total,
             )
+            self._spawn(self._host.speak(remind), "trivia-remind")
 
     async def on_session_lost(self) -> None:
         """Se cayó o se renovó la sesión de GPT-Live: la partida no puede seguir."""
@@ -856,3 +929,232 @@ def _words(text: str) -> set[str]:
     """Palabras de cuatro letras o más, en minúsculas y sin tildes, para comparar lo dicho."""
     plain = text.lower().translate(str.maketrans("áéíóúü", "aeiouu"))
     return {w for w in re.findall(r"\w+", plain) if len(w) >= 4}
+
+
+#: Tope de las notas que van por ``session.instructions.append`` (``APPEND_MAX_CHARS``).
+_NOTE_MAX = 1200
+#: Lo que va delante de cada pieza del guion en la ayuda del panel.
+_JOINED = "Se une a las demás piezas del guion con un espacio."
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """Los textos de la trivia editables desde el panel (grupo «Trivia», ``trivia/*``)."""
+
+    def piece(
+        name: str,
+        title: str,
+        default: str,
+        *,
+        fields: tuple[str, ...] = (),
+        required: tuple[str, ...] = (),
+        help: str = "",
+        max_len: int = _NOTE_MAX,
+    ) -> PromptSpec:
+        return PromptSpec(
+            id=f"trivia/{name}",
+            group="Trivia",
+            title=title,
+            default=lambda: default,
+            fields=fields,
+            required=required,
+            applies="ronda",
+            help=help,
+            max_len=max_len,
+        )
+
+    counts = "{total}: preguntas de la partida; {threshold}: aciertos para ganar"
+    return [
+        piece(
+            "reglas",
+            "Reglas al empezar (nota para Sonia, sin hablar)",
+            RULES_TEXT,
+            fields=("total", "threshold", "level"),
+            help=f"{counts}; {{level}}: fácil, intermedio o difícil. Como mucho 1200 caracteres.",
+        ),
+        piece(
+            "opciones",
+            "Cada pregunta con sus opciones (nota para Sonia, sin hablar)",
+            OPTIONS_TEXT,
+            fields=("number", "total", "question", "a", "b", "c"),
+            required=("a", "b", "c"),
+            help=(
+                "{number}: número de la pregunta; {total}: preguntas de la partida; {question}: "
+                "la pregunta; {a}, {b} y {c}: las opciones de cada letra, para que sepa qué "
+                "letra elige el visitante. Va en una nota de 1200 caracteres con la pregunta y "
+                "las opciones dentro (y, en la primera, con «opciones_espera» delante)."
+            ),
+            max_len=600,
+        ),
+        piece(
+            "opciones_espera",
+            "Delante de la primera pregunta si aún tiene que seguir a Sonnet Code",
+            WAIT_OPTIONS_TEXT,
+            help="Va delante de «opciones», en la misma nota, con un espacio.",
+            max_len=300,
+        ),
+        piece(
+            "presentacion",
+            "Arranque: la trivia ya está en pantalla",
+            INTRO_TEXT,
+            fields=("level", "total", "threshold"),
+            help=f"{{level}}: el nivel; {counts}. {_JOINED}",
+        ),
+        piece(
+            "preparada",
+            "Arranque: preparada, pero aún sin salir en pantalla (sigue a Sonnet Code)",
+            READY_TEXT,
+            fields=("level", "total", "threshold"),
+            help=f"{{level}}: el nivel; {counts}. {_JOINED}",
+        ),
+        piece(
+            "otro_nivel",
+            "Arranque: si pide otro nivel",
+            LEVEL_TEXT,
+            help=_JOINED,
+        ),
+        piece(
+            "seguir_sonnet_code",
+            "Arranque: pedir que siga a Sonnet Code antes de empezar",
+            FOLLOW_TEXT,
+            help=(
+                "Va justo antes de «arranque», que sigue en minúscula («arranca con energía…»): "
+                f"deja la última frase a medias para que siga con él. {_JOINED}"
+            ),
+        ),
+        piece(
+            "arranque",
+            "Arranque: cuántas preguntas son y con cuántos aciertos se gana",
+            KICKOFF_TEXT,
+            fields=("lead", "total", "threshold"),
+            help=(
+                "{lead}: «Arranca», o «arranca» si va detrás de «seguir_sonnet_code»; "
+                f"{counts}. Si Sonia dice «aciertos», la trivia sale en pantalla en ese momento "
+                f"(si no, al leer la pregunta). {_JOINED}"
+            ),
+        ),
+        piece(
+            "pregunta",
+            "Leer la pregunta",
+            QUESTION_TEXT,
+            fields=("lead", "number", "total", "question", "a", "b", "c"),
+            required=("question",),
+            help=(
+                "{lead}: «Después di», «Vamos con» o «Si no la has leído, lee»; {number}: número "
+                "de la pregunta; {total}: preguntas de la partida; {question}: la pregunta (sin "
+                "ella se inventa una); {a}, {b} y {c}: las opciones."
+            ),
+        ),
+        piece(
+            "correcta",
+            "Resultado: acierto",
+            CORRECT_TEXT,
+            fields=("letter", "option"),
+            help=f"{{letter}}: la letra que eligió; {{option}}: su opción. {_JOINED}",
+        ),
+        piece(
+            "incorrecta",
+            "Resultado: fallo",
+            WRONG_TEXT,
+            fields=("letter", "option", "right_letter", "right_option"),
+            required=("right_letter", "right_option"),
+            help=(
+                "{letter} y {option}: lo que eligió; {right_letter} y {right_option}: la buena "
+                f"(sin ella no sabe cuál explicar). {_JOINED}"
+            ),
+        ),
+        piece(
+            "no_lo_sabe",
+            "Resultado: no lo sabe",
+            PASS_TEXT,
+            fields=("right_letter", "right_option"),
+            required=("right_letter", "right_option"),
+            help=f"{{right_letter}} y {{right_option}}: la buena. {_JOINED}",
+        ),
+        piece(
+            "explicar",
+            "Resultado: explicar por qué es la buena",
+            EXPLAIN_TEXT,
+            help=_JOINED,
+        ),
+        piece(
+            "dato",
+            "Resultado: el dato de la pregunta (si el banco lo trae)",
+            FACT_TEXT,
+            fields=("fact",),
+            required=("fact",),
+            help=f"{{fact}}: la línea «>» de la pregunta en el banco. {_JOINED}",
+        ),
+        piece(
+            "siguiente",
+            "Tras el resultado: preguntar si quiere la siguiente",
+            ASK_NEXT_TEXT,
+            help=_JOINED,
+        ),
+        piece(
+            "espera_siguiente",
+            "Contesta otra vez con el resultado aún en pantalla",
+            WAITING_NEXT_TEXT,
+            fields=("number",),
+            help="{number}: la pregunta ya contestada.",
+        ),
+        piece(
+            "gana",
+            "Final: ha ganado",
+            WON_TEXT,
+            fields=("score", "total", "threshold"),
+            help=f"{{score}}: aciertos; {counts}. {_JOINED}",
+        ),
+        piece(
+            "pierde",
+            "Final: no llegó a los aciertos",
+            LOST_TEXT,
+            fields=("score", "total", "threshold"),
+            help=f"{{score}}: aciertos; {counts}. {_JOINED}",
+        ),
+        piece(
+            "contacto",
+            "Final: con quién del stand habla quien gana",
+            WIN_CONTACT_TEXT,
+            fields=("contact",),
+            required=("contact",),
+            help=(
+                "{contact}: TRIVIA_WIN_CONTACT (Brian o Mariel). Sin contacto no se dice. "
+                f"{_JOINED}"
+            ),
+        ),
+        piece(
+            "volver_a_conversar",
+            "Final: volver a conversar",
+            BACK_TO_TALK_TEXT,
+            help=_JOINED,
+        ),
+        piece(
+            "recordatorio",
+            "Recordatorio si no contesta",
+            REMIND_TEXT,
+            fields=("number", "total"),
+            help="{number}: la pregunta que espera; {total}: preguntas de la partida.",
+        ),
+        piece(
+            "empujon",
+            "Empujón si el visitante habló y no se delegó nada",
+            NUDGE_TEXT,
+            help="La hace hablar: escríbelo como una orden corta, sin frases que pueda repetir.",
+        ),
+        piece(
+            "cancelada_panel",
+            "Terminada desde el panel",
+            CANCEL_TEXT["panel"],
+        ),
+        piece(
+            "cancelada_abandono",
+            "Cancelada porque el visitante ya no contesta",
+            CANCEL_TEXT["abandoned"],
+        ),
+        piece(
+            "fin",
+            "Fin de la trivia (nota para Sonia, sin hablar)",
+            OFF_TEXT,
+            help="Como mucho 1200 caracteres.",
+        ),
+    ]

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sonia.gestures.catalog import Gesture, GestureCatalog
+from sonia.prompts import BOOK, PromptSpec
 
 __all__ = [
     "Cooldowns",
@@ -23,8 +24,10 @@ __all__ = [
     "build_request_message",
     "build_system_prompt",
     "build_user_message",
+    "catalog_text",
     "gesture_line",
     "parse_choice",
+    "prompt_specs",
 ]
 
 #: Lo que contesta el modelo cuando la frase no lleva gesto.
@@ -45,11 +48,57 @@ Cómo elegir:
 - Los marcados como relleno son casi neutros: acompañan una frase sin intención marcada.
 - En la apertura Sonnia aún no ha empezado a contestar: si encaja, elige un gesto para cómo va a reaccionar a lo que acaba de decir el visitante (saludar si saluda, agradecer si le da las gracias, pensar si le pregunta algo difícil).
 
-Responde solo con JSON, sin explicaciones: {{"gesto": "<nombre exacto de la lista>"}} o {{"gesto": "ninguno"}}.
+Responde solo con JSON, sin explicaciones: {"gesto": "<nombre exacto de la lista>"} o {"gesto": "ninguno"}.
 
 Gestos de {character}, uno por línea: nombre · frecuencia, duración, impacto, intensidad de 1 a 4 · descripción · intenciones · estilo · reglas.
 {gestures}
 """
+
+#: Ids de los prompts en el panel (``sonia.prompts``): editables desde la nube.
+SYSTEM_PROMPT_ID = "gestos/sistema"
+REQUEST_PROMPT_ID = "gestos/peticion"
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """El mensaje de sistema del director de gestos y el de los gestos pedidos, editables
+    desde el panel. El catálogo de Genies no se edita: entra por ``{gestures}``."""
+    return [
+        PromptSpec(
+            id=SYSTEM_PROMPT_ID,
+            group="Gestos",
+            title="Director de gestos: papel, reglas y formato de la respuesta",
+            default=lambda: SYSTEM_PROMPT,
+            fields=("character", "gestures"),
+            required=("gestures",),
+            must_contain=("JSON", '"gesto"'),
+            applies="peticion",
+            help=(
+                "Mensaje de sistema del modelo que elige el gesto de cada frase de Sonnia (y "
+                "el que pide el visitante). {gestures}: el catálogo de gestos de la pantalla, "
+                "una línea por gesto con su ficha (obligatorio: sin él no puede elegir). "
+                "{character}: el personaje de esos gestos (Sage). Tiene que seguir pidiendo "
+                'la respuesta en JSON con "gesto" (el nombre exacto o «ninguno»). Lo que '
+                "cambia en cada frase (lo que dicen, los gestos recientes) va aparte."
+            ),
+        ),
+        PromptSpec(
+            id=REQUEST_PROMPT_ID,
+            group="Gestos",
+            title="Gesto que pide el visitante («tocarse un ojo»)",
+            default=lambda: REQUEST_PROMPT,
+            fields=("request",),
+            required=("request",),
+            must_contain=('"gesto"',),
+            applies="peticion",
+            help=(
+                "Pregunta al modelo de gestos cuando el visitante le pide a Sonia un gesto "
+                "concreto; va con el mismo mensaje de sistema. {request}: lo que pidió, ya "
+                "entre comillas latinas («…») y recortado a 200 caracteres (obligatorio). "
+                'Tiene que seguir pidiendo {"gesto": "..."}.'
+            ),
+        ),
+    ]
+
 
 #: Tope de cada texto del mensaje de usuario: lo último es lo que importa.
 USER_TEXT_CHARS = 400
@@ -106,11 +155,23 @@ def gesture_line(gesture: Gesture) -> str:
     return "- " + " · ".join(parts)
 
 
-def build_system_prompt(catalog: GestureCatalog) -> str:
-    """La parte fija: papel, reglas y catálogo. Igual en todas las llamadas con el mismo catálogo."""
-    return SYSTEM_PROMPT.format(
+def catalog_text(catalog: GestureCatalog) -> str:
+    """El catálogo del prompt, una línea por gesto: lo que rellena ``{gestures}``."""
+    return "\n".join(gesture_line(g) for g in catalog)
+
+
+def build_system_prompt(catalog: GestureCatalog, gestures: str | None = None) -> str:
+    """La parte fija: papel, reglas y catálogo. Igual en todas las llamadas con el mismo
+    catálogo y el mismo texto (el de la app o el de la nube, ``gestos/sistema``).
+
+    ``gestures`` es el catálogo ya montado con :func:`catalog_text`, para no rehacerlo en
+    cada llamada.
+    """
+    return BOOK.render(
+        SYSTEM_PROMPT_ID,
+        fallback=SYSTEM_PROMPT,
         character=catalog.character or "Sonnia",
-        gestures="\n".join(gesture_line(g) for g in catalog),
+        gestures=catalog_text(catalog) if gestures is None else gestures,
     )
 
 
@@ -189,25 +250,21 @@ def build_user_message(
 REQUEST_CHARS = 200
 
 
+REQUEST_PROMPT = """\
+Petición: el visitante le pide a Sonnia que haga este gesto o movimiento: {request}.
+Elige el gesto de la lista cuya descripción física hace eso mismo. No vale uno que solo se le parezca en la intención o el ánimo: para «hacer un truco de magia» no vale mover las manos de cualquier forma. Aquí no cuentan la frecuencia (vale aunque sea Rare o Uncommon), los gestos recientes ni la apertura: lo ha pedido el visitante.
+Si ninguno lo hace de verdad, o lo que pide no es apropiado en un entorno profesional, contesta ninguno.
+Responde solo con {"gesto": "..."}."""
+
+
 def build_request_message(request: str) -> str:
     """Un gesto que pide el visitante (``play_animation`` con ``gesto``), no el de una frase.
 
     Va con el mismo mensaje de sistema que los gestos al hablar, para que el
-    servidor lo sirva de su caché: solo cambia la pregunta.
+    servidor lo sirva de su caché: solo cambia la pregunta (``gestos/peticion``).
     """
-    return "\n".join(
-        [
-            "Petición: el visitante le pide a Sonnia que haga este gesto o movimiento: "
-            + _quote(request, REQUEST_CHARS)
-            + ".",
-            "Elige el gesto de la lista cuya descripción física hace eso mismo. No vale uno que "
-            "solo se le parezca en la intención o el ánimo: para «hacer un truco de magia» no "
-            "vale mover las manos de cualquier forma. Aquí no cuentan la frecuencia (vale aunque "
-            "sea Rare o Uncommon), los gestos recientes ni la apertura: lo ha pedido el visitante.",
-            "Si ninguno lo hace de verdad, o lo que pide no es apropiado en un entorno "
-            "profesional, contesta ninguno.",
-            'Responde solo con {"gesto": "..."}.',
-        ]
+    return BOOK.render(
+        REQUEST_PROMPT_ID, fallback=REQUEST_PROMPT, request=_quote(request, REQUEST_CHARS)
     )
 
 

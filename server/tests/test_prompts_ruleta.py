@@ -19,9 +19,10 @@ from sonia.games import GameError
 from sonia.games.ruleta import texts as t
 from sonia.games.ruleta.banks import RIDDLES, SONNET, TECHS
 from sonia.games.ruleta.game import RuletaGame
+from sonia.prompts import BOOK
 from sonia.trivia.bank import TriviaQuestion
 from tests.games.fakes import FakeGameHost, game_settings, make_game
-from tests.prompt_snapshots import assert_snapshot
+from tests.prompt_snapshots import assert_snapshot, cloud_prompts
 
 QUESTIONS = [
     TriviaQuestion(
@@ -366,3 +367,73 @@ async def all_scenarios() -> dict[str, Any]:
 
 async def test_con_los_textos_de_la_app_no_cambia_nada() -> None:
     assert_snapshot("prompts_ruleta", await all_scenarios())
+
+
+# ---------------------------------------------------------------------------
+# 2. Las piezas y sus versiones de la nube
+# ---------------------------------------------------------------------------
+
+
+def test_las_piezas_de_la_app_estan_registradas_y_validan() -> None:
+    specs = t.prompt_specs()
+    assert len(specs) == len({spec.id for spec in specs}) >= 40
+    for spec in specs:
+        assert spec.id in BOOK and spec.id.startswith("juegos/ruleta/")
+        assert spec.group == "Juego: Ruleta" and spec.applies == "ronda"
+        assert BOOK.validate(spec.id, BOOK.default(spec.id)) == [], spec.id
+    rules = [spec for spec in specs if spec.id.endswith("reglas")]
+    assert len(rules) == 7 and all(spec.max_len == 1200 for spec in rules)
+    # Sin la respuesta, Sonia no podría juzgar la adivinanza.
+    assert BOOK.validate("juegos/ruleta/adivinanza_reglas", "Adivina: {riddle}")
+
+
+async def test_con_la_version_de_la_nube_se_usa_esa_y_no_la_de_la_app() -> None:
+    cloud = {
+        "juegos/ruleta/reglas": "NUBE reglas: retos {segments}; premios con {contact}.",
+        "juegos/ruleta/empezar": "NUBE: gira la ruleta.",
+        "juegos/ruleta/trivia_reglas": "NUBE trivia {question}: A {a}, B {b}, C {c}.",
+        "juegos/ruleta/trivia_anuncio": "NUBE anuncia «{question}».",
+        "juegos/ruleta/trivia_acierto": "NUBE acierto con la {letter}.",
+        "juegos/ruleta/otra_vuelta": "NUBE ¿otra vuelta?",
+    }
+    with cloud_prompts(cloud):
+        log = await start(weights=ONLY["trivia"])
+        await log.stop_wheel()
+        await log.play(log.game.answer({"respuesta": "B"}))
+    question = QUESTIONS[0]
+    assert log.host.instructions == [
+        "NUBE reglas: retos trivia relámpago; premios con Brian o Mariel.",
+        f"NUBE trivia {question.text}: A {question.options[0]}, B {question.options[1]}, "
+        f"C {question.options[2]}.",
+    ]
+    assert log.host.spoken == [f"NUBE anuncia «{question.text}»."]
+    fact = t.FACT_TEXT.format(fact=question.fact)
+    assert log.scripts == [
+        "empezar: NUBE: gira la ruleta.",
+        f"guion: NUBE acierto con la B.{fact} NUBE ¿otra vuelta?",
+    ]
+    # Nada de las de la app: nunca las dos.
+    everything = " ".join(log.host.instructions + log.host.spoken + log.scripts)
+    for app in (t.RULES_TEXT[:40], t.START_TEXT[:40], "RETO DE LA RULETA", "Celébralo"):
+        assert app not in everything
+    assert t.AGAIN_TEXT.strip()[:30] not in everything
+    # Al quitar la de la nube vuelve la de la app.
+    assert BOOK.source("juegos/ruleta/reglas") == "app"
+    assert (await start(weights=ONLY["trivia"])).host.instructions[0].startswith("JUEGO EN MARCHA")
+
+
+async def test_una_version_de_la_nube_que_no_vale_no_se_usa() -> None:
+    warnings = BOOK.set_overrides(
+        {
+            "juegos/ruleta/trivia_anuncio": "Sin la pregunta, no puede leerla.",
+            "juegos/ruleta/reglas": "Demasiado larga. " + "x" * 1200,
+        }
+    )
+    try:
+        assert len(warnings) == 2
+        log = await start(weights=ONLY["trivia"])
+        await log.stop_wheel()
+        assert log.host.instructions[0].startswith("JUEGO EN MARCHA")
+        assert log.host.spoken[0].startswith("RULETA: ha caído en TRIVIA RELÁMPAGO")
+    finally:
+        BOOK.set_overrides(None)

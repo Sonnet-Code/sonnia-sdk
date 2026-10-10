@@ -1,15 +1,20 @@
 """Búsqueda relámpago: los textos que se mandan a GPT-Live, idénticos a los de antes con los de la app.
 
 La instantánea (``snapshots/prompts_busqueda.json``) se sacó con el código de antes de hacer
-editables los prompts (``sonia.prompts``). Sin red ni APIs: el juego suelto con
-``FakeGameHost`` y un juez guionizado (nunca el modelo de verdad).
+editables los prompts (``sonia.prompts``). Con una versión de la nube se usa esa y no la de la
+app. Sin red ni APIs: el juego suelto con ``FakeGameHost`` y un juez guionizado (nunca el
+modelo de verdad).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from sonia.games import INSTRUCT_MAX_CHARS
+from sonia.games.busqueda import texts as t
 from sonia.games.busqueda.game import BusquedaGame
+from sonia.games.busqueda.texts import prompt_specs
+from sonia.prompts import BOOK
 from tests.games.fakes import FakeGameHost, FakeVision, game_settings, make_game
 from tests.games.test_busqueda import (
     MISS,
@@ -22,7 +27,7 @@ from tests.games.test_busqueda import (
     play_game,
     pump,
 )
-from tests.prompt_snapshots import assert_snapshot
+from tests.prompt_snapshots import assert_snapshot, cloud_prompts
 
 
 def live_texts(host: FakeGameHost) -> dict[str, list[str]]:
@@ -120,3 +125,32 @@ async def collect() -> dict[str, Any]:
 
 async def test_los_textos_de_la_busqueda_no_cambian() -> None:
     assert_snapshot("prompts_busqueda", await collect())
+
+
+def test_las_piezas_de_la_app_validan_y_estan_registradas() -> None:
+    specs = prompt_specs()
+    assert specs and len({spec.id for spec in specs}) == len(specs)
+    for spec in specs:
+        assert spec.id.startswith("juegos/busqueda/")
+        assert spec.group == "Juego: Búsqueda relámpago"
+        assert spec.id in BOOK and BOOK.source(spec.id) == "app"
+        assert BOOK.validate(spec.id, BOOK.default(spec.id)) == [], spec.id
+    assert BOOK.spec("juegos/busqueda/reglas").max_len == INSTRUCT_MAX_CHARS
+
+
+async def test_con_la_version_de_la_nube_se_usa_solo_esa() -> None:
+    cloud = {
+        "juegos/busqueda/reglas": "BUSCAR: {total} rondas de {seconds} s; delega busqueda_check.",
+        "juegos/busqueda/arranque": "¡Enséñame {name}!",
+        "juegos/busqueda/encontrado": "¡Visto: {what}!",
+    }
+    with cloud_prompts(cloud):
+        game, host, _ = new_game(SEEN)
+        script = await game.start("voice", {})
+        await go(game, host)
+        found = await game.check({})
+    assert host.instructions == ["BUSCAR: 3 rondas de 25 s; delega busqueda_check."]
+    assert script == "¡Enséñame unos audífonos!"
+    assert found == "¡Visto: botella azul!" + t.NEXT_TEXT
+    assert "JUEGO EN MARCHA" not in host.instructions[0] and "lo han encontrado" not in found
+    assert BOOK.source("juegos/busqueda/reglas") == "app"

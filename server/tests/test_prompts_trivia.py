@@ -15,10 +15,12 @@ from typing import Any
 
 from sonia.actions import build_default_registry
 from sonia.config import TriviaSettings
+from sonia.prompts import BOOK, PLACEHOLDER
 from sonia.trivia import PASS, TriviaGame
 from sonia.trivia.game import NUDGE_S
 from sonia.types import ActionContext
-from tests.prompt_snapshots import assert_snapshot
+from tests.games.fakes import check_for_live
+from tests.prompt_snapshots import assert_snapshot, cloud_prompts
 
 #: Banco propio (no el del repo, que Jean edita): cuatro preguntas, una con dato y una por
 #: nivel, para que las partidas de las instantáneas no cambien al tocar el banco.
@@ -259,3 +261,85 @@ async def test_con_los_textos_de_la_app_gpt_live_recibe_lo_mismo_que_antes(
     tmp_path: Path,
 ) -> None:
     assert_snapshot("prompts_trivia", await all_flows(tmp_path))
+
+
+# ---------------------------------------------------------------------------
+# Versiones de la nube
+# ---------------------------------------------------------------------------
+
+
+def trivia_ids() -> list[str]:
+    return [prompt_id for prompt_id in BOOK.ids() if prompt_id.startswith("trivia/")]
+
+
+def test_las_piezas_de_la_app_validan_y_no_llevan_espacios_en_los_bordes() -> None:
+    ids = trivia_ids()
+    assert len(ids) == 25
+    for prompt_id in ids:
+        spec = BOOK.spec(prompt_id)
+        assert spec.group == "Trivia" and spec.applies == "ronda"
+        text = BOOK.default(prompt_id)
+        assert BOOK.validate(prompt_id, text) == [], prompt_id
+        # La nube recorta los bordes: el código pone los espacios entre piezas.
+        assert text == text.strip(), prompt_id
+        check_for_live(text, limit=spec.max_len)
+
+
+async def test_la_version_de_la_nube_sustituye_a_la_de_la_app(tmp_path: Path) -> None:
+    rules = "Trivia de {total} preguntas, nivel {level}: gana con {threshold}."
+    right_text = "¡Bien! La {letter}, {option}, era la buena."
+    with cloud_prompts({"trivia/reglas": rules, "trivia/correcta": right_text}):
+        game, _, log = make_game(tmp_path)
+        await game.start("voice", "fácil")
+        assert log[0] == ["instruct", "Trivia de 3 preguntas, nivel fácil: gana con 2."]
+        assert not any("MODO TRIVIA EN MARCHA" in entry[1] for entry in log)
+        question = game._current
+        assert question is not None
+        option = question.options[question.correct]
+        ok, script = await game.answer(right(game), "voice")
+        letter = "ABC"[question.correct]
+        assert ok and script.startswith(f"¡Bien! La {letter}, {option}, era la buena. Explica")
+        assert "es CORRECTA" not in script and "Celébralo" not in script
+    # Sin la versión de la nube, vuelve la de la app.
+    folder = tmp_path / "otra"
+    folder.mkdir()
+    game, _, log = make_game(folder)
+    await game.start("voice", "fácil")
+    assert log[0][1].startswith("MODO TRIVIA EN MARCHA")
+
+
+async def test_una_version_de_la_nube_rota_se_ignora(tmp_path: Path) -> None:
+    # Sin {question}, Sonia se inventaba la pregunta: no vale y sigue la de la app.
+    warnings = BOOK.set_overrides({"trivia/pregunta": "Lee la pregunta {number}."})
+    try:
+        assert warnings and BOOK.source("trivia/pregunta") == "app"
+        game, _, _ = make_game(tmp_path)
+        ok, script = await game.start("voice")
+        question = game._current
+        assert ok and question is not None
+        assert f"lee solo la pregunta, tal cual: «{question.text}»" in script
+    finally:
+        BOOK.set_overrides(None)
+
+
+def _literal_chunks(text: str) -> list[str]:
+    """Los trozos fijos largos de un texto de la app (sin marcadores)."""
+    return [chunk.strip() for chunk in PLACEHOLDER.split(text)[::2] if len(chunk.strip()) >= 20]
+
+
+async def test_con_todas_las_piezas_en_la_nube_no_queda_nada_de_la_app(tmp_path: Path) -> None:
+    """Cada pieza se usa donde toca (su marca sale) y nunca junto a la de la app."""
+    overrides: dict[str, str] = {}
+    for prompt_id in trivia_ids():
+        spec = BOOK.spec(prompt_id)
+        fields = " ".join(f"{name}={{{name}}}" for name in spec.fields)
+        overrides[prompt_id] = f"<<{prompt_id}>> {fields} {' '.join(spec.must_contain)}".strip()
+    with cloud_prompts(overrides):
+        flows = await all_flows(tmp_path)
+    said = "\n".join(str(entry[-1]) for log in flows.values() for entry in log)
+    for prompt_id in overrides:
+        assert f"<<{prompt_id}>>" in said, f"{prompt_id} no se usa"
+        for chunk in _literal_chunks(BOOK.default(prompt_id)):
+            assert chunk not in said, f"{prompt_id}: sigue el texto de la app «{chunk}»"
+    # Las marcas llevan sus valores: «trivia/arranque» con lead, total y umbral.
+    assert "<<trivia/arranque>> lead=Arranca total=3 threshold=2" in said

@@ -207,7 +207,9 @@ class BusquedaGame(Game):
             {"rounds": self._total, "round_seconds": float(cfg.round_seconds), "preview": True},
         )
         await self.host.instruct(
-            t.RULES_TEXT.format(total=self._total, seconds=_seconds(cfg.round_seconds))
+            t.live_text(
+                "reglas", t.RULES_TEXT, total=self._total, seconds=_seconds(cfg.round_seconds)
+            )
         )
         self._open_round(now, first=True)
         await self.host.send("round", self._state("ready"))
@@ -220,15 +222,21 @@ class BusquedaGame(Game):
             cfg.max_checks,
             ", ".join(e.name for e in self._objects),
         )
-        return t.START_TEXT.format(
-            total=self._total, seconds=_seconds(cfg.round_seconds), name=entry.name
+        return t.live_text(
+            "arranque",
+            t.START_TEXT,
+            total=self._total,
+            seconds=_seconds(cfg.round_seconds),
+            name=entry.name,
         )
 
     async def resume(self) -> str:
         entry = self._current
         if entry is None:
             return await super().resume()
-        return t.RESUME_TEXT.format(number=self._round, total=self._total, name=entry.name)
+        return t.live_text(
+            "reanudar", t.RESUME_TEXT, number=self._round, total=self._total, name=entry.name
+        )
 
     async def stop(self, reason: StopReason) -> None:
         if self._phase != "off":
@@ -252,9 +260,9 @@ class BusquedaGame(Game):
     def nudge(self) -> str | None:
         """Si hablan y no se delega nada: comprobar el objeto en plena ronda o terminar el juego."""
         if self._phase == "running":
-            return t.NUDGE_RUNNING
+            return t.live_text("empujon_ronda", t.NUDGE_RUNNING)
         if self._phase in ("ready", "between"):
-            return t.NUDGE_STOP
+            return t.live_text("empujon_parar", t.NUDGE_STOP)
         return None
 
     def snapshot(self) -> dict[str, Any]:
@@ -399,7 +407,9 @@ class BusquedaGame(Game):
             return
         await self.host.send("round", self._state("ready"))
         await self.host.speak(
-            t.ROUND_TEXT.format(number=self._round, total=self._total, name=entry.name)
+            t.live_text(
+                "ronda", t.ROUND_TEXT, number=self._round, total=self._total, name=entry.name
+            )
         )
 
     async def on_assistant_text(self, text: str, final: bool) -> None:
@@ -498,9 +508,9 @@ class BusquedaGame(Game):
     async def check(self, arguments: dict[str, Any]) -> str:
         """``busqueda_check``: alguien grita «¡aquí!»: se mira ya, dentro del tope de la ronda."""
         if self._phase == "ready":
-            return t.NOT_STARTED_TEXT
+            return t.live_text("sin_salida", t.NOT_STARTED_TEXT)
         if self._phase != "running" or self._current is None:
-            return t.ALREADY_TEXT
+            return t.live_text("ya_contada", t.ALREADY_TEXT)
         cfg = self.host.settings.games.busqueda
         round_no = self._round
         pending = self._inflight
@@ -510,24 +520,24 @@ class BusquedaGame(Game):
             try:
                 await asyncio.wait_for(asyncio.shield(pending), MANUAL_JOIN_S)
             except TimeoutError:
-                return t.STILL_LOOKING_TEXT
+                return t.live_text("mirando", t.STILL_LOOKING_TEXT)
             if self._phase != "running" or self._round != round_no:
-                return t.ALREADY_TEXT
+                return t.live_text("ya_contada", t.ALREADY_TEXT)
         if self._checks >= cfg.max_checks:
-            return t.NO_MORE_TEXT
+            return t.live_text("sin_miradas", t.NO_MORE_TEXT)
         entry = self._current
         fut = self._begin_look(self.host.now(), manual=True)
         answer = await self._run_look(fut, entry.question, round_no)
         if self._phase != "running" or self._round != round_no:
-            return t.ALREADY_TEXT
+            return t.live_text("ya_contada", t.ALREADY_TEXT)
         if answer is None:
-            return t.NO_ANSWER_TEXT
+            return t.live_text("sin_respuesta", t.NO_ANSWER_TEXT)
         if not answer.seen:
             left = max(0, round(self._deadline - self.host.now()))
-            return t.NOT_YET_TEXT.format(name=entry.name, left=left)
+            return t.live_text("aun_no", t.NOT_YET_TEXT, name=entry.name, left=left)
         outcome = self._resolve("found", self.host.now(), answer)
         if outcome is None:
-            return t.ALREADY_TEXT
+            return t.live_text("ya_contada", t.ALREADY_TEXT)
         await self._show(outcome)
         await self._settle(outcome, first_word_s=VOICE_FIRST_WORD_S, min_delay_s=VOICE_MIN_DELAY_S)
         return outcome.script
@@ -601,15 +611,17 @@ class BusquedaGame(Game):
         result: GameResult = "cancel" if cancel else ("win" if won else "lose")
         if kind == "found":
             screen = self._state("found", what=what)
-            script = t.FOUND_TEXT.format(what=what)
+            script = t.live_text("encontrado", t.FOUND_TEXT, what=what)
         else:
             screen = self._state("timeout", silent=silent)
             if silent:
-                script = t.SILENT_TEXT
+                script = t.live_text("camara_muda", t.SILENT_TEXT)
+            elif skipped:
+                script = t.live_text("saltado", t.SKIP_TEXT, name=entry.name)
             else:
-                script = (t.SKIP_TEXT if skipped else t.TIMEOUT_TEXT).format(name=entry.name)
+                script = t.live_text("tiempo", t.TIMEOUT_TEXT, name=entry.name)
         if cancel:
-            script = t.CANCEL_TEXT
+            script = t.live_text("cancelado", t.CANCEL_TEXT)
         elif last:
             script += self._final_text(won)
         else:

@@ -39,6 +39,7 @@ from sonia.gestures.prompt import (
     build_request_message,
     build_system_prompt,
     build_user_message,
+    catalog_text,
     parse_choice,
 )
 from sonia.llm.client import Completion
@@ -157,7 +158,8 @@ class GestureDirector:
         self._rng = rng or random.Random()
         self._catalog = GestureCatalog([])
         #: Mensaje de sistema: idéntico en todas las llamadas con el mismo catálogo.
-        self._system = ""
+        #: El catálogo ya montado para el prompt (``{gestures}``), uno por catálogo.
+        self._gestures = ""
         self._live = False
 
         # Conversación.
@@ -192,7 +194,11 @@ class GestureDirector:
 
     @property
     def system_prompt(self) -> str:
-        return self._system
+        """El mensaje de sistema, con el texto en uso (el de la app o el de la nube) en cada
+        petición: un cambio en el panel vale desde la siguiente."""
+        if not len(self._catalog):
+            return ""
+        return build_system_prompt(self._catalog, self._gestures)
 
     def _ready(self) -> bool:
         if not self.enabled or not self._live or not len(self._catalog):
@@ -217,7 +223,7 @@ class GestureDirector:
         if not self.can_choose:
             return RequestedGesture(None, "sin modelo de gestos o sin catálogo de Unity")
         assert self._llm is not None
-        messages = [system(self._system), user_text(build_request_message(request))]
+        messages = [system(self.system_prompt), user_text(build_request_message(request))]
         started = time.monotonic()
         timeout = self._settings.timeout_s
         try:
@@ -252,7 +258,7 @@ class GestureDirector:
         """Catálogo nuevo (``gesture_catalog`` de Unity): reemplaza al anterior."""
         catalog = GestureCatalog.from_message(msg)
         self._catalog = catalog
-        self._system = build_system_prompt(catalog) if len(catalog) else ""
+        self._gestures = catalog_text(catalog)
         logger.info(
             "Catálogo de gestos de %s: %d gestos (%d de relleno)%s",
             catalog.character or "Unity",
@@ -451,7 +457,7 @@ class GestureDirector:
             # Lo que llegue después del plazo de la frase se tiraría igual.
             deadline = utterance.started_at + settings.max_delay_s - FALLBACK_MARGIN_S
             timeout = min(timeout, deadline - started)
-        messages = [system(self._system), user_text(self._user_message(utterance, started))]
+        messages = [system(self.system_prompt), user_text(self._user_message(utterance, started))]
         self._stats.requests += 1
         completion: Completion | None = None
         error = ""
