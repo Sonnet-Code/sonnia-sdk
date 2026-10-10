@@ -684,40 +684,16 @@ summary:focus-visible,
   font-weight: 600;
 }
 
-.trivia-bank {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+/* Los editores de los bancos están en Developer: aquí queda solo el enlace */
+.bank-moved {
+  margin: 14px 0 0;
+  color: var(--ink-2);
+  font-size: 15px;
 }
 
-.trivia-bank > summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.trivia-bank > summary::-webkit-details-marker {
-  display: none;
-}
-
-.trivia-bank > summary::before {
-  content: "▸";
+.bank-moved a {
   color: var(--blue-strong);
-}
-
-.trivia-bank[open] > summary::before {
-  content: "▾";
-}
-
-.trivia-bank-title {
   font-weight: 700;
-}
-
-.trivia-bank[open] > summary {
-  margin-bottom: 10px;
 }
 
 .trivia-bank-input {
@@ -1698,6 +1674,19 @@ input[type="range"]:disabled {
 
 .avatar-state[data-state="editing"] {
   color: var(--warn);
+}
+
+/* Bancos de la trivia y de los juegos: con el editor abierto, el bloque ocupa todo el ancho */
+.dev-bank:has(> .bank-editor:not([hidden])) {
+  grid-column: 1 / -1;
+}
+
+.bank-info {
+  margin: -4px 0 8px;
+}
+
+.bank-info:empty {
+  display: none;
 }
 
 /* Animaciones: un grupo por familia, botones que se reparten el ancho */

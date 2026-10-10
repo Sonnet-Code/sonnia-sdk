@@ -321,6 +321,7 @@
       "game-judge", "game-judge-select", "game-judge-help",
       "gallery-add-btn", "gallery-file", "gallery-upload", "gallery-upload-preview", "gallery-upload-name",
       "gallery-upload-btn", "gallery-upload-cancel", "gallery-upload-state",
+      "developer",
     ];
     for (const id of ids) {
       // "topbar-status" -> ui.topbarStatus
@@ -332,6 +333,7 @@
     ui.resetTuningButtons = Array.from(document.querySelectorAll("[data-reset-tuning]"));
     ui.syncNotes = Array.from(document.querySelectorAll("[data-sync-note]"));
     ui.logFilterButtons = Array.from(document.querySelectorAll("[data-log-filter]"));
+    ui.openDeveloperLinks = Array.from(document.querySelectorAll("[data-open-developer]"));
     ui.tuningInputs = [];
   }
 
@@ -2070,6 +2072,16 @@
     else renderGameBankState();
   }
 
+  /** «Los bancos se editan en Developer»: abre Developer y baja hasta el bloque. */
+  function onOpenDeveloper(event) {
+    const link = event.currentTarget;
+    const target = byId((link.getAttribute("href") || "").replace(/^#/, "")) || ui.developer;
+    event.preventDefault();
+    ui.developer.open = true;
+    const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+  }
+
   function onMuteClick() {
     const mic = (app.status && app.status.health && app.status.health.mic) || {};
     sendAction("mute", { muted: !mic.muted }, { button: ui.muteBtn });
@@ -3506,6 +3518,7 @@
     ui.gameBankInput.addEventListener("input", renderGameBankState);
     ui.gamePoseSelect.addEventListener("change", onPoseModelChange);
     ui.gameJudgeSelect.addEventListener("change", onGameJudgeChange);
+    for (const link of ui.openDeveloperLinks) link.addEventListener("click", onOpenDeveloper);
 
     trackDragging(ui.volumeInput);
     ui.volumeInput.addEventListener("input", () => {

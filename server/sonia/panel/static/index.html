@@ -180,23 +180,7 @@
         </div>
         <p class="note" id="trivia-note" hidden>La trivia necesita a Sonnia en «Conversando».</p>
         <p class="cap-note" data-cap-note="trivia" hidden>Esta Sonnia no tiene trivia: actualiza su orquestador o revisa assets/trivia/preguntas.md.</p>
-        <details class="trivia-bank" id="trivia-bank">
-          <summary><span class="trivia-bank-title">Banco de preguntas</span> <span class="summary-hint" id="trivia-bank-info"></span></summary>
-          <p class="help">Lo que guardes aquí va a la nube y lo usan todas las Sonnias actualizadas desde su próxima partida, sin reiniciar. Cada pregunta es una línea <code>## [fácil] ¿…?</code> (o <code>[intermedio]</code>, <code>[difícil]</code>), tres opciones con <code>- [x]</code> en la correcta y <code>- [ ]</code> en las otras, y si quieres una línea <code>&gt;</code> con un dato para cuando la revele. Mejor opciones cortas, de menos de 35 letras.</p>
-          <div class="row">
-            <button type="button" class="btn" id="trivia-bank-load-btn" data-cap="trivia_bank">Cargar el banco para editarlo</button>
-          </div>
-          <div class="stack" id="trivia-bank-editor" hidden>
-            <label class="visually-hidden" for="trivia-bank-input">Banco de preguntas</label>
-            <textarea id="trivia-bank-input" class="trivia-bank-input" rows="18" maxlength="100000" spellcheck="false" data-cap="trivia_bank"></textarea>
-            <div class="row">
-              <button type="button" class="btn btn-primary" id="trivia-bank-save-btn" data-cap="trivia_bank">Guardar en la nube</button>
-              <button type="button" class="btn" id="trivia-bank-reset-btn" data-cap="trivia_bank">Volver al de la app</button>
-              <span class="save-state" id="trivia-bank-state" data-state="saved"></span>
-            </div>
-          </div>
-          <p class="cap-note" data-cap-note="trivia_bank" hidden>Esta Sonnia no tiene el banco en la nube: hay que instalarle una versión más nueva de la app.</p>
-        </details>
+        <p class="bank-moved">Los bancos se editan en <a href="#dev-trivia-bank" data-open-developer>Developer</a>.</p>
       </section>
 
       <!-- ===== Juegos del stand (docs/juegos.md) ===== -->
@@ -236,26 +220,7 @@
           <p class="help game-pose-help" id="game-judge-help">Si Gemini va lento o falla, pon Local: vale para todas las Sonnias, al momento.</p>
           <p class="cap-note" data-cap-note="game_judge" hidden>Esta Sonnia no puede cambiar el juez: le falta la cámara de los juegos o una versión más nueva de la app.</p>
         </div>
-        <details class="trivia-bank game-banks" id="game-banks">
-          <summary><span class="trivia-bank-title">Bancos de los juegos</span> <span class="summary-hint" id="game-bank-info"></span></summary>
-          <p class="help">Palabras, retos, adivinanzas… de cada juego. Lo que guardes aquí va a la nube y lo usan todas las Sonnias actualizadas desde su próxima partida, sin reiniciar. Cada banco explica su formato al principio, entre <code>&lt;!--</code> y <code>--&gt;</code>. Si está mal escrito o tiene pocas entradas, no se guarda y te dice por qué.</p>
-          <div class="row">
-            <label class="visually-hidden" for="game-bank-select">Banco</label>
-            <select id="game-bank-select" data-cap="game_banks"></select>
-            <button type="button" class="btn" id="game-bank-load-btn" data-cap="game_banks" data-extra="game_bank_chosen">Cargar para editarlo</button>
-          </div>
-          <p class="help game-bank-detail" id="game-bank-detail" hidden></p>
-          <div class="stack" id="game-bank-editor" hidden>
-            <label class="visually-hidden" for="game-bank-input">Banco del juego</label>
-            <textarea id="game-bank-input" class="trivia-bank-input" rows="16" maxlength="15000" spellcheck="false" data-cap="game_banks"></textarea>
-            <div class="row">
-              <button type="button" class="btn btn-primary" id="game-bank-save-btn" data-cap="game_banks" data-extra="game_bank_loaded">Guardar en la nube</button>
-              <button type="button" class="btn" id="game-bank-reset-btn" data-cap="game_banks" data-extra="game_bank_loaded">Volver al de la app</button>
-              <span class="save-state" id="game-bank-state" data-state="saved"></span>
-            </div>
-          </div>
-          <p class="cap-note" data-cap-note="game_banks" hidden>Esta Sonnia no tiene bancos de juegos: hay que instalarle una versión más nueva de la app.</p>
-        </details>
+        <p class="bank-moved">Los bancos se editan en <a href="#dev-game-banks" data-open-developer>Developer</a>.</p>
       </section>
 
       <!-- ===== Imágenes de la galería ===== -->
@@ -500,12 +465,54 @@
       </div>
     </details>
 
-    <!-- ===== Developer (plegado): boca, cámara y movimiento, guardados en la nube ===== -->
+    <!-- ===== Developer (plegado): bancos, personaje, boca, cámara y movimiento, guardados en la nube ===== -->
     <details class="card advanced developer" id="developer">
-      <summary><span>Developer</span><span class="summary-hint">Personaje, boca, encuadre de la cámara, movimiento en reposo y registro</span></summary>
+      <summary><span>Developer</span><span class="summary-hint">Bancos de la trivia y los juegos, personaje, boca, encuadre de la cámara, movimiento en reposo y registro</span></summary>
 
       <p class="sync-note" data-sync-note hidden></p>
       <div class="adv-grid">
+        <!-- Bancos: estaban en las tarjetas de la trivia y de los juegos; ahí queda solo el enlace -->
+        <section class="adv-block dev-bank" id="dev-trivia-bank" aria-labelledby="dev-trivia-bank-title">
+          <h3 id="dev-trivia-bank-title">Banco de la trivia</h3>
+          <p class="summary-hint bank-info" id="trivia-bank-info"></p>
+          <p class="help">Lo que guardes aquí va a la nube y lo usan todas las Sonnias actualizadas desde su próxima partida, sin reiniciar. Cada pregunta es una línea <code>## [fácil] ¿…?</code> (o <code>[intermedio]</code>, <code>[difícil]</code>), tres opciones con <code>- [x]</code> en la correcta y <code>- [ ]</code> en las otras, y si quieres una línea <code>&gt;</code> con un dato para cuando la revele. Mejor opciones cortas, de menos de 35 letras.</p>
+          <div class="row">
+            <button type="button" class="btn" id="trivia-bank-load-btn" data-cap="trivia_bank">Cargar el banco para editarlo</button>
+          </div>
+          <div class="stack bank-editor" id="trivia-bank-editor" hidden>
+            <label class="visually-hidden" for="trivia-bank-input">Banco de la trivia</label>
+            <textarea id="trivia-bank-input" class="trivia-bank-input" rows="18" maxlength="100000" spellcheck="false" data-cap="trivia_bank"></textarea>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="trivia-bank-save-btn" data-cap="trivia_bank">Guardar en la nube</button>
+              <button type="button" class="btn" id="trivia-bank-reset-btn" data-cap="trivia_bank">Volver al de la app</button>
+              <span class="save-state" id="trivia-bank-state" data-state="saved"></span>
+            </div>
+          </div>
+          <p class="cap-note" data-cap-note="trivia_bank" hidden>Esta Sonnia no tiene el banco en la nube: hay que instalarle una versión más nueva de la app.</p>
+        </section>
+
+        <section class="adv-block dev-bank" id="dev-game-banks" aria-labelledby="dev-game-banks-title">
+          <h3 id="dev-game-banks-title">Bancos de los juegos</h3>
+          <p class="summary-hint bank-info" id="game-bank-info"></p>
+          <p class="help">Palabras, retos, adivinanzas… de cada juego. Lo que guardes aquí va a la nube y lo usan todas las Sonnias actualizadas desde su próxima partida, sin reiniciar. Cada banco explica su formato al principio, entre <code>&lt;!--</code> y <code>--&gt;</code>. Si está mal escrito o tiene pocas entradas, no se guarda y te dice por qué.</p>
+          <div class="row">
+            <label class="visually-hidden" for="game-bank-select">Banco</label>
+            <select id="game-bank-select" data-cap="game_banks"></select>
+            <button type="button" class="btn" id="game-bank-load-btn" data-cap="game_banks" data-extra="game_bank_chosen">Cargar para editarlo</button>
+          </div>
+          <p class="help game-bank-detail" id="game-bank-detail" hidden></p>
+          <div class="stack bank-editor" id="game-bank-editor" hidden>
+            <label class="visually-hidden" for="game-bank-input">Banco del juego</label>
+            <textarea id="game-bank-input" class="trivia-bank-input" rows="16" maxlength="15000" spellcheck="false" data-cap="game_banks"></textarea>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="game-bank-save-btn" data-cap="game_banks" data-extra="game_bank_loaded">Guardar en la nube</button>
+              <button type="button" class="btn" id="game-bank-reset-btn" data-cap="game_banks" data-extra="game_bank_loaded">Volver al de la app</button>
+              <span class="save-state" id="game-bank-state" data-state="saved"></span>
+            </div>
+          </div>
+          <p class="cap-note" data-cap-note="game_banks" hidden>Esta Sonnia no tiene bancos de juegos: hay que instalarle una versión más nueva de la app.</p>
+        </section>
+
         <section class="adv-block" aria-labelledby="dev-avatar-title">
           <h3 id="dev-avatar-title">Personaje</h3>
           <p class="help">Pone la pantalla de Sonnia en el editor de personaje de Genies, para Sonnia o para el avatar de Jean del Modo Jean. Se edita allí, con el ratón; al guardar, el aspecto nuevo queda en la nube y lo usan todas las Sonnias. Mientras tanto Sonnia no conversa.</p>
