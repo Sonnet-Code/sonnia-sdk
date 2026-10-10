@@ -191,6 +191,13 @@ class WordleGame(Game):
         self._guesses: list[Guess] = []
         self._hint_shown = False
         self._over = False
+        self._result = ""
+
+    @property
+    def word(self) -> str:
+        """La palabra secreta de la partida (para los tests y el registro: nunca sale de aquí por
+        el panel ni va a GPT-Live antes del final)."""
+        return self._word
 
     # -- lo que declara el juego ----------------------------------------------
 
@@ -274,15 +281,28 @@ class WordleGame(Game):
         return NUDGE_TEXT.format(cols=WORD_LENGTH)
 
     def snapshot(self) -> dict[str, Any]:
+        """En qué va la partida para el panel. Sin la palabra ni la pista: el panel se ve delante
+        de los visitantes, y si el estado no trae ``summary`` enseña sus datos tal cual."""
         return {
-            "word": self._word,
-            "hint": self._hint,
+            "summary": self._summary(),
             "rows": self._rows,
             "attempts": len(self._guesses),
             "guesses": [guess.letters for guess in self._guesses],
             "hint_shown": self._hint_shown,
             "over": self._over,
+            "result": self._result,
         }
+
+    def _summary(self) -> str:
+        """El texto corto de la tarjeta «Juegos» del panel («Intento 3 de 6»)."""
+        attempts = len(self._guesses)
+        if self._result == "win":
+            return f"Acertaron en {attempts} de {self._rows}"
+        if self._result == "lose":
+            return f"Sin intentos ({attempts} de {self._rows})"
+        if attempts == 0:
+            return f"{self._rows} intentos"
+        return f"Intento {attempts} de {self._rows}"
 
     # -- la jugada -------------------------------------------------------------
 
@@ -332,6 +352,7 @@ class WordleGame(Game):
         result = "win" if won else "lose" if lost else ""
         # Ganar o perder cierra la partida aquí mismo: ningún intento más puede entrar.
         self._over = bool(result)
+        self._result = result
         logger.info("Wordle: intento %d/%d %s -> %s", number, self._rows, word, marks)
         await self.host.send("guess", self._state(result))
         if won:

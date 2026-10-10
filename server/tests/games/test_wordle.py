@@ -381,25 +381,25 @@ async def test_cada_partida_empieza_de_cero_y_no_repite_palabra_hasta_agotar() -
     for _ in range(10):
         await game.start("voice", {})
         assert game.snapshot()["attempts"] == 0 and not game.snapshot()["hint_shown"]
-        seen.append(str(game.snapshot()["word"]))
+        seen.append(game.word)
         await play(game, "LINUX")
     # Las diez del banco, una vez cada una; en la siguiente vuelta empiezan a repetirse.
     assert sorted(seen) == sorted(e.word for e in parse_words(bank_text()).entries)
     await game.start("voice", {})
-    assert str(game.snapshot()["word"]) in seen
+    assert game.word in seen
 
 
 async def test_el_banco_de_la_nube_manda_sobre_el_de_la_app() -> None:
     game, host = make_game(WordleGame, cloud_banks={WORDS.id: bank_text("LOGIN")})
     host.rng = FirstPick()
     await game.start("voice", {})
-    assert game.snapshot()["word"] == "LOGIN"
+    assert game.word == "LOGIN"
     # Una de la nube con pocas palabras no vale (menos del mínimo): sigue el archivo de la app.
     few = "## LOGIN\n> Una.\n\n## TOKEN\n> Otra.\n"
     game, host = make_game(WordleGame, cloud_banks={WORDS.id: few}, seed=2)
     await game.start("voice", {})
     app_words = {e.word for e in parse_words(_app_bank()).entries}
-    assert game.snapshot()["word"] in app_words
+    assert game.word in app_words
 
 
 def _app_bank() -> str:
@@ -409,7 +409,7 @@ def _app_bank() -> str:
 async def test_con_el_banco_de_la_app_se_juega_una_partida_entera() -> None:
     game, host = make_game(WordleGame, seed=5)
     await game.start("voice", {})
-    word = str(game.snapshot()["word"])
+    word = game.word
     assert re.fullmatch(r"[A-Z]{5}", word)
     script = await play(game, word)
     assert host.finished[0][0] == "win" and word in script
@@ -437,11 +437,36 @@ async def test_el_empujon_pide_delegar_y_no_nombra_el_stack() -> None:
 async def test_el_snapshot_cuenta_la_partida_para_el_panel() -> None:
     game, _ = make_wordle()
     await game.start("voice", {})
+    assert game.snapshot()["summary"] == "6 intentos"
     await play(game, "LINUX")
     state = game.snapshot()
-    assert state["attempts"] == 1 and state["guesses"] == ["LINUX"] and state["word"] == SECRET
-    assert state["rows"] == 6 and state["over"] is False
+    assert state["summary"] == "Intento 1 de 6"
+    assert state["attempts"] == 1 and state["guesses"] == ["LINUX"]
+    assert state["rows"] == 6 and state["over"] is False and state["result"] == ""
     json.dumps(state)  # tipos JSON
+    # El panel se ve delante de los visitantes: ni la palabra ni la pista salen en el estado.
+    assert SECRET not in json.dumps(state).upper() and HINT not in json.dumps(state)
+    for word in wrong_words(SECRET, 3):
+        await play(game, word)
+    assert game.snapshot()["summary"] == "Intento 4 de 6" and game.snapshot()["hint_shown"]
+    assert HINT not in json.dumps(game.snapshot())
+
+
+async def test_el_resumen_del_panel_cuenta_el_final() -> None:
+    won, _ = make_wordle()
+    await won.start("voice", {})
+    await play(won, SECRET)
+    assert won.snapshot()["summary"] == "Acertaron en 1 de 6" and won.snapshot()["over"] is True
+    lost, _ = make_wordle()
+    await lost.start("voice", {})
+    for word in wrong_words(SECRET, 6):
+        await play(lost, word)
+    assert lost.snapshot()["summary"] == "Sin intentos (6 de 6)"
+    assert lost.snapshot()["result"] == "lose"
+    assert SECRET not in json.dumps(lost.snapshot()).upper()
+    # Una partida nueva empieza de cero.
+    await lost.start("voice", {})
+    assert lost.snapshot()["summary"] == "6 intentos" and lost.snapshot()["result"] == ""
 
 
 async def test_sin_frases_grabadas_ni_camara() -> None:
@@ -595,7 +620,7 @@ async def rig(
 def secret_of(manager: GameManager) -> str:
     game = manager.current
     assert isinstance(game, WordleGame)
-    return str(game.snapshot()["word"])
+    return game.word
 
 
 async def test_partida_ganada_por_voz() -> None:

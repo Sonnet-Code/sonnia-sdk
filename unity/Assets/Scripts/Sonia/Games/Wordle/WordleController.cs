@@ -148,6 +148,9 @@ namespace Sonia.Games.Wordle
         private TextMeshProUGUI[] _keyLetter;
         private float _tile;
         private float _contentHeight;
+        private int _builtRows;
+        private int _builtCols;
+        private int _builtHintAfter;
 
         // La partida.
         private int _rows = 6;
@@ -192,7 +195,17 @@ namespace Sonia.Games.Wordle
                 return;
             }
 
-            Build();
+            if (_tiles != null && _builtRows == _rows && _builtCols == _cols && _builtHintAfter == _hintAfter)
+            {
+                // La misma rejilla que la partida anterior: no se vuelve a montar (son unos 250
+                // objetos de interfaz), solo se deja como nueva.
+                ResetBoard();
+            }
+            else
+            {
+                Build();
+            }
+
             Hud.SetContentHeight(Id, _contentHeight);
             Hud.SetCaption(_rows + " INTENTOS");
             Hud.RefreshLayout();
@@ -716,6 +729,48 @@ namespace Sonia.Games.Wordle
             Place(_right, new Vector2(1f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(rightW, _contentHeight));
             BuildInfo(rightW, infoH);
             BuildKeys(rightW, infoH + InfoGap);
+            _builtRows = _rows;
+            _builtCols = _cols;
+            _builtHintAfter = _hintAfter;
+        }
+
+        /// <summary>Deja lo ya montado como al empezar: fichas vacías, letras sin usar y la pista candada.</summary>
+        private void ResetBoard()
+        {
+            for (int r = 0; r < _rows; r++)
+            {
+                _rowTaken[r] = false;
+                _rowDone[r] = false;
+                _rowRects[r].anchoredPosition = new Vector2(0f, -r * (_tile + TileGap));
+                _rowRects[r].localScale = Vector3.one;
+                for (int c = 0; c < _cols; c++)
+                {
+                    Tile tile = _tiles[r, c];
+                    tile.Rect.anchoredPosition = new Vector2(c * (_tile + TileGap), 0f);
+                    tile.Rect.localScale = Vector3.one;
+                    PaintEmpty(tile);
+                }
+            }
+
+            for (int i = 0; i < _keyFill.Length; i++)
+            {
+                _keyFill[i].color = KeyFill;
+                _keyFill[i].rectTransform.localScale = Vector3.one;
+                _keyLetter[i].color = Color.white;
+            }
+
+            _infoLabel.text = "PISTA";
+            _infoLabel.color = GameColors.Muted;
+            _hintBody.text = string.Empty;
+            _revealHint.text = string.Empty;
+            _hintRoot.localScale = Vector3.one;
+            _lockedRoot.gameObject.SetActive(true);
+            _hintRoot.gameObject.SetActive(false);
+            _revealRoot.gameObject.SetActive(false);
+            for (int c = 0; c < _wordTiles.Length; c++)
+            {
+                _wordTiles[c].Rect.localScale = Vector3.one;
+            }
         }
 
         private void BuildGrid(float gridW, float gridH)

@@ -22,7 +22,7 @@ from tests.test_live import LiveRig, _backend_call
 def secret_of(rig: LiveRig) -> str:
     games = rig.engine.games
     assert games is not None and isinstance(games.current, WordleGame)
-    return str(games.current.snapshot()["word"])
+    return games.current.word
 
 
 async def test_el_wordle_por_voz_de_punta_a_punta_en_el_motor(tmp_path: Path) -> None:
