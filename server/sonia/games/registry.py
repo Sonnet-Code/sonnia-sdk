@@ -53,7 +53,7 @@ GAMES: tuple[GameEntry, ...] = (
     GameEntry(PosesGame, on=False),
     #
     # A4: Akinator dev (docs/juegos/akinator.md).
-    GameEntry(AkinatorGame, on=False),
+    GameEntry(AkinatorGame, on=True),
     #
     # A5: piedra, papel o tijera (docs/juegos/piedra_papel_tijera.md).
     GameEntry(PptGame, on=False),

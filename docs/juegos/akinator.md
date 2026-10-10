@@ -2,7 +2,7 @@
 
 Plan: `docs/plan-juegos.md`, sección 5.3. Contrato de los juegos: `docs/juegos.md`. Pantalla de Unity y capturas: `docs/juegos-unity.md`. Eventos: `docs/protocolo.md`, «akinator».
 
-> **Estado (10 de octubre de 2026):** el orquestador y la pantalla están hechos y probados con un GPT-Live falso y con el orquestador falso en Unity. No se ha probado con la API real (decisión de Jean): ver «Pendiente».
+> **Estado (10 de octubre de 2026):** el orquestador y la pantalla están hechos y probados con un GPT-Live falso (también dentro del `LiveEngine` real) y con el orquestador falso en Unity, con capturas 9:16 revisadas de cada estado. No se ha probado con la API real (decisión de Jean): ver «Pendiente».
 
 ## Qué es
 
@@ -46,7 +46,7 @@ Los esquemas son estrictos (todos los parámetros obligatorios, y `no_lo_dijo` e
 
 Entran por `instruct` al empezar (`server/sonia/games/akinator/prompts.py`, `RULES_TEXT`): preguntas de sí o no, una cada vez y sin delegar; acepta «no sé» y «a veces»; no repite; empieza por lo general y afina; los temas que valen (con dos ejemplos de cada uno mientras quepan); no arriesga antes de la pregunta `GAME_AKINATOR_MIN_QUESTIONS`; cómo delegar la respuesta y el resultado; y que la pantalla no cambia si no delega. Como mucho 1200 caracteres: con un banco largo los temas llevan menos ejemplos (y al final solo el nombre). Los temas y ejemplos con marcas del stack (Unity, Windows, GPT...) salen en la pantalla pero no entran en las reglas.
 
-Dos avisos silenciosos más (`instruct`): «llevas 15 de 20» y «la que acabas de hacer es la última». Y los empujones (`GAMES_NUDGE_SECONDS`, solo cuando el visitante habla y no se delega nada): con la respuesta en pantalla, «delega el veredicto»; tras rendirse, «delega lo que era»; con las 20 preguntas hechas, «no puedes hacer más: arriesga o ríndete». Mientras pregunta no hay empujón: preguntar sin delegar es lo normal.
+Dos avisos silenciosos más (`instruct`): «llevas 15 de 20» y «la que acabas de hacer es la última». Y los empujones (`GAMES_NUDGE_SECONDS`, solo cuando el visitante habla y no se delega nada): si el visitante ya avisó y Sonnia aún no ha hecho su primera pregunta, «hazla ahora»; con la respuesta en pantalla, «delega el veredicto»; tras rendirse, «delega lo que era»; con las 20 preguntas hechas, «no puedes hacer más: arriesga o ríndete». Mientras pregunta no hay empujón: preguntar sin delegar es lo normal. El manager evalúa el empujón cuando vence, así que si Sonnia ya estaba preguntando no se dice nada.
 
 ## El contador de preguntas
 
@@ -58,8 +58,13 @@ Dos avisos silenciosos más (`instruct`): «llevas 15 de 20» y «la que acabas 
 - No cuenta lo que no es del juego: una sola palabra («¿verdad?», «¿listo?») y frases hechas («¿cómo dices?», «¿me oyes?»), ni la pregunta con la que se rinde («¿qué era?»), que cambia la pantalla a «Me rindo…».
 - No cuenta nada hasta que el visitante habla por primera vez tras el arranque (`READY_GRACE_S` de margen para la transcripción tardía de su petición): así un «¿listo?» de la apertura no es la pregunta 1. La apertura no lleva ninguna pregunta.
 - No depende de que llegue el cierre de la frase: la frase siguiente se reconoce porque su texto no continúa el anterior.
+- Aguanta que el «?» llegue tarde: el motor corta las frases por el silencio del audio y el texto no va pegado a él, así que una pregunta puede quedar abierta al final de una frase («¿Es un lenguaje de programación») y su «?» abrir la siguiente. Se juntan.
 
 Si se descuenta una pregunta (dos en la misma frase) o se cuenta de más (una aclaración que parece pregunta), la pantalla va una arriba o abajo y el juego sigue igual.
+
+## Panel
+
+La tarjeta «Juegos» del panel enseña el `summary` del `snapshot()` del juego: «Esperando a que piense en algo», «Pregunta 7 de 20», «Pregunta 7 de 20 · arriesga: Kotlin», «Se rinde: pregunta qué era», «Acertó: Kotlin» o «Perdió: era Rust». El resto del `snapshot()` (`phase`, `asked`, `max`, `question`, `guess`, `missed`) sirve para depurar. El banco de temas se edita en «Bancos de los juegos».
 
 ## Pantalla
 
