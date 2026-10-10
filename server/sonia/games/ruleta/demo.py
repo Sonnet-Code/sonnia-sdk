@@ -36,10 +36,15 @@ def _round(spin: int, kind_index: int, **fields: object) -> Round:
 
 
 def _spin_steps(round_: Round, wins: int, capture: str = "") -> list[Step]:
-    """Gira hasta la casilla del reto y espera a que Unity diga que paró."""
+    """Gira hasta la casilla del reto y espera a que Unity diga que paró.
+
+    Con ``capture``, varias capturas seguidas del giro (el impulso, la velocidad, la
+    frenada y los últimos clics) para validar la animación por fotogramas.
+    """
     steps: list[Step] = [GameMsg("spin", spin_data(round_, wins))]
     if capture:
-        steps += [Wait(1.4), Capture(capture, settle_s=0.0)]
+        for i, wait in enumerate((0.15, 0.5, 0.9, 1.1)):
+            steps += [Wait(wait), Capture(f"{capture}-{i + 1}", settle_s=0.0)]
     steps.append(WaitEvent("wheel_stopped", timeout=SPIN_SECONDS + 6.0))
     return steps
 
