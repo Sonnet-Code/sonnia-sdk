@@ -1,5 +1,5 @@
-"""La página del panel: los editores de los bancos, en «Developer». Sin navegador: se lee
-``index.html`` y ``panel.js`` tal cual se sirven."""
+"""La página del panel: «Developer», con la tarjeta «Prompts de Sonnia» y los editores de
+los bancos. Sin navegador: se lee ``index.html`` y ``panel.js`` tal cual se sirven."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import re
 from html.parser import HTMLParser
 
 from sonia.panel.server import STATIC_DIR
+from sonia.prompts import PLACEHOLDER, PROMPT_MAX_LEN
 
 PAGE = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 SCRIPT = (STATIC_DIR / "panel.js").read_text(encoding="utf-8")
@@ -78,8 +79,52 @@ def test_los_ids_del_panel_existen_y_no_se_repiten() -> None:
     listed = re.search(r"const ids = \[(.*?)\];", SCRIPT, re.S)
     assert listed
     wanted = re.findall(r'"([a-z0-9-]+)"', listed.group(1))
-    assert "trivia-bank-input" in wanted
+    assert "prompt-input" in wanted and "trivia-bank-input" in wanted
     assert [i for i in wanted if i not in tree.attrs] == []
+
+
+def test_la_tarjeta_de_prompts_esta_en_developer_con_su_capacidad() -> None:
+    tree = _tree()
+    assert tree.tags["developer"] == "details"
+    assert "developer" in tree.parents["dev-prompts"]
+    controls = (
+        "prompts-load-btn",
+        "prompt-group-select",
+        "prompt-select",
+        "prompt-input",
+        "prompt-save-btn",
+        "prompt-reset-btn",
+        "prompt-default-btn",
+    )
+    for element in controls:
+        assert "dev-prompts" in tree.parents[element], element
+        assert tree.attrs[element].get("data-cap") == "prompts", element
+    for element in ("prompt-input", "prompt-save-btn", "prompt-reset-btn", "prompt-default-btn"):
+        assert tree.attrs[element].get("data-extra") == "prompt_loaded", element
+    # La línea de estado, el contador y los datos de la pieza.
+    for element in ("prompt-state", "prompt-count", "prompt-check", "prompt-facts", "prompt-help"):
+        assert "dev-prompts" in tree.parents[element], element
+    # Sin catálogo hasta pulsar «Cargar prompts»; con una app anterior, el aviso.
+    assert "hidden" in tree.attrs["prompt-pick"] and "hidden" in tree.attrs["prompt-editor"]
+    card = _section("dev-prompts")
+    assert ">Prompts de Sonnia<" in card and ">Cargar prompts<" in card
+    assert 'data-cap-note="prompts"' in card
+    for label in ("Guardar en la nube", "Volver al de la app", "Ver el de la app"):
+        assert f">{label}<" in card, label
+    # No deja escribir más de lo que acepta el orquestador.
+    assert tree.attrs["prompt-input"].get("maxlength") == str(PROMPT_MAX_LEN)
+
+
+def test_el_panel_pide_y_guarda_los_prompts_como_el_orquestador() -> None:
+    for action in ("prompt_catalog", "prompt", "set_prompt"):
+        assert f'sendAction("{action}"' in SCRIPT, action
+    assert "prompt_loaded: () =>" in SCRIPT
+    assert f"const PROMPT_MAX_CHARS = {PROMPT_MAX_LEN};" in SCRIPT
+    # El aviso al escribir usa el mismo marcador que valida el orquestador.
+    placeholder = re.search(r"const PROMPT_PLACEHOLDER = /(.+)/g;", SCRIPT)
+    assert placeholder and placeholder.group(1) == PLACEHOLDER.pattern
+    # Al cambiar de Sonnia se suelta el catálogo (otra app puede tener otras piezas).
+    assert "closePrompts();" in SCRIPT
 
 
 def test_los_bancos_se_editan_en_developer() -> None:

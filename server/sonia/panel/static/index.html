@@ -465,12 +465,53 @@
       </div>
     </details>
 
-    <!-- ===== Developer (plegado): bancos, personaje, boca, cámara y movimiento, guardados en la nube ===== -->
+    <!-- ===== Developer (plegado): prompts, bancos, personaje, boca, cámara y movimiento, guardados en la nube ===== -->
     <details class="card advanced developer" id="developer">
-      <summary><span>Developer</span><span class="summary-hint">Bancos de la trivia y los juegos, personaje, boca, encuadre de la cámara, movimiento en reposo y registro</span></summary>
+      <summary><span>Developer</span><span class="summary-hint">Prompts, bancos de la trivia y los juegos, personaje, boca, encuadre de la cámara, movimiento en reposo y registro</span></summary>
 
       <p class="sync-note" data-sync-note hidden></p>
       <div class="adv-grid">
+        <!-- Prompts de Sonnia: el texto que se le da a cada modelo, con su versión en la nube (sonia/prompts) -->
+        <section class="adv-block adv-wide" id="dev-prompts" aria-labelledby="dev-prompts-title">
+          <h3 id="dev-prompts-title">Prompts de Sonnia</h3>
+          <p class="help">Todo el texto que se le da a un modelo: la persona de Sonnia, lo que sabe, las reglas de la conversación, la visión, los gestos, el juez, la trivia y los juegos. Lo que guardes aquí va a la nube y todas las Sonnias actualizadas lo usan en lugar del de la app, nunca los dos. Si no vale (por ejemplo, le falta un marcador), no se guarda y te dice por qué.</p>
+          <div class="row">
+            <button type="button" class="btn" id="prompts-load-btn" data-cap="prompts">Cargar prompts</button>
+            <span class="summary-hint" id="prompts-info"></span>
+          </div>
+          <div class="prompt-pick" id="prompt-pick" hidden>
+            <label class="field">
+              <span class="field-label">Grupo</span>
+              <select id="prompt-group-select" data-cap="prompts"></select>
+            </label>
+            <label class="field">
+              <span class="field-label">Pieza</span>
+              <select id="prompt-select" data-cap="prompts"></select>
+            </label>
+          </div>
+          <div class="stack prompt-editor" id="prompt-editor" hidden>
+            <div class="prompt-head">
+              <strong class="prompt-title" id="prompt-title"></strong>
+              <span class="prompt-badge" id="prompt-source" data-source="app">app</span>
+              <span class="prompt-badge prompt-badge--ignored" id="prompt-ignored" hidden>versión de la nube ignorada (no valida)</span>
+              <code class="prompt-id" id="prompt-id"></code>
+            </div>
+            <label class="visually-hidden" for="prompt-input">Texto del prompt</label>
+            <textarea id="prompt-input" class="prompt-input" rows="20" maxlength="60000" spellcheck="false" data-cap="prompts" data-extra="prompt_loaded"></textarea>
+            <p class="prompt-count" id="prompt-count"></p>
+            <p class="prompt-check" id="prompt-check" hidden></p>
+            <dl class="facts prompt-facts" id="prompt-facts"></dl>
+            <p class="help prompt-help" id="prompt-help" hidden></p>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="prompt-save-btn" data-cap="prompts" data-extra="prompt_loaded">Guardar en la nube</button>
+              <button type="button" class="btn" id="prompt-reset-btn" data-cap="prompts" data-extra="prompt_loaded">Volver al de la app</button>
+              <button type="button" class="btn" id="prompt-default-btn" data-cap="prompts" data-extra="prompt_loaded">Ver el de la app</button>
+            </div>
+            <p class="prompt-state" id="prompt-state" role="status" aria-live="polite" data-state="" hidden></p>
+          </div>
+          <p class="cap-note" data-cap-note="prompts" hidden>Esta Sonnia no tiene los prompts editables: hay que instalarle una versión más nueva de la app.</p>
+        </section>
+
         <!-- Bancos: estaban en las tarjetas de la trivia y de los juegos; ahí queda solo el enlace -->
         <section class="adv-block dev-bank" id="dev-trivia-bank" aria-labelledby="dev-trivia-bank-title">
           <h3 id="dev-trivia-bank-title">Banco de la trivia</h3>

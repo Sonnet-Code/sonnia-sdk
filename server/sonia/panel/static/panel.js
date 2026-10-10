@@ -285,6 +285,12 @@
     triviaBankBase: null, // banco de preguntas cargado en la caja (null: sin cargar)
     gameBankId: null, // banco de los juegos cargado en su caja (null: ninguno)
     gameBankBase: null, // su texto tal como llegó (para saber si hay cambios sin guardar)
+    prompts: null, // catálogo de prompts de la Sonnia elegida (null: sin cargar)
+    promptId: null, // pieza cargada en el editor de prompts (null: ninguna)
+    promptData: null, // esa pieza: {id, default, source, fields, appliesText}
+    promptBase: null, // su texto en uso tal como llegó (para saber si hay cambios sin guardar)
+    promptNote: null, // {state, text}: lo último que respondió Sonnia, hasta que se vuelva a escribir
+    promptSeq: 0, // para descartar respuestas de una pieza que ya no está elegida
     lastPresence: null,
   };
 
@@ -321,7 +327,10 @@
       "game-judge", "game-judge-select", "game-judge-help",
       "gallery-add-btn", "gallery-file", "gallery-upload", "gallery-upload-preview", "gallery-upload-name",
       "gallery-upload-btn", "gallery-upload-cancel", "gallery-upload-state",
-      "developer",
+      "developer", "prompts-load-btn", "prompts-info", "prompt-pick", "prompt-group-select", "prompt-select",
+      "prompt-editor", "prompt-title", "prompt-source", "prompt-ignored", "prompt-id", "prompt-input", "prompt-count",
+      "prompt-check", "prompt-facts", "prompt-help", "prompt-save-btn", "prompt-reset-btn", "prompt-default-btn",
+      "prompt-state",
     ];
     for (const id of ids) {
       // "topbar-status" -> ui.topbarStatus
@@ -819,6 +828,7 @@
     game_active: () => gameActive(),
     game_bank_chosen: () => Boolean(ui.gameBankSelect.value),
     game_bank_loaded: () => app.gameBankId !== null,
+    prompt_loaded: () => app.promptId !== null,
   };
 
   /** Partida de trivia en curso (`trivia` del estado). */
@@ -987,6 +997,7 @@
     app.lastPresence = null;
     closeTriviaBank();
     clearGames();
+    closePrompts();
     resetChat();
     ui.log.replaceChildren();
     clearDevLog();
@@ -2070,6 +2081,422 @@
     const result = await sendAction("set_game_bank", { bank, text: "" }, { button: ui.gameBankResetBtn });
     if (result.ok) await loadGameBank(bank);
     else renderGameBankState();
+  }
+
+  // ------------------------------------------------------------ prompts de Sonnia (Developer)
+
+  /** Tope de una pieza (PROMPT_MAX_LEN en server/sonia/prompts/book.py). */
+  const PROMPT_MAX_CHARS = 60000;
+
+  /** Un marcador que rellena el código (PLACEHOLDER en server/sonia/prompts/book.py). */
+  const PROMPT_PLACEHOLDER = /\{([a-z][a-z0-9_]*)\}/g;
+
+  function stringList(value) {
+    return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item) : [];
+  }
+
+  /** «Cargar prompts»: el catálogo (`prompt_catalog`) llega en JSON dentro del mensaje. */
+  function parsePromptCatalog(message) {
+    let data = null;
+    try {
+      data = JSON.parse(message);
+    } catch {
+      return null;
+    }
+    if (!data || !Array.isArray(data.prompts)) return null;
+    return data.prompts
+      .filter((item) => item && typeof item.id === "string" && item.id)
+      .map((item) => ({
+        id: item.id,
+        group: typeof item.group === "string" && item.group.trim() ? item.group.trim() : "Otros",
+        title: typeof item.title === "string" && item.title.trim() ? item.title.trim() : item.id,
+        fields: stringList(item.fields),
+        required: stringList(item.required),
+        mustContain: stringList(item.must_contain),
+        appliesText: typeof item.applies_text === "string" ? item.applies_text : "",
+        help: typeof item.help === "string" ? item.help.trim() : "",
+        source: item.source === "nube" ? "nube" : "app",
+        ignored: item.ignored === true,
+      }));
+  }
+
+  function promptEntry(id) {
+    return (app.prompts || []).find((entry) => entry.id === id) || null;
+  }
+
+  /** Los grupos en el orden en que llegan («Sonnia», «Conocimiento», «Juez»...). */
+  function promptGroups() {
+    const groups = [];
+    for (const entry of app.prompts || []) {
+      if (!groups.includes(entry.group)) groups.push(entry.group);
+    }
+    return groups;
+  }
+
+  function promptOptionText(entry) {
+    const text = `${entry.title} · ${entry.source}`;
+    return entry.ignored ? `${text} · versión de la nube ignorada (no valida)` : text;
+  }
+
+  function renderPromptsInfo() {
+    const list = app.prompts;
+    let text = "";
+    if (list && !list.length) {
+      text = "Esta Sonnia no tiene prompts registrados.";
+    } else if (list) {
+      const cloud = list.filter((entry) => entry.source === "nube").length;
+      const ignored = list.filter((entry) => entry.ignored).length;
+      text = `${list.length} pieza${list.length === 1 ? "" : "s"} · ` +
+        (cloud ? `${cloud} en la nube` : "todas las de la app");
+      if (ignored) text += ` · ${ignored} de la nube ignorada${ignored === 1 ? "" : "s"} (no valida${ignored === 1 ? "" : "n"})`;
+    }
+    setText(ui.promptsInfo, text);
+  }
+
+  /** Los dos selectores. Conserva el grupo y la pieza elegidos si siguen en el catálogo. */
+  function renderPromptPickers() {
+    const list = app.prompts || [];
+    const groups = promptGroups();
+    const loaded = promptEntry(app.promptId);
+    const keep = loaded ? loaded.group : ui.promptGroupSelect.value;
+    ui.promptGroupSelect.replaceChildren(
+      ...groups.map((group) => {
+        const entries = list.filter((entry) => entry.group === group);
+        const cloud = entries.filter((entry) => entry.source === "nube").length;
+        return el("option", { value: group, text: `${group} (${entries.length}${cloud ? ` · ${cloud} en la nube` : ""})` });
+      }),
+    );
+    if (groups.includes(keep)) ui.promptGroupSelect.value = keep;
+    renderPromptPieces();
+    setHidden(ui.promptPick, !list.length);
+  }
+
+  function renderPromptPieces() {
+    const entries = (app.prompts || []).filter((entry) => entry.group === ui.promptGroupSelect.value);
+    ui.promptSelect.replaceChildren(
+      el("option", { value: "", text: entries.length ? "Elige una pieza…" : "Sin piezas" }),
+      ...entries.map((entry) => el("option", { value: entry.id, text: promptOptionText(entry) })),
+    );
+    ui.promptSelect.value = entries.some((entry) => entry.id === app.promptId) ? app.promptId : "";
+  }
+
+  async function loadPromptCatalog({ quiet = false } = {}) {
+    const instance = app.instanceId;
+    const result = await sendAction("prompt_catalog", {}, { button: quiet ? null : ui.promptsLoadBtn, silent: true });
+    if (instance !== app.instanceId) return;
+    const list = result.ok ? parsePromptCatalog(result.message) : null;
+    if (!list) {
+      if (!quiet) showToast(result.ok ? "La lista de prompts llegó mal. Inténtalo de nuevo." : result.message, "error");
+      return;
+    }
+    app.prompts = list;
+    setText(ui.promptsLoadBtn, "Recargar la lista");
+    renderPromptsInfo();
+    renderPromptPickers();
+    renderPromptMeta();
+  }
+
+  function promptDirty() {
+    return app.promptBase !== null && ui.promptInput.value.trim() !== app.promptBase.trim();
+  }
+
+  /** ¿Se está viendo el texto de la app de una pieza que usa otro (el de la nube)? */
+  function viewingPromptDefault() {
+    const data = app.promptData;
+    return Boolean(data) && promptDirty() && ui.promptInput.value.trim() === data.default.trim();
+  }
+
+  /** Qué marcadores trae el texto: `{objeto}` sí; `{"visto": true}` no (lleva comillas). */
+  function promptMarks(text) {
+    return new Set(Array.from(text.matchAll(PROMPT_PLACEHOLDER), (match) => match[1]));
+  }
+
+  /** Lo mismo que comprueba el orquestador al guardar (PromptBook.validate), para verlo antes. */
+  function promptProblems(entry, text) {
+    if (!entry || !text.trim()) return [];
+    const marks = promptMarks(text);
+    const problems = [];
+    const extra = [...marks].filter((name) => !entry.fields.includes(name));
+    if (extra.length) problems.push(`El código no rellena ${extra.map((name) => `{${name}}`).join(", ")}.`);
+    const missing = entry.required.filter((name) => !marks.has(name));
+    if (missing.length) problems.push(`Le falta ${missing.map((name) => `{${name}}`).join(", ")}, que es obligatorio.`);
+    for (const needed of entry.mustContain) {
+      if (!text.includes(needed)) problems.push(`Tiene que seguir diciendo «${needed}».`);
+    }
+    return problems;
+  }
+
+  /** Lo que se sabe de la pieza cargada: del catálogo y de su respuesta (`prompt`), la más fresca. */
+  function loadedPrompt() {
+    const data = app.promptData;
+    if (!data) return null;
+    const entry = promptEntry(data.id);
+    return {
+      id: data.id,
+      title: entry ? entry.title : data.id,
+      fields: data.fields.length || !entry ? data.fields : entry.fields,
+      required: entry ? entry.required : [],
+      mustContain: entry ? entry.mustContain : [],
+      appliesText: data.appliesText || (entry ? entry.appliesText : ""),
+      help: entry ? entry.help : "",
+      source: data.source,
+      ignored: Boolean(entry && entry.ignored) && data.source !== "nube",
+    };
+  }
+
+  /** Cabecera, marcadores, cuándo se aplica y ayuda de la pieza cargada. */
+  function renderPromptMeta() {
+    const prompt = loadedPrompt();
+    if (!prompt) return;
+    setText(ui.promptTitle, prompt.title);
+    setText(ui.promptId, prompt.id);
+    setText(ui.promptSource, prompt.source);
+    ui.promptSource.dataset.source = prompt.source;
+    setHidden(ui.promptIgnored, !prompt.ignored);
+    setText(ui.promptHelp, prompt.help);
+    setHidden(ui.promptHelp, !prompt.help);
+    renderPromptChecks();
+  }
+
+  /** Lo que cambia al escribir: los marcadores que están, los avisos, el contador y el estado. */
+  function renderPromptChecks() {
+    const prompt = loadedPrompt();
+    if (!prompt) return;
+    const text = ui.promptInput.value;
+    const marks = promptMarks(text);
+    const chips = prompt.fields.map((name) => {
+      const required = prompt.required.includes(name);
+      const state = marks.has(name) ? "ok" : required ? "missing" : "";
+      return el("code", {
+        class: "prompt-mark",
+        "data-state": state,
+        title: required ? "Obligatorio" : "Opcional",
+        text: `{${name}}${required ? " *" : ""}`,
+      });
+    });
+    const requiredNote = prompt.required.length
+      ? el("span", { class: "prompt-mark-note", text: "* obligatorio: sin él no se guarda" })
+      : null;
+    const facts = [
+      ["Marcadores", chips.length ? [...chips, requiredNote] : ["Ninguno: el código no rellena nada en esta pieza."]],
+    ];
+    if (prompt.mustContain.length) {
+      facts.push(["Tiene que decir", [prompt.mustContain.map((needed) => `«${needed}»`).join(", ")]]);
+    }
+    if (prompt.appliesText) facts.push(["Se aplica", [capitalize(prompt.appliesText)]]);
+    ui.promptFacts.replaceChildren(
+      ...facts.flatMap(([term, parts]) => [el("dt", { text: term }), el("dd", {}, ...parts)]),
+    );
+    const problems = promptProblems(prompt, text);
+    setText(ui.promptCheck, problems.length ? `Así no se guarda: ${problems.join(" ")}` : "");
+    setHidden(ui.promptCheck, !problems.length);
+    setText(ui.promptCount, `${text.length.toLocaleString(LOCALE)} de ${PROMPT_MAX_CHARS.toLocaleString(LOCALE)} caracteres`);
+    setText(ui.promptDefaultBtn, viewingPromptDefault() ? "Ver el que está en uso" : "Ver el de la app");
+    renderPromptState();
+  }
+
+  /** La línea de estado: guardando, lo que respondió Sonnia o si hay cambios sin guardar. */
+  function renderPromptState() {
+    const node = ui.promptState;
+    let state = "";
+    let text = "";
+    if (ui.promptSaveBtn.classList.contains("is-busy") || ui.promptResetBtn.classList.contains("is-busy")) {
+      state = "saving";
+      text = "Guardando…";
+    } else if (app.promptNote) {
+      ({ state, text } = app.promptNote);
+    } else if (viewingPromptDefault()) {
+      state = "dirty";
+      text = "Viendo el de la app, sin guardar. Para usarlo, «Volver al de la app».";
+    } else if (promptDirty()) {
+      state = "dirty";
+      text = "Cambios sin guardar";
+    }
+    setText(node, text);
+    if (node.dataset.state !== state) node.dataset.state = state;
+    setHidden(node, !text);
+  }
+
+  function setPromptNote(state, text) {
+    app.promptNote = text ? { state, text } : null;
+    renderPromptState();
+  }
+
+  function closePromptEditor() {
+    app.promptSeq += 1;
+    app.promptId = null;
+    app.promptData = null;
+    app.promptBase = null;
+    app.promptNote = null;
+    ui.promptInput.value = "";
+    setHidden(ui.promptEditor, true);
+    refreshControls();
+  }
+
+  /** Sin catálogo ni editor (al cambiar de Sonnia: la otra puede tener otra versión de la app). */
+  function closePrompts() {
+    closePromptEditor();
+    app.prompts = null;
+    ui.promptGroupSelect.replaceChildren();
+    ui.promptSelect.replaceChildren();
+    setHidden(ui.promptPick, true);
+    setText(ui.promptsLoadBtn, "Cargar prompts");
+    renderPromptsInfo();
+  }
+
+  /** Trae una pieza entera (`prompt`): el texto en uso, el de la app y de dónde sale. */
+  async function loadPrompt(id) {
+    const seq = ++app.promptSeq;
+    const instance = app.instanceId;
+    const result = await sendAction("prompt", { id }, { button: ui.promptSelect, silent: true });
+    if (seq !== app.promptSeq || instance !== app.instanceId) return false;
+    let data = null;
+    if (result.ok) {
+      try {
+        data = JSON.parse(result.message);
+      } catch {
+        data = null;
+      }
+    }
+    if (!data || typeof data.text !== "string") {
+      showToast(result.ok ? "El prompt llegó mal. Inténtalo de nuevo." : result.message, "error");
+      ui.promptSelect.value = app.promptId || "";
+      return false;
+    }
+    app.promptId = id;
+    app.promptData = {
+      id,
+      default: typeof data.default === "string" ? data.default : "",
+      source: data.source === "nube" ? "nube" : "app",
+      fields: stringList(data.fields),
+      appliesText: typeof data.applies_text === "string" ? data.applies_text : "",
+    };
+    app.promptBase = data.text;
+    app.promptNote = null;
+    ui.promptInput.value = data.text;
+    ui.promptSelect.value = id;
+    setHidden(ui.promptEditor, false);
+    renderPromptMeta();
+    refreshControls();
+    return true;
+  }
+
+  async function confirmDropPrompt() {
+    if (!promptDirty()) return true;
+    return confirmAction({
+      title: "¿Dejar este prompt sin guardar?",
+      text: "Se pierden los cambios que no has guardado en la nube.",
+      confirmLabel: "Sí, dejarlo",
+      danger: true,
+    });
+  }
+
+  async function onPromptGroupChange() {
+    const loaded = promptEntry(app.promptId);
+    if (loaded && loaded.group !== ui.promptGroupSelect.value) {
+      if (!(await confirmDropPrompt())) {
+        ui.promptGroupSelect.value = loaded.group;
+        return;
+      }
+      closePromptEditor();
+    }
+    renderPromptPieces();
+  }
+
+  async function onPromptSelect() {
+    const id = ui.promptSelect.value;
+    if (id === (app.promptId || "")) return;
+    if (!(await confirmDropPrompt())) {
+      ui.promptSelect.value = app.promptId || "";
+      return;
+    }
+    if (id) await loadPrompt(id);
+    else closePromptEditor();
+  }
+
+  async function onPromptSave() {
+    const id = app.promptId;
+    const data = app.promptData;
+    if (id === null || !data) return;
+    const text = ui.promptInput.value.trim();
+    if (!text) {
+      setPromptNote("error", "Está vacío. Para volver al de la app, usa «Volver al de la app».");
+      return;
+    }
+    const instance = app.instanceId;
+    const promise = sendAction("set_prompt", { id, text }, { button: ui.promptSaveBtn, silent: true });
+    setPromptNote("", "");
+    const result = await promise;
+    if (instance !== app.instanceId || app.promptId !== id) return;
+    if (result.ok) {
+      // Igual que el de la app, el orquestador lo quita de la nube: vuelve al de la app.
+      app.promptBase = text;
+      data.source = text === data.default.trim() ? "app" : "nube";
+      const entry = promptEntry(id);
+      if (entry) {
+        entry.source = data.source;
+        entry.ignored = false;
+      }
+    }
+    setPromptNote(result.ok ? "ok" : "error", result.message);
+    renderPromptMeta();
+    if (result.ok) loadPromptCatalog({ quiet: true });
+  }
+
+  async function onPromptReset() {
+    const id = app.promptId;
+    if (id === null) return;
+    const title = loadedPrompt().title;
+    const ok = await confirmAction({
+      title: "¿Volver al prompt de la app?",
+      text: `Se borra de la nube la versión guardada de «${title}» y todas las Sonnias vuelven a usar la que trae su app.`,
+      confirmLabel: "Volver al de la app",
+      danger: true,
+    });
+    if (!ok || app.promptId !== id) return;
+    const promise = sendAction("set_prompt", { id, text: "" }, { button: ui.promptResetBtn, silent: true });
+    renderPromptState();
+    const result = await promise;
+    if (app.promptId !== id) return;
+    if (!result.ok) {
+      setPromptNote("error", result.message);
+      return;
+    }
+    if (await loadPrompt(id)) setPromptNote("ok", result.message);
+    loadPromptCatalog({ quiet: true });
+  }
+
+  /** «Ver el de la app» carga su texto sin guardar; con él a la vista, vuelve al que está en uso. */
+  async function onPromptDefault() {
+    const data = app.promptData;
+    if (!data) return;
+    if (viewingPromptDefault()) {
+      ui.promptInput.value = app.promptBase;
+      setPromptNote("", "");
+      renderPromptChecks();
+      return;
+    }
+    if (ui.promptInput.value.trim() === data.default.trim()) {
+      setPromptNote("info", "Este es el de la app: es el que se usa ahora.");
+      return;
+    }
+    if (promptDirty()) {
+      const ok = await confirmAction({
+        title: "¿Ver el de la app?",
+        text: "Se pierden los cambios que no has guardado en la nube.",
+        confirmLabel: "Ver el de la app",
+        danger: true,
+      });
+      if (!ok || app.promptData !== data) return;
+    }
+    ui.promptInput.value = data.default;
+    setPromptNote("", "");
+    renderPromptChecks();
+  }
+
+  function onPromptInput() {
+    app.promptNote = null;
+    renderPromptChecks();
   }
 
   /** «Los bancos se editan en Developer»: abre Developer y baja hasta el bloque. */
@@ -3519,6 +3946,20 @@
     ui.gamePoseSelect.addEventListener("change", onPoseModelChange);
     ui.gameJudgeSelect.addEventListener("change", onGameJudgeChange);
     for (const link of ui.openDeveloperLinks) link.addEventListener("click", onOpenDeveloper);
+
+    ui.promptsLoadBtn.addEventListener("click", () => loadPromptCatalog());
+    ui.promptGroupSelect.addEventListener("change", onPromptGroupChange);
+    ui.promptSelect.addEventListener("change", onPromptSelect);
+    ui.promptInput.addEventListener("input", onPromptInput);
+    ui.promptSaveBtn.addEventListener("click", onPromptSave);
+    ui.promptResetBtn.addEventListener("click", onPromptReset);
+    ui.promptDefaultBtn.addEventListener("click", onPromptDefault);
+    // Un prompt puede ser largo: no se pierde lo escrito por cerrar o recargar la pestaña sin querer.
+    window.addEventListener("beforeunload", (event) => {
+      if (!promptDirty()) return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
 
     trackDragging(ui.volumeInput);
     ui.volumeInput.addEventListener("input", () => {
