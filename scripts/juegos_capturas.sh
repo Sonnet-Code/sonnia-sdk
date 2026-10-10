@@ -13,11 +13,19 @@
 # Ctrl+C) cierra por PID el orquestador y Unity y suelta el candado.
 #
 # Variables:
-#   SONIA_UNITY_LOCKS   carpeta de los candados (como mucho dos Unity en batch a la
+#   SONIA_UNITY_LOCKS   carpeta de los candados (los Unity en batch que caben a la
 #                       vez en la máquina). Sin ella no se coge turno (aviso).
+#   SONIA_UNITY_CLONE   clon a usar si no se pasa --clon (el compartido).
+#   SONIA_UNITY_NEW_CLONE=1  permite crear un clon nuevo si no existe (ocupa disco:
+#                       Unity reescribe gigas de Library). Sin ella, solo se usa uno
+#                       que ya exista.
 #   SONIA_UNITY_SOURCE  proyecto Unity a clonar (por defecto, el de la copia
 #                       principal del repo: tiene los assets de Genies que git ignora).
+#   SONIA_MIN_FREE_GB   disco libre mínimo para arrancar (5).
 #   UNITY_EDITOR_PATH   ejecutable de Unity 6000.6.0f1.
+#
+# El clon puede ser compartido por agentes con ramas distintas: en cada pasada se
+# copian los scripts de quien la lanza (con rsync --delete) y Unity recompila.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,7 +53,7 @@ Opciones:
   --orquestador CMD   otra orden para el orquestador falso (se lanza desde server/)
   --hud-check         sin orquestador: comprobación de la pantalla común
   --foto RUTA         foto 16:9 (JPEG) para la vista en vivo de --hud-check
-  --clon DIR          carpeta del clon (por defecto, una por worktree en $TMPDIR)
+  --clon DIR          carpeta del clon (por defecto SONIA_UNITY_CLONE)
   --timeout S         segundos como mucho para Unity (600)
   --avatar-timeout S  segundos como mucho esperando al avatar de Genies (60)
 EOF
@@ -99,7 +107,12 @@ if [ -z "$SOURCE" ] || [ ! -d "$SOURCE/Library" ]; then
 fi
 
 if [ -z "$CLON" ]; then
-  CLON="${TMPDIR:-/tmp}/sonia-clon-$(basename "$ROOT")"
+  CLON="${SONIA_UNITY_CLONE:-${TMPDIR:-/tmp}/sonia-clon-$(basename "$ROOT")}"
+fi
+if [ ! -d "$CLON/unity/Library" ] && [ "${SONIA_UNITY_NEW_CLONE:-0}" != "1" ]; then
+  echo "no hay clon en $CLON/unity: pasa --clon con el clon compartido (docs/juegos-unity.md)" >&2
+  echo "o, si de verdad hace falta uno nuevo y hay disco, SONIA_UNITY_NEW_CLONE=1" >&2
+  exit 2
 fi
 mkdir -p "$CLON"
 CLON="$(cd "$CLON" && pwd)"
@@ -109,24 +122,44 @@ if [ "$PROJECT" = "$SOURCE" ]; then
   exit 2
 fi
 
+# Tu rama tiene que traer la herramienta: el rsync de abajo deja en el clon tus scripts.
+if [ ! -f "$ROOT/unity/Assets/Scripts/Sonia/Editor/SoniaGameCapture.cs" ]; then
+  echo "tu rama no tiene Editor/SoniaGameCapture.cs: junta antes juegos/base en tu rama" >&2
+  exit 2
+fi
+if [ $HUD_CHECK -eq 0 ] && [ -z "$ORQ_CMD" ] && [ ! -f "$ROOT/scripts/juegos_demo.py" ]; then
+  echo "tu rama no tiene scripts/juegos_demo.py: junta antes juegos/base en tu rama" >&2
+  exit 2
+fi
+
+# Disco: con poco libre no se arranca (Unity escribe gigas en Library al compilar).
+MIN_FREE_GB="${SONIA_MIN_FREE_GB:-5}"
+FREE_KB=$(df -k "$HOME" | awk 'NR==2 {print $4}')
+if [ -n "$FREE_KB" ] && [ "$FREE_KB" -lt $((MIN_FREE_GB * 1024 * 1024)) ]; then
+  echo "quedan $((FREE_KB / 1024 / 1024)) GB libres (menos de $MIN_FREE_GB): no se arranca Unity. Avisa a la sesión principal." >&2
+  exit 6
+fi
+
 LOCK=""
 ORQ_PID=""
 UNITY_PID=""
-WATCHDOG_PID=""
 
 cleanup() {
   local rc=$?
-  for pid in $WATCHDOG_PID $ORQ_PID $UNITY_PID; do
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null
-    fi
-  done
+  # El orquestador va en su propio grupo de procesos (uv y su python).
+  if [ -n "$ORQ_PID" ]; then
+    kill -TERM -- "-$ORQ_PID" 2>/dev/null || kill "$ORQ_PID" 2>/dev/null
+  fi
+  if [ -n "$UNITY_PID" ] && kill -0 "$UNITY_PID" 2>/dev/null; then
+    kill "$UNITY_PID" 2>/dev/null
+  fi
   sleep 1
-  for pid in $ORQ_PID $UNITY_PID; do
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      kill -9 "$pid" 2>/dev/null
-    fi
-  done
+  if [ -n "$ORQ_PID" ]; then
+    kill -KILL -- "-$ORQ_PID" 2>/dev/null
+  fi
+  if [ -n "$UNITY_PID" ] && kill -0 "$UNITY_PID" 2>/dev/null; then
+    kill -9 "$UNITY_PID" 2>/dev/null
+  fi
   # Lo que Unity lanzó para este clon: importadores de assets y el relay del
   # asistente de IA (bun, con --log-dir en los Logs del clon; si no, sigue 180 s).
   pkill -f -- "-projectPath $PROJECT" 2>/dev/null
@@ -157,15 +190,28 @@ else
   echo "· aviso: sin SONIA_UNITY_LOCKS no se coge turno (como mucho dos Unity en batch a la vez)"
 fi
 
-# 2. Clon APFS (instantáneo, sin Temp ni Logs) y tus scripts encima.
+# 2. Clon APFS (instantáneo, sin Temp ni Logs) y tus scripts encima. Si otro Unity
+#    lo tiene abierto (alguien sin candado), se espera: dos a la vez lo rompen.
+for _ in $(seq 1 120); do
+  if ! pgrep -f -- "-projectPath $PROJECT" > /dev/null 2>&1; then
+    break
+  fi
+  echo "· otro Unity tiene abierto el clon; espero"
+  sleep 15
+done
+if pgrep -f -- "-projectPath $PROJECT" > /dev/null 2>&1; then
+  echo "el clon sigue abierto por otro Unity tras 30 min: no se toca" >&2
+  exit 1
+fi
 if [ ! -d "$PROJECT/Library" ]; then
   echo "· clonando $SOURCE en $PROJECT"
   rm -rf "$PROJECT"
   cp -cR "$SOURCE" "$PROJECT" || { echo "falló el clon" >&2; exit 1; }
   rm -rf "$PROJECT/Temp" "$PROJECT/Logs"
 fi
-# Sin esto, el Unity del clon mata el compilador del editor de verdad.
-rm -f "$PROJECT/Library/ilpp.pid"
+# Sin esto, el Unity del clon mata el compilador del editor de verdad. Y el
+# candado de Unity de una pasada que se cortó a la fuerza, fuera (nadie lo tiene).
+rm -f "$PROJECT/Library/ilpp.pid" "$PROJECT/Temp/UnityLockfile"
 rsync -a --delete --exclude '*.meta' "$ROOT/unity/Assets/Scripts/" "$PROJECT/Assets/Scripts/" \
   || { echo "falló la copia de los scripts" >&2; exit 1; }
 echo "· scripts de $ROOT copiados al clon"
@@ -180,15 +226,17 @@ if [ $HUD_CHECK -eq 1 ]; then
   fi
 else
   if [ -z "$ORQ_CMD" ]; then
-    ORQ_CMD="uv run --no-sync python ../scripts/juegos_demo.py --juego $JUEGO --puerto $PUERTO"
+    ORQ_CMD="uv run --no-sync python ../scripts/juegos_demo.py --juego $JUEGO --puerto $PUERTO --espera $TIMEOUT"
   fi
   if nc -z 127.0.0.1 "$PUERTO" 2>/dev/null; then
     echo "el puerto $PUERTO ya está ocupado: elige otro con --puerto" >&2
     exit 1
   fi
   echo "· orquestador falso: $ORQ_CMD"
+  set -m
   (cd "$ROOT/server" && exec bash -c "$ORQ_CMD") > "$SALIDA/orquestador.log" 2>&1 &
   ORQ_PID=$!
+  set +m
   for _ in $(seq 1 60); do
     if nc -z 127.0.0.1 "$PUERTO" 2>/dev/null; then
       break
@@ -217,9 +265,30 @@ UNITY_MCP_DISABLE_BATCH=1 "$UNITY" -batchmode -projectPath "$PROJECT" \
   ${EXTRA[@]+"${EXTRA[@]}"} \
   -logFile "$SALIDA/unity.log" &
 UNITY_PID=$!
-( sleep $((TIMEOUT + 180)); kill "$UNITY_PID" 2>/dev/null ) &
-WATCHDOG_PID=$!
 
+# Espera a que Unity salga. Si pasa el tiempo (más un margen para compilar) o el
+# orquestador falso termina y Unity no sale en 20 s, se cierra Unity.
+DEADLINE=$(( $(date +%s) + TIMEOUT + 180 ))
+ORQ_GONE_AT=""
+while kill -0 "$UNITY_PID" 2>/dev/null; do
+  NOW=$(date +%s)
+  if [ "$NOW" -ge "$DEADLINE" ]; then
+    echo "· Unity no salió a tiempo: se cierra"
+    kill "$UNITY_PID" 2>/dev/null
+    break
+  fi
+  if [ -n "$ORQ_PID" ] && ! kill -0 "$ORQ_PID" 2>/dev/null; then
+    if [ -z "$ORQ_GONE_AT" ]; then
+      ORQ_GONE_AT=$NOW
+    elif [ $((NOW - ORQ_GONE_AT)) -ge 20 ]; then
+      echo "· el orquestador falso terminó y Unity sigue: se cierra Unity"
+      tail -5 "$SALIDA/orquestador.log"
+      kill "$UNITY_PID" 2>/dev/null
+      break
+    fi
+  fi
+  sleep 2
+done
 wait "$UNITY_PID"
 RC=$?
 UNITY_PID=""

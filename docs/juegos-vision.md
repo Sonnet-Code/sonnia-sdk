@@ -76,22 +76,31 @@ answer = await host.judge.ask("¿Alguien enseña algo azul a la cámara?")   # J
 
 | Modelo | Para qué | Origen (revisión fijada) | Tamaño | Licencia |
 |---|---|---|---|---|
-| `yolov8s-pose.onnx` | Poses (por defecto, `GAME_POSES_MODEL=s`) | `Xenova/yolov8s-pose` `9dd2818` | 47 MB | AGPL-3.0 (Ultralytics) |
-| `yolov8n-pose.onnx` | Poses, ligero (`GAME_POSES_MODEL=n`) | `Xenova/yolov8n-pose` `da42240` | 13 MB | AGPL-3.0 (Ultralytics) |
+| `yolov8n-pose.onnx` | Poses, ligero (por defecto, `GAME_POSES_MODEL=n`) | `Xenova/yolov8n-pose` `da42240` | 13 MB | AGPL-3.0 (Ultralytics) |
+| `yolov8s-pose.onnx` | Poses, preciso (`GAME_POSES_MODEL=s`) | `Xenova/yolov8s-pose` `9dd2818` | 47 MB | AGPL-3.0 (Ultralytics) |
 | `palm_detection_mediapipe_2023feb.onnx` | Palmas (piedra, papel o tijera) | `opencv/palm_detection_mediapipe` `233e619` | 4 MB | Apache 2.0 |
 | `handpose_estimation_mediapipe_2023feb.onnx` | 21 puntos de la mano | `opencv/handpose_estimation_mediapipe` `4b2a0b4` | 4 MB | Apache 2.0 |
 
 Todos de Hugging Face, con la revisión en la URL y comprobados por SHA-256 (`models.py`).
 
-- **Bajarlos:** `uv run --no-sync python -m sonia.vision.models` (desde `server/`) los baja a
-  `GAMES_MODELS_DIR` (`cache/games/modelos`). Solo baja lo que falte o no cuadre.
-- **En la app:** `scripts/build_orquestador.sh` los baja si faltan y los mete en el orquestador
-  congelado; la app los copia a su carpeta de datos al arrancar (`sonia.paths.SEEDED`, igual que
-  los modelos de caras, también con `sonia caras`). `scripts/parchea_orquestador_windows.py` los
-  añade a un orquestador de Windows ya congelado si este equipo los tiene en `cache/games/modelos`.
-- **Si faltan al arrancar,** el motor los baja en un hilo y, hasta que llegan, los juegos de cámara
-  no se ofrecen. Con los modelos ya en su sitio, ese hilo los carga y los calienta con una
-  detección en vacío, para que la primera ronda no pague la carga (unos 200 ms).
+- **Bajarlos:** `uv run --no-sync python -m sonia.vision.models` (desde `server/`) baja los cuatro
+  (los dos de poses y los de manos) a `GAMES_MODELS_DIR` (`cache/games/modelos`). Solo baja lo que
+  falte o no cuadre.
+- **En la app:** `scripts/build_orquestador.sh` los baja si faltan y los mete todos en el
+  orquestador congelado; la app los copia a su carpeta de datos al arrancar (`sonia.paths.SEEDED`,
+  igual que los modelos de caras, también con `sonia caras`). `scripts/parchea_orquestador_windows.py`
+  los baja si faltan y los añade igual a un orquestador de Windows ya congelado.
+- **Al arrancar** la app solo exige el de poses de `GAME_POSES_MODEL` y los de manos: si faltan, el
+  motor los baja en un hilo y, hasta que llegan, los juegos de cámara no se ofrecen. Con los modelos
+  ya en su sitio, ese hilo los carga y los calienta con una detección en vacío, para que la primera
+  ronda no pague la carga (unos 200 ms). El otro de poses se baja la primera vez que se pide.
+- **Cambiar de modelo sin reiniciar:** el ajuste compartido `games_pose_model` del panel («Modelo de
+  poses: ligero (n) o preciso (s)») manda sobre `GAME_POSES_MODEL`; vacío, vuelve al de
+  `GAME_POSES_MODEL`. El motor llama a `GameManager.set_pose_model`, que usa
+  `YoloPoseDetector.set_variant`: el modelo nuevo se carga en un hilo (y se baja si no vino con la
+  app) mientras se sigue detectando con el viejo, y el cambio es atómico, también con una partida
+  en marcha. Si el nuevo no carga, o falta y no se puede bajar, se queda el viejo con un aviso en el
+  registro. `variant` dice el que está en uso.
 
 ## Rendimiento y aciertos (10 de octubre de 2026)
 
@@ -149,6 +158,7 @@ segundo, `look` sigue funcionando desde el stream, y el proceso usa de media **u
   mientras dura el juego.
 - **En Windows** (las ruedas de OpenCV usan otro reparto) el límite `DNN_THREADS` (4) sí vale.
   Falta medirlo en el equipo del stand (GMKtec EVO-X2, 16 núcleos) con Unity en marcha.
-- **Recomendación:** `s` en el EVO-X2 si la medida con Unity sale bien; **`n` si el equipo del
-  stand es el Mac o un portátil** (`GAME_POSES_MODEL=n`): cuesta la mitad de CPU y de frente detecta
-  casi lo mismo. Bajar `GAME_POSES_FPS` (por ejemplo a 5) también reparte menos carga.
+- **Por defecto, `n`** (`GAME_POSES_MODEL=n`, desde el 10 de octubre de 2026): cuesta la mitad de
+  CPU y de frente detecta casi lo mismo. `s` (más preciso con gente tapada) se puede poner desde el
+  panel si la CPU del equipo del stand va sobrada con Unity en marcha. Bajar `GAME_POSES_FPS` (por
+  ejemplo a 5) también reparte menos carga.
