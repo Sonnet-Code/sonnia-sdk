@@ -39,6 +39,23 @@ Qué hace Sonia por detrás, para los efectos de la escena: `search` mientras el
 {"type": "activity", "activity": "search"}
 ```
 
+### `busy`
+
+Aviso de espera en pantalla («la gente se desespera», Jean, 10 de octubre de 2026): una pastilla grande con puntos animados mientras Sonia espera algo que el visitante no ve. Es el estado entero, no un cambio: con `on: true` Unity enseña `text` (o lo cambia si ya estaba) y con `on: false` lo quita. Unity la saca al momento y la sostiene al menos 0,6 s aunque llegue antes el `off`, para que no parpadee. Va por encima del escenario y de los juegos, sin tapar la cara ni las manos de Sonnia. El orquestador manda solo la espera de más prioridad (`kind`, de más a menos: `judge`, `camera`, `game`, `search`, `think`; `sonia/busy.py`) y la repite al conectarse Unity si hay una en marcha. Una Unity que no lo conoce lo ignora.
+
+| `kind` | Cuándo | Texto |
+|---|---|---|
+| `judge` | El juez de un juego mira la foto de la ronda: Simón dice, piedra, papel o tijera y, en la búsqueda, mientras haya una foto en juicio. | «Mirando las poses…», «Mirando tu mano…», «Mirando lo que enseñas…» |
+| `camera` | La cámara de un juego arranca, hasta su primer frame. | «Encendiendo la cámara…» |
+| `game` | Un juego se prepara (`start_game`), hasta su primera pantalla. | «Preparando el juego…» |
+| `search` | El backend busca en internet (`web_search`). | «Buscando en internet…» |
+| `think` | Hay una tarea delegada en el backend, desde que empieza. | «Pensando…» |
+
+```json
+{"type": "busy", "on": true, "kind": "think", "text": "Pensando…"}
+{"type": "busy", "on": false}
+```
+
 ### `transcript`
 
 Texto de lo que dice el visitante (`user`) o Sonia (`assistant`), para los subtítulos y el panel. `final` es `false` mientras el texto sigue creciendo; cada mensaje trae el texto acumulado, no solo lo nuevo.

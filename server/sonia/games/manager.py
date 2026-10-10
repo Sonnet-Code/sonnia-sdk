@@ -51,6 +51,7 @@ from sonia.vision.models import DEFAULT_POSE_VARIANT, POSE_VARIANTS, pose_varian
 from sonia.ws import protocol as p
 
 if TYPE_CHECKING:
+    from sonia.busy import BusyBoard, BusyKind
     from sonia.config import Settings
     from sonia.games.host import ManagedGameHost
     from sonia.trivia.bank import TriviaQuestion
@@ -195,6 +196,7 @@ class GameManager:
         camera_ready: Callable[[], bool] | None = None,
         meeting: bool = False,
         busy: Callable[[], str | None] | None = None,
+        busy_board: BusyBoard | None = None,
         trivia_draw: Callable[[str | None], TriviaQuestion | None] | None = None,
         rng: random.Random | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -207,6 +209,8 @@ class GameManager:
         - ``meeting``: Sonia está en una videollamada: no hay juegos.
         - ``busy``: por qué no se puede empezar un juego ahora por otra cosa (la trivia en
           marcha), o ``None``.
+        - ``busy_board``: el aviso de espera en pantalla (``sonia.busy``); sin él, los
+          ``set_busy`` de los juegos no hacen nada.
         - ``trivia_draw``: una pregunta del banco de la trivia (``TriviaGame.draw_one``).
         - ``clock`` y ``sleep``: el reloj de los juegos (en los tests, uno falso).
         """
@@ -225,6 +229,7 @@ class GameManager:
         self._camera_ready = camera_ready or (lambda: False)
         self._meeting = meeting
         self._busy = busy
+        self._busy_board = busy_board
         self._trivia_draw = trivia_draw
         self._rng = rng or random.Random()
         self._clock = clock
@@ -767,6 +772,7 @@ class GameManager:
         except Exception:  # noqa: BLE001
             logger.exception("Falló stop de %s", game.id)
         await self._release_vision(game.id)
+        await self._clear_busy(game.id)
         self._screen.clear_sticky(STICKY_START)
         self._screen.clear_sticky(STICKY_STATE)
         if self._screen_started:
@@ -949,6 +955,25 @@ class GameManager:
     def _next_seq(self) -> int:
         self._seq += 1
         return self._seq
+
+    async def set_busy(self, game_id: str, kind: BusyKind, text: str | None) -> None:
+        """Enciende (``text``) o apaga (``None``) un aviso de espera del juego ``game_id``.
+
+        Uno por tipo y juego. Un juego que ya no está en pantalla no lo enciende, y al
+        terminar la partida se apagan todos los suyos.
+        """
+        board = self._busy_board
+        if board is None:
+            return
+        key = f"game:{game_id}:{kind}"
+        if text is None:
+            await board.clear(key)
+        elif self.is_active(game_id):
+            await board.set(key, kind, text)
+
+    async def _clear_busy(self, game_id: str) -> None:
+        if self._busy_board is not None:
+            await self._busy_board.clear_prefix(f"game:{game_id}:")
 
     def is_active(self, game_id: str) -> bool:
         """¿Es ``game_id`` el juego en pantalla?"""

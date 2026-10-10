@@ -1,10 +1,11 @@
 """Contratos de la visión en vivo de los juegos (``docs/plan-juegos.md``, secciones 4 y 6).
 
-Los implementa ``sonia.vision`` (``stream``, ``poses``, ``hands`` y ``judge``) y los usan
-los juegos a través de ``GameHost`` (``sonia.games``). Todo corre en este equipo y en
-memoria: nunca se guarda una imagen ni un dato de nadie y no se reconoce a nadie. Solo
-:class:`VisionJudge` manda una foto reducida al modelo de visión, y solo en la búsqueda
-relámpago.
+Los implementa ``sonia.vision`` (``stream``, ``poses``, ``hands``, ``judge`` y ``referee``)
+y los usan los juegos a través de ``GameHost`` (``sonia.games``). Todo corre en este equipo
+y en memoria: nunca se guarda una imagen ni un dato de nadie y no se reconoce a nadie. Solo
+salen fotos reducidas, sin guardarlas, hacia un modelo de visión: las de :class:`VisionJudge`
+en la búsqueda relámpago (con tope por ronda) y una por ronda de :class:`GameReferee` en
+Simón dice y en piedra, papel o tijera (``GAMES_JUDGE=gemini``).
 
 Coordenadas normalizadas de 0 a 1 sobre la imagen de la cámara **sin espejo**: el espejo
 es solo de la vista en vivo (:class:`PreviewStreamer`). Izquierda y derecha de las
@@ -43,16 +44,20 @@ __all__ = [
     "R_SHOULDER",
     "R_WRIST",
     "CameraStream",
+    "GameReferee",
     "GameVision",
     "HandDetector",
     "HandReading",
     "HandShape",
+    "HandVerdict",
     "JudgeAnswer",
+    "NoReferee",
     "Overlay",
     "Person",
     "Point",
     "PoseDetector",
     "PoseFrame",
+    "PoseVerdict",
     "PreviewStreamer",
     "Side",
     "VisionJudge",
@@ -267,6 +272,63 @@ class VisionJudge(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class PoseVerdict:
+    """Lo que ve el juez en la foto de una ronda de Simón dice.
+
+    ``people``: personas que juegan (de medio cuerpo o con los brazos a la vista);
+    ``counts``: cuántas hacen cada pose, por su id del banco (``brazos_arriba``...). Una pose
+    que no está en ``counts`` no la sabe juzgar: el juego usa entonces su recuento local.
+    """
+
+    people: int
+    counts: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class HandVerdict:
+    """Los gestos de piedra, papel o tijera que ve el juez, de la mano más clara a la menos.
+
+    El primero es la jugada de la persona más cercana. Vacío: ninguna mano hace un gesto claro.
+    """
+
+    shapes: tuple[HandShape, ...] = ()
+
+
+class GameReferee(Protocol):
+    """Juez de las rondas de cámara con un modelo de visión (``GAMES_JUDGE=gemini``).
+
+    Una foto reducida por ronda, en memoria y sin guardarla, con plazo
+    (``GAMES_JUDGE_TIMEOUT_SECONDS``). ``None``: sin clave, sin respuesta a tiempo o sin el
+    JSON esperado; el juego decide entonces con su lectura local, como antes.
+    """
+
+    @property
+    def available(self) -> bool: ...
+
+    async def poses(self, frame_bgr: np.ndarray) -> PoseVerdict | None:
+        """Personas y cuántas hacen cada pose en ``frame_bgr`` (sin espejo)."""
+        ...
+
+    async def hands(self, frame_bgr: np.ndarray) -> HandVerdict | None:
+        """Los gestos de la mano que enseña a la cámara la persona más cercana."""
+        ...
+
+
+class NoReferee:
+    """Sin juez de rondas: los juegos de cámara deciden con la detección local."""
+
+    @property
+    def available(self) -> bool:
+        return False
+
+    async def poses(self, frame_bgr: np.ndarray) -> PoseVerdict | None:
+        return None
+
+    async def hands(self, frame_bgr: np.ndarray) -> HandVerdict | None:
+        return None
+
+
 async def _nothing_to_close() -> None:
     return None
 
@@ -285,3 +347,5 @@ class GameVision:
     hands: HandDetector
     judge: VisionJudge
     close: Callable[[], Awaitable[None]] = field(default=_nothing_to_close)
+    #: Juez de las rondas de Simón dice y de piedra, papel o tijera (``GAMES_JUDGE``).
+    referee: GameReferee = field(default_factory=NoReferee)

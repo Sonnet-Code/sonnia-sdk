@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from sonia.games.base import GameResult
 from sonia.vision.contracts import (
     CameraStream,
+    GameReferee,
     HandDetector,
     PoseDetector,
     PreviewStreamer,
@@ -31,6 +32,7 @@ from sonia.vision.contracts import (
 )
 
 if TYPE_CHECKING:
+    from sonia.busy import BusyKind
     from sonia.config import Settings
     from sonia.games.banks import GameBank
     from sonia.games.manager import GameManager
@@ -109,6 +111,9 @@ class ManagedGameHost:
     async def finish(self, result: GameResult, data: dict[str, Any] | None = None) -> None:
         await self._manager.finish(self._game_id, result, data)
 
+    async def set_busy(self, kind: BusyKind, text: str | None) -> None:
+        await self._manager.set_busy(self._game_id, kind, text)
+
     # -- cámara y visión --------------------------------------------------------
 
     @property
@@ -130,6 +135,10 @@ class ManagedGameHost:
     @property
     def judge(self) -> VisionJudge:
         return self._manager.vision.judge
+
+    @property
+    def referee(self) -> GameReferee:
+        return self._manager.vision.referee
 
     # -- tareas y bancos ------------------------------------------------------
 

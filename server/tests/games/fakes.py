@@ -23,6 +23,7 @@ from typing import Any, TypeVar
 
 import numpy as np
 
+from sonia.busy import BusyKind
 from sonia.config import Settings
 from sonia.games.banks import GameBank
 from sonia.games.base import INSTRUCT_MAX_CHARS, Game, GameResult
@@ -32,11 +33,13 @@ from sonia.vision.contracts import (
     BODY_POINTS,
     GameVision,
     HandReading,
+    HandVerdict,
     JudgeAnswer,
     Overlay,
     Person,
     Point,
     PoseFrame,
+    PoseVerdict,
 )
 from sonia.ws import protocol as p
 
@@ -273,6 +276,39 @@ class FakeJudge:
         return self.answers.popleft() if self.answers else JudgeAnswer(seen=False)
 
 
+class FakeReferee:
+    """Veredictos guionizados del juez de rondas (``GAMES_JUDGE``); apunta las fotos.
+
+    Sin veredictos en la cola, ``None`` (como si no contestara a tiempo): el juego decide
+    con la detección local. ``available=False`` es ``GAMES_JUDGE=local`` o sin clave.
+    """
+
+    def __init__(
+        self,
+        poses: Iterable[PoseVerdict | None] = (),
+        hands: Iterable[HandVerdict | None] = (),
+        *,
+        available: bool = True,
+    ) -> None:
+        self.available_flag = available
+        self.pose_verdicts: deque[PoseVerdict | None] = deque(poses)
+        self.hand_verdicts: deque[HandVerdict | None] = deque(hands)
+        #: ``("poses" | "hands", forma del frame)`` de cada foto que se le pasó.
+        self.photos: list[tuple[str, tuple[int, ...]]] = []
+
+    @property
+    def available(self) -> bool:
+        return self.available_flag
+
+    async def poses(self, frame_bgr: np.ndarray) -> PoseVerdict | None:
+        self.photos.append(("poses", tuple(frame_bgr.shape)))
+        return self.pose_verdicts.popleft() if self.pose_verdicts else None
+
+    async def hands(self, frame_bgr: np.ndarray) -> HandVerdict | None:
+        self.photos.append(("hands", tuple(frame_bgr.shape)))
+        return self.hand_verdicts.popleft() if self.hand_verdicts else None
+
+
 class FakeVision:
     """Toda la visión falsa junta; :meth:`game_vision` la da como ``GameVision``."""
 
@@ -284,12 +320,16 @@ class FakeVision:
         poses: FakePoses | None = None,
         hands: FakeHands | None = None,
         judge: FakeJudge | None = None,
+        referee: FakeReferee | None = None,
     ) -> None:
         self.stream = stream or FakeStream()
         self.preview = preview or FakePreview()
         self.poses = poses or FakePoses()
         self.hands = hands or FakeHands()
         self.judge = judge or FakeJudge()
+        #: Por defecto, sin juez de rondas (``GAMES_JUDGE=local``): los tests de antes
+        #: siguen decidiendo con la detección local.
+        self.referee = referee or FakeReferee(available=False)
         self.closed = False
 
     async def _close(self) -> None:
@@ -303,6 +343,7 @@ class FakeVision:
             hands=self.hands,
             judge=self.judge,
             close=self._close,
+            referee=self.referee,
         )
 
 
@@ -355,6 +396,9 @@ class FakeGameHost:
         self.sent: list[dict[str, Any]] = []
         self.animations: list[str] = []
         self.finished: list[tuple[GameResult, dict[str, Any] | None]] = []
+        #: ``(tipo, texto o None)`` de cada ``set_busy``; ``busy_now``, los encendidos ahora.
+        self.busy: list[tuple[str, str | None]] = []
+        self.busy_now: dict[str, str] = {}
         self.touches = 0
         self.tasks: list[asyncio.Task[Any]] = []
         #: Preguntas de la trivia que dará ``draw_trivia``, en orden.
@@ -441,6 +485,19 @@ class FakeGameHost:
     @property
     def judge(self) -> FakeJudge:
         return self.vision.judge
+
+    @property
+    def referee(self) -> FakeReferee:
+        return self.vision.referee
+
+    # -- aviso de espera -----------------------------------------------------
+
+    async def set_busy(self, kind: BusyKind, text: str | None) -> None:
+        self.busy.append((kind, text))
+        if text is None:
+            self.busy_now.pop(kind, None)
+        else:
+            self.busy_now[kind] = text
 
     # -- tareas y bancos -----------------------------------------------------
 

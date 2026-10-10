@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, TypeVar
 from sonia.types import ActionSpec
 from sonia.vision.contracts import (
     CameraStream,
+    GameReferee,
     HandDetector,
     PoseDetector,
     PreviewStreamer,
@@ -35,6 +36,7 @@ from sonia.vision.contracts import (
 )
 
 if TYPE_CHECKING:
+    from sonia.busy import BusyKind
     from sonia.config import Settings
     from sonia.games.banks import GameBank
     from sonia.trivia.bank import TriviaQuestion
@@ -238,6 +240,26 @@ class GameHost(Protocol):
 
     @property
     def judge(self) -> VisionJudge: ...
+
+    @property
+    def referee(self) -> GameReferee:
+        """El juez de las rondas de cámara (``GAMES_JUDGE``): una foto reducida por ronda.
+
+        ``available`` es ``False`` con ``GAMES_JUDGE=local`` o sin clave; sus respuestas
+        ``None`` (sin respuesta a tiempo) obligan a decidir con la detección local.
+        """
+        ...
+
+    # -- aviso de espera (``sonia.busy``) ---------------------------------------
+
+    async def set_busy(self, kind: BusyKind, text: str | None) -> None:
+        """Enciende (``text``) o apaga (``None``) la pastilla de espera de la pantalla.
+
+        Para lo que el visitante espera sin ver nada: el juez mirando la foto de la ronda
+        (``judge``), la cámara arrancando (``camera``). Una por tipo; se apagan todas al
+        terminar la partida. Los textos están en ``sonia.busy`` (``TEXT_POSES``...).
+        """
+        ...
 
     # -- tareas y bancos ------------------------------------------------------
 

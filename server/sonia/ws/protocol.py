@@ -61,6 +61,11 @@ AVATAR_TARGETS = ("sonia", "guest")
 #: Valores de ``activity``: nada, una tarea que tarda o una búsqueda en internet.
 ACTIVITIES = ("none", "think", "search")
 
+#: Tipos del aviso de espera (``busy``), de más a menos prioridad: el juez de un juego mirando
+#: la foto de la ronda, la cámara de un juego arrancando, un juego preparándose, una búsqueda en
+#: internet y una tarea delegada en el backend (``sonia.busy``).
+BUSY_KINDS = ("judge", "camera", "game", "search", "think")
+
 #: Formato del audio que se anuncia en ``hello``.
 AUDIO_FORMAT = "pcm_s16le"
 AUDIO_CHANNELS = 1
@@ -98,6 +103,8 @@ MSG_TRIVIA_QUESTION = "trivia_question"
 MSG_TRIVIA_ANSWER = "trivia_answer"
 MSG_TRIVIA_END = "trivia_end"
 MSG_ACTIVITY = "activity"
+#: Aviso de espera en pantalla (``sonia.busy``): una pastilla con puntos animados.
+MSG_BUSY = "busy"
 MSG_CAMERA_PREVIEW = "camera_preview"
 #: Sobre común de los juegos (``docs/juegos.md``): ``game``, ``event``, ``seq`` y ``data``.
 MSG_GAME = "game"
@@ -555,6 +562,19 @@ def msg_activity(activity: str) -> dict[str, Any]:
     if activity not in ACTIVITIES:
         raise ValueError(f"actividad desconocida: {activity!r}")
     return {"type": MSG_ACTIVITY, "activity": activity}
+
+
+def msg_busy(on: bool, kind: str = "", text: str = "") -> dict[str, Any]:
+    """El aviso de espera en pantalla: ``on`` con su tipo (:data:`BUSY_KINDS`) y su texto, u ``off``.
+
+    Es el estado entero (no un cambio): Unity enseña ``text`` mientras llegue ``on`` y lo
+    quita con ``on: false``. Lo sostiene al menos un momento para que no parpadee.
+    """
+    if not on:
+        return {"type": MSG_BUSY, "on": False}
+    if kind not in BUSY_KINDS:
+        raise ValueError(f"aviso de espera desconocido: {kind!r}")
+    return {"type": MSG_BUSY, "on": True, "kind": kind, "text": str(text)}
 
 
 def msg_request_frame() -> dict[str, Any]:
