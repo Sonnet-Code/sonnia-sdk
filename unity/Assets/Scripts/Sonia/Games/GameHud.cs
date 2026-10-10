@@ -14,7 +14,9 @@
 //    tarjeta (cada juego lo puede mover).
 //  - El rótulo de acierto o fallo salta sobre el borde de abajo de la tarjeta y
 //    la tarjeta del resultado final la sustituye, como en la trivia.
-//  - Confeti y destellos copiados de la trivia (sin tocar TriviaController).
+//  - Confeti y destellos copiados de la trivia (sin tocar TriviaController). Los
+//    destellos van detrás de la tarjeta y del resultado, para no tapar su texto; el
+//    confeti de las celebraciones pasa por delante.
 //  - Mientras hay juego en pantalla o vista en vivo, StageScreen aparta el QR y la
 //    invitación a hablar (HoldsTopStrip).
 //
@@ -163,6 +165,7 @@ namespace Sonia
         private TextMeshProUGUI _resultLine;
         private RectTransform _layers;
         private RectTransform _effects;
+        private RectTransform _sparkleLayer;
         private readonly Dictionary<string, RectTransform> _contents = new Dictionary<string, RectTransform>();
         private readonly Dictionary<string, RectTransform> _gameLayers = new Dictionary<string, RectTransform>();
 
@@ -968,7 +971,10 @@ namespace Sonia
             Burst(EffectsPoint(target), count, speed);
         }
 
-        /// <summary>Destellos alrededor de un punto de la capa de efectos.</summary>
+        /// <summary>
+        /// Destellos alrededor de un punto de la capa de efectos. Van detrás de la tarjeta
+        /// y del resultado: asoman por sus bordes, nunca encima del texto.
+        /// </summary>
         public void Sparkles(Vector2 at, int count = 10)
         {
             EnsureBuilt();
@@ -1473,6 +1479,13 @@ namespace Sonia
                 piece.Rect.sizeDelta = round ? new Vector2(16f, 16f) : new Vector2(Random.Range(12f, 18f), Random.Range(22f, 32f));
             }
 
+            // Destellos detrás de la tarjeta; confeti delante (misma geometría).
+            RectTransform layer = sparkle && _sparkleLayer != null ? _sparkleLayer : _effects;
+            if (piece.Rect.parent != layer)
+            {
+                piece.Rect.SetParent(layer, false);
+            }
+
             piece.Rect.anchoredPosition = at;
             piece.Rect.localScale = sparkle ? Vector3.zero : Vector3.one;
             piece.Rect.gameObject.SetActive(true);
@@ -1538,6 +1551,10 @@ namespace Sonia
                 _root.SetSiblingIndex(1);
             }
 
+            // Los destellos, lo primero: detrás de la tarjeta y del resultado.
+            _sparkleLayer = NewRect("Destellos", _root);
+            GameUi.Stretch(_sparkleLayer);
+
             BuildCard();
             BuildResult();
 
@@ -1590,7 +1607,9 @@ namespace Sonia
 
             Image border = NewImage("Borde", _card, _roundSprite, GameColors.CardBorder);
             GameUi.Stretch(border.rectTransform);
-            Image fill = NewImage("Fondo", _card, _roundSprite, GameColors.CardFill);
+            // Opaco y del color que daba el translúcido: así lo de detrás (los
+            // destellos) no se ve a través del texto.
+            Image fill = NewImage("Fondo", _card, _roundSprite, GameColors.CardFillOpaque);
             GameUi.Stretch(fill.rectTransform);
             fill.rectTransform.offsetMin = new Vector2(3f, 3f);
             fill.rectTransform.offsetMax = new Vector2(-3f, -3f);
