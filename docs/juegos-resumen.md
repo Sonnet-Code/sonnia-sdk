@@ -1,6 +1,21 @@
 # Juegos del stand: estado para Jean (10 de octubre de 2026)
 
-## Entrega de la mañana: 1.0.460 (la que va al stand)
+## Última entrega: 1.0.497 (la que va al stand)
+
+- **App: `Sonnia-macOS-1.0.497.zip`**, desde `main` en `03513b7`. SHA-256 `6b9f3441357bd4051fc82b03dafe8954f0656a20e59a994621e3e0c77c366a01`. Está en `~/Documents/git/sonia-entrega/1.0.497/`, con su `LEEME.txt`, y en `unity/Build/`.
+- **Qué añade sobre la 1.0.460, la de abajo:**
+  - **Editor de prompts.** Tarjeta «Prompts de Sonnia» en Developer: 270 textos para los modelos, editables desde el panel. Si hay versión de la nube válida, se usa solo esa. Los editores de bancos se pasaron a Developer. Lo hizo sonia-e6 (`docs/prompts.md`).
+  - **La mano de Sonnia en piedra, papel o tijera.** En la cuenta agita el puño a la altura de la cara. En el «¡ya!» saca su jugada y la sostiene mientras juzga Gemini y en el resultado. Con la mano arriba no gesticula al hablar.
+- **Cómo se probó:**
+  - E2E real con GPT-Live, Gemini y el director de gestos, en Unity real, revisado por fotogramas: ninguna pastilla ni tarjeta tapa la mano, y Gemini acertó las 6 jugadas.
+  - La app sacada del zip, probada como la 1.0.460 y además con el editor de prompts.
+- **Reservas:**
+  - 1.0.494, con el editor de prompts sin dos arreglos menores y sin la mano;
+  - 1.0.460;
+  - 1.0.391.
+- **Panel de la nube:** sigue el de la 1.0.460 (`0f699541`). Para ver «Prompts de Sonnia» en la nube hay que desplegar el de `main`, pendiente de tu OK. La app funciona igual con el panel actual, pero sin esa tarjeta en la nube.
+
+## Entrega de la mañana: 1.0.460
 
 Encargos de Jean de las 05:05 a las 05:30, en Santo Domingo. Los coordinó «sonia-e6» y los hizo «sonia-af».
 
