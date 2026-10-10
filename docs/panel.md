@@ -418,6 +418,11 @@ Puede haber varias Sonias a la vez en sitios distintos (por ejemplo, la del stan
 - `/agent` y `/guest/agent`: solo con `AGENT_TOKEN`.
 - Todo lo demás (página, estáticos, API, WebSocket): un JWT de Cloudflare Access válido (`Cf-Access-Jwt-Assertion` o la cookie `CF_Authorization`, firmado con las claves de `https://<ACCESS_TEAM_DOMAIN>/cdn-cgi/access/certs`, `aud` = `ACCESS_AUD`) si esas variables están puestas, **o** la sesión de la contraseña del panel (`PANEL_PASSWORD`): `GET /login` muestra un formulario, `POST /login` comprueba la contraseña y deja una cookie `sonia_session` (HttpOnly, Secure, SameSite=Strict, 12 h, firmada con HMAC). Sin sesión: las páginas redirigen a `/login` y la API responde 401. Si no hay ni Access ni contraseña configurados, nadie entra.
 - Cuando se cree la aplicación de Access para `sonia.sonnetcode.com`, la ruta `/agent` necesita una política **Bypass** (o un service token) para que las Sonias sigan conectando.
+- **Desde un script** (Claude lo puede hacer con la contraseña, ver CLAUDE.md, «Claves y secretos»):
+  1. `POST /login` con el formulario `password=<PANEL_PASSWORD>` y la cabecera `Origin: https://sonia.sonnetcode.com`. Responde 303 con la cookie `sonia_session`.
+  2. Con esa cookie: `GET /api/instances` para ver cada Sonnia (su `id`, si está conectada y su modo) y `GET /api/status?instance=<id>`.
+  3. `POST /api/action` con `{"instance": "<id>", "action": "say", "text": "..."}` (los parámetros van al mismo nivel que `action`) y las cabeceras `X-Sonia-Panel: 1` y `Origin`. Por ejemplo, `say` dice un aviso y `restart` empieza una conversación nueva; `prompt` con `{"id": ...}` dice si una pieza viene de la nube o de la app.
+  - La contraseña se lee del archivo dentro del script y nunca se imprime.
 - Las mismas cabeceras de seguridad que el panel local (CSP sin scripts en línea, `frame-ancestors 'none'`...).
 
 ### Secretos y despliegue

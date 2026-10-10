@@ -22,7 +22,16 @@ Sonia **no corre en local**: la voz y la conversación van por la API de OpenAI 
 
 ## Claves y secretos
 
-Las claves (`OPENAI_API_KEY`, que usan GPT-Live y el modelo de visión salvo que `LIVE_API_KEY` o `LLM_API_KEY` den otra, `GEMINI_API_KEY` para el director de gestos y `PANEL_CLOUD_TOKEN`) viven en `.env`, ignorado por git. **Nunca leas ni imprimas `.env`** ni otros archivos con claves (los antiguos `kimi.txt` y `aistudio.txt`, también ignorados, o `~/.config/sonia/panel-secrets.env`). Los secretos del Worker del panel se ponen con `npx wrangler secret put` en `cloud/panel/`.
+Las claves (`OPENAI_API_KEY`, que usan GPT-Live y el modelo de visión salvo que `LIVE_API_KEY` o `LLM_API_KEY` den otra, `GEMINI_API_KEY` para el director de gestos y `PANEL_CLOUD_TOKEN`) viven en `.env`, ignorado por git. **Nunca leas ni imprimas `.env`** ni otros archivos con claves (los antiguos `kimi.txt` y `aistudio.txt`, también ignorados, o `~/.config/sonia/panel-secrets.env`), con una excepción. Los secretos del Worker del panel se ponen con `npx wrangler secret put` en `cloud/panel/`.
+
+**Excepción: la contraseña del panel (decisión de Jean del 10 de octubre de 2026).** Claude tiene permiso total para usar `PANEL_PASSWORD` de `~/.config/sonia/panel-secrets.env` y manejar el panel de la nube por sus endpoints (`docs/panel.md`, «Acceso»). Sin preguntar cada vez, puede:
+- entrar con `POST /login`;
+- consultar las Sonnias (`/api/instances`, `/api/status`);
+- mandarles acciones (`POST /api/action`): decir un aviso, reiniciar la conversación, cambiar de modo, editar prompts y bancos...
+
+La contraseña se carga desde el archivo dentro del propio script y no se imprime nunca: ni en la salida, ni en registros, commits, URLs o mensajes. El resto de ese archivo (`PANEL_CLOUD_TOKEN`) y `.env` siguen sin leerse.
+
+Hacer hablar a la Sonnia del stand interrumpe a quien esté con ella. Las acciones que la hacen hablar o cortan su conversación (`say`, `ask`, `restart`, cambiar de modo) solo se mandan cuando Jean las pide.
 
 ## Stack
 
