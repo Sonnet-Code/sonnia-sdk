@@ -226,6 +226,9 @@ namespace Sonia.Games.Ppt
 
         private const int ShapeCount = 3;
 
+        // Tope de lo que la mano sigue al pecho, en grados.
+        private const float MaxFollowDegrees = 20f;
+
         private AvatarBinder _binder;
         private Transform _avatar;
         private Animator _animator;
@@ -236,6 +239,7 @@ namespace Sonia.Games.Ppt
         private Quaternion _chestRest = Quaternion.identity;
         private bool _chestReady;
         private bool _chestCapture;
+        private int _bindFrame = -1;
         private readonly Transform[] _fingers = new Transform[FingerBones.Length];
         private readonly Quaternion[,] _targets = new Quaternion[ShapeCount, FingerBones.Length];
         private Vector3 _fingerLocal = Vector3.forward;
@@ -296,6 +300,26 @@ namespace Sonia.Games.Ppt
         public PptHand Shape
         {
             get { return _shape; }
+        }
+
+        /// <summary>Grados que se ha girado el pecho desde que subió la mano (pruebas).</summary>
+        public float ChestDeltaDegrees { get; private set; }
+
+        /// <summary>Grados que la mano sigue de ese giro (pruebas).</summary>
+        public float ChestFollowDegrees { get; private set; }
+
+        /// <summary>Dónde está la muñeca respecto al hombro, en los ejes del avatar (pruebas).</summary>
+        public Vector3 WristFromShoulder
+        {
+            get
+            {
+                if (_avatar == null || _shoulder == null || _wrist == null)
+                {
+                    return Vector3.zero;
+                }
+
+                return _avatar.InverseTransformDirection(_wrist.position - _shoulder.position);
+            }
         }
 
         private void Awake()
@@ -520,7 +544,7 @@ namespace Sonia.Games.Ppt
             }
 
             float weight = Smooth(_blend);
-            if ((_chestCapture || !_chestReady) && _chest != null)
+            if ((_chestCapture || !_chestReady) && _chest != null && Time.frameCount != _bindFrame)
             {
                 // La postura del pecho al empezar a subir el brazo: lo que se gire luego
                 // (balanceo al hablar, una inclinación) lo sigue la mano.
@@ -560,11 +584,19 @@ namespace Sonia.Games.Ppt
             // Ejes del brazo: los del avatar, siguiendo en parte al pecho (balanceos, inclinaciones).
             // El giro del pecho respecto a su postura neutra, en los ejes del avatar.
             Quaternion frame = _avatar.rotation;
+            ChestDeltaDegrees = 0f;
+            ChestFollowDegrees = 0f;
             if (_chestReady && _chest != null && followChest > 0f)
             {
                 Quaternion inverse = Quaternion.Inverse(_avatar.rotation);
                 Quaternion delta = (inverse * _chest.rotation) * Quaternion.Inverse(_chestRest);
-                frame = _avatar.rotation * Quaternion.Slerp(Quaternion.identity, delta, followChest);
+                Quaternion follow = Quaternion.Slerp(Quaternion.identity, delta, followChest);
+
+                // Un balanceo o una inclinación son unos grados: más, no se sigue entero.
+                follow = Quaternion.RotateTowards(Quaternion.identity, follow, MaxFollowDegrees);
+                ChestDeltaDegrees = Quaternion.Angle(Quaternion.identity, delta);
+                ChestFollowDegrees = Quaternion.Angle(Quaternion.identity, follow);
+                frame = _avatar.rotation * follow;
             }
 
             Vector3 up = frame * Vector3.up;
@@ -803,6 +835,7 @@ namespace Sonia.Games.Ppt
             _fingerLocal = finger;
             _thumbLocal = thumbSide.normalized;
             _bound = true;
+            _bindFrame = Time.frameCount;
             _fingersReady = ComputeFingerTargets();
             Log("mano enganchada a " + avatar.name + (_fingersReady ? "" : " (sin dedos)"));
         }
@@ -837,6 +870,23 @@ namespace Sonia.Games.Ppt
             if (muscle == null)
             {
                 return false;
+            }
+
+            // El cuerpo se deja luego exactamente como estaba, hueso a hueso: volver con
+            // SetHumanPose no es exacto (el pecho salía girado en ese fotograma).
+            int boneCount = (int)HumanBodyBones.LastBone;
+            Transform[] bodyBones = new Transform[boneCount];
+            Quaternion[] bodyRotations = new Quaternion[boneCount];
+            Vector3[] bodyPositions = new Vector3[boneCount];
+            for (int b = 0; b < boneCount; b++)
+            {
+                Transform bone = _animator.GetBoneTransform((HumanBodyBones)b);
+                bodyBones[b] = bone;
+                if (bone != null)
+                {
+                    bodyRotations[b] = bone.localRotation;
+                    bodyPositions[b] = bone.localPosition;
+                }
             }
 
             HumanPoseHandler handler = null;
@@ -896,8 +946,6 @@ namespace Sonia.Games.Ppt
                     }
                 }
 
-                original.muscles = saved;
-                handler.SetHumanPose(ref original);
                 return true;
             }
             catch (Exception ex)
@@ -910,6 +958,15 @@ namespace Sonia.Games.Ppt
                 if (handler != null)
                 {
                     handler.Dispose();
+                }
+
+                for (int b = 0; b < boneCount; b++)
+                {
+                    if (bodyBones[b] != null)
+                    {
+                        bodyBones[b].localRotation = bodyRotations[b];
+                        bodyBones[b].localPosition = bodyPositions[b];
+                    }
                 }
             }
         }
