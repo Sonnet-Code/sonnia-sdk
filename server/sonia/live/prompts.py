@@ -102,6 +102,28 @@ _CAPABILITIES = {
     ),
 }
 
+
+def games_capability(registry: ActionRegistry | None) -> str:
+    """La única línea de los juegos (``docs/juegos.md``): cuáles hay y que se delegan.
+
+    Sale de ``start_game``: los juegos de su enum, con su nombre para GPT-Live. Las reglas
+    de cada juego no van aquí: entran al empezar (``instructions.append``).
+    """
+    from sonia.games.base import NOT_SAID
+    from sonia.games.registry import find_game, games_line_for
+
+    spec = registry.get("start_game") if registry is not None else None
+    if spec is None:
+        return ""
+    prop = spec.parameters.get("properties", {}).get("juego", {})
+    ids = [i for i in prop.get("enum", []) if isinstance(i, str) and i != NOT_SAID]
+    names = []
+    for game_id in ids:
+        cls = find_game(game_id)
+        names.append(cls.spoken if cls is not None else game_id.replace("_", " "))
+    return games_line_for(names)
+
+
 #: ``play_animation`` cuando el director de gestos puede elegir cualquier gesto de Sage.
 _ANY_GESTURE_CAPABILITY = (
     "- Moverte en la pantalla: bailar, saludar con la mano, la señal de paz, un saludo militar, "
@@ -454,6 +476,7 @@ _BACKEND_DOES = {
     "look": "mirar por la cámara",
     "play_animation": "bailar o hacer un gesto",
     "start_trivia": "la trivia (empezarla, registrar respuestas, pasar de pregunta, reiniciarla y terminarla)",
+    "start_game": "empezar y terminar los juegos y sus jugadas",
     "check_agenda": "consultar la agenda en la web",
     "show_talk": "enseñar la tarjeta de una charla",
 }
@@ -530,10 +553,12 @@ def build_live_instructions(
             return _MEETING_LOOK_CAPABILITY
         if any_gesture and name == "play_animation":
             return _ANY_GESTURE_CAPABILITY
+        if name == "start_game":
+            return games_capability(registry)
         return _CAPABILITIES[name]
 
     capabilities = "\n".join(
-        [capability(n) for n in names if n in _CAPABILITIES]
+        [capability(n) for n in names if n in _CAPABILITIES or n == "start_game"]
         + ([_SEARCH_CAPABILITY] if web_search else [])
     )
     camera_rule = _CAMERA_RULE[mode]

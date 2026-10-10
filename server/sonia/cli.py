@@ -44,6 +44,7 @@ from sonia.faces import FaceBook, FaceWatcher, load_greetings, models_ready, nam
 from sonia.faces.book import book_path
 from sonia.faces.model import DETECTOR, print_model
 from sonia.faces.watcher import CAMERA_KINDS, ENROLL_KEEP
+from sonia.games.base import Game
 from sonia.gestures.director import GestureDirector
 from sonia.guest.link import FrameGrabber
 from sonia.live.audio import silence_blocks
@@ -250,6 +251,13 @@ class ConsoleTap:
     def on(self, type: str, callback: MessageCallback) -> None:
         self._inner.on(type, callback)
 
+    @property
+    def client_count(self) -> int:
+        return self._inner.client_count
+
+    async def broadcast_bytes(self, data: bytes) -> None:
+        await self._inner.broadcast_bytes(data)
+
     async def broadcast_json(self, msg: dict[str, Any]) -> None:
         kind = msg.get("type")
         if kind == p.MSG_STATE:
@@ -364,6 +372,7 @@ def build_components(
         include_look=policy.enabled,
         include_trivia=_trivia_ready(settings),
         include_agenda=agenda is not None,
+        games=_games_ready(settings),
     )
     llm = LLMClient(settings.llm) if policy.enabled else None
     gesture_llm: LLMClient | None = None
@@ -455,6 +464,22 @@ def _missing_gesture_key(settings: Settings) -> str:
     if is_openai_url(base_url):
         return f"falta la clave de OpenAI para {base_url} (OPENAI_API_KEY o GESTURE_API_KEY)"
     return f"falta GESTURE_API_KEY (o LLM_API_KEY si es el servidor de LLM_*) para {base_url}"
+
+
+def _games_ready(settings: Settings) -> list[type[Game]]:
+    """Los juegos encendidos (registro y ajustes): sus acciones van al backend.
+
+    En una videollamada (modo reunión) no hay juegos.
+    """
+    from sonia.games.registry import enabled_games
+    from sonia.live.prompts import in_meeting
+
+    if in_meeting(settings):
+        return []
+    games = enabled_games(settings)
+    if games:
+        logger.info("Juegos: %s", ", ".join(g.id for g in games))
+    return games
 
 
 def _trivia_ready(settings: Settings) -> bool:
@@ -774,6 +799,7 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
         agenda=components.agenda,
         faces=components.faces,
         presence=presence,
+        vision_llm=components.llm,
     )
 
     tasks: list[asyncio.Task[None]] = []

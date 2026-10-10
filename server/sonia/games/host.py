@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from sonia.config import Settings
     from sonia.games.banks import GameBank
     from sonia.games.manager import GameManager
+    from sonia.trivia.bank import TriviaQuestion
 
 __all__ = ["ManagedGameHost"]
 
@@ -158,3 +159,6 @@ class ManagedGameHost:
 
     def read_bank(self, bank: GameBank[T]) -> list[T]:
         return self._manager.read_bank(self._game_id, bank)
+
+    def draw_trivia(self, level: str | None = None) -> TriviaQuestion | None:
+        return self._manager.draw_trivia(level)
