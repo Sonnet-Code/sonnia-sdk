@@ -114,6 +114,10 @@ SLOW_TASK_S = 5.0
 #: tarea delegada (``think``) y otra mientras esa tarea busca en internet (``search``).
 BUSY_PREFIX = "live:"
 
+#: «Pensando…» solo sale si la tarea delegada sigue en marcha pasado esto: una que acaba al
+#: momento no enciende la pastilla y no parpadea (las demás esperas salen ya).
+THINK_DELAY_S = 0.3
+
 #: Ventana en la que la próxima voz de Sonia se considera el número del stand pedido.
 AMBIENT_WAIT_S = 8.0
 #: Tras un tramo de frase del stand, lo que diga GPT-Live en este tiempo es su
@@ -1481,8 +1485,9 @@ class LiveEngine:
 
         «Pensando…» desde que GPT-Live delega (no solo pasado ``SLOW_TASK_S``, como
         ``activity``) hasta que la tarea termina, falla, se cancela o se olvida
-        (``DELEGATION_TIMEOUT_S``), y «Buscando en internet…» mientras busca. Lo llama el
-        tick (cada 50 ms) y, para que salga al momento, el sitio donde nace la tarea.
+        (``DELEGATION_TIMEOUT_S``), y «Buscando en internet…» mientras busca. «Pensando…»
+        espera ``THINK_DELAY_S`` (0,3 s) por si la tarea acaba al momento; la búsqueda sale
+        ya. Lo llama el tick (cada 50 ms) y el sitio donde nace la tarea.
 
         El estado ``thinking`` (GPT-Live preparando su respuesta) no lo enciende, a
         propósito: se deduce de la transcripción y también salta con voces del pasillo
@@ -1490,8 +1495,10 @@ class LiveEngine:
         nada (se dejó fuera el 10 de octubre de 2026).
         """
         wanted: dict[str, tuple[BusyKind, str]] = {}
+        now = time.monotonic()
         for delegation in self._delegations.values():
-            wanted[f"{BUSY_PREFIX}think:{delegation.id}"] = ("think", TEXT_THINK)
+            if now - delegation.created_at >= THINK_DELAY_S:
+                wanted[f"{BUSY_PREFIX}think:{delegation.id}"] = ("think", TEXT_THINK)
             if delegation.searches:
                 wanted[f"{BUSY_PREFIX}search:{delegation.id}"] = ("search", TEXT_SEARCH)
         board = self._busy_board

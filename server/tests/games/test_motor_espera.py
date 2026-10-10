@@ -5,7 +5,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from sonia.busy import TEXT_GAME, TEXT_THINK
+from sonia.live import engine as engine_module
 from tests.games.test_motor import games_rig
 from tests.test_live import LiveRig, _backend_call
 
@@ -21,7 +24,11 @@ def _screen(rig: LiveRig) -> list[str]:
     return out
 
 
-async def test_start_game_avisa_hasta_la_primera_pantalla(tmp_path: Path) -> None:
+async def test_start_game_avisa_hasta_la_primera_pantalla(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Sin el retardo de «Pensando…», para que el orden sea fijo.
+    monkeypatch.setattr(engine_module, "THINK_DELAY_S", 0.0)
     async with games_rig(tmp_path) as rig:
         assert rig.engine.games is not None
         conn = await rig.conn()
