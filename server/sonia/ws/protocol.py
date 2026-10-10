@@ -13,7 +13,9 @@ Hay dos tipos de frame:
 from __future__ import annotations
 
 import json
+import re
 import struct
+from dataclasses import dataclass
 from typing import Any, Literal
 
 # ---------------------------------------------------------------------------
@@ -97,6 +99,8 @@ MSG_TRIVIA_ANSWER = "trivia_answer"
 MSG_TRIVIA_END = "trivia_end"
 MSG_ACTIVITY = "activity"
 MSG_CAMERA_PREVIEW = "camera_preview"
+#: Sobre común de los juegos (``docs/juegos.md``): ``game``, ``event``, ``seq`` y ``data``.
+MSG_GAME = "game"
 
 # Mensajes de Unity hacia el orquestador.
 MSG_CLIENT_HELLO = "client_hello"
@@ -113,6 +117,8 @@ MSG_ANIMATION_PLAYING = "animation_playing"
 MSG_AVATAR_EDITOR = "avatar_editor"
 MSG_AVATAR_SAVED = "avatar_saved"
 MSG_GUEST_STATE = "guest_state"
+#: Lo que pasa en la pantalla de un juego (``wheel_stopped``...), para el juego activo.
+MSG_GAME_EVENT = "game_event"
 
 #: Tope de clips que se aceptan en ``animations`` (el set real tiene unos 40).
 MAX_ANIMATIONS = 200
@@ -127,6 +133,22 @@ GESTURE_IMPACTS = ("NoImpact", "LowImpact", "HighImpact")
 
 #: Tope de la definición del avatar de Genies (JSON en texto; la real ronda 4 KB).
 MAX_AVATAR_DEFINITION = 64 * 1024
+
+#: Eventos comunes a todos los juegos: ``start`` monta la pantalla y ``end`` la retira.
+GAME_EVENT_START = "start"
+GAME_EVENT_END = "end"
+
+#: Valores de ``data.result`` en el evento ``end`` de un juego.
+GAME_RESULTS = ("win", "lose", "cancel")
+
+#: Lo que una Unity puede anunciar en ``client_hello.features``: la vista en vivo (``SNCV``).
+FEATURE_CAMERA_PREVIEW = "camera_preview"
+
+#: Tope de juegos y capacidades que se aceptan en ``client_hello``.
+MAX_HELLO_ITEMS = 50
+
+#: Forma de los ids de juego y de los eventos: minúsculas, cifras y ``_``.
+_GAME_NAME = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 
 
 Role = Literal["user", "assistant"]
@@ -316,6 +338,33 @@ def msg_hide_image() -> dict[str, Any]:
 def msg_camera_preview(on: bool, *, mirror: bool = True) -> dict[str, Any]:
     """Enciende o apaga la vista en vivo de la cámara (frames ``SNCV``) encima de Sonia."""
     return {"type": MSG_CAMERA_PREVIEW, "on": bool(on), "mirror": bool(mirror)}
+
+
+def msg_game(game: str, event: str, seq: int, data: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Un mensaje de la pantalla de un juego (el sobre común de ``docs/juegos.md``).
+
+    ``seq`` sube en cada mensaje de juego que manda el orquestador (en todos los
+    juegos): Unity descarta uno con ``seq`` menor que el último que pintó en esa
+    conexión. ``data`` lo lee el controlador de ese juego.
+    """
+    if not is_game_name(game) or not is_game_name(event):
+        raise ValueError(f"juego o evento con forma inválida: {game!r}, {event!r}")
+    return {
+        "type": MSG_GAME,
+        "game": game,
+        "event": event,
+        "seq": int(seq),
+        "data": dict(data or {}),
+    }
+
+
+def msg_game_end(
+    game: str, seq: int, result: str, data: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """El evento común ``end``: retira la pantalla del juego. ``result``: win, lose o cancel."""
+    if result not in GAME_RESULTS:
+        raise ValueError(f"resultado de juego desconocido: {result!r}")
+    return msg_game(game, GAME_EVENT_END, seq, {**(data or {}), "result": result})
 
 
 def msg_error(message: str) -> dict[str, Any]:
@@ -539,6 +588,62 @@ def parse_client_message(text: str | bytes) -> dict[str, Any] | None:
     if not isinstance(parsed.get("type"), str):
         return None
     return parsed
+
+
+def is_game_name(value: Any) -> bool:
+    """¿Es un id de juego o un nombre de evento válido (``wordle``, ``wheel_stopped``)?"""
+    return isinstance(value, str) and _GAME_NAME.match(value) is not None
+
+
+@dataclass(frozen=True, slots=True)
+class ClientHello:
+    """Lo que anuncia un cliente en ``client_hello``.
+
+    ``games`` es ``None`` si no trae la lista (una Unity anterior a los juegos):
+    entonces no se ofrece ninguno. ``features``, lo que sabe hacer además
+    (``camera_preview``).
+    """
+
+    client: str
+    version: str
+    games: frozenset[str] | None
+    features: frozenset[str]
+
+
+def parse_client_hello(msg: dict[str, Any]) -> ClientHello:
+    """``client_hello`` normalizado. Tolerante: lo que no vale se ignora."""
+    raw_games = msg.get("games")
+    games: frozenset[str] | None = None
+    if isinstance(raw_games, list):
+        games = frozenset(g for g in raw_games[:MAX_HELLO_ITEMS] if is_game_name(g))
+    raw_features = msg.get("features")
+    features = (
+        frozenset(
+            f.strip()
+            for f in raw_features[:MAX_HELLO_ITEMS]
+            if isinstance(f, str) and 0 < len(f.strip()) <= 40
+        )
+        if isinstance(raw_features, list)
+        else frozenset()
+    )
+    return ClientHello(
+        client=_text(msg.get("client"), 40),
+        version=_text(msg.get("version"), 40),
+        games=games,
+        features=features,
+    )
+
+
+def parse_game_event(msg: dict[str, Any]) -> tuple[str, str, dict[str, Any]] | None:
+    """``(juego, evento, data)`` de un ``game_event`` de Unity, o ``None`` si no vale."""
+    game, event, data = msg.get("game"), msg.get("event"), msg.get("data")
+    if not is_game_name(game) or not is_game_name(event):
+        return None
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        return None
+    return str(game), str(event), data
 
 
 def parse_animation_playing(msg: dict[str, Any]) -> str | None:

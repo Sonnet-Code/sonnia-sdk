@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 from sonia.actions.gallery import Gallery
 from sonia.actions.registry import ActionRegistry
 from sonia.types import ActionContext, ActionResult, ActionSpec, Frame
+
+if TYPE_CHECKING:
+    from sonia.games.base import Game
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +191,11 @@ HIDE_IMAGE = ActionSpec(
 
 
 def build_default_registry(
-    *, include_look: bool = True, include_trivia: bool = False, include_agenda: bool = False
+    *,
+    include_look: bool = True,
+    include_trivia: bool = False,
+    include_agenda: bool = False,
+    games: Sequence[type[Game]] = (),
 ) -> ActionRegistry:
     """Registro con las acciones integradas.
 
@@ -197,9 +205,12 @@ def build_default_registry(
     ``include_trivia`` anuncia ``start_trivia``, ``trivia_answer``, ``trivia_next``,
     ``restart_trivia`` y ``stop_trivia`` cuando hay banco de preguntas
     (``assets/trivia/preguntas.md``). ``include_agenda`` anuncia ``check_agenda``
-    (:mod:`sonia.actions.agenda`) cuando hay agenda del evento.
+    (:mod:`sonia.actions.agenda`) cuando hay agenda del evento. ``games`` (los juegos
+    encendidos, :func:`sonia.games.registry.enabled_games`) anuncia ``start_game``,
+    ``stop_game`` y las jugadas de cada uno (:mod:`sonia.actions.games`).
     """
     from sonia.actions.agenda import CHECK_AGENDA, SHOW_TALK
+    from sonia.actions.games import game_actions
     from sonia.actions.moves import PLAY_ANIMATION
     from sonia.actions.trivia import (
         RESTART_TRIVIA,
@@ -224,4 +235,6 @@ def build_default_registry(
     if include_agenda:
         registry.register(CHECK_AGENDA)
         registry.register(SHOW_TALK)
+    for spec in game_actions(games):
+        registry.register(spec)
     return registry
