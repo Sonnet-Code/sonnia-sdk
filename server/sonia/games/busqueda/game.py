@@ -425,7 +425,12 @@ class BusquedaGame(Game):
         self._photos += 1
         if manual:
             self._manual += 1
-        self._next_check_at = now + float(cfg.check_seconds)
+        # La siguiente, a ``check_seconds`` y, si el tope va justo (las miradas de
+        # ``busqueda_check`` también cuentan), repartiendo las que quedan por lo que queda de
+        # ronda: así no se gastan todas al principio y el final de la ronda también se mira.
+        left = max(0, cfg.max_checks - self._checks)
+        spread = max(0.0, self._deadline - now) / (left + 1)
+        self._next_check_at = now + max(float(cfg.check_seconds), spread)
         fut: asyncio.Future[None] = asyncio.get_running_loop().create_future()
         self._inflight = fut
         return fut

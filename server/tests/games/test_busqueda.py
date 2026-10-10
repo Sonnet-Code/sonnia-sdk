@@ -387,6 +387,46 @@ async def test_el_tope_de_fotos_por_ronda_se_respeta() -> None:
     assert judge.rounds == [4]
 
 
+async def test_con_el_tope_justo_las_miradas_se_reparten_por_toda_la_ronda() -> None:
+    game, host, judge = new_game(*[MISS] * 30, max_checks=4)
+    await game.start("voice", {})
+    await go(game, host)
+    looks: list[float] = []
+    started = host.now()
+    seen = 0
+    for _ in range(520):  # 26 s a ticks de 0,05
+        host.clock.advance(0.05)
+        await game.tick(host.now())
+        await host.run_tasks()
+        if len(judge.questions) > seen:
+            seen = len(judge.questions)
+            looks.append(round(host.now() - started, 1))
+    # 4 fotos: la primera a los 2,5 s y las otras tres repartidas hasta el final (no seguidas).
+    assert len(looks) == 4 and looks[0] == pytest.approx(2.5, abs=0.2)
+    gaps = [b - a for a, b in zip(looks, looks[1:], strict=False)]
+    assert all(5.0 <= gap <= 6.2 for gap in gaps), looks
+    assert looks[-1] > 18.0, "la última mirada tiene que caer hacia el final de la ronda"
+
+
+async def test_las_miradas_manuales_no_dejan_sin_mirar_el_final_de_la_ronda() -> None:
+    game, host, judge = new_game(*[MISS] * 40)
+    await game.start("voice", {})
+    await go(game, host)
+    # Alguien grita «¡aquí!» una y otra vez al principio de la ronda: cinco miradas manuales.
+    for _ in range(5):
+        await pump(game, host, 1.0)
+        assert "no se ve todavía" in await game.check({})
+    used = game.snapshot()["checks"]
+    assert used >= 5
+    # Las miradas que quedan se reparten por el resto de la ronda, no se gastan seguidas.
+    started = len(judge.questions)
+    await pump(game, host, 26.0)
+    later = len(judge.questions) - started
+    assert 0 < later <= 10 - used + 1
+    assert game.snapshot()["checks"] <= 10
+    assert sent(host, "timeout")
+
+
 async def test_una_ronda_entera_hace_nueve_o_diez_miradas_como_mucho() -> None:
     game, host, judge = new_game(*[MISS] * 30)
     await game.start("voice", {})
