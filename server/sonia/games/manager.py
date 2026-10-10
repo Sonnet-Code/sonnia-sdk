@@ -103,6 +103,10 @@ CANCEL_TEXT = {
         "JUEGO: {spoken} se ha quitado de tu pantalla. Dilo en una frase corta y sigue "
         "conversando con normalidad."
     ),
+    "error": (
+        "JUEGO: {spoken} se ha quitado de tu pantalla por un fallo. Dilo en una frase corta, "
+        "con humor, y sigue conversando con normalidad."
+    ),
 }
 
 #: Lo que se le pasa a GPT-Live cuando el juego se arranca desde el panel.
@@ -411,6 +415,11 @@ class GameManager:
     @property
     def games_off(self) -> frozenset[str]:
         return self._off
+
+    @property
+    def unity_games(self) -> frozenset[str] | None:
+        """Los juegos que anunció la Unity conectada (``None``: ninguna lo anunció aún)."""
+        return self._unity_games
 
     async def set_games_off(self, ids: Iterable[str]) -> None:
         """Los juegos apagados desde el panel (ajuste compartido ``games_off``).
@@ -789,7 +798,7 @@ class GameManager:
                 logger.exception("Falló tick de %s", game.id)
             if self._tick_failures >= MAX_TICK_FAILURES and self._active is game:
                 logger.error("tick de %s falla sin parar: se cancela la partida", game.id)
-                await self.stop("panel")
+                await self.stop("error")
         else:
             self._tick_failures = 0
 
