@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -18,16 +19,19 @@ from sonia.games import SCRIPT_PREFIX
 from sonia.games.busqueda import game as game_module
 from sonia.games.busqueda.game import BusquedaGame
 from tests.games.fakes import FakeVision, game_settings
-from tests.games.test_busqueda import SEEN, CountingJudge
+from tests.games.test_busqueda import SEEN, CountingJudge, RoundJudge
 from tests.games.test_motor import games_rig
 from tests.test_live import _backend_call, pcm, wait_until
 
 
-def commentary(conn: object, fragment: str) -> bool:
-    return any(
-        m["type"] == "session.commentary.append" and fragment in str(m["content"])
+def commentary(conn: object, fragment: str, count: int = 1) -> bool:
+    """¿Le han llegado a GPT-Live ``count`` comentarios con ``fragment``?"""
+    found = [
+        m
         for m in conn.received  # type: ignore[attr-defined]
-    )
+        if m["type"] == "session.commentary.append" and fragment in str(m["content"])
+    ]
+    return len(found) >= count
 
 
 async def test_una_ronda_por_voz_de_punta_a_punta_en_el_motor(
@@ -117,6 +121,68 @@ async def test_una_ronda_por_voz_de_punta_a_punta_en_el_motor(
             lambda msgs: any(m.get("event") == "end" for m in rig.rec.of_type("game", msgs))
         )
         assert rig.rec.of_type("game")[-1]["data"]["result"] == "cancel"
+        await wait_until(lambda: not vision.stream.active and not vision.preview.active)
+        assert rig.hub.sticky("game_start") is None and rig.hub.sticky("game") is None
+        await conn.wait_for(
+            lambda msgs: any(
+                "vuelve a conversar con normalidad" in str(m.get("content")) for m in msgs
+            )
+        )
+
+
+async def sonia_says(conn: object, text: str) -> None:
+    """Sonia dice algo: audio y transcripción, como llegan de GPT-Live."""
+    await conn.audio(pcm(2400))  # type: ignore[attr-defined]
+    await conn.say(text)  # type: ignore[attr-defined]
+    await conn.audio(pcm(2400))  # type: ignore[attr-defined]
+
+
+async def test_una_partida_de_tres_rondas_hasta_el_final_en_el_motor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shutil.copytree(game_settings().games_dir / "busqueda", tmp_path / "games" / "busqueda")
+    monkeypatch.setattr(game_module, "SETTLE_S", 0.25)
+    async with games_rig(tmp_path, games=[BusquedaGame]) as rig:
+        manager = rig.engine.games
+        assert manager is not None
+        vision = FakeVision(judge=RoundJudge([1, 2, 3]))  # ve el objeto a la primera en cada ronda
+        manager.attach_vision(vision.game_vision())
+        manager._camera_ready = lambda: True  # type: ignore[assignment]
+        rig.settings.games.busqueda.round_seconds = 5.0
+        rig.settings.games.busqueda.check_seconds = 0.3
+        rig.settings.games.result_seconds = 0.2
+        rig.settings.games.final_wait_seconds = 4.0
+        conn = await rig.conn()
+
+        def events(kind: str) -> list[dict[str, Any]]:
+            return [m for m in rig.rec.of_type("game") if m["event"] == kind]
+
+        async def wait_event(kind: str, count: int) -> dict[str, Any]:
+            await rig.rec.wait_for(lambda _msgs: len(events(kind)) >= count, limit=6.0)
+            return events(kind)[count - 1]
+
+        await _backend_call(conn, "b1", "start_game", {"juego": "busqueda"})
+        for number in (1, 2, 3):
+            ronda = await wait_event("round", number)
+            assert ronda["data"]["index"] == number and ronda["data"]["found"] == number - 1
+            await sonia_says(conn, f"¡El primero que me enseñe {ronda['data']['object']}!")
+            go = await wait_event("go", number)
+            assert go["data"]["index"] == number
+            found = await wait_event("found", number)
+            assert found["data"]["found"] == number and found["data"]["what"] == "botella azul"
+            await conn.wait_for(lambda _msgs, n=number: commentary(conn, "En la cámara se ve", n))
+            if number < 3:
+                await sonia_says(conn, "¡Qué buen ojo!")
+
+        # La última ronda lleva el final en el mismo guion: encontraron las tres.
+        await conn.wait_for(lambda _msgs: commentary(conn, "han encontrado 3 de 3"))
+        assert commentary(conn, "¡Las 3 de 3!") and commentary(conn, "Brian o Mariel")
+        assert len(events("round")) == 3 and events("end") == []
+        # Sonia lo cuenta y calla; entonces sale el final de la pantalla.
+        await sonia_says(conn, "¡Las tres! ¡Pasen a ver a Brian o a Mariel!")
+        end = await wait_event("end", 1)
+        assert end["data"] == {"result": "win", "found": 3, "total": 3, "photos": 3}
+        await wait_until(lambda: not manager.active)
         await wait_until(lambda: not vision.stream.active and not vision.preview.active)
         assert rig.hub.sticky("game_start") is None and rig.hub.sticky("game") is None
         await conn.wait_for(

@@ -96,6 +96,8 @@ Con tiempo exacto, por `say_fixed` (de `cache/voice` si están grabadas; si no, 
 - «¡Lo veo!» — al ver el objeto, antes de que Sonia lo celebre con sus palabras.
 - «¡Tiempo!» — al acabarse el tiempo.
 
+**Hay que grabarlas** («Preparar voces» en el panel, o la grabación automática) antes de jugar: sin la frase grabada, cada una sale por `commentary` y GPT-Live la dice con ~1,5 s de retraso (y a veces la siguiente ronda se adelanta un poco a su reacción). Con las voces preparadas, suenan al instante y sin gastar.
+
 ## Ajustes (`GAME_BUSQUEDA_*`)
 
 | Ajuste | Por defecto | Qué hace |
