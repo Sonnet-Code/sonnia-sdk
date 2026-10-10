@@ -57,7 +57,7 @@ namespace Sonia.Games.Akinator
         private const float ContentHeight = 372f;
         private const float BallBox = 230f;
         private const float BallDiameter = 196f;
-        private const float TextLeft = 250f;
+        private const float TextLeft = 264f;
         private const float TextHeight = 230f;
         private const float DotsTop = 248f;
         private const float DotsHeight = 76f;
@@ -156,6 +156,8 @@ namespace Sonia.Games.Akinator
         private TextMeshProUGUI _hint;
         private Texture2D _sphereTexture;
         private Sprite _sphereSprite;
+        private Texture2D _glowTexture;
+        private Sprite _glowSprite;
 
         // Estado de la partida.
         private string[] _themes = new string[0];
@@ -264,11 +266,7 @@ namespace Sonia.Games.Akinator
             _asked = 0;
             _question = string.Empty;
             _guess = string.Empty;
-            _bannerUntil = -1f;
-            if (Hud != null)
-            {
-                Hud.HideBanner();
-            }
+            HideMissBanner();
         }
 
         private void OnDestroy()
@@ -281,6 +279,16 @@ namespace Sonia.Games.Akinator
             if (_sphereTexture != null)
             {
                 Destroy(_sphereTexture);
+            }
+
+            if (_glowSprite != null)
+            {
+                Destroy(_glowSprite);
+            }
+
+            if (_glowTexture != null)
+            {
+                Destroy(_glowTexture);
             }
         }
 
@@ -320,6 +328,7 @@ namespace Sonia.Games.Akinator
         private void ApplyGuess(StateData state)
         {
             bool already = _phase == PhaseGuessing && string.Equals(state.Guess, _guess, StringComparison.Ordinal);
+            HideMissBanner();
             int before = _asked;
             Sync(state);
             _phase = PhaseGuessing;
@@ -331,7 +340,7 @@ namespace Sonia.Games.Akinator
                 GameAnim.Pop(_answerBox, 0.5f);
                 GameAnim.Pulse(_ball, 0.12f, 0.5f);
                 Hud.PopCard();
-                Hud.SparklesAt(_ball, 12);
+                Hud.SparklesAt(_answerBox, 10);
                 BoostBall(1.6f);
             }
         }
@@ -344,9 +353,10 @@ namespace Sonia.Games.Akinator
             SetPonder(true);
             ShowAsking();
             FillDots(before, _asked, false);
-            string missed = LastOf(state.Missed);
-            Hud.ShowBanner(string.IsNullOrEmpty(missed) ? "¡No era!" : "¡No era " + GameUi.Plain(missed) + "!", GameColors.Red);
+            string missed = Shorten(GameUi.Plain(LastOf(state.Missed)), 24);
+            Hud.ShowBanner(string.IsNullOrEmpty(missed) ? "¡No era!" : "¡No era " + missed + "!", GameColors.Red);
             _bannerUntil = _clock + missBannerSeconds;
+            _hint.alpha = 0f;
             GameAnim.Shake(_ball, 0.55f, 14f);
             PlayReaction(missClip, null);
             ShowEmotion(FacialExpressionController.Emotion.Sad, 1.8f);
@@ -372,9 +382,8 @@ namespace Sonia.Games.Akinator
             _phase = PhaseRevealed;
             SetPonder(false);
             FillDots(before, _asked, false);
-            Hud.HideBanner();
-            _bannerUntil = -1f;
-            string answer = GameUi.Plain(state.Answer ?? string.Empty);
+            HideMissBanner();
+            string answer = Shorten(GameUi.Plain(state.Answer ?? string.Empty), 36);
             if (state.Outcome == "sonnia")
             {
                 Hud.ShowResult(
@@ -468,7 +477,7 @@ namespace Sonia.Games.Akinator
             _mainText.text = "ME RINDO…\n<color=#" + yellow + ">¿QUÉ ERA?</color>";
             _mainText.gameObject.SetActive(true);
             _answerBox.gameObject.SetActive(false);
-            _mark.text = "…";
+            _mark.text = "?";
             _themesText.gameObject.SetActive(false);
             _dotsRow.gameObject.SetActive(true);
             _hint.text = "DILE A SONNIA QUÉ ERA";
@@ -531,7 +540,7 @@ namespace Sonia.Games.Akinator
 
         private static Color EmptyDot
         {
-            get { return GameUi.WithAlpha(Color.white, 0.16f); }
+            get { return GameUi.WithAlpha(Color.white, 0.12f); }
         }
 
         private static Color DotColor(int index)
@@ -579,6 +588,31 @@ namespace Sonia.Games.Akinator
         // Sonnia piensa
         // ------------------------------------------------------------------
 
+        /// <summary>Quita el rótulo «¡No era …!» y devuelve la línea de ayuda que tapaba.</summary>
+        private void HideMissBanner()
+        {
+            _bannerUntil = -1f;
+            if (Hud != null)
+            {
+                Hud.HideBanner();
+            }
+
+            if (_hint != null)
+            {
+                _hint.alpha = 1f;
+            }
+        }
+
+        private static string Shorten(string text, int max)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= max)
+            {
+                return text ?? string.Empty;
+            }
+
+            return text.Substring(0, max - 1).TrimEnd() + "…";
+        }
+
         private void SetPonder(bool on)
         {
             _wantPonder = on && ponderWhileThinking;
@@ -620,8 +654,7 @@ namespace Sonia.Games.Akinator
 
             if (_bannerUntil > 0f && _clock >= _bannerUntil)
             {
-                _bannerUntil = -1f;
-                Hud.HideBanner();
+                HideMissBanner();
             }
 
             float boost = _clock < _speedBoostUntil ? _speedBoost : 1f;
@@ -635,8 +668,8 @@ namespace Sonia.Games.Akinator
             float pulse = 0.5f + (0.5f * Mathf.Sin(t * 2.1f));
             Color target = _glowColor;
             float strength = _glowStrength * Mathf.Lerp(0.75f, 1f, pulse);
-            _glowOuter.color = GameUi.WithAlpha(target, 0.16f * strength);
-            _glowInner.color = GameUi.WithAlpha(target, 0.24f * strength);
+            _glowOuter.color = GameUi.WithAlpha(target, 0.3f * strength);
+            _glowInner.color = GameUi.WithAlpha(target, 0.5f * strength);
             float breathe = 1f + (0.03f * Mathf.Sin(t * 1.7f));
             _glowOuter.rectTransform.localScale = new Vector3(breathe, breathe, 1f);
 
@@ -739,10 +772,16 @@ namespace Sonia.Games.Akinator
             // La bola queda un poco más arriba del centro de su caja: debajo va el soporte.
             Vector2 center = BallCenter;
 
-            _glowOuter = Hud.NewImage("HaloExterior", _ball, Hud.DotSprite, GameUi.WithAlpha(GameColors.Blue, 0.16f));
-            Center(_glowOuter.rectTransform, center, 262f, 262f);
-            _glowInner = Hud.NewImage("HaloInterior", _ball, Hud.DotSprite, GameUi.WithAlpha(GameColors.Blue, 0.24f));
-            Center(_glowInner.rectTransform, center, 228f, 228f);
+            _glowTexture = MakeGlowTexture(128);
+            _glowSprite = Sprite.Create(
+                _glowTexture,
+                new Rect(0f, 0f, _glowTexture.width, _glowTexture.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            _glowOuter = Hud.NewImage("HaloExterior", _ball, _glowSprite, GameUi.WithAlpha(GameColors.Blue, 0.3f));
+            Center(_glowOuter.rectTransform, center, 244f, 244f);
+            _glowInner = Hud.NewImage("HaloInterior", _ball, _glowSprite, GameUi.WithAlpha(GameColors.Blue, 0.5f));
+            Center(_glowInner.rectTransform, center, 212f, 212f);
 
             // Soporte dorado, detrás de la esfera.
             Color gold = new Color(0.86f, 0.62f, 0.12f, 1f);
@@ -766,8 +805,8 @@ namespace Sonia.Games.Akinator
             // Arcos de colores que giran dentro de la esfera.
             Color[] arcColors =
             {
-                GameUi.WithAlpha(new Color(0.7f, 0.85f, 1f), 0.55f),
-                GameUi.WithAlpha(GameColors.Yellow, 0.55f),
+                GameUi.WithAlpha(new Color(0.7f, 0.85f, 1f), 0.45f),
+                GameUi.WithAlpha(GameColors.Yellow, 0.5f),
                 GameUi.WithAlpha(GameColors.Green, 0.5f)
             };
             float[] arcSizes = { 168f, 128f, 92f };
@@ -814,8 +853,6 @@ namespace Sonia.Games.Akinator
             Image glint = Hud.NewImage("Reflejo", _ball, Hud.DotSprite, GameUi.WithAlpha(Color.white, 0.5f));
             Center(glint.rectTransform, center + new Vector2(-46f, 50f), 56f, 26f);
             glint.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 38f);
-            Image glintSmall = Hud.NewImage("ReflejoPequeno", _ball, Hud.DotSprite, GameUi.WithAlpha(Color.white, 0.7f));
-            Center(glintSmall.rectTransform, center + new Vector2(-20f, 70f), 14f, 14f);
         }
 
         private void BuildTexts()
@@ -862,6 +899,35 @@ namespace Sonia.Games.Akinator
         // ------------------------------------------------------------------
         // La esfera de cristal, dibujada pixel a pixel
         // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Un halo suave: opaco hasta el 70 % del radio (lo tapa la esfera) y desvaneciéndose
+        /// hasta el borde. Se tiñe con el color de la Image.
+        /// </summary>
+        private static Texture2D MakeGlowTexture(int size)
+        {
+            Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            texture.name = "AkinatorHalo";
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.filterMode = FilterMode.Bilinear;
+            Color32[] pixels = new Color32[size * size];
+            float radius = size * 0.5f;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float u = (x + 0.5f - radius) / radius;
+                    float v = (y + 0.5f - radius) / radius;
+                    float r = Mathf.Sqrt((u * u) + (v * v));
+                    float alpha = r <= 0.7f ? 1f : Mathf.Pow(Mathf.Clamp01((1f - r) / 0.3f), 1.6f);
+                    pixels[(y * size) + x] = new Color32(255, 255, 255, (byte)(alpha * 255f));
+                }
+            }
+
+            texture.SetPixels32(pixels);
+            texture.Apply(false, true);
+            return texture;
+        }
 
         /// <summary>
         /// Una esfera de cristal azul: sombreado difuso desde arriba a la izquierda, brillo
