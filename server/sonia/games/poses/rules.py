@@ -83,8 +83,9 @@ MIN_SCALE_PX = 6.0
 #: (encogidos en la imagen), el torso da una escala más fiel. Se divide de más a propósito
 #: para que solo mande cuando los hombros salen muy encogidos.
 TORSO_PER_SHOULDER = 1.6
-#: Entre orejas hay unos 0,4 S (mismo uso que el torso).
-EARS_PER_SHOULDER = 0.5
+#: Entre orejas hay unos 0,45 S (mismo uso que el torso: se divide de más). Con 0,5, en
+#: los primeros planos la escala salía inflada (foto pública de un doble bíceps).
+EARS_PER_SHOULDER = 0.6
 #: Sin nariz: los ojos van un poco más arriba y las orejas casi a su altura.
 NOSE_BELOW_EYES = 0.08
 NOSE_BELOW_EARS = 0.05
@@ -138,8 +139,9 @@ HEAD_ELBOW_MAX_ABOVE_NOSE = 0.25
 BICEPS_ELBOW_BAND = 0.45
 #: Y abierto hacia fuera del hombro al menos esto.
 BICEPS_ELBOW_OUT = 0.3
-#: La muñeca, por encima del codo al menos esto...
-BICEPS_WRIST_ABOVE_ELBOW = 0.25
+#: La muñeca, por encima del codo al menos esto (el detector pone a veces la muñeca a media
+#: altura del antebrazo cuando este va hacia la cámara)...
+BICEPS_WRIST_ABOVE_ELBOW = 0.15
 #: ...con el antebrazo más vertical que horizontal (con las manos en la cabeza, el
 #: antebrazo va hacia dentro y se queda tumbado).
 BICEPS_FOREARM_MAX_FROM_VERTICAL_DEG = 45.0

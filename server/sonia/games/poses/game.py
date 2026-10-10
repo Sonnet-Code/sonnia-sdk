@@ -317,7 +317,29 @@ class PosesGame(Game):
             "done": done,
             "possible": possible,
             "fell": fell,
+            "summary": self._summary(),
         }
+
+    def _summary(self) -> str:
+        """En qué va la partida, en una línea para el panel («Ronda 2 de 6: 7 de 9»)."""
+        phase = self._phase
+        entry = self._entry
+        if phase == "placement":
+            text = f"Colocándose: juegan {self._placement.players}"
+            return text + (" (alguien muy cerca)" if self._placement.close else "")
+        if phase == "final":
+            done, possible, fell = self._totals()
+            return f"Final: {done} de {possible} bien" + (f", cayeron {fell}" if fell else "")
+        if entry is None or phase == "off":
+            return ""
+        head = f"Ronda {self._index + 1} de {len(self._plan)}" + (
+            "" if self._simon else " (trampa)"
+        )
+        if phase == "result":
+            if not self._simon:
+                return f"{head}: cayeron {self._count} de {self._total}"
+            return f"{head}: {self._count} de {self._total}"
+        return f"{head}: {entry.pose}"
 
     # -- la partida ---------------------------------------------------------------
 

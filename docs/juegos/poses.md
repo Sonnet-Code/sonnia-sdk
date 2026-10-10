@@ -90,7 +90,7 @@ Las órdenes de todas las poses activas, con y sin «Simón dice» (doce con el 
 | `WINDOW_SECONDS` | 1.8 | Ventana tras la orden en la que se cuenta (el mejor frame). |
 | `MIN_PERSON` | 0.25 | Alto mínimo de una persona en la imagen (fracción) para jugar. |
 | `FPS` | 8 | Detecciones por segundo mientras se juega. |
-| `MODEL` | `s` | Modelo de poses: `s` o `n` (la mitad de CPU; recomendado si el equipo del stand es el Mac o un portátil, `docs/juegos-vision.md`). |
+| `MODEL` | `n` | Modelo de poses: `n` (ligero) o `s` (más preciso, el doble de CPU). El panel lo cambia en caliente (`docs/juegos-vision.md`). |
 | `ABANDON_SECONDS` | 0 | Sin voz ni nadie delante durante esto, se cancela (0: `GAMES_ABANDON_SECONDS`). |
 
 Los tiempos internos (colocación, espera a que calle, demostración, reintentos) son constantes documentadas al principio de `server/sonia/games/poses/game.py`.
@@ -99,6 +99,13 @@ Los tiempos internos (colocación, espera a que calle, demostración, reintentos
 
 - `server/tests/games/test_poses_rules.py`: cada pose con monigotes inventados (`puppets.py`), que no salte con las demás ni en reposo, que dé igual el lado y el sitio de la imagen, el codo cuando falta la muñeca, el brazo que no se ve, quién juega y la colocación.
 - `server/tests/games/test_poses.py`: el banco (bien y mal formado, mínimo, frases grabadas), el plan de rondas (la trampa nunca primero, sin repetir seguida), la partida entera con una multitud falsa (acierto, trampa, sin nadie, alguien demasiado cerca, la cámara que falla), los textos para GPT-Live (sin marcas del stack, las reglas por debajo de 1200 caracteres), los esqueletos de la vista en vivo (colores y espejo) y de punta a punta con el `GameManager`: por voz, con las órdenes grabadas, `stop_game` a mitad, abandono, reconexión de Unity y la secuencia del orquestador falso.
+- **Con detecciones de verdad** (10 de octubre de 2026): el detector de poses (`s`) sobre fotos públicas de Wikimedia Commons (las de `docs/juegos-vision.md` y otras siete: guerrero II de yoga, doble bíceps, un chico pensando con la mano en la barbilla, un hombre pensando, niños con las manos arriba, la foto de grupo de Wikimania 2023 con las manos arriba y un dibujo de un hombre con las manos en la cabeza), en el scratchpad de esa sesión y nunca en el repo:
+  - Grupos de frente en reposo (cuatro fotos, unas 55 personas que juegan): ninguna pose de más.
+  - Saltando en la playa (seis personas de espaldas): las dos con los brazos arriba, las tres con uno y la de las manos en la cabeza, como en la foto.
+  - Brazos arriba (también con los puños en alto y los codos doblados), pose T, doble bíceps y las dos manos en la barbilla: bien.
+  - Cuentan de más: quien habla con un micro o enseña la palma delante de la cara sale como barbilla (es lo esperado: la mano junto a la cara).
+  - En las multitudes muy apretadas el detector solo ve la primera fila (ya lo dice la prueba de la visión) y en un dibujo cortado por arriba no hay nada que medir.
+  - Ajustes que salieron de aquí: el codo de brazos arriba basta con 0,25 S por encima del hombro (con 0,4 se perdían los puños en alto), las manos a la cabeza no pasan de 0,6 S sobre la nariz (los brazos estirados junto a la cabeza contaban), la muñeca del bíceps basta con 0,15 S sobre el codo (el detector la pone a media altura del antebrazo) y las orejas dan la escala solo con los hombros muy de perfil.
 - Capturas 9:16 con el orquestador falso (`server/sonia/games/poses/demo.py`: colocación, ronda con demostración, orden, ventana, acierto, fallo, trampa, las demás demostraciones, final y cierre), con una vista en vivo sintética: una sala dibujada con monigotes y los esqueletos de verdad encima.
 
   ```bash

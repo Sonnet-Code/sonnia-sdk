@@ -406,6 +406,19 @@ async def test_stop_suelta_la_camara_y_borra_los_esqueletos() -> None:
     assert not image.any()
 
 
+async def test_el_panel_ve_en_que_va_la_partida() -> None:
+    game, host, _ = crowd_game(Crowd(players=4, doers=3, fallers=1))
+    await game.start("voice", {})
+    assert game.snapshot()["summary"].startswith("Colocándose")
+    await host.run_tasks()
+    snap = game.snapshot()
+    assert snap["summary"] == "Final: 18 de 24 bien, cayeron 1"  # 5 x 3 + (4 - 1)
+    assert [r["count"] for r in snap["results"] if r["simon"]] == [3] * 5
+    game._phase = "result"
+    game._index, game._count, game._total = 0, 3, 4
+    assert game._summary() == "Ronda 1 de 6: 3 de 4"
+
+
 async def test_resume_dice_por_donde_va() -> None:
     game, host, _ = crowd_game()
     await game.start("voice", {})
