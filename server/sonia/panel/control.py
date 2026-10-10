@@ -108,7 +108,8 @@ CAPABILITIES = [
 
 #: Ajustes que se guardan en la nube y comparten todas las Sonnias. El modo, el
 #: modo debug y el gasto no están: son de cada equipo. Las Sonnias anteriores
-#: ignoran los que no conocen (``games_off`` y ``game_banks`` llegaron con los juegos).
+#: ignoran los que no conocen (``games_off``, ``game_banks`` y ``games_pose_model``
+#: llegaron con los juegos).
 SHARED_SETTINGS: tuple[str, ...] = (
     "away_message",
     "notes",
@@ -124,7 +125,15 @@ SHARED_SETTINGS: tuple[str, ...] = (
     "trivia_bank",
     "games_off",
     "game_banks",
+    "games_pose_model",
 )
+
+#: Variantes del modelo de poses que se pueden elegir en el panel, si la visión de los
+#: juegos no dice otras (``GameManager.snapshot()["pose_model"]["options"]``).
+POSE_MODEL_VARIANTS: tuple[str, ...] = ("n", "s")
+
+#: Cómo se llama cada modelo de poses en los mensajes del panel.
+POSE_MODEL_NAMES = {"n": "ligero (n)", "s": "preciso (s, más CPU)"}
 
 #: Ajustes de «Developer»: grupo -> valor -> (mínimo, máximo, por defecto). La
 #: boca y el movimiento en reposo van en multiplicadores de lo que trae la escena
@@ -256,6 +265,9 @@ class PanelState:
     #: Bancos de los juegos guardados desde el panel (``{banco: texto}``); ``None``: todos
     #: los que trae la app.
     game_banks: dict[str, str] | None = None
+    #: Modelo de poses elegido en el panel (``n`` ligero o ``s`` preciso); ``None``: el de
+    #: la app (``GAME_POSES_MODEL``). Brian y Mariel no pueden tocar el ``.env`` del stand.
+    games_pose_model: str | None = None
     #: Modo debug: Sonnia quieta (sin GPT-Live ni nada automático) para pruebas visuales.
     debug: bool = False
     #: Gasto del día: segundos de sesión de GPT-Live acumulados en ``usage_date``
@@ -297,6 +309,10 @@ class PanelState:
             state.games_off = _normalize_shared("games_off", raw.get("games_off"))
         with contextlib.suppress(ValueError):
             state.game_banks = _normalize_shared("game_banks", raw.get("game_banks"))
+        with contextlib.suppress(ValueError):
+            state.games_pose_model = _normalize_shared(
+                "games_pose_model", raw.get("games_pose_model")
+            )
         for name in ("volume", "mic_gate", "usage_seconds", "trial_seconds"):
             value = raw.get(name)
             if _is_number(value):
@@ -498,6 +514,7 @@ class StandControl:
         if games is not None:
             await games.set_games_off(state.games_off)
             games.use_cloud_banks(state.game_banks)
+            self._apply_pose_model(state.games_pose_model)
             self._spawn(self._refresh_game_phrases(), "game-phrases")
         await self._hub.set_sticky("volume", p.msg_set_volume(state.volume))
         await self._hub.set_sticky("subtitles", p.msg_set_subtitles(state.subtitles))
@@ -1124,6 +1141,34 @@ class StandControl:
             message += " La partida que había se ha terminado."
         return True, message
 
+    async def _act_set_game_pose_model(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Modelo de poses» (``games_pose_model``, en todas las Sonnias): ``n`` (ligero),
+        ``s`` (preciso, más CPU) o vacío para volver al de la app (``GAME_POSES_MODEL``)."""
+        self._need_games()
+        raw = params.get("model")
+        if raw in (None, "", "app"):
+            if self.state.games_pose_model is None:
+                return True, "Las poses ya usan el modelo que trae la app."
+            await self._set_shared("games_pose_model", None)
+            return True, "Las poses vuelven al modelo que trae la app, en todas las Sonnias."
+        model = _normalize_pose_model(raw)
+        if model is None:
+            raise _BadRequest("Modelo de poses no válido: ligero (n) o preciso (s).")
+        await self._set_shared("games_pose_model", model)
+        return True, f"Modelo de poses: {POSE_MODEL_NAMES.get(model, model)}, en todas las Sonnias."
+
+    def _apply_pose_model(self, model: str | None) -> None:
+        """El modelo de poses a la visión de los juegos (``None``: el de ``GAME_POSES_MODEL``)."""
+        games = self._games
+        # ``set_pose_model`` llega con la visión de los juegos (A1): sin él, no se aplica.
+        setter = getattr(games, "set_pose_model", None) if games is not None else None
+        if setter is None:
+            return
+        try:
+            setter(model)
+        except Exception:  # noqa: BLE001 - un modelo que no carga no tumba el panel
+            logger.exception("No se pudo cambiar el modelo de poses a %s", model)
+
     async def _act_game_bank(self, params: dict[str, Any]) -> tuple[bool, str]:
         """Un banco de los juegos en uso (el de la nube o el de la app), entero en el mensaje."""
         games = self._need_games()
@@ -1366,6 +1411,9 @@ class StandControl:
                 games.use_cloud_banks(value)
                 # Las frases fijas de un juego pueden salir de sus bancos.
                 self._spawn(self._refresh_game_phrases(), "game-phrases")
+        elif key == "games_pose_model":
+            state.games_pose_model = value
+            self._apply_pose_model(value)
         else:  # pragma: no cover - SHARED_SETTINGS y esto van juntos
             raise ValueError(f"Ajuste desconocido: {key}")
 
@@ -1551,6 +1599,8 @@ class StandControl:
             "trivia": snap.get("trivia") or {"available": False, "active": False},
             # ``GameManager.snapshot()`` (forma en ``docs/juegos.md``, «El panel»).
             "games": snap.get("games") or {"enabled": False},
+            # El modelo de poses guardado en el panel (``None``: el de la app).
+            "games_pose_model": self.state.games_pose_model,
             "gesture_director": snap.get("gestures"),
             "settings_sync": self._settings_sync(),
             "last_error": snap.get("last_error") or None,
@@ -1813,7 +1863,32 @@ def _normalize_shared(key: str, value: Any) -> Any:
         if not isinstance(value, dict):
             raise ValueError(key)
         return normalize_game_banks(value)
+    if key == "games_pose_model":
+        if value is None:
+            return None
+        model = _normalize_pose_model(value)
+        if model is None:
+            raise ValueError(key)
+        return model
     raise ValueError(key)
+
+
+def _normalize_pose_model(value: Any) -> str | None:
+    """Una variante válida del modelo de poses (``n`` o ``s``), o ``None``.
+
+    Usa ``normalize_pose_model`` de la visión de los juegos (``sonia.games``) cuando está;
+    si no, acepta las de :data:`POSE_MODEL_VARIANTS`.
+    """
+    import sonia.games as games_package
+
+    normalize = getattr(games_package, "normalize_pose_model", None)
+    if normalize is not None:
+        result = normalize(value)
+        return result if isinstance(result, str) and result else None
+    if not isinstance(value, str):
+        return None
+    variant = value.strip().lower()
+    return variant if variant in POSE_MODEL_VARIANTS else None
 
 
 def _summary(params: dict[str, Any]) -> str:

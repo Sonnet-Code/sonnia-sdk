@@ -172,6 +172,11 @@
     return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
   }
 
+  /** "Preciso (s, más CPU)" -> "preciso (s, más CPU)": para meterlo en una frase. */
+  function uncapitalize(text) {
+    return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
+  }
+
   /** "oficinas-sonnet" -> "Oficinas sonnet". */
   function prettyImageName(id) {
     return capitalize(String(id).replace(/[-_]+/g, " ").trim());
@@ -302,7 +307,7 @@
       "trivia-bank-reset-btn", "trivia-bank-state",
       "game-state", "game-list", "game-stop-btn", "game-note", "game-bank-info", "game-bank-select",
       "game-bank-load-btn", "game-bank-detail", "game-bank-editor", "game-bank-input", "game-bank-save-btn",
-      "game-bank-reset-btn", "game-bank-state",
+      "game-bank-reset-btn", "game-bank-state", "game-pose", "game-pose-select", "game-pose-help",
     ];
     for (const id of ids) {
       // "topbar-status" -> ui.topbarStatus
@@ -1558,6 +1563,7 @@
     setHidden(ui.gameNote, status.mode === "conversation" || Boolean(active) || list.length === 0);
     renderGameBanks(games);
     renderGameBankState();
+    renderPoseModel(status, list);
   }
 
   function buildGameTiles(list) {
@@ -1653,6 +1659,81 @@
     setHidden(ui.gameBankDetail, true);
     setText(ui.gameState, "No hay ningún juego en marcha.");
     ui.gameState.classList.remove("is-playing");
+    poseKey = "";
+    ui.gamePoseSelect.replaceChildren();
+    setHidden(ui.gamePose, true);
+  }
+
+  // ------------------------------------------------------------ modelo de poses
+
+  /** Cómo se llama cada variante del modelo de poses (GAME_POSES_MODEL). */
+  const POSE_MODEL_LABELS = { n: "Ligero (n)", s: "Preciso (s, más CPU)" };
+  let poseKey = "";
+
+  function poseModelLabel(id, label) {
+    if (typeof label === "string" && label.trim()) return label.trim();
+    return POSE_MODEL_LABELS[id] || id;
+  }
+
+  /** `pose_model` de los juegos: `{current, default, options}` (o null si no lo manda). */
+  function poseModelInfo() {
+    const info = gamesInfo().pose_model;
+    return info && typeof info === "object" ? info : null;
+  }
+
+  /** Las variantes que se pueden elegir: `[{id, label}]`, de textos o de objetos. */
+  function poseOptions(info) {
+    const raw = info && Array.isArray(info.options) ? info.options : Object.keys(POSE_MODEL_LABELS);
+    const out = [];
+    for (const item of raw) {
+      if (typeof item === "string" && item) {
+        out.push({ id: item, label: poseModelLabel(item) });
+      } else if (item && typeof item === "object") {
+        const id = [item.id, item.value, item.variant].find((value) => typeof value === "string" && value);
+        if (id) out.push({ id, label: poseModelLabel(id, item.label || item.title) });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * «Modelo de poses»: solo si esta Sonnia tiene algún juego que mira el cuerpo. La
+   * primera opción es el de la app (sin ajuste en la nube); elegirla lo borra.
+   */
+  function renderPoseModel(status, list) {
+    const usesPoses = list.some((game) => Array.isArray(game.needs) && game.needs.includes("poses"));
+    setHidden(ui.gamePose, !usesPoses);
+    if (!usesPoses) return;
+    const info = poseModelInfo();
+    const options = poseOptions(info);
+    const fallback = info && typeof info.default === "string" ? info.default : "";
+    const key = JSON.stringify([fallback, options]);
+    if (key !== poseKey) {
+      poseKey = key;
+      const appLabel = fallback ? `El de la app: ${uncapitalize(poseModelLabel(fallback))}` : "El de la app";
+      ui.gamePoseSelect.replaceChildren(
+        el("option", { value: "", text: appLabel }),
+        ...options.map((option) => el("option", { value: option.id, text: option.label })),
+      );
+    }
+    const saved = typeof status.games_pose_model === "string" ? status.games_pose_model : "";
+    if (!isLocked(ui.gamePoseSelect) && ui.gamePoseSelect.value !== saved) ui.gamePoseSelect.value = saved;
+    const current = info && typeof info.current === "string" ? info.current : "";
+    let help = "Para los juegos que miran el cuerpo (Simón dice con poses y piedra, papel o tijera). " +
+      "El ligero gasta la mitad de CPU con la pantalla en marcha; el preciso acierta algo más con gente tapada. " +
+      "Vale para todas las Sonnias.";
+    if (current) help += ` En uso ahora: ${uncapitalize(poseModelLabel(current))}.`;
+    setText(ui.gamePoseHelp, help);
+  }
+
+  async function onPoseModelChange() {
+    const select = ui.gamePoseSelect;
+    const model = select.value;
+    const saved = app.status && typeof app.status.games_pose_model === "string" ? app.status.games_pose_model : "";
+    lockControl(select);
+    const result = await sendAction("set_game_pose_model", { model }, { button: select });
+    if (!result.ok) select.value = saved;
+    lockControl(select);
   }
 
   // ------------------------------------------------------------ bancos de los juegos
@@ -2978,6 +3059,7 @@
     ui.gameBankSaveBtn.addEventListener("click", onGameBankSave);
     ui.gameBankResetBtn.addEventListener("click", onGameBankReset);
     ui.gameBankInput.addEventListener("input", renderGameBankState);
+    ui.gamePoseSelect.addEventListener("change", onPoseModelChange);
 
     trackDragging(ui.volumeInput);
     ui.volumeInput.addEventListener("input", () => {

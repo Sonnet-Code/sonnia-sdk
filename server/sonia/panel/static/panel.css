@@ -862,6 +862,21 @@ summary:focus-visible,
   margin: 8px 0 0;
 }
 
+.game-pose {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.game-pose-label {
+  font-weight: 700;
+}
+
+.game-pose-help {
+  margin: 8px 0 0;
+  font-size: 15px;
+}
+
 #juegos > .row {
   margin-top: 4px;
 }

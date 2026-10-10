@@ -21,6 +21,7 @@ import pytest
 
 from sonia.games import BankParse, Game, GameBank, GameError
 from sonia.games.banks import BANK_MAX_CHARS, markdown_sections
+from sonia.games.manager import GameManager
 from sonia.panel import control as control_module
 from sonia.panel.control import EMPTY_GAME_BANK, SHARED_SETTINGS, PanelState
 from sonia.panel.server import STATIC_DIR
@@ -558,25 +559,111 @@ async def test_preparar_voces_graba_tambien_las_frases_de_los_juegos(
 
 
 # ---------------------------------------------------------------------------
+# Modelo de poses (games_pose_model)
+# ---------------------------------------------------------------------------
+
+
+class PoseModelCalls:
+    """``GameManager.set_pose_model`` falso: apunta las variantes que le llegan
+    (``None``: el de la app, ``GAME_POSES_MODEL``)."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.calls: list[str | None] = []
+        calls = self.calls
+
+        def set_pose_model(manager: GameManager, variant: str | None) -> None:
+            calls.append(variant)
+
+        monkeypatch.setattr(GameManager, "set_pose_model", set_pose_model, raising=False)
+
+
+async def test_el_modelo_de_poses_se_cambia_desde_el_panel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pose = PoseModelCalls(monkeypatch)
+    async with make_panel_rig(tmp_path, games=GAMES) as rig:
+        # Al arrancar, el de la app.
+        assert pose.calls == [None]
+        assert rig.control.status()["games_pose_model"] is None
+
+        ok, message = await rig.control.act("set_game_pose_model", {"model": "s"})
+        assert ok and "preciso" in message, message
+        assert pose.calls[-1] == "s"
+        assert rig.control.state.games_pose_model == "s"
+        assert rig.control.shared_settings()["games_pose_model"] == "s"
+        status = rig.control.status()
+        assert status["games_pose_model"] == "s"
+        assert status["settings_sync"]["pending"] == ["games_pose_model"]
+
+        ok, message = await rig.control.act("set_game_pose_model", {"model": "xl"})
+        assert not ok and pose.calls[-1] == "s"
+        ok, message = await rig.control.act("set_game_pose_model", {"model": 3})
+        assert not ok
+
+        # «Volver al de la app» borra el ajuste.
+        ok, message = await rig.control.act("set_game_pose_model", {"model": ""})
+        assert ok and "app" in message
+        assert pose.calls[-1] is None and rig.control.state.games_pose_model is None
+        ok, message = await rig.control.act("set_game_pose_model", {"model": "app"})
+        assert ok and "ya usan" in message
+    saved = PanelState.load(tmp_path / "cache" / "panel_state.json")
+    assert saved.games_pose_model is None
+
+
+async def test_el_modelo_de_poses_llega_de_la_nube_y_sobrevive_al_reinicio(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pose = PoseModelCalls(monkeypatch)
+    state = PanelState(games_pose_model="s")
+    async with make_panel_rig(tmp_path, games=GAMES, state=state) as rig:
+        assert pose.calls == ["s"]
+        assert rig.control.status()["games_pose_model"] == "s"
+        values = rig.control.shared_settings()
+        changed = await rig.control.apply_cloud_settings(
+            {**values, "games_pose_model": "n"}, rev=2, ack=0
+        )
+        assert changed == ["games_pose_model"] and pose.calls[-1] == "n"
+        # Lo que no es un modelo se ignora.
+        changed = await rig.control.apply_cloud_settings({"games_pose_model": "xxl"}, rev=3, ack=0)
+        assert changed == [] and rig.control.state.games_pose_model == "n"
+        changed = await rig.control.apply_cloud_settings({"games_pose_model": None}, rev=4, ack=0)
+        assert changed == ["games_pose_model"] and pose.calls[-1] is None
+
+
+async def test_sin_juegos_no_se_cambia_el_modelo_de_poses(tmp_path: Path) -> None:
+    async with make_panel_rig(tmp_path, games=[]) as rig:
+        ok, message = await rig.control.act("set_game_pose_model", {"model": "s"})
+        assert not ok and "no tiene juegos" in message
+        assert rig.control.state.games_pose_model is None
+
+
+# ---------------------------------------------------------------------------
 # Compatibilidad
 # ---------------------------------------------------------------------------
 
 
 def test_los_ajustes_de_los_juegos_son_compartidos_y_un_estado_viejo_carga(tmp_path: Path) -> None:
-    assert "games_off" in SHARED_SETTINGS and "game_banks" in SHARED_SETTINGS
+    assert {"games_off", "game_banks", "games_pose_model"} <= set(SHARED_SETTINGS)
     # El estado de una Sonnia anterior a los juegos (sin las claves nuevas).
     path = tmp_path / "panel_state.json"
     path.write_text(json.dumps({"mode": "greeter", "volume": 0.5}), encoding="utf-8")
     state = PanelState.load(path)
     assert state.games_off == [] and state.game_banks is None and state.mode == "greeter"
+    assert state.games_pose_model is None
     # Lo mal formado en disco no rompe la carga.
-    path.write_text(json.dumps({"games_off": "quiz", "game_banks": ["x"]}), encoding="utf-8")
+    path.write_text(
+        json.dumps({"games_off": "quiz", "game_banks": ["x"], "games_pose_model": "z"}),
+        encoding="utf-8",
+    )
     state = PanelState.load(path)
-    assert state.games_off == [] and state.game_banks is None
+    assert state.games_off == [] and state.game_banks is None and state.games_pose_model is None
     # Y lo bueno vuelve igual.
-    PanelState(games_off=["quiz"], game_banks={"quiz_preguntas": CLOUD_BANK}).save(path)
+    PanelState(
+        games_off=["quiz"], game_banks={"quiz_preguntas": CLOUD_BANK}, games_pose_model="s"
+    ).save(path)
     state = PanelState.load(path)
     assert state.games_off == ["quiz"] and state.game_banks == {"quiz_preguntas": CLOUD_BANK}
+    assert state.games_pose_model == "s"
 
 
 def test_los_controles_de_los_juegos_llevan_su_capacidad() -> None:
@@ -595,11 +682,21 @@ def test_los_controles_de_los_juegos_llevan_su_capacidad() -> None:
     ):
         assert re.search(rf'id="{element}"[^>]*data-cap="game_banks"', page), element
     assert 'data-cap-note="games"' in page and 'data-cap-note="game_banks"' in page
+    # El modelo de poses, solo en las Sonnias que lo anuncian.
+    assert re.search(r'id="game-pose-select"[^>]*data-cap="game_pose_model"', page)
+    assert 'data-cap-note="game_pose_model"' in page
     # Los botones de cada juego se crean con su capacidad (game:<id>) y los interruptores
     # con la de los juegos.
     assert '"data-cap": `game:${game.id}`' in script
     assert '"data-cap": "games"' in script
-    for action in ("game_start", "game_stop", "set_game_enabled", "game_bank", "set_game_bank"):
+    for action in (
+        "game_start",
+        "game_stop",
+        "set_game_enabled",
+        "game_bank",
+        "set_game_bank",
+        "set_game_pose_model",
+    ):
         assert f'"{action}"' in script, action
     # El editor no deja escribir más de lo que acepta el orquestador.
     assert re.search(rf'id="game-bank-input"[^>]*maxlength="{BANK_MAX_CHARS}"', page)
