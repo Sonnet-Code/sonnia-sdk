@@ -154,7 +154,12 @@ El sobre común del protocolo (`docs/protocolo.md`, «Juegos: `game`»):
 
 ## Cámara y visión
 
-Los contratos están en `server/sonia/vision/contracts.py` y los implementa el agente de visión (A1); mientras no estén, `build_game_vision` da todo «no disponible» y los juegos de cámara no se ofrecen. Tus tests usan `FakeVision`.
+Los contratos están en `server/sonia/vision/contracts.py` y los implementa `server/sonia/vision` (stream, vista en vivo, poses, manos y juez, con sus dibujos en `overlay.py`): detalle, modelos y medidas en `docs/juegos-vision.md`. Sin cámara USB (`VISION_SOURCE` distinto de `opencv`), sin los modelos o sin una Unity que anuncie `camera_preview`, `build_game_vision` da esa pieza «no disponible» y los juegos de cámara no se ofrecen. Tus tests usan `FakeVision`.
+
+Medido el 10 de octubre de 2026 en el Mac (M1 Pro, con la máquina cargada) con fotos públicas de Commons:
+- Poses: `s` unos 60 ms por detección (310 ms de CPU) y `n` unos 30 ms (120 ms de CPU). De frente detecta a casi todos (18 de 20 en dos filas, 5 de 5) y ninguna persona en salas vacías; pierde a quien solo asoma la cabeza.
+- Manos: 12 de 13 manos con gesto bien leídas (piedra, papel y tijera); falla con una mano pegada a la cámara.
+- Todo junto (poses a 8 por segundo, vista en vivo y manos): unos 3 núcleos con `s` y 1,4 con `n`. En el Mac no se puede limitar a menos núcleos; si el equipo del stand es el Mac o un portátil, `GAME_POSES_MODEL=n`.
 
 - Declara lo que necesitas en `needs`: el manager no ofrece el juego si falta (cámara USB, la Unity sin `camera_preview`, detectores o el modelo de visión).
 - Pide y suelta a tu nombre: `await host.stream.acquire(self.id)`, `await host.poses.acquire(self.id, fps)`, `await host.preview.start(self.id, overlay=...)`. Al terminar la partida el manager suelta `preview`, `poses` y `stream` a tu nombre, aunque se te olvide.
