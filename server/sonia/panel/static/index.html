@@ -199,6 +199,39 @@
         </details>
       </section>
 
+      <!-- ===== Juegos del stand (docs/juegos.md) ===== -->
+      <section class="card" id="juegos" aria-labelledby="juegos-title">
+        <h2 id="juegos-title">Juegos</h2>
+        <p class="help">Juegos en la pantalla de Sonnia, de uno en uno. También se los pueden pedir a ella: «¿jugamos a algo?». El interruptor de cada juego vale para todas las Sonnias: apagado, Sonnia no lo ofrece y no se puede empezar.</p>
+        <p class="trivia-state game-state" id="game-state" aria-live="polite">No hay ningún juego en marcha.</p>
+        <div class="game-list" id="game-list"></div>
+        <div class="row">
+          <button type="button" class="btn" id="game-stop-btn" data-cap="games" data-extra="game_active">Terminar juego</button>
+        </div>
+        <p class="note" id="game-note" hidden>Los juegos necesitan a Sonnia en «Conversando».</p>
+        <p class="cap-note" data-cap-note="games" hidden>Esta Sonnia no tiene juegos: hay que instalarle una versión más nueva de la app (o los tiene apagados en su configuración, GAMES_ENABLED).</p>
+        <details class="trivia-bank game-banks" id="game-banks">
+          <summary><span class="trivia-bank-title">Bancos de los juegos</span> <span class="summary-hint" id="game-bank-info"></span></summary>
+          <p class="help">Palabras, retos, adivinanzas… de cada juego. Lo que guardes aquí va a la nube y lo usan todas las Sonnias actualizadas desde su próxima partida, sin reiniciar. Cada banco explica su formato al principio, entre <code>&lt;!--</code> y <code>--&gt;</code>. Si está mal escrito o tiene pocas entradas, no se guarda y te dice por qué.</p>
+          <div class="row">
+            <label class="visually-hidden" for="game-bank-select">Banco</label>
+            <select id="game-bank-select" data-cap="game_banks"></select>
+            <button type="button" class="btn" id="game-bank-load-btn" data-cap="game_banks" data-extra="game_bank_chosen">Cargar para editarlo</button>
+          </div>
+          <p class="help game-bank-detail" id="game-bank-detail" hidden></p>
+          <div class="stack" id="game-bank-editor" hidden>
+            <label class="visually-hidden" for="game-bank-input">Banco del juego</label>
+            <textarea id="game-bank-input" class="trivia-bank-input" rows="16" maxlength="15000" spellcheck="false" data-cap="game_banks"></textarea>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="game-bank-save-btn" data-cap="game_banks" data-extra="game_bank_loaded">Guardar en la nube</button>
+              <button type="button" class="btn" id="game-bank-reset-btn" data-cap="game_banks" data-extra="game_bank_loaded">Volver al de la app</button>
+              <span class="save-state" id="game-bank-state" data-state="saved"></span>
+            </div>
+          </div>
+          <p class="cap-note" data-cap-note="game_banks" hidden>Esta Sonnia no tiene bancos de juegos: hay que instalarle una versión más nueva de la app.</p>
+        </details>
+      </section>
+
       <!-- ===== Imágenes de la galería ===== -->
       <section class="card" id="imagenes" aria-labelledby="imagenes-title">
         <h2 id="imagenes-title">Mostrar una imagen</h2>
@@ -397,8 +430,8 @@
         </details>
 
         <section class="adv-block" aria-labelledby="adv-cache-title">
-          <h3 id="adv-cache-title">Voces del modo saludos</h3>
-          <p class="help">Graba con la voz de Sonnia las frases fijas que usa en «Solo saludos». Necesita internet.</p>
+          <h3 id="adv-cache-title">Voces grabadas</h3>
+          <p class="help">Graba con la voz de Sonnia las frases fijas: las de «Solo saludos» y las de los juegos («¡Piedra, papel o tijera… ya!»), que así suenan al momento y sin gastar. Necesita internet.</p>
           <progress id="cache-progress" max="1" value="0"></progress>
           <p class="cache-text" id="cache-text">Sin datos</p>
           <p class="cache-error" id="cache-error" hidden></p>

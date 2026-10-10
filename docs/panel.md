@@ -14,7 +14,7 @@ El orquestador sigue sirviendo el mismo panel en `http://127.0.0.1:8780/` como r
 
 ## Dónde se guardan los ajustes
 
-Los ajustes son de Sonia, no de un equipo: el texto del letrero, los avisos del día, el volumen, la sensibilidad del micrófono, la voz, la animación de stand, los subtítulos, las animaciones que no usa por su cuenta, los de «Developer» (boca, cámara y movimiento en reposo), los personajes guardados en el editor (el de Sonia y el de Jean del Modo Jean) y el banco de preguntas de la trivia se guardan **en la nube** y valen para todas las Sonias (`SHARED_SETTINGS` en `server/sonia/panel/control.py`). Da igual desde dónde se cambien, el panel de Cloudflare o el local (`http://127.0.0.1:8780`): el orquestador los aplica al momento y los sube a la nube, que los reparte a las demás Sonias conectadas.
+Los ajustes son de Sonia, no de un equipo: el texto del letrero, los avisos del día, el volumen, la sensibilidad del micrófono, la voz, la animación de stand, los subtítulos, las animaciones que no usa por su cuenta, los de «Developer» (boca, cámara y movimiento en reposo), los personajes guardados en el editor (el de Sonia y el de Jean del Modo Jean), el banco de preguntas de la trivia, los juegos apagados (`games_off`) y los bancos de los juegos (`game_banks`) se guardan **en la nube** y valen para todas las Sonias (`SHARED_SETTINGS` en `server/sonia/panel/control.py`). Da igual desde dónde se cambien, el panel de Cloudflare o el local (`http://127.0.0.1:8780`): el orquestador los aplica al momento y los sube a la nube, que los reparte a las demás Sonias conectadas.
 
 Cada orquestador guarda además una copia en `cache/panel_state.json`, así que sin internet arranca con lo último que supo y lo que se cambie desde el panel local queda apuntado como pendiente (`pending_settings`) hasta que la nube lo confirma al volver la conexión. Si con la red caída se cambia algo aquí y otra Sonia cambia lo mismo, gana el último cambio que llega a la nube.
 
@@ -22,7 +22,21 @@ El modo (Conversando, Solo saludos, Fuera), el modo debug y el gasto del día so
 
 El estado lo dice en `settings_sync`, y el panel lo muestra arriba de «Avanzado» y de «Developer»: guardado en la nube, guardando, sin conexión (con lo que falta por subir) o sin nube configurada (falta `PANEL_CLOUD_TOKEN`).
 
-La caché de voces guarda cada frase fija (saludos, frases y cantos del stand) leída una vez por GPT-Live con la voz configurada. Se rellena sola en segundo plano cuando hay clave y Sonia está en `conversation`, o con el botón "Preparar voces". Las frases del modo saludos están en `assets/showcase/saludos.md`.
+La caché de voces guarda cada frase fija (saludos, frases y cantos del stand, las del Modo Jean y las de los juegos) leída una vez por GPT-Live con la voz configurada. Se rellena sola en segundo plano cuando hay clave y Sonia está en `conversation`, o con el botón "Preparar voces" («Voces grabadas», en «Avanzado»). Las frases del modo saludos están en `assets/showcase/saludos.md`; las de los juegos las da cada juego (`Game.phrases()`, juntas en `GameManager.fixed_phrases()`), y como algunas salen de sus bancos, el panel las vuelve a leer en un hilo al arrancar, al cambiar un banco y antes de grabar.
+
+## Juegos
+
+La tarjeta «Juegos» lleva los juegos del stand (`docs/juegos.md`), uno cada vez y nunca a la vez que la trivia:
+
+- **Un botón por juego** para empezarlo (`game_start`), igual que si lo pidiera un visitante: Sonia lo cuenta en cuanto calla. Solo en «Conversando», sin modo debug, sin editor de personaje, sin Modo Jean y con la pantalla conectada; lo demás lo mira el `GameManager` (otro juego o la trivia en marcha, la pantalla que no sabe pintarlo, la cámara, la sesión de voz). Si un juego no se puede, debajo sale por qué. Los que usan la cámara llevan la etiqueta «Cámara».
+- **«Terminar juego»** (`game_stop`) y el estado de la partida en marcha: el juego, el tiempo y en qué va (el `summary` del `snapshot()` del juego si lo trae, un texto para el panel; si no, sus datos sencillos).
+- **Un interruptor por juego** (`set_game_enabled`), guardado en la nube como `games_off` (la lista de los apagados): si un juego falla en el stand, se apaga desde el móvil sin reinstalar y vale para todas las Sonias. Apagado, no se ofrece a GPT-Live ni se puede empezar; si se estaba jugando, se termina (el panel pide confirmación). Se guardan también los ids que esta Sonia no conoce: son de otras más nuevas.
+- **«Bancos de los juegos»**, como «Banco de preguntas» de la trivia: se elige el banco, se carga el que está en uso (`game_bank`: el de la nube o el de la app, `assets/games/<juego>/<archivo>.md`), se edita y se guarda (`set_game_bank`). Antes de guardarlo, el orquestador lo valida con el analizador del juego (`GameManager.validate_bank`): con más de 15 000 caracteres o menos entradas válidas que su mínimo no se guarda y el panel dice por qué; si se salta alguna entrada mal escrita, lo avisa. Se guarda en la nube en `game_banks` (`{banco: texto}`, junto a los bancos de otras Sonias) y sale desde la próxima partida en todas las actualizadas. «Volver al de la app» lo borra de la nube.
+
+Capacidades (`data-cap`): `games` (el interruptor y «Terminar juego»), `game:<id>` (el botón de cada juego, solo si la pantalla conectada lo anuncia en `client_hello.games`) y `game_banks` (los bancos). Un juego apagado sigue en las capacidades para poder encenderlo otra vez. Compatibilidad:
+- Las Sonias anteriores a los juegos (1.0.195 y antes) ignoran `games_off` y `game_banks` y no mandan `games` en el estado: el panel nuevo enseña la tarjeta con sus controles desactivados y la nota de que hay que actualizar la app.
+- Un panel anterior con una Sonia nueva ignora la tarjeta: no se rompe nada.
+- Sin juegos encendidos (`GAMES_ENABLED=false`, ninguno en `games/registry.py` o en una videollamada) no hay capacidades de juegos y el estado trae `games: {"enabled": false}`.
 
 ## Ver cámara
 
@@ -174,7 +188,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
 ```
 
 - `health.*.ok` es `true`, `false` o `null` (no aplica, por ejemplo la cámara desactivada o GPT-Live en modo saludos). `label` es una frase corta para el operador y `hint`, si no está bien, qué hacer.
-- `capabilities` dice qué controles funcionan; la página desactiva los que no estén en la lista y muestra una nota junto a ellos.
+- `capabilities` dice qué controles funcionan; la página desactiva los que no estén en la lista y muestra una nota junto a ellos. Con juegos se suman `games`, `game:<id>` (los que anuncia la pantalla conectada) y `game_banks`.
 - `image` es `null` o `{"id": "oficinas", "caption": "..."}`; `last_error` es `null` o un texto.
 - `animations` es la lista que mandó Unity al conectar (vacía si la app de Unity es anterior a este mensaje o aún no se ha conectado). `current_animation` es el clip que suena según `animation_playing` (`null` si ninguno o sin pantalla) y `disabled_animations`, los que Sonia no usa por su cuenta.
 - `health.mic.level` es el nivel RMS del micrófono (0 a 1, con decaimiento rápido), la misma escala que `mic_gate`. Llega con el estado cada medio segundo.
@@ -198,6 +212,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   - `live`: si la cámara sale ahora del stand (sala conectada y alguien mirando).
   - `video`: las estadísticas del vídeo.
 - `trivia` (modo trivia, ver `docs/trivia.md`): `available`, si hay preguntas suficientes en `assets/trivia/preguntas.md` (si la trivia está apagada con `TRIVIA_ENABLED=false`, no aparece `trivia` en `capabilities`); `active`; `phase` (`off`, `asking` esperando respuesta o `revealing` con el resultado en pantalla); `number` y `total`; `threshold`, los aciertos para ganar; `score`, y la pregunta en curso con sus tres `options`. Además `bank` (preguntas válidas del banco en uso), `bank_source` (`cloud` si es el guardado desde el panel, `app` si es el archivo de la app) y `bank_levels` (cuántas hay de cada nivel); las Sonias anteriores al banco en la nube no los mandan ni tienen la capacidad `trivia_bank`.
+- `games` (juegos del stand, ver «Juegos» y `docs/juegos.md`): `GameManager.snapshot()`. `enabled`; `active` (id del juego en pantalla o `null`), `title`, `phase` (`off`, `playing` o `finishing`, enseñando el resultado), `elapsed_s` y `state` (el `snapshot()` del juego; con `summary`, el texto que enseña el panel); `games`, cada uno con `id`, `title`, `needs`, `off` (apagado desde el panel), `available` y `reason` (por qué no se puede, para el panel); `games_off`; `banks`, cada uno con `id`, `game`, `title`, `file`, `min_entries` y `source` (`cloud` o `app`); `unity_games` (lo que anunció la pantalla, `null` si nada o una anterior a los juegos) y `preview` (si la pantalla sabe enseñar la cámara en vivo). Sin juegos, `{"enabled": false}`; las Sonias anteriores no lo mandan.
 - `gesture_director` (gestos al hablar, ver `docs/gestos.md`): `null` si está apagado (`GESTURES_ENABLED=false` o sin clave para su modelo). Si no, contadores desde que arrancó el orquestador: `catalog`, cuántos gestos mandó Unity; `requests`, peticiones al modelo; `gestures`, gestos mandados a Unity (de ellos, `fallbacks` de relleno); `none`, frases en las que eligió no gesticular (incluidos `unknown`, respuestas que no eran un gesto, y `vetoed`, gestos que tiró la regla de frecuencia); `late`, gestos que llegaban tarde; `failures`, fallos o esperas agotadas del modelo; `avg_latency_s`, lo que tarda de media, y `last`, el último gesto. Solo informativo: la página aún no lo muestra.
 - `settings_sync`: `cloud` es `off` (sin `PANEL_CLOUD_TOKEN`), `offline` u `online`; `synced`, si ya llegaron los ajustes de la nube en esta conexión; `pending`, los ajustes cambiados aquí que la nube aún no ha confirmado, y `rev`, la última revisión de la nube aplicada.
 
@@ -244,13 +259,18 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `set_guest_mode` | `active`: bool | Modo Jean: Sonia presenta a Jean y le deja el sitio, o él se despide y vuelve ella. Necesita la nube y la pantalla conectada. |
 | `watch_camera` | `active`: bool; `keepalive` opcional | «Ver cámara»: abre la sala solo con vídeo (o la renueva) y, con `false`, la deja cerrarse en cuanto no quede nadie mirando. No toca GPT-Live, Unity ni el micro. |
 | `guest_animation` | `clip` | Un gesto del avatar de Jean (con el invitado en el stand). |
-| `prepare_voices` | | Graba las frases que falten en la caché de voces. |
+| `prepare_voices` | | Graba las frases que falten en la caché de voces: las del stand y las de los juegos. |
 | `trivia_start` | | Empieza una trivia (la misma partida que pide un visitante por voz). Solo en «Conversando», con la pantalla conectada y sin Modo Jean, editor ni modo debug. |
 | `trivia_restart` | | Reinicia la trivia: una partida nueva desde la primera pregunta (corta la que haya). |
 | `trivia_answer` | `option`: `A`, `B`, `C` o `pass` | Contesta por el visitante (si con el ruido Sonia no le entiende); `pass` es «no lo sabe». |
 | `trivia_stop` | | Termina la trivia en curso. |
 | `trivia_bank` | | Devuelve en `message` el banco de preguntas en uso, entero y con el formato de `assets/trivia/preguntas.md` (el de la nube o el de la app), para editarlo. |
 | `set_trivia_bank` | `text` (hasta 100 000 caracteres) | Guarda el banco en la nube (ajuste compartido `trivia_bank`) para todas las Sonias actualizadas, desde su próxima partida. Se rechaza si no llega a las preguntas de una partida; avisa de las mal formadas y de los niveles cortos. Vacío vuelve al banco de la app. |
+| `game_start` | `game`: un id de `games.games` | Empieza ese juego (la misma partida que pide un visitante por voz). Solo en «Conversando», con la pantalla conectada y sin Modo Jean, editor ni modo debug; si no se puede (otro juego o la trivia en marcha, apagado, la pantalla no lo pinta, sin cámara...), dice por qué. Si ya se está jugando a ese, no hace nada. |
+| `game_stop` | | Termina el juego en marcha: Sonia lo cuenta en una frase y vuelve a conversar. |
+| `set_game_enabled` | `game`, `enabled`: bool | Enciende o apaga ese juego en todas las Sonias (ajuste compartido `games_off`). Apagado no se ofrece ni se puede empezar; si se estaba jugando, se termina. |
+| `game_bank` | `bank`: un id de `games.banks` | Devuelve en `message` el banco en uso, entero y con su formato (el de la nube o el de la app), para editarlo. Si no tiene texto, un comentario `<!-- … -->` para empezarlo. |
+| `set_game_bank` | `bank`, `text` (hasta 15 000 caracteres) | Guarda ese banco en la nube (ajuste compartido `game_banks`) para todas las Sonias actualizadas, desde su próxima partida. Antes lo valida el analizador del juego: si pasa del tope o no llega a su mínimo de entradas válidas, no se guarda; avisa de las que se salta. Vacío vuelve al de la app. |
 
 ### `WS /api/events`
 
@@ -311,8 +331,8 @@ El Durable Object guarda un único documento de ajustes (clave `settings` de su 
 - Al recibir un `hello` con `settings`, si aún no hay documento, esa Sonia lo siembra con todos sus `values`; si ya lo hay, solo se mezclan sus `pending` (lo que cambió sin conexión). Siempre se le contesta con `settings`.
 - Al recibir `settings` con `changes`, los mezcla, sube `rev` y lo guarda (una escritura) si algo cambió de verdad; contesta a esa Sonia con su `ack` y reparte el documento a las demás conectadas.
 - Una Sonia anterior a esto (su `hello` sin `settings`) ni siembra ni recibe ajustes.
-- Tope de 256 KB en JSON (el banco de la trivia, el ajuste más grande, se limita a 100 000 caracteres).
-- Las Sonias ignoran los ajustes que no conocen: una app anterior al banco de la trivia en la nube recibe `trivia_bank` y sigue con su archivo.
+- Tope de 256 KB en JSON (`MAX_SETTINGS_BYTES`): el banco de la trivia, el ajuste más grande, se limita a 100 000 caracteres y cada banco de los juegos a 15 000. Si un cambio no cabe, la nube lo descarta sin avisar (y la Sonia vuelve a lo de la nube al confirmarlo), así que el orquestador lo comprueba antes de guardar un banco: con todos los ajustes por encima de 250 000 caracteres (`SHARED_SETTINGS_MAX_CHARS`), no lo guarda y lo dice.
+- Las Sonias ignoran los ajustes que no conocen: una app anterior al banco de la trivia en la nube recibe `trivia_bank` y sigue con su archivo, y una anterior a los juegos recibe `games_off` y `game_banks` y no los toca. El Durable Object no mira las claves: no hubo que cambiarlo para los juegos.
 
 ### API del navegador en Cloudflare
 
@@ -321,7 +341,7 @@ Es la misma API del panel local con un parámetro `instance` (el `id` de la Soni
 - `GET /api/instances` → `{"instances": [...], "conflicts": {"connected": ["id1", "id2"], "conversing": ["id1", "id2"]}}`. Cada instancia: `id`, `name`, `host`, `connected`, `last_seen` (ms desde 1970), `mode`, `state`, `engine`, `healthy` (bool), `issues` (frases de lo que falla), `cost_usd`. Incluye las desconectadas vistas en las últimas 2 horas.
 - `GET /api/status?instance=<id>` → la instantánea de esa Sonia más `"instance": {...}`. 404 si no se conoce.
 - `GET /api/gallery?instance=<id>` → `{"images": [{"id", "url"}]}`: ids que mandó esa Sonia; las imágenes se sirven desde los estáticos del Worker (`/gallery/<archivo>`, copiadas de `assets/gallery` al desplegar). Un id sin archivo en Cloudflare sale sin miniatura.
-- `POST /api/action` con `{"instance": "<id>", "action": ..., ...}` y la cabecera `X-Sonia-Panel: 1` → `{"ok", "message"}`. Cuerpo de hasta 320 KB (cabe el banco de la trivia). 503 si esa Sonia no está conectada, 504 si no contesta en 15 s.
+- `POST /api/action` con `{"instance": "<id>", "action": ..., ...}` y la cabecera `X-Sonia-Panel: 1` → `{"ok", "message"}`. Cuerpo de hasta 320 KB (cabe el banco de la trivia; los de los juegos, de 15 000 caracteres, de sobra). 503 si esa Sonia no está conectada, 504 si no contesta en 15 s.
 - `WS /api/events?instance=<id>` → igual que el local (`history`, `status`, `message`, `log` de esa Sonia) más `{"type": "instances", ...}` (misma forma que `GET /api/instances`) al conectar y cada vez que cambia la lista o el modo de alguna. El navegador puede mandar `{"type": "select", "instance": "<id>"}` para cambiar de Sonia sin reconectar.
 - `WS /api/guest?instance=<id>` → sala de vídeo de esa Sonia (Durable Object `GuestRoom`, uno por Sonia), para el Modo Jean y para «Ver cámara». Recibe:
   - la cámara del stand en JPEG;
