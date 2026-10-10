@@ -337,8 +337,17 @@ Cada agente apunta los de su juego en su tabla (además de `start` y `end`). En 
 
 ##### `ruleta` (La ruleta de Sonnia, `docs/juegos/ruleta.md`)
 
+Las casillas van siempre en este orden (`segment` es su índice): `0` trivia relámpago, `1` adivinanza geek, `2` explica en 20 segundos, `3` predice el futuro de la IA y `4` reto sorpresa de Sonnet Code. `spin` es el número de la vuelta en la partida (1, 2...). Los textos ya vienen con «Sonnia».
+
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `start` | → Unity | `title`, `segments`: `[{id, label, title, icon, off}]` (`id`: `trivia`, `adivinanza`, `explica`, `futuro` o `sonnet`; `label`, el texto de la casilla, «Trivia relámpago»; `title`, el de la tarjeta del reto, «TRIVIA RELÁMPAGO»; `icon`: `bolt`, `riddle`, `mic`, `crystal` o `star`; `off`: sin reto en esta partida, apagada) | sí (el de la partida) | Monta la ruleta quieta en la tarjeta común. |
+| `spin` | → Unity | `spin`, `segment` (la casilla de destino), `duration_s` (4,6), `wins` (retos superados) | sí | Gira y frena hasta `segment`; al parar, `wheel_stopped`. Repetido con el mismo `spin` (reconexión), se ignora. |
+| `wheel_stopped` | → orquestador | `spin`, `segment` | — | La ruleta paró. Si no llega en `duration_s` + 3 s, el orquestador sigue solo; uno de otra vuelta o tarde se ignora, y la casilla la manda el orquestador. |
+| `challenge` | → Unity | `spin`, `segment`, `kind` (el `id` de la casilla), `title`, `prompt` (la pregunta, la adivinanza, la tecnología, la pregunta del futuro o el reto), `wins`; según el reto: `options` (las tres de la trivia), `tries` y `misses` (intentos y fallos), `hint` (la pista, vacía hasta que sale), `task` (Sonnet Code: reto de stand y no pregunta), `timer` (`{seconds, running}`: el contador empieza a correr con `running`) y `time_up` (explica: se acabó el tiempo) | sí | La tarjeta del reto. Mientras se juega llega otra vez con lo que cambia (la pista, un fallo, el contador, el «¡Tiempo!»). Si llega con la ruleta aún girando, la ruleta para ya en `segment`; si llega de una vuelta que Unity no vio girar, la pinta con la ruleta ya parada. |
+| `result` | → Unity | lo de `challenge` sin `timer`, más `outcome` (`win`, `lose`, `pass`: se rindieron, o `done`: la nota y la predicción) y lo de cada reto: `chosen` y `correct` (trivia; `chosen` -1 si no lo sabía), `answer` (la solución de la adivinanza y de la pregunta de Sonnet Code), `score` (la nota, 1 a 10) o `prediction` y `probability` (0 a 100) | sí | El resultado en la tarjeta, el rótulo, el confeti y la reacción de Sonnia. Se queda hasta el siguiente `spin` o el `end`. |
+
+`end` llega con `cancel` (la ruleta no termina sola: `stop_game`, el panel o el abandono) y la pantalla se retira al momento.
 
 ##### `poses` (Simón dice con poses, `docs/juegos/poses.md`)
 
@@ -359,6 +368,12 @@ Cada agente apunta los de su juego en su tabla (además de `start` y `end`). En 
 
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `start` | orquestador → Unity | `{"title": "Wordle de tecnología", "rows": 6, "cols": 5, "hint_after": 4}` | sí | Monta la rejilla vacía de `rows`×`cols` (3 a 8 filas), la pista candada («sale tras `hint_after` intentos»; sin pista si `hint_after` es 0 o no cabe) y las 26 letras sin usar. |
+| `guess` | orquestador → Unity | `{"row": 2, "letters": "LINUX", "marks": "gyxxg", "board": [{"letters": "CLOUD", "marks": "xyyxx"}, ...], "used": {"g": "LX", "y": "IO", "x": "CDNU"}, "hint": "", "result": "", "word": ""}` | sí | Un intento: las letras entran en la fila `row` (desde 0), las fichas se voltean con sus `marks` (`g` verde, `y` amarilla, `x` gris) y sale la pista si viene en `hint`. Lleva el **estado completo**: `board` con todas las filas hasta esta (para repintar tras reconectar, sin animar las ya vistas) y `used` con cada letra en su mejor color. `result` vale `win` o `lose` en el último intento y vacío mientras se juega; entonces `word` trae la palabra (y, al perder, `hint` trae siempre la pista); con `win`, confeti. |
+| `invalid` | orquestador → Unity | `{"letters": "WEB", "reason": "length", "message": "Tienen que ser 5 letras"}` | no | La palabra no vale y no gasta intento: la primera fila libre se sacude con lo que se entendió (`letters`, hasta cinco letras, puede venir vacío) y un rótulo de una línea dice `message` (de 25 caracteres como mucho). `reason`: `length`, `chars`, `empty` o `repeated`. |
+| `end` | orquestador → Unity | `{"word": "KAFKA", "attempts": 3, "result": "win"}` | no | El final común (lo manda el manager tras `finish`): Unity enseña su tarjeta de resultado con la palabra y los intentos y se retira. `result`: `win` o `lose` (o `cancel`, sin más datos). |
+
+Unity no manda ningún `game_event` en este juego. Una Unity sin el controlador ignora todo esto.
 
 ##### `busqueda` (Búsqueda relámpago, `docs/juegos/busqueda.md`)
 
