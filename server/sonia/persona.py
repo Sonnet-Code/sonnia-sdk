@@ -5,15 +5,21 @@ y lo que cuenta de sí misma. ``sonia/live/prompts.py`` le añade las reglas de
 la voz en tiempo real, el conocimiento y el stack. El conocimiento del evento,
 del GDG, del lugar y de Sonnet Code vive en archivos Markdown de
 ``assets/knowledge`` para que el equipo lo edite sin tocar código.
+
+La persona y cada archivo de conocimiento son además piezas editables desde el panel
+(``sonnia/persona`` y ``conocimiento/<archivo>``, ver ``sonia/prompts``): si hay una versión
+de la nube que vale, se usa esa en lugar del texto de la app.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
 from sonia.paths import BUNDLE_ROOT
+from sonia.prompts import BOOK, PROMPT_ID
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +70,37 @@ Tu aspecto (si te preguntan cómo eres o qué llevas puesto; no te describas sin
 KnowledgeSource = str | Path | Sequence[str | Path] | None
 
 
+def knowledge_files(directory: Path) -> list[Path]:
+    """Los archivos de conocimiento de una carpeta, en orden alfabético y sin el ``README.md``."""
+    if not directory.is_dir():
+        return []
+    return [path for path in sorted(directory.glob("*.md")) if path.name.lower() != "readme.md"]
+
+
+def knowledge_prompt_id(path: Path) -> str | None:
+    """Id de la pieza editable de un archivo de conocimiento (``conocimiento/04-sonnet-code``),
+    o ``None`` si su nombre no da un id válido."""
+    slug = re.sub(r"[^a-z0-9_.-]+", "-", path.stem.lower()).strip("-._")
+    prompt_id = f"conocimiento/{slug}"
+    return prompt_id if PROMPT_ID.match(prompt_id) else None
+
+
+def _cloud_knowledge(path: Path, text: str) -> str:
+    """El texto de un archivo del stand: su versión de la nube si hay una que vale; si no, el
+    del archivo. Nunca los dos."""
+    prompt_id = knowledge_prompt_id(path)
+    if prompt_id is None or prompt_id not in BOOK or BOOK.source(prompt_id) != "nube":
+        return text
+    return BOOK.text(prompt_id, fallback=text).strip()
+
+
 def load_knowledge(knowledge_dir: KnowledgeSource = None) -> str:
     """Concatena los archivos ``*.md`` de la base de conocimiento, en orden alfabético.
 
     Con varias carpetas, una detrás de otra. ``README.md`` se ignora. Si no hay
     nada, devuelve una cadena vacía y Sonia funciona solo con el prompt base.
+    Los archivos de la primera carpeta (la del stand) se pueden cambiar desde el panel
+    (``conocimiento/<archivo>``); los de las demás (datos de prueba) no.
     """
     if knowledge_dir is None:
         directories = [DEFAULT_KNOWLEDGE_DIR]
@@ -77,17 +109,15 @@ def load_knowledge(knowledge_dir: KnowledgeSource = None) -> str:
     else:
         directories = [Path(d) for d in knowledge_dir]
     parts: list[str] = []
-    for directory in directories:
-        if not directory.is_dir():
-            continue
-        for path in sorted(directory.glob("*.md")):
-            if path.name.lower() == "readme.md":
-                continue
+    for index, directory in enumerate(directories):
+        for path in knowledge_files(directory):
             try:
                 text = path.read_text(encoding="utf-8").strip()
             except OSError as exc:
                 logger.warning("No se pudo leer %s: %s", path, exc)
                 continue
+            if index == 0:
+                text = _cloud_knowledge(path, text)
             if text:
                 parts.append(text)
     return "\n\n".join(parts)

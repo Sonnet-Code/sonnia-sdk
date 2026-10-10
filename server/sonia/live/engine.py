@@ -63,6 +63,7 @@ from sonia.live.prompts import (
 from sonia.live.vision import VisionNarrator
 from sonia.live.voicecache import VoiceCache
 from sonia.persona import KnowledgeSource
+from sonia.prompts import BOOK
 from sonia.showcase import Showcase
 from sonia.trivia import TriviaGame
 from sonia.types import (
@@ -222,6 +223,29 @@ MOMENT_FOCUS = {
         "interrumpirte para ver que hablas en tiempo real."
     ),
 }
+
+#: Id de la pieza editable (``sonia.prompts``) de cada ``MOMENT_FOCUS``.
+MOMENT_FOCUS_IDS = {
+    "agenda": "animacion/momento/agenda",
+    "cámara": "animacion/momento/camara",
+    "invitación": "animacion/momento/invitacion",
+}
+
+
+def showcase_prompt(text: str) -> str:
+    """Cómo se le pide a GPT-Live una frase del stand (pieza ``animacion/frase``)."""
+    return BOOK.render("animacion/frase", fallback=SHOWCASE_TEMPLATE, text=text)
+
+
+def moment_focus(kind: str, text: str = "") -> str:
+    """De qué tira un momento (``agenda``, ``cámara`` o ``invitación``), con su texto."""
+    return BOOK.render(MOMENT_FOCUS_IDS[kind], fallback=MOMENT_FOCUS[kind], text=text)
+
+
+def moment_prompt(focus: str) -> str:
+    """Cómo se le pide a GPT-Live un momento del stand (pieza ``animacion/momento``)."""
+    return BOOK.render("animacion/momento", fallback=MOMENT_TEMPLATE, focus=focus)
+
 
 #: Tope para preparar un momento (la foto y su descripción): mientras, no sale otro número.
 MOMENT_PREP_S = 15.0
@@ -1221,7 +1245,10 @@ class LiveEngine:
                         "type": "message",
                         "role": "user",
                         "content": [
-                            {"type": "input_text", "text": LOOK_IMAGE_TEXT},
+                            {
+                                "type": "input_text",
+                                "text": BOOK.text("vision/look", fallback=LOOK_IMAGE_TEXT),
+                            },
                             {
                                 "type": "input_image",
                                 "image_url": result.image.to_data_url(),
@@ -1620,7 +1647,7 @@ class LiveEngine:
 
     async def _request_showcase(self, client: LiveClient, text: str) -> None:
         try:
-            await client.append_commentary(SHOWCASE_TEMPLATE.format(text=text))
+            await client.append_commentary(showcase_prompt(text))
         except Exception as exc:  # noqa: BLE001
             logger.debug("No se pudo pedir el número del stand: %s", exc)
             self._ambient_expected_until = 0.0
@@ -1638,7 +1665,7 @@ class LiveEngine:
             await self._hub.broadcast_json(p.msg_attention(attention))
         self._ambient_expected_until = time.monotonic() + AMBIENT_WAIT_S
         try:
-            await client.append_commentary(MOMENT_TEMPLATE.format(focus=focus))
+            await client.append_commentary(moment_prompt(focus))
         except Exception as exc:  # noqa: BLE001
             logger.debug("No se pudo pedir el momento del stand: %s", exc)
             self._ambient_expected_until = 0.0
@@ -1664,12 +1691,12 @@ class LiveEngine:
         kind = options[self._moment_turn % len(options)]
         self._moment_turn += 1
         if kind == "agenda":
-            return MOMENT_FOCUS["agenda"].format(text=today)
+            return moment_focus("agenda", today)
         if kind == "cámara":
             text = await self._moment_scene()
             if text:
-                return MOMENT_FOCUS["cámara"].format(text=text)
-        return MOMENT_FOCUS["invitación"]
+                return moment_focus("cámara", text)
+        return moment_focus("invitación")
 
     async def _moment_scene(self) -> str:
         """Lo que ve ahora la cámara para un momento (vacío si no se pudo). La foto no se guarda."""
