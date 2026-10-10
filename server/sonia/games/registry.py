@@ -26,7 +26,15 @@ from sonia.games.wordle.game import WordleGame
 if TYPE_CHECKING:
     from sonia.config import Settings
 
-__all__ = ["GAMES", "GameEntry", "all_games", "enabled_games", "find_game", "games_line"]
+__all__ = [
+    "GAMES",
+    "GameEntry",
+    "all_games",
+    "enabled_games",
+    "find_game",
+    "games_line",
+    "games_line_for",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,7 +90,12 @@ def find_game(game_id: str) -> type[Game] | None:
 
 def games_line(games: Sequence[type[Game]]) -> str:
     """La línea de juegos de las instrucciones de GPT-Live (la única: las reglas llegan al empezar)."""
-    names = [g.spoken for g in games]
+    return games_line_for([g.spoken for g in games])
+
+
+def games_line_for(names: Sequence[str]) -> str:
+    """:func:`games_line` con los nombres ya puestos (los de ``Game.spoken``)."""
+    names = [n for n in names if n]
     if not names:
         return ""
     listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" y {names[-1]}"

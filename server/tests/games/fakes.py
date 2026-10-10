@@ -27,6 +27,7 @@ from sonia.config import Settings
 from sonia.games.banks import GameBank
 from sonia.games.base import INSTRUCT_MAX_CHARS, Game, GameResult
 from sonia.games.manager import GameManager
+from sonia.trivia.bank import TriviaQuestion
 from sonia.vision.contracts import (
     BODY_POINTS,
     GameVision,
@@ -322,6 +323,7 @@ class FakeGameHost:
     - ``clock``: el reloj (``now``/``sleep``); ``rng`` con semilla.
     - ``cloud_banks``: bancos «guardados en la nube» (``{banco: texto}``); si no, el
       archivo de la app en ``settings.games_dir/<game_id>/``.
+    - ``trivia_questions``: lo que dará ``draw_trivia`` (``TriviaQuestion``), en orden.
     """
 
     def __init__(
@@ -335,6 +337,7 @@ class FakeGameHost:
         recorded: Iterable[str] = (),
         connected: bool = True,
         clock: FakeClock | None = None,
+        trivia_questions: Iterable[TriviaQuestion] = (),
     ) -> None:
         self.game_id = game_id
         self.settings = settings or game_settings()
@@ -354,6 +357,9 @@ class FakeGameHost:
         self.finished: list[tuple[GameResult, dict[str, Any] | None]] = []
         self.touches = 0
         self.tasks: list[asyncio.Task[Any]] = []
+        #: Preguntas de la trivia que dará ``draw_trivia``, en orden.
+        self.trivia_questions: deque[TriviaQuestion] = deque(trivia_questions)
+        self.trivia_levels: list[str | None] = []
 
     # -- reloj ---------------------------------------------------------------
 
@@ -458,6 +464,11 @@ class FakeGameHost:
     async def load_bank(self, bank: GameBank[T]) -> list[T]:
         return self.read_bank(bank)
 
+    def draw_trivia(self, level: str | None = None) -> TriviaQuestion | None:
+        """La siguiente de ``trivia_questions`` (apunta el nivel pedido en ``trivia_levels``)."""
+        self.trivia_levels.append(level)
+        return self.trivia_questions.popleft() if self.trivia_questions else None
+
 
 def make_game[G: Game](cls: type[G], **kwargs: Any) -> tuple[G, FakeGameHost]:
     """Un juego suelto con su :class:`FakeGameHost` (``kwargs`` van al host)."""
@@ -560,6 +571,7 @@ async def make_manager(
     camera: bool = True,
     recorded: Iterable[str] = (),
     busy: Any = None,
+    trivia_draw: Any = None,
     seed: int = 1,
 ) -> tuple[GameManager, FakeEngine, FakeScreen, FakeClock]:
     """Un ``GameManager`` con motor, pantalla, visión y reloj falsos, y una Unity que ya
@@ -574,6 +586,7 @@ async def make_manager(
         games=games,
         camera_ready=lambda: camera,
         busy=busy,
+        trivia_draw=trivia_draw,
         rng=random.Random(seed),
         clock=clock,
         sleep=clock.sleep,

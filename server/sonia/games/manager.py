@@ -51,6 +51,7 @@ from sonia.ws import protocol as p
 if TYPE_CHECKING:
     from sonia.config import Settings
     from sonia.games.host import ManagedGameHost
+    from sonia.trivia.bank import TriviaQuestion
 
 __all__ = [
     "GameEngineLink",
@@ -177,6 +178,7 @@ class GameManager:
         camera_ready: Callable[[], bool] | None = None,
         meeting: bool = False,
         busy: Callable[[], str | None] | None = None,
+        trivia_draw: Callable[[str | None], TriviaQuestion | None] | None = None,
         rng: random.Random | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -188,6 +190,7 @@ class GameManager:
         - ``meeting``: Sonia está en una videollamada: no hay juegos.
         - ``busy``: por qué no se puede empezar un juego ahora por otra cosa (la trivia en
           marcha), o ``None``.
+        - ``trivia_draw``: una pregunta del banco de la trivia (``TriviaGame.draw_one``).
         - ``clock`` y ``sleep``: el reloj de los juegos (en los tests, uno falso).
         """
         from sonia.games.host import ManagedGameHost
@@ -205,6 +208,7 @@ class GameManager:
         self._camera_ready = camera_ready or (lambda: False)
         self._meeting = meeting
         self._busy = busy
+        self._trivia_draw = trivia_draw
         self._rng = rng or random.Random()
         self._clock = clock
         self._sleep = sleep
@@ -1038,6 +1042,16 @@ class GameManager:
         for warning in parsed.warnings:
             logger.warning("Banco %s (%s): %s", bank.id, source, warning)
         return list(parsed.entries)
+
+    def draw_trivia(self, level: str | None = None) -> TriviaQuestion | None:
+        """Una pregunta del banco de la trivia en uso, sin repetir (``GameHost.draw_trivia``)."""
+        if self._trivia_draw is None:
+            return None
+        try:
+            return self._trivia_draw(level)
+        except Exception:  # noqa: BLE001
+            logger.exception("No se pudo sacar una pregunta de la trivia")
+            return None
 
     async def load_bank(self, game_id: str, bank: GameBank[T]) -> list[T]:
         """Como :meth:`read_bank`, en un hilo."""

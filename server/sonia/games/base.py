@@ -37,6 +37,7 @@ from sonia.vision.contracts import (
 if TYPE_CHECKING:
     from sonia.config import Settings
     from sonia.games.banks import GameBank
+    from sonia.trivia.bank import TriviaQuestion
 
 __all__ = [
     "INSTRUCT_MAX_CHARS",
@@ -259,6 +260,15 @@ class GameHost(Protocol):
     def read_bank(self, bank: GameBank[T]) -> list[T]:
         """Como :meth:`load_bank`, pero síncrona (lee disco): solo desde un hilo o en
         :meth:`Game.phrases`."""
+        ...
+
+    def draw_trivia(self, level: str | None = None) -> TriviaQuestion | None:
+        """Una pregunta del banco de la trivia en uso (``TriviaGame.draw_one``).
+
+        Con las opciones barajadas y sin repetir hasta agotar el nivel (``fácil``,
+        ``intermedio`` o ``difícil``; sin nivel, el de ``TRIVIA_DEFAULT_LEVEL``).
+        ``None`` si la trivia está apagada o sin preguntas. La usa la ruleta.
+        """
         ...
 
 
