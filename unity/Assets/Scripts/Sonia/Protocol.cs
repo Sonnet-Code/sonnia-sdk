@@ -52,6 +52,9 @@ namespace Sonia
         public const string TriviaEnd = "trivia_end";
         public const string Activity = "activity";
 
+        /// <summary>Aviso de espera en pantalla (<see cref="BusyMessage"/>): lo pinta <see cref="BusyIndicator"/>.</summary>
+        public const string Busy = "busy";
+
         /// <summary>Sobre común de los juegos (docs/plan-juegos.md): lo reparte <see cref="GameRouter"/>.</summary>
         public const string Game = "game";
 
@@ -591,6 +594,44 @@ namespace Sonia
     public class ActivityMessage
     {
         [JsonProperty("activity")] public string Activity = ActivityNames.None;
+    }
+
+    /// <summary>Valores del campo <c>kind</c> del mensaje <c>busy</c>, de más a menos prioridad.</summary>
+    public static class BusyKinds
+    {
+        /// <summary>El juez de un juego mira la foto de la ronda.</summary>
+        public const string Judge = "judge";
+
+        /// <summary>La cámara de un juego arranca, hasta su primer frame.</summary>
+        public const string Camera = "camera";
+
+        /// <summary>Un juego se prepara, hasta su primera pantalla.</summary>
+        public const string Game = "game";
+
+        /// <summary>El backend busca en internet.</summary>
+        public const string Search = "search";
+
+        /// <summary>Hay una tarea delegada en el backend.</summary>
+        public const string Think = "think";
+    }
+
+    /// <summary>
+    /// Aviso de espera en pantalla («la gente se desespera», Jean, 10 de octubre
+    /// de 2026): una pastilla con puntos animados mientras Sonia espera algo que
+    /// el visitante no ve. Es el estado entero, no un cambio: con <c>on</c> se
+    /// enseña <c>text</c> (o se cambia si ya estaba) y sin él se quita. El
+    /// orquestador lo manda solo al cambiar y lo repite al reconectarse.
+    /// </summary>
+    [Serializable]
+    public class BusyMessage
+    {
+        [JsonProperty("on")] public bool On;
+
+        /// <summary>Tipo de espera (<see cref="BusyKinds"/>); vacío con <c>on: false</c>.</summary>
+        [JsonProperty("kind")] public string Kind = string.Empty;
+
+        /// <summary>Lo que dice la pastilla («Pensando…»); vacío con <c>on: false</c>.</summary>
+        [JsonProperty("text")] public string Text = string.Empty;
     }
 
     /// <summary>Volumen de la voz de Sonia. También fijo: se repite tras <c>hello</c>.</summary>
