@@ -173,6 +173,13 @@ la tarjeta común:
 - **Plan B**: `PptController.SoniaHandEnabled = false` quita la mano y la jugada de Sonnia sale
   solo en la tarjeta (por si en algún avatar los dedos no quedaran bien).
 
+**Cómo se validó la mano** (10 de octubre de 2026, Unity en batch sobre un clon, con el avatar de
+Genies de Sonnia y su camiseta de staff): un laboratorio de paso fijo (30 fps) subió el puño, contó y
+enseñó cada forma con capturas de cerca de cada dos fotogramas, de lado y desde arriba, además del
+plano 9:16. Así salieron dos fallos que una captura suelta no habría enseñado: durante la cuenta los
+dedos ya tenían la forma final (se veía el papel antes del «ya») y el puño se quedaba en garra. Los
+músculos del puño y de la tijera salieron de una galería de 16 variantes (pulgar y cierre).
+
 ## Pruebas y capturas
 
 - `server/tests/games/test_ppt.py`, sin red ni cámara:
