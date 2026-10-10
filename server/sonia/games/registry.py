@@ -62,7 +62,7 @@ GAMES: tuple[GameEntry, ...] = (
     GameEntry(WordleGame, on=True),
     #
     # A7: búsqueda relámpago (docs/juegos/busqueda.md).
-    GameEntry(BusquedaGame, on=False),
+    GameEntry(BusquedaGame, on=True),
 )
 
 

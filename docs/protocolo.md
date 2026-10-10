@@ -379,6 +379,15 @@ Unity no manda ningún `game_event` en este juego. Una Unity sin el controlador 
 
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `start` | → Unity | `{title, rounds, round_seconds, preview}` | sí | Monta la pantalla: `rounds` rondas de `round_seconds` segundos; `preview` dice que la vista en vivo ya está encendida (`camera_preview`). |
+| `round` | → Unity | `{index, total, object, color, seconds, found, phase: "ready"}` | sí | Ronda nueva, lista: la tarjeta con el objeto y el tiempo entero, parado. `index` desde 1; `object`, con su artículo («algo azul»); `color`, `#RRGGBB` o `""`; `found`, las rondas encontradas hasta ahora. |
+| `go` | → Unity | lo de `round` con `phase: "running"` | sí | El «¡Ya!»: arranca el contador de `seconds`. Estado completo de la ronda: tras reconectar repinta toda la pantalla. |
+| `checking` | → Unity | `{n, max}` | no | Va una foto al modelo de visión (la `n` de `max` de la ronda): el barrido de «mirando» sobre la vista en vivo. |
+| `found` | → Unity | lo de `round` con `phase: "found"`, `found` ya sumada, y `what` | sí | ¡Encontrado!: confeti, visto y `what`, lo que vio la cámara (solo el objeto, ya filtrado; si no vale, el `object` pedido). |
+| `timeout` | → Unity | lo de `round` con `phase: "timeout"` y `silent` | sí | ¡Tiempo!: se acabó sin verlo. Con `silent: true`, la cámara no contestó a ninguna mirada (no es que nadie lo trajera). |
+| `end` | → Unity | `{result, found, total, photos}` | no | El final (el común): `win` si encontraron la mitad o más, `lose` si no, `cancel` si se abandona o se cancela (también si la cámara falla dos rondas). `photos` son las fotos al modelo de visión de la partida. |
+
+Unity no manda ningún `game_event` en este juego.
 
 ### `error`
 
