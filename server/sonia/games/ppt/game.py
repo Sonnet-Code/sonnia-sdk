@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 import numpy as np
 
 from sonia.busy import TEXT_HAND
-from sonia.games.base import Game, GameError, GameHost, StopReason
+from sonia.games.base import INSTRUCT_MAX_CHARS, Game, GameError, GameHost, StopReason
 from sonia.games.ppt.logic import (
     MOVES,
     NO_HAND,
@@ -52,12 +52,13 @@ from sonia.games.ppt.logic import (
     ya_onset,
 )
 from sonia.games.ppt.overlay import OverlayState, draw_state
+from sonia.prompts import BOOK, PROMPT_MAX_LEN, PromptSpec
 from sonia.vision.contracts import HandShape, HandVerdict, Person, PoseFrame
 
 if TYPE_CHECKING:
     from sonia.config import PptSettings, Settings
 
-__all__ = ["PHRASE", "PptGame", "phrase_go_seconds"]
+__all__ = ["PHRASE", "PptGame", "phrase_go_seconds", "prompt_specs"]
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,139 @@ SAY_FAILED_TEXT = (
     "para otro momento."
 )
 
+#: Prefijo de las piezas editables desde el panel (``sonia.prompts``).
+PROMPT = "juegos/piedra_papel_tijera/"
+
+#: Qué rellenan los marcadores del marcador y del final.
+_SCORE_HELP = "{sonnia}: rondas que lleva ganadas Sonia; {player}: las que lleva el jugador."
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """Los textos de piedra, papel o tijera editables desde el panel (``sonia.prompts``). La
+    cuenta («¡Piedra, papel o tijera… ya!») es una frase grabada y sigue en el código, igual
+    que «gana el jugador» / «ganas tú» de cada resultado y el rótulo de la pantalla."""
+
+    def piece(
+        name: str,
+        title: str,
+        default: str,
+        *fields: str,
+        help: str = "",
+        required: tuple[str, ...] = (),
+        max_len: int = PROMPT_MAX_LEN,
+    ) -> PromptSpec:
+        return PromptSpec(
+            id=PROMPT + name,
+            group="Juego: Piedra, papel o tijera",
+            title=title,
+            default=lambda: default,
+            fields=fields,
+            required=required,
+            applies="ronda",
+            help=help,
+            max_len=max_len,
+        )
+
+    glued = "Va pegado detrás del resultado de la ronda. "
+    return [
+        piece(
+            "reglas",
+            "Reglas (las sabe sin decirlas, al empezar)",
+            RULES,
+            "rounds",
+            "target",
+            help="{rounds}: al mejor de cuántas rondas; {target}: victorias para ganar.",
+            max_len=INSTRUCT_MAX_CHARS,
+        ),
+        piece(
+            "presentacion",
+            "Presentación: lo que dice al empezar",
+            START_SCRIPT,
+            "rounds",
+            help="{rounds}: al mejor de cuántas rondas.",
+        ),
+        piece(
+            "reanudar",
+            "Si vuelven a pedir el juego a mitad de partida",
+            RESUME_SCRIPT,
+            "rounds",
+            "sonnia",
+            "player",
+            help="{rounds}: al mejor de cuántas rondas. " + _SCORE_HELP,
+        ),
+        piece(
+            "ronda_ganada",
+            "Resultado de una ronda con ganador",
+            THROW_DECIDED,
+            "round",
+            "sonnia",
+            "player",
+            "who",
+            help=(
+                "{round}: número de ronda; {sonnia}: lo que sacó Sonia; {player}: lo que sacó el "
+                "jugador (piedra, papel o tijera); {who}: «gana el jugador» o «ganas tú»."
+            ),
+            required=("who",),
+        ),
+        piece(
+            "ronda_empate",
+            "Resultado de una ronda empatada",
+            THROW_TIE,
+            "round",
+            "sonnia",
+            help="{round}: número de ronda; {sonnia}: lo que sacaron los dos.",
+        ),
+        piece("ronda_nula", "Ronda que no cuenta (no se vio la mano)", THROW_VOID),
+        piece(
+            "marcador",
+            "Tras una ronda con ganador, si la partida sigue",
+            GOES_ON.strip(),
+            "sonnia",
+            "player",
+            help=glued + _SCORE_HELP,
+        ),
+        piece(
+            "empate_sigue",
+            "Tras un empate, si la partida sigue",
+            TIE_GOES_ON.strip(),
+            help=glued.strip(),
+        ),
+        piece("repetir_sin_mano", "Se repite la ronda: no vio la mano", RETRY_NO_HAND),
+        piece("repetir_no_clara", "Se repite la ronda: la mano no estaba clara", RETRY_UNCLEAR),
+        piece(
+            "final_gana_jugador",
+            "Final: gana el jugador",
+            FINAL_PLAYER.strip(),
+            "sonnia",
+            "player",
+            "contact",
+            help=glued + _SCORE_HELP + " {contact}: a quién del equipo ver (Brian o Mariel).",
+        ),
+        piece(
+            "final_gana_sonia",
+            "Final: gana Sonia",
+            FINAL_SONNIA.strip(),
+            "sonnia",
+            "player",
+            "contact",
+            help=glued + _SCORE_HELP + " {contact}: a quién del equipo ver (Brian o Mariel).",
+        ),
+        piece(
+            "final_empate",
+            "Final: empate al acabarse las rondas",
+            FINAL_TIE.strip(),
+            "sonnia",
+            "player",
+            "contact",
+            help=glued + _SCORE_HELP + " {contact}: a quién del equipo ver (Brian o Mariel).",
+        ),
+        piece("nadie_delante", "Aviso: no hay nadie delante de la cámara", NO_PLAYER_TEXT),
+        piece("nadie_se_deja", "Se deja: sigue sin haber nadie delante", NO_PLAYER_CANCEL_TEXT),
+        piece("no_ve_la_mano", "Se deja: la cámara no ve la mano", CANT_SEE_TEXT),
+        piece("cuenta_falla", "Se deja: la cuenta no consigue sonar", SAY_FAILED_TEXT),
+    ]
+
+
 # -- control a mano desde el panel --------------------------------------------
 
 #: La jugada del visitante, puesta a mano en la tirada en curso (manda sobre la lectura).
@@ -308,7 +442,9 @@ class PptGame(Game):
 
     def rules(self) -> str:
         """Las reglas para GPT-Live (``instruct``, 1200 caracteres como mucho)."""
-        return RULES.format(rounds=self.rounds, target=self.target)
+        return BOOK.render(
+            PROMPT + "reglas", fallback=RULES, rounds=self.rounds, target=self.target
+        )
 
     # -- ciclo de vida ----------------------------------------------------------
 
@@ -330,11 +466,15 @@ class PptGame(Game):
         await host.send("start", self._base())
         await host.instruct(self.rules())
         host.spawn(self._run(), "match")
-        return START_SCRIPT.format(rounds=self.rounds)
+        return BOOK.render(PROMPT + "presentacion", fallback=START_SCRIPT, rounds=self.rounds)
 
     async def resume(self) -> str:
-        return RESUME_SCRIPT.format(
-            rounds=self.rounds, sonnia=self._points["sonnia"], player=self._points["player"]
+        return BOOK.render(
+            PROMPT + "reanudar",
+            fallback=RESUME_SCRIPT,
+            rounds=self.rounds,
+            sonnia=self._points["sonnia"],
+            player=self._points["player"],
         )
 
     async def stop(self, reason: StopReason) -> None:
@@ -405,7 +545,7 @@ class PptGame(Game):
             if ya_at is None:
                 say_failures += 1
                 if say_failures >= MAX_SAY_FAILURES:
-                    await host.speak(SAY_FAILED_TEXT)
+                    await host.speak(BOOK.text(PROMPT + "cuenta_falla", SAY_FAILED_TEXT))
                     await self._finish_cancel("countdown")
                     return
                 await self._wait_idle()
@@ -698,10 +838,13 @@ class PptGame(Game):
             self._points["player"],
         )
         if retry:
-            await host.speak(RETRY_UNCLEAR if reason == "unclear" else RETRY_NO_HAND)
+            if reason == "unclear":
+                await host.speak(BOOK.text(PROMPT + "repetir_no_clara", RETRY_UNCLEAR))
+            else:
+                await host.speak(BOOK.text(PROMPT + "repetir_sin_mano", RETRY_NO_HAND))
             return False
         if void and self._void_in_a_row >= MAX_VOID_IN_A_ROW:
-            await host.speak(CANT_SEE_TEXT)
+            await host.speak(BOOK.text(PROMPT + "no_ve_la_mano", CANT_SEE_TEXT))
             await self._finish_cancel("no_hand")
             return True
         throw_text = self._throw_text(thrown_round, move, player, winner)
@@ -709,8 +852,11 @@ class PptGame(Game):
         if best >= self.target or self._throws >= max_throws:
             await self._final(throw_text)
             return True
-        tail = TIE_GOES_ON if winner == "tie" else GOES_ON.format(**self._points)
-        await host.speak(throw_text + tail)
+        if winner == "tie":
+            tail = BOOK.text(PROMPT + "empate_sigue", TIE_GOES_ON)
+        else:
+            tail = BOOK.render(PROMPT + "marcador", fallback=GOES_ON, **self._points)
+        await host.speak(throw_text + " " + tail.strip())
         return False
 
     def _next_round(self) -> None:
@@ -722,11 +868,20 @@ class PptGame(Game):
         number: int, move: HandShape, player: HandShape | None, winner: ThrowWinner
     ) -> str:
         if player is None:
-            return THROW_VOID
+            return BOOK.text(PROMPT + "ronda_nula", THROW_VOID)
         if winner == "tie":
-            return THROW_TIE.format(round=number, sonnia=move.value)
+            return BOOK.render(
+                PROMPT + "ronda_empate", fallback=THROW_TIE, round=number, sonnia=move.value
+            )
         who = "gana el jugador" if winner == "player" else "ganas tú"
-        return THROW_DECIDED.format(round=number, sonnia=move.value, player=player.value, who=who)
+        return BOOK.render(
+            PROMPT + "ronda_ganada",
+            fallback=THROW_DECIDED,
+            round=number,
+            sonnia=move.value,
+            player=player.value,
+            who=who,
+        )
 
     async def _final(self, throw_text: str) -> None:
         host = self.host
@@ -749,8 +904,15 @@ class PptGame(Game):
                 "contact": contact,
             },
         )
-        text = {"player": FINAL_PLAYER, "sonnia": FINAL_SONNIA, "tie": FINAL_TIE}[winner]
-        await host.speak(throw_text + text.format(sonnia=sonnia, player=player, contact=contact))
+        name, text = {
+            "player": ("final_gana_jugador", FINAL_PLAYER),
+            "sonnia": ("final_gana_sonia", FINAL_SONNIA),
+            "tie": ("final_empate", FINAL_TIE),
+        }[winner]
+        ending = BOOK.render(
+            PROMPT + name, fallback=text, sonnia=sonnia, player=player, contact=contact
+        )
+        await host.speak(throw_text + " " + ending.strip())
         logger.info("Piedra, papel o tijera: final %s (%d-%d)", winner, sonnia, player)
         await host.finish(
             "win" if winner == "player" else "lose", {"winner": winner, "score": self.score}
@@ -837,12 +999,12 @@ class PptGame(Game):
                 return True
             waited = host.now() - begin
             if waited >= NO_PLAYER_CANCEL_S:
-                await host.speak(NO_PLAYER_CANCEL_TEXT)
+                await host.speak(BOOK.text(PROMPT + "nadie_se_deja", NO_PLAYER_CANCEL_TEXT))
                 await self._finish_cancel("no_player")
                 return False
             if waited >= HINT_AFTER_S and not hinted:
                 hinted = True
                 self._phase = "waiting"
                 await host.send("hint", {"text": HINT_NO_PLAYER}, sticky=False)
-                await host.speak(NO_PLAYER_TEXT)
+                await host.speak(BOOK.text(PROMPT + "nadie_delante", NO_PLAYER_TEXT))
             await host.sleep(TRACK_STEP_S)
