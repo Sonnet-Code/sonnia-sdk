@@ -555,8 +555,8 @@ class LiveEngine:
             busy=self._games_busy,
             trivia_draw=self._trivia.draw_one if self._trivia is not None else None,
         )
-        manager.attach_vision(
-            build_game_vision(
+        try:
+            vision = build_game_vision(
                 settings=settings,
                 camera=camera,
                 send_json=hub.broadcast_json,
@@ -564,7 +564,10 @@ class LiveEngine:
                 preview_supported=manager.preview_supported,
                 vision_llm=vision_llm,
             )
-        )
+        except Exception:  # noqa: BLE001 - sin visión, los juegos de cámara no se ofrecen
+            logger.exception("La visión de los juegos no arrancó: los de cámara no se ofrecen")
+        else:
+            manager.attach_vision(vision)
         hub.on(p.MSG_CLIENT_HELLO, manager.on_client_hello)
         hub.on(p.MSG_GAME_EVENT, manager.on_game_event)
         logger.info("Juegos del stand: %s", ", ".join(g.id for g in manager.games()))

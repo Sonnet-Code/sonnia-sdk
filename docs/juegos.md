@@ -97,6 +97,7 @@ Los ganchos que fallan van al registro y no tumban nada; si `tick` falla 20 vece
 - **Al empezar**: las reglas por `instruct` (≤ 1200) y el guion de arranque como retorno de `start`. Por voz, el guion vuelve como resultado de `start_game` con la marca `PARA SONIA:` (el backend lo pasa entero); desde el panel, el manager se lo pasa por `speak` en cuanto Sonia calla.
 - **En cada jugada**: lo que devuelve tu función `play` es el guion (sale con `PARA SONIA:`); un `GameError` sale tal cual, sin la marca.
 - **Por su cuenta** (un contador que acaba, la cámara que ve algo): `speak` con lo que tiene que decir. Una frase exacta en el tiempo, `say_fixed`.
+- **Una frase grabada no la oye GPT-Live**: suena desde la caché, fuera de su conversación, y el micro le manda silencio mientras tanto (si no, la contestaría). Si tiene que saber que ya se dijo («¡Simón dice: brazos arriba!»), cuéntaselo con `instruct`. Va a la pantalla como frase `ambient` (boca, cejas y ojos, sin pasar a hablar) y con subtítulo. `say_fixed` devuelve `False` si Sonia ya estaba hablando: espera antes con `wait_idle` si el momento importa.
 - GPT-Live **no sabe la solución** hasta que se la das (como la trivia): así no puede revelarla.
 - **No le dejes decir que algo ha pasado sin delegarlo.** Si la pantalla solo cambia con una jugada delegada, díselo en las reglas («en la pantalla nada cambia si no lo delegas»).
 
