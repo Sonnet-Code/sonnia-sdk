@@ -121,6 +121,11 @@ def test_ruleta_despedirse_termina_y_no_juzga_ella_la_adivinanza() -> None:
     assert "se despidió" in ruleta_text.NUDGE_RESULT
     assert "se despidió" in ruleta_text.NUDGE_SPINNING
     assert "Aunque sepas que no es, no lo digas tú" in ruleta_text.RIDDLE_RULES
+    # Girar solo si lo pidieron, y nunca anunciarlo sin delegarlo.
+    for nudge in (ruleta_text.NUDGE_CHALLENGE, ruleta_text.NUDGE_RESULT):
+        assert "Solo si" in nudge or "solo si" in nudge
+        assert "Nunca digas que gira o que terminas sin delegarlo" in nudge
+    assert "que la ruleta gira, que terminas" in ruleta_text.RULES_TEXT
     for announce in (
         ruleta_text.TRIVIA_ANNOUNCE,
         ruleta_text.RIDDLE_ANNOUNCE,
@@ -165,4 +170,4 @@ def test_ningun_empujon_nombra_el_stack_ni_es_largo() -> None:
     ]
     for text in nudges:
         assert not brands_in(text + NUDGE_TAIL)
-        assert len(text) <= 220, text  # órdenes cortas: en voz alta se oían
+        assert len(text) <= 260, text  # órdenes cortas: en voz alta se oían
