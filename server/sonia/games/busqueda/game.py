@@ -78,6 +78,10 @@ MAX_SILENT_ROUNDS = 2
 #: Tras la última ronda, la vista en vivo se queda esto antes de retirarse (dejando ver el final).
 FINAL_PREVIEW_S = 3.0
 
+#: Controles a mano del panel (``panel_controls``), con la ronda en marcha.
+CONTROL_FOUND = "found"
+CONTROL_SKIP = "skip"
+
 Phase = Literal["off", "ready", "running", "between", "done"]
 
 
@@ -528,16 +532,55 @@ class BusquedaGame(Game):
         await self._settle(outcome, first_word_s=VOICE_FIRST_WORD_S, min_delay_s=VOICE_MIN_DELAY_S)
         return outcome.script
 
+    # -- control a mano desde el panel ---------------------------------------------------
+
+    def panel_controls(self) -> list[dict[str, Any]]:
+        """Con la ronda en marcha: «¡Lo encontró!» y «Saltar objeto»."""
+        if self._phase != "running" or self._current is None:
+            return []
+        return [
+            {"id": CONTROL_FOUND, "label": "¡Lo encontró!"},
+            {"id": CONTROL_SKIP, "label": "Saltar objeto"},
+        ]
+
+    async def panel_control(self, control: str, value: str) -> str:
+        """«¡Lo encontró!» gana la ronda como un ``busqueda_check`` que lo ve; «Saltar objeto»
+        la cierra sin encontrarlo. Las dos, como el juego: pantalla, sonido y el guion."""
+        if control not in (CONTROL_FOUND, CONTROL_SKIP):
+            raise GameError("Ese control no es de la búsqueda relámpago.")
+        if self._phase != "running" or self._current is None:
+            raise GameError("Ahora no hay ninguna ronda de la búsqueda en marcha.")
+        now = self.host.now()
+        if control == CONTROL_FOUND:
+            outcome = self._resolve("found", now, None)
+        else:
+            outcome = self._resolve("timeout", now, None, skipped=True)
+        if outcome is None:
+            raise GameError("Esa ronda ya se ha contado.")
+        logger.info("Búsqueda: ronda %d llevada a mano desde el panel (%s)", self._round, control)
+        await self._show(outcome)
+        await self._settle(outcome, first_word_s=VOICE_FIRST_WORD_S, min_delay_s=VOICE_MIN_DELAY_S)
+        return outcome.script
+
     # -- el resultado de la ronda ----------------------------------------------------------
 
     def _resolve(
-        self, kind: Literal["found", "timeout"], now: float, answer: JudgeAnswer | None
+        self,
+        kind: Literal["found", "timeout"],
+        now: float,
+        answer: JudgeAnswer | None,
+        *,
+        skipped: bool = False,
     ) -> _Outcome | None:
-        """Cierra la ronda (síncrona: solo una vez, gane quien gane). ``None`` si ya no tocaba."""
+        """Cierra la ronda (síncrona: solo una vez, gane quien gane). ``None`` si ya no tocaba.
+
+        ``skipped``: el equipo saltó el objeto desde el panel (cuenta como no encontrado, pero
+        nunca como ronda en la que la cámara no contestó).
+        """
         entry = self._current
         if self._phase != "running" or entry is None:
             return None
-        silent = kind == "timeout" and self._checks > 0 and self._answered == 0
+        silent = not skipped and kind == "timeout" and self._checks > 0 and self._answered == 0
         what = ""
         if kind == "found":
             self._found += 1
@@ -561,7 +604,10 @@ class BusquedaGame(Game):
             script = t.FOUND_TEXT.format(what=what)
         else:
             screen = self._state("timeout", silent=silent)
-            script = t.SILENT_TEXT if silent else t.TIMEOUT_TEXT.format(name=entry.name)
+            if silent:
+                script = t.SILENT_TEXT
+            else:
+                script = (t.SKIP_TEXT if skipped else t.TIMEOUT_TEXT).format(name=entry.name)
         if cancel:
             script = t.CANCEL_TEXT
         elif last:

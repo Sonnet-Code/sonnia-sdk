@@ -43,7 +43,7 @@ color: amarillo
 color: verde
 
 ## la credencial del DevFest
-> En la foto, ¿se ve una credencial o gafete de evento (una tarjeta con cordón) bien a la vista, en una mano o frente a la cámara?
+> En la foto, ¿se ve una credencial o gafete de evento (una tarjeta con cordón) levantada y enseñada a la cámara? Si solo cuelga, no cuenta.
 
 ## algo con el logo de Google
 > En la foto, ¿se ve un objeto con el logo de Google (la G de colores o la palabra Google) bien a la vista, en una mano o frente a la cámara? No cuentan la ropa ni el fondo.

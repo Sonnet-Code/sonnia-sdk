@@ -218,3 +218,26 @@ async def test_si_lo_local_no_ve_a_nadie_haciendola_va_el_ultimo_frame_de_la_ven
         assert mark == last_served > 10
         # La última lectura de la ventana (el juez lee una más al empezar a esperar).
         assert mark == polls - 1
+
+
+async def test_si_lo_local_no_ve_a_nadie_el_juez_mira_igual_y_manda() -> None:
+    referee = FakeReferee(poses=[everyone(1, 2)] * ROUNDS)
+    game, host, _ = judged_game(Crowd(players=0), referee)
+    await game.start("voice", {})
+    await host.run_tasks()
+    # Sin el juez, dos rondas vacías acababan el juego; con él, se juegan todas.
+    assert len(referee.photos) == ROUNDS
+    assert {(r["count"], r["total"]) for r in sent(host, "result")} == {(1, 2)}
+    assert host.finished and host.finished[0][0] == "win"
+
+
+async def test_sin_ningun_frame_de_la_camara_no_se_pregunta() -> None:
+    referee = FakeReferee(poses=[everyone(4, 6)] * ROUNDS)
+    stream = FakeStream()
+    vision = FakeVision(poses=Crowd(players=5, doers=3, fallers=1), stream=stream, referee=referee)
+    game, host, _ = crowd_game(vision.poses, vision=vision)  # type: ignore[arg-type]
+    await game.start("voice", {})
+    await host.run_tasks()
+    # La cámara sin dueño no da frames: ni foto ni aviso, el recuento local.
+    assert referee.photos == [] and host.busy == []
+    assert {(r["count"], r["total"]) for r in sent(host, "result") if r["simon"]} == {(3, 5)}

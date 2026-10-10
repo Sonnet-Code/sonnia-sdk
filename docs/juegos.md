@@ -311,3 +311,38 @@ El panel usa el `GameManager` del motor (`engine.games`, `None` si esta Sonnia n
 | Frases grabadas | `await asyncio.to_thread(manager.fixed_phrases)` se suma a las frases de «Preparar voces», de la grabación automática y del contador de frases grabadas. |
 
 Las Sonnias anteriores ignoran `games_off` y `game_banks`, y sus pantallas no anuncian juegos.
+
+## Control a mano desde el panel
+
+Jean, 10 de octubre de 2026: «Debe haber panel para controlar los juegos igual que el de la trivia por si acaso algo sale mal». Con un juego en marcha, la tarjeta «Juegos» del panel enseña «Control del juego»: botones y campos para llevar la partida a mano si falla la voz o la cámara, como A, B, C, «Siguiente», «Reiniciar» y «Terminar» de la trivia. El equipo marca lo que haría el visitante y Sonia lo cuenta como parte del juego.
+
+El contrato:
+
+- **`Game.panel_controls()`**: los controles que valen ahora, en orden. Un botón es `{"id": "spin", "label": "Girar"}`; un campo de texto con su botón, `{"id": "guess", "label": "Probar palabra", "kind": "text", "placeholder": "5 letras"}`. Por defecto, ninguno.
+- **`Game.panel_control(control, value) -> str`**: hace lo del control reutilizando el handler de la jugada de GPT-Live (la misma pantalla y el mismo guion) y devuelve el guion para Sonia. Si no vale ahora (fuera de turno, un id que no conoce, un texto que no vale), `GameError` con un mensaje para el equipo; la partida no se toca.
+- **`GameManager.snapshot()["controls"]`**: los del juego (solo con la partida en `playing`) más «Reiniciar» (`restart`) y «Terminar» (`stop`), que pone el manager para todos; `[]` sin juego en pantalla.
+- **`await GameManager.panel_control(control, value) -> (ok, mensaje)`**: `restart` termina el juego y empieza otra partida del mismo, `stop` lo termina como «Terminar juego». El resto va al juego, y su guion le llega a GPT-Live por `commentary` en cuanto calla, con `PANEL_CONTROL_TEXT` delante (que lo cuente como parte del juego, sin hablar del panel). Nunca lanza.
+- **Orden del panel `game_control`** (`control` y `value`, este opcional y de hasta 200 caracteres, `GAME_CONTROL_VALUE_MAX_LEN`): pide lo mismo que `game_start` («Conversando», sin modo debug, sin editor de personaje, sin Modo Jean y con la pantalla conectada), salvo `stop`, que vale siempre.
+- **Capacidad `game_controls`**: el panel solo pinta «Control del juego» en las Sonnias que la anuncian. A las anteriores les deja el botón «Terminar juego» de siempre y una nota.
+
+El panel pinta tal cual la lista y solo la rehace si cambia, para no borrar lo que se está escribiendo. Antes de «Reiniciar» y «Terminar» pide confirmación.
+
+| Juego | Momento de la partida | Controles (`id` · botón) | Qué hacen |
+|---|---|---|---|
+| Ruleta | Girando | ninguno | — |
+| | Trivia relámpago | `A`, `B`, `C` · la letra y su opción; `pass` · «No lo sabe» | `ruleta_answer` con la letra o `se_rinden`. |
+| | Adivinanza | `right` · «Acertó», `wrong` · «Falló», `pass` · «Se rinde» | `ruleta_answer`. «Falló» gasta un intento y saca la pista; el reto sigue hasta el tercer fallo. |
+| | Explica en 20 s | `right` · «Bien (nota 8)», `wrong` · «Flojo (nota 4)», `pass` · «Se rinde» | `ruleta_score` con nota 8 (supera el reto) o 4; `pass`, `ruleta_answer` con `se_rinden`. |
+| | Futuro de la IA | `predict` · «Poner su predicción» (campo), `pass` · «Se rinde» | `ruleta_prediccion` con el texto y una probabilidad al azar de 30 a 85. |
+| | Sonnet Code: pregunta | `right` · «Acertó», `wrong` · «Falló», `pass` · «Se rinde» | `ruleta_answer`. |
+| | Sonnet Code: reto de stand | `right` · «Lo hizo», `wrong` · «No lo hizo», `pass` · «Se rinde» | `ruleta_answer`. |
+| | Cualquier reto en curso | `spin` · «Cambiar de reto» (el último) | `ruleta_spin`: salta el reto y gira. |
+| | Resultado en pantalla | `spin` · «Girar» | `ruleta_spin`: otra vuelta. |
+| Akinator dev | Esperando a que piense en algo | `ready` · «Ya lo pensó» | Cuenta como el aviso del visitante: desde ahí cuentan las preguntas de Sonia. |
+| | Pregunta en curso | `yes` · «Sí», `no` · «No», `dont_know` · «No sé» | No hay jugada (las preguntas no se delegan): cuentan como una respuesta corta del visitante y el guion se la dice a Sonia. |
+| | Sonia arriesga una respuesta | `right` · «Acertó», `wrong` · «Falló» | `akinator_result` con sí o no: gana Sonia, o sigue preguntando o se rinde. |
+| | Sonia se rinde y pregunta qué era | `answer` · «Decir qué era» (campo) | `akinator_result` con no y lo que era: gana el visitante. |
+| Wordle | Jugando | `guess` · «Probar palabra» (campo, «5 letras»), `reveal` · «Ver la palabra» | `guess` es `wordle_guess`; si lo escrito no vale, `GameError` sin gastar intento ni sacudir la fila delante de los visitantes. `reveal` es `stop_requested`: enseña la palabra con su pista y termina. |
+| Simón dice, piedra, papel o tijera y búsqueda relámpago | — | pendiente | Mientras, «Reiniciar» y «Terminar». |
+
+Tests: `tests/test_panel_game_controls.py` (la orden y el panel, con un juego de mentira) y `tests/games/test_<juego>_panel.py` (cada juego: el control hace lo mismo que la jugada de GPT-Live, fuera de turno da `GameError` y la lista cambia según la fase).

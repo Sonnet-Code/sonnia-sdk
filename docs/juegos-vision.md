@@ -85,7 +85,7 @@ if host.referee.available:
   buscan palmas en la caja de la persona. La tabla de la sección 5.4 del plan está en
   `hands.classify`.
 - **Juez de la búsqueda.** Foto de 640 px de ancho y calidad 75, prompt que prohíbe describir a las
-  personas (no cuenta lo que alguien lleva puesto o colgado: ropa, gafas, pelo, gorras ni el gafete del evento), respuesta
+  personas (lo que alguien lleva puesto o colgado, gafete incluido, no cuenta salvo que lo sostenga con la mano y lo enseñe), respuesta
   `{"visto": bool, "objeto": str}`, plazo de 8 s y tope por ronda (`start_round`). Pasado el tope,
   `ask` devuelve `None` sin llamar. Con `GAMES_JUDGE=gemini` pregunta a Gemini y con `local`, al
   modelo de visión de Sonia (ver «Juez de Gemini»).

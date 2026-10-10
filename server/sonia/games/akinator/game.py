@@ -54,6 +54,8 @@ from sonia.games.akinator.prompts import (
     NO_ANSWER_SCRIPT,
     NO_GUESS_SCRIPT,
     NOT_CLEAR_SCRIPT,
+    PANEL_ANSWER_SCRIPT,
+    PANEL_READY_SCRIPT,
     REPEATED_GUESS_SCRIPT,
     RESUME_GUESS,
     RESUME_SCRIPT,
@@ -95,6 +97,14 @@ GUESS_REMIND_S = 20.0
 #: Largo máximo de lo que se enseña en la tarjeta.
 QUESTION_CHARS = 120
 ANSWER_CHARS = 60
+
+#: Controles a mano del panel (``panel_controls``, ``docs/juegos.md``, «Control a mano»).
+CONTROL_READY = "ready"
+CONTROL_RIGHT = "right"
+CONTROL_WRONG = "wrong"
+CONTROL_ANSWER = "answer"
+#: «Sí», «No» y «No sé» a la pregunta en curso: ``(id, botón, lo que contesta el visitante)``.
+PANEL_ANSWERS = (("yes", "Sí", "sí"), ("no", "No", "no"), ("dont_know", "No sé", "no sé"))
 
 _SPOKEN_NAME = re.compile(r"\bson[ií]a\b", re.IGNORECASE)
 _TAGS = re.compile(r"<[^<>]*>")
@@ -473,31 +483,33 @@ class AkinatorGame(Game):
         verdict = str(arguments.get("acierto") or NOT_SAID)
         real = clean_answer(arguments.get("respuesta_real"))
         async with self._lock:
-            if self._phase == "revealed":
-                raise GameError(
-                    "La partida ya terminó. Si quieren otra, delega empezarla de nuevo."
-                )
-            pending = self._guess if self._phase == "guessing" else ""
-            if verdict == "si" and self._phase == "giving_up":
-                # Se rindió y preguntó qué era: lo que conteste el visitante no es un acierto.
-                verdict = "no"
-            if verdict == "si":
-                answer = pending or real
-                if not answer:
-                    raise GameError(NO_ANSWER_SCRIPT)
-                return await self._reveal("win", answer)
-            if verdict == "no":
-                return await self._miss(pending, real)
-            # No quedó claro: con lo que era se puede decidir; si no, que se lo pregunte.
-            if pending and real:
-                if normalize(pending) == normalize(real):
-                    return await self._reveal("win", pending)
-                return await self._miss(pending, real)
-            if real:
-                return await self._miss(pending, real)
-            if pending:
-                return NOT_CLEAR_SCRIPT
-            return NO_GUESS_SCRIPT
+            return await self._settle(verdict, real)
+
+    async def _settle(self, verdict: str, real: str) -> str:
+        """El veredicto de ``akinator_result`` (o del panel), con ``self._lock`` cogido."""
+        if self._phase == "revealed":
+            raise GameError("La partida ya terminó. Si quieren otra, delega empezarla de nuevo.")
+        pending = self._guess if self._phase == "guessing" else ""
+        if verdict == "si" and self._phase == "giving_up":
+            # Se rindió y preguntó qué era: lo que conteste el visitante no es un acierto.
+            verdict = "no"
+        if verdict == "si":
+            answer = pending or real
+            if not answer:
+                raise GameError(NO_ANSWER_SCRIPT)
+            return await self._reveal("win", answer)
+        if verdict == "no":
+            return await self._miss(pending, real)
+        # No quedó claro: con lo que era se puede decidir; si no, que se lo pregunte.
+        if pending and real:
+            if normalize(pending) == normalize(real):
+                return await self._reveal("win", pending)
+            return await self._miss(pending, real)
+        if real:
+            return await self._miss(pending, real)
+        if pending:
+            return NOT_CLEAR_SCRIPT
+        return NO_GUESS_SCRIPT
 
     async def _miss(self, pending: str, real: str) -> str:
         """Sonia falló: si el visitante dijo qué era, ganó; si no, sigue o se rinde."""
@@ -552,3 +564,71 @@ class AkinatorGame(Game):
         return LOSE_SCRIPT.format(
             answer=answer, contact=LOSE_CONTACT_TEXT.format(contact=contact) if contact else ""
         )
+
+    # -- control a mano desde el panel (``docs/juegos.md``, «Control a mano») ------
+
+    def panel_controls(self) -> list[dict[str, Any]]:
+        """Lo que el equipo puede marcar por el visitante en cada fase."""
+        if self._phase == "waiting":
+            return [{"id": CONTROL_READY, "label": "Ya lo pensó"}]
+        if self._phase == "asking":
+            return [{"id": key, "label": label} for key, label, _ in PANEL_ANSWERS]
+        if self._phase == "guessing":
+            return [
+                {"id": CONTROL_RIGHT, "label": "Acertó"},
+                {"id": CONTROL_WRONG, "label": "Falló"},
+            ]
+        if self._phase == "giving_up":
+            return [
+                {
+                    "id": CONTROL_ANSWER,
+                    "label": "Decir qué era",
+                    "kind": "text",
+                    "placeholder": "Kotlin",
+                }
+            ]
+        return []
+
+    async def panel_control(self, control: str, value: str) -> str:
+        """Lo que haría el visitante con la voz: avisar, contestar o dar el veredicto.
+
+        «Acertó», «Falló» y «Decir qué era» pasan por el mismo veredicto que
+        ``akinator_result``. «Sí», «No» y «No sé» no tienen jugada (las preguntas no se
+        delegan): cuentan como un turno corto del visitante y el guion se lo cuenta a Sonia.
+        """
+        answers = {key: said for key, _, said in PANEL_ANSWERS}
+        if control == CONTROL_READY:
+            if self._phase != "waiting":
+                raise GameError("«Ya lo pensó» vale mientras Sonnia espera a que piense en algo.")
+            if not self._ready:
+                # Como si avisara el visitante: su aviso es un turno (``_evidence`` lo descuenta)
+                # y desde aquí cuentan las preguntas de Sonia.
+                self._ready = True
+                self._answers += 1
+            return PANEL_READY_SCRIPT
+        if control in answers:
+            if self._phase != "asking":
+                raise GameError("«Sí», «No» y «No sé» valen cuando Sonnia hace una pregunta.")
+            # Como un turno corto del visitante (``on_user_text`` y ``on_user_turn_end``).
+            self._ready = True
+            self._answers += 1
+            self._long_turn = False
+            return PANEL_ANSWER_SCRIPT.format(answer=answers[control])
+        if control in (CONTROL_RIGHT, CONTROL_WRONG):
+            async with self._lock:
+                if self._phase != "guessing" or not self._guess:
+                    raise GameError(
+                        "«Acertó» y «Falló» valen cuando Sonnia arriesga una respuesta."
+                    )
+                return await self._settle("si" if control == CONTROL_RIGHT else "no", "")
+        if control == CONTROL_ANSWER:
+            real = clean_answer(value)
+            if not real:
+                raise GameError("Escribe qué era, por ejemplo «Kotlin».")
+            async with self._lock:
+                if self._phase != "giving_up":
+                    raise GameError(
+                        "«Decir qué era» vale cuando Sonnia se rinde y pregunta qué era."
+                    )
+                return await self._settle("no", real)
+        return await super().panel_control(control, value)

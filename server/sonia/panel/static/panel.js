@@ -178,8 +178,14 @@
   }
 
   /** "oficinas-sonnet" -> "Oficinas sonnet". */
+  /** Con lo que empiezan los ids de las imágenes subidas desde el panel (las que tienen «×»).
+   * Igual que `UPLOAD_PREFIX` de `server/sonia/actions/gallery.py`. */
+  const UPLOAD_PREFIX = "subida-";
+
   function prettyImageName(id) {
-    return capitalize(String(id).replace(/[-_]+/g, " ").trim());
+    let name = String(id);
+    if (name.startsWith(UPLOAD_PREFIX) && name.length > UPLOAD_PREFIX.length) name = name.slice(UPLOAD_PREFIX.length);
+    return capitalize(name.replace(/[-_]+/g, " ").trim());
   }
 
   function isNumber(value) {
@@ -272,6 +278,9 @@
     gallery: [],
     galleryState: "loading", // loading | ready | error
     galleryAttemptAt: 0,
+    gallerySig: "", // ids y subidas de `status.gallery` ya pintados
+    galleryPreviews: new Map(), // id -> vista previa local de lo subido desde este navegador
+    pendingUpload: null, // imagen elegida y ya reducida, esperando a «Subir a la galería»
     notesBase: null, // último texto de avisos que vino del servidor y está en la caja
     triviaBankBase: null, // banco de preguntas cargado en la caja (null: sin cargar)
     gameBankId: null, // banco de los juegos cargado en su caja (null: ninguno)
@@ -306,9 +315,12 @@
       "trivia-bank-info", "trivia-bank-load-btn", "trivia-bank-editor", "trivia-bank-input", "trivia-bank-save-btn",
       "trivia-bank-reset-btn", "trivia-bank-state",
       "game-state", "game-list", "game-stop-btn", "game-note", "game-bank-info", "game-bank-select",
+      "game-stop-row", "game-controls", "game-control-list",
       "game-bank-load-btn", "game-bank-detail", "game-bank-editor", "game-bank-input", "game-bank-save-btn",
       "game-bank-reset-btn", "game-bank-state", "game-pose", "game-pose-select", "game-pose-help",
       "game-judge", "game-judge-select", "game-judge-help",
+      "gallery-add-btn", "gallery-file", "gallery-upload", "gallery-upload-preview", "gallery-upload-name",
+      "gallery-upload-btn", "gallery-upload-cancel", "gallery-upload-state",
     ];
     for (const id of ids) {
       // "topbar-status" -> ui.topbarStatus
@@ -765,6 +777,7 @@
     renderTrivia(status);
     renderGames(status);
     renderImageState(status);
+    syncGallery(status);
     renderSound(status);
     renderHealth(status);
     renderNotes(status);
@@ -996,6 +1009,9 @@
     for (const button of ui.modeButtons) button.setAttribute("aria-pressed", "false");
     setText(ui.nowShowing, "No hay ninguna imagen en pantalla.");
     ui.nowShowing.classList.remove("is-showing");
+    app.gallerySig = "";
+    discardPendingUpload();
+    setUploadState("");
     renderHeroKicker();
     renderNotesState();
     refreshControls();
@@ -1562,6 +1578,7 @@
     setText(ui.gameState, text);
     ui.gameState.classList.toggle("is-playing", Boolean(active));
     setHidden(ui.gameNote, status.mode === "conversation" || Boolean(active) || list.length === 0);
+    renderGameControls(games);
     renderGameBanks(games);
     renderGameBankState();
     renderPoseModel(status, list);
@@ -1649,13 +1666,143 @@
     lockControl(input);
   }
 
+  // ------------------------------------------------------------ control a mano del juego
+
+  /** Tope del texto de un control (GAME_CONTROL_VALUE_MAX_LEN en server/sonia/panel/control.py). */
+  const GAME_CONTROL_MAX_CHARS = 200;
+
+  /** Los controles que pone el orquestador para todos los juegos; se confirman antes. */
+  const COMMON_GAME_CONTROLS = new Set(["restart", "stop"]);
+
+  let gameControlsKey = "";
+
+  /** `controls` del estado de los juegos: [{id, label, kind?, placeholder?}], ya en orden. */
+  function gameControls(games) {
+    const list = Array.isArray(games.controls) ? games.controls : [];
+    return list.filter((control) => control && typeof control.id === "string" && control.id);
+  }
+
+  /**
+   * «Control del juego», con un juego en marcha: pinta tal cual los controles que manda la
+   * Sonnia. Solo se rehace si cambian, para no borrar lo que se está escribiendo.
+   */
+  function renderGameControls(games) {
+    const active = gameActive();
+    setHidden(ui.gameControls, !active);
+    // Las Sonnias anteriores no tienen controles a mano: les queda «Terminar juego».
+    setHidden(ui.gameStopRow, app.capsKnown && hasCap("game_controls"));
+    const controls = active ? gameControls(games) : [];
+    const key = JSON.stringify(controls.map((c) => [c.id, c.label, c.kind, c.placeholder]));
+    if (key === gameControlsKey) return;
+    gameControlsKey = key;
+    // Lo escrito en un campo que sigue después de rehacerlos no se pierde, ni su foco.
+    const typed = new Map();
+    let focused = null;
+    for (const input of ui.gameControlList.querySelectorAll("input[data-control]")) {
+      typed.set(input.dataset.control, input.value);
+      if (input === document.activeElement) focused = input.dataset.control;
+    }
+    const nodes = [];
+    const common = [];
+    let row = null;
+    for (const control of controls) {
+      if (COMMON_GAME_CONTROLS.has(control.id)) {
+        common.push(gameControlButton(control));
+      } else if (control.kind === "text") {
+        nodes.push(gameControlForm(control, typed.get(control.id) || ""));
+        row = null;
+      } else {
+        if (!row) {
+          row = el("div", { class: "game-control-row" });
+          nodes.push(row);
+        }
+        row.append(gameControlButton(control));
+      }
+    }
+    if (common.length) nodes.push(el("div", { class: "game-control-row game-control-common" }, ...common));
+    ui.gameControlList.replaceChildren(...nodes);
+    if (focused) {
+      for (const input of ui.gameControlList.querySelectorAll("input[data-control]")) {
+        if (input.dataset.control === focused) input.focus();
+      }
+    }
+  }
+
+  function gameControlLabel(control) {
+    return typeof control.label === "string" && control.label ? control.label : control.id;
+  }
+
+  /** Un botón: manda su id tal cual (los comunes, después de confirmarlo). */
+  function gameControlButton(control) {
+    const common = COMMON_GAME_CONTROLS.has(control.id);
+    const button = el("button", {
+      type: "button",
+      class: common ? "btn btn-small" : "btn",
+      "data-cap": "game_controls",
+      text: gameControlLabel(control),
+    });
+    button.addEventListener("click", () => onGameControl(control, "", button));
+    return button;
+  }
+
+  /** `kind: "text"`: un campo con su botón; Enter también lo manda. */
+  function gameControlForm(control, typed) {
+    const label = gameControlLabel(control);
+    const input = el("input", {
+      type: "text",
+      class: "game-control-input",
+      maxLength: GAME_CONTROL_MAX_CHARS,
+      autocomplete: "off",
+      spellcheck: false,
+      placeholder: typeof control.placeholder === "string" ? control.placeholder : "",
+      value: typed,
+      "data-cap": "game_controls",
+      "data-control": control.id,
+      "aria-label": label,
+    });
+    const button = el("button", { type: "submit", class: "btn", "data-cap": "game_controls", text: label });
+    const form = el("form", { class: "game-control-form" }, input, button);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const value = input.value.trim();
+      if (!value) {
+        showToast("Escribe algo primero.", "error");
+        input.focus();
+        return;
+      }
+      const result = await onGameControl(control, value, button);
+      if (result.ok) input.value = "";
+    });
+    return form;
+  }
+
+  async function onGameControl(control, value, button) {
+    if (COMMON_GAME_CONTROLS.has(control.id)) {
+      const title = gamesInfo().title || "el juego";
+      const restart = control.id === "restart";
+      const ok = await confirmAction({
+        title: restart ? `¿Reiniciar ${title}?` : `¿Terminar ${title}?`,
+        text: restart
+          ? "Se pierde la partida en marcha y empieza otra desde cero."
+          : "Sonnia lo cuenta en una frase y vuelve a conversar.",
+        confirmLabel: restart ? "Reiniciar" : "Terminar",
+        danger: true,
+      });
+      if (!ok) return { ok: false, message: "" };
+    }
+    return sendAction("game_control", { control: control.id, value }, { button });
+  }
+
   /** Borra lo de los juegos de la Sonnia anterior (al cambiar de Sonnia). */
   function clearGames() {
     closeGameBank();
     gamesKey = "";
     gameBanksKey = "";
+    gameControlsKey = "";
     gameTiles.clear();
     ui.gameList.replaceChildren();
+    ui.gameControlList.replaceChildren();
+    setHidden(ui.gameControls, true);
     ui.gameBankSelect.replaceChildren();
     setText(ui.gameBankInfo, "");
     setHidden(ui.gameBankDetail, true);
@@ -1930,11 +2077,17 @@
 
   // ------------------------------------------------------------ galería
 
-  async function loadGallery() {
+  /**
+   * Pide la galería de la Sonnia elegida. Con quiet (al subir o quitar una imagen, o si
+   * cambió la lista del estado) no enseña «Cargando…» y, si falla, deja la que había.
+   */
+  async function loadGallery({ quiet = false } = {}) {
     const requested = app.instanceId;
-    app.galleryState = "loading";
+    if (!quiet || app.galleryState !== "ready") {
+      app.galleryState = "loading";
+      renderGallery();
+    }
     app.galleryAttemptAt = Date.now();
-    renderGallery();
     let gallery = [];
     let state = "error";
     try {
@@ -1953,6 +2106,7 @@
     }
     // Si mientras tanto se cambió de Sonnia, esta respuesta ya no vale.
     if (requested !== app.instanceId) return;
+    if (quiet && state === "error" && app.galleryState === "ready") return;
     app.gallery = gallery;
     app.galleryState = state;
     renderGallery();
@@ -1977,14 +2131,16 @@
       );
       return;
     }
-    if (app.gallery.length === 0) {
-      thumbs.replaceChildren(
-        el("p", { class: "muted", text: "No hay imágenes en la galería. Se añaden en la carpeta assets/gallery del equipo del stand." }),
-      );
+    const images = galleryItems();
+    if (images.length === 0) {
+      const text = app.caps.has("gallery_upload")
+        ? "No hay imágenes en la galería. Añade una con «Añadir imagen»."
+        : "No hay imágenes en la galería. Se añaden en la carpeta assets/gallery del equipo del stand.";
+      thumbs.replaceChildren(el("p", { class: "muted", text }));
       return;
     }
     thumbs.replaceChildren(
-      ...app.gallery.map((image) => {
+      ...images.map((image) => {
         const button = el(
           "button",
           {
@@ -1999,10 +2155,244 @@
           el("span", { class: "thumb-name", text: prettyImageName(image.id) }),
         );
         button.addEventListener("click", () => onShowImage(image.id, button));
-        return button;
+        if (!image.upload) return button;
+        // Solo las subidas desde el panel se pueden quitar; las de la app, no.
+        const remove = el("button", {
+          type: "button",
+          class: "thumb-remove",
+          "data-cap": "gallery_upload",
+          "aria-label": `Quitar «${prettyImageName(image.id)}» de la galería`,
+          title: "Quitar de la galería",
+          text: "×",
+        });
+        remove.addEventListener("click", () => onRemoveImage(image.id, remove));
+        return el("div", { class: "thumb-wrap" }, button, remove);
       }),
     );
     if (app.status) renderImageState(app.status);
+    refreshControls();
+  }
+
+  /**
+   * Las imágenes que se enseñan: los ids de `status.gallery` (al día, también en la nube,
+   * que de `/api/gallery` solo sabe los del `hello`) o, si esta Sonnia no lo manda, la
+   * lista de `/api/gallery`. Las subidas desde el panel se reconocen por el id
+   * (`subida-...`) y llevan «×». La miniatura es la vista previa local de lo subido desde
+   * aquí o la url del servidor; en la nube, una subida no tiene archivo y sale como ficha.
+   */
+  function galleryItems() {
+    const info = app.status && app.status.gallery;
+    const fetched = new Map(app.gallery.map((image) => [image.id, image]));
+    let ids = app.gallery.map((image) => image.id);
+    if (info && typeof info === "object" && Array.isArray(info.ids)) {
+      ids = info.ids.filter((id) => typeof id === "string" && id);
+    }
+    return ids.map((id) => {
+      const known = fetched.get(id);
+      return { id, url: app.galleryPreviews.get(id) || (known && known.url) || "", upload: id.startsWith(UPLOAD_PREFIX) };
+    });
+  }
+
+  /** Repinta la galería si cambió la lista del estado (y la pide otra vez si trae ids nuevos). */
+  function syncGallery(status) {
+    const info = status.gallery;
+    if (!info || typeof info !== "object" || !Array.isArray(info.ids)) return;
+    const sig = JSON.stringify(info.ids);
+    if (sig === app.gallerySig) return;
+    app.gallerySig = sig;
+    if (app.galleryState !== "ready") return;
+    renderGallery();
+    const fetched = new Set(app.gallery.map((image) => image.id));
+    if (info.ids.some((id) => !fetched.has(id))) loadGallery({ quiet: true });
+  }
+
+  async function onRemoveImage(id, button) {
+    const ok = await confirmAction({
+      title: "¿Quitar la imagen?",
+      text: `«${prettyImageName(id)}» sale de la galería de esta Sonnia y ya no la podrá enseñar.`,
+      confirmLabel: "Quitar",
+      danger: true,
+    });
+    if (!ok) return;
+    const result = await sendAction("remove_gallery_image", { id }, { button });
+    if (!result.ok) return;
+    const preview = app.galleryPreviews.get(id);
+    if (preview) {
+      URL.revokeObjectURL(preview);
+      app.galleryPreviews.delete(id);
+    }
+    loadGallery({ quiet: true });
+  }
+
+  // ------------------------------------------------------------ subir imágenes
+
+  // La imagen se reduce aquí antes de mandarla: 1280 px de lado largo y ~220 KB, para que
+  // en base64 y dentro del JSON quepa en una acción del panel de la nube (320 KiB).
+  const UPLOAD_MAX_SIDE = 1280;
+  const UPLOAD_MIN_SIDE = 16;
+  const UPLOAD_TARGET_BYTES = 220 * 1024;
+  const UPLOAD_BAD_FORMAT = "Usa una foto JPG o PNG: este navegador no puede abrir esa imagen.";
+
+  /** Error de la subida con un texto para el operador (los demás salen como UPLOAD_BAD_FORMAT). */
+  class UploadError extends Error {}
+
+  async function onGalleryFile() {
+    const file = ui.galleryFile.files && ui.galleryFile.files[0];
+    ui.galleryFile.value = ""; // para poder elegir otra vez la misma
+    if (!file) return;
+    discardPendingUpload();
+    setUploadState("Preparando la imagen…");
+    let prepared;
+    try {
+      prepared = await prepareUpload(file);
+    } catch (error) {
+      setUploadState(error instanceof UploadError ? error.message : UPLOAD_BAD_FORMAT, "error");
+      return;
+    }
+    app.pendingUpload = prepared;
+    ui.galleryUploadPreview.src = prepared.previewUrl;
+    ui.galleryUploadName.value = uploadName(file.name);
+    setHidden(ui.galleryUpload, false);
+    setUploadState(`Lista para subir (${Math.max(1, Math.round(prepared.blob.size / 1024))} KB). Revisa el nombre.`);
+    ui.galleryUploadName.focus();
+    ui.galleryUploadName.select();
+  }
+
+  /** «IMG_4521.jpg» -> «IMG 4521»: el nombre de la foto, sin extensión, para editarlo. */
+  function uploadName(fileName) {
+    const base = String(fileName || "").replace(/\.[a-z0-9]{2,5}$/i, "");
+    return base.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+  }
+
+  /**
+   * Decodifica la imagen en el navegador y la reduce. Los PNG que caben se quedan en PNG
+   * (logos con transparencia); el resto va a JPEG sobre blanco, bajando la calidad (y,
+   * si hace falta, el tamaño) hasta que ocupe ~220 KB como mucho.
+   */
+  async function prepareUpload(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      try {
+        await img.decode();
+      } catch {
+        throw new UploadError(UPLOAD_BAD_FORMAT);
+      }
+      const width = img.naturalWidth;
+      const height = img.naturalHeight;
+      if (!width || !height) throw new UploadError(UPLOAD_BAD_FORMAT);
+      if (Math.min(width, height) < UPLOAD_MIN_SIDE) {
+        throw new UploadError(`La imagen es demasiado pequeña: tiene que medir al menos ${UPLOAD_MIN_SIDE} píxeles por lado.`);
+      }
+      let scale = Math.min(1, UPLOAD_MAX_SIDE / Math.max(width, height));
+      if (file.type === "image/png") {
+        const blob = await drawToBlob(img, width * scale, height * scale, "image/png");
+        if (blob && blob.size <= UPLOAD_TARGET_BYTES) return finishUpload(blob);
+      }
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        for (const quality of [0.86, 0.78, 0.7, 0.62, 0.54, 0.46]) {
+          const blob = await drawToBlob(img, width * scale, height * scale, "image/jpeg", quality);
+          if (!blob) throw new UploadError(UPLOAD_BAD_FORMAT);
+          if (blob.size <= UPLOAD_TARGET_BYTES) return finishUpload(blob);
+        }
+        scale *= 0.75;
+      }
+      throw new UploadError("La imagen pesa demasiado incluso reducida: prueba con otra.");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  function finishUpload(blob) {
+    return { blob, previewUrl: URL.createObjectURL(blob) };
+  }
+
+  /** Dibuja la imagen en un canvas del tamaño pedido y la saca como PNG o JPEG. */
+  function drawToBlob(img, width, height, type, quality) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width));
+    canvas.height = Math.max(1, Math.round(height));
+    const context = canvas.getContext("2d");
+    if (!context) return Promise.resolve(null);
+    if (type === "image/jpeg") {
+      // Sin fondo, lo transparente de un PNG sale negro en el JPEG.
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    context.imageSmoothingQuality = "high";
+    context.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function onGalleryUpload() {
+    const pending = app.pendingUpload;
+    if (!pending) return;
+    const name = ui.galleryUploadName.value.trim();
+    if (!/[a-z0-9]/i.test(name.normalize("NFKD"))) {
+      setUploadState("Ponle a la imagen un nombre con letras o números.", "error");
+      ui.galleryUploadName.focus();
+      return;
+    }
+    setUploadState("Subiendo…");
+    let data;
+    try {
+      data = await blobToBase64(pending.blob);
+    } catch {
+      setUploadState(UPLOAD_BAD_FORMAT, "error");
+      return;
+    }
+    const result = await sendAction(
+      "add_gallery_image",
+      { name, data_base64: data },
+      { button: ui.galleryUploadBtn, silent: true },
+    );
+    if (!result.ok) {
+      setUploadState(result.message, "error");
+      return;
+    }
+    // «Imagen añadida: subida-logo-gdg-0731»: el id que verá Sonnia.
+    const match = /:\s*(\S+)\s*$/.exec(result.message);
+    const id = match ? match[1] : "";
+    if (pending === app.pendingUpload) {
+      if (id) {
+        app.galleryPreviews.set(id, pending.previewUrl);
+        app.pendingUpload = null; // la vista previa se queda para la miniatura
+      }
+      discardPendingUpload();
+    }
+    setUploadState(id ? `Añadida como «${id}». Sonnia ya la puede enseñar.` : result.message, "ok");
+    renderGallery();
+    loadGallery({ quiet: true });
+  }
+
+  /** Olvida la imagen elegida y aún no subida (y su vista previa). */
+  function discardPendingUpload() {
+    const pending = app.pendingUpload;
+    app.pendingUpload = null;
+    if (pending) URL.revokeObjectURL(pending.previewUrl);
+    if (!ui.galleryUpload) return;
+    setHidden(ui.galleryUpload, true);
+    ui.galleryUploadPreview.removeAttribute("src");
+    ui.galleryUploadName.value = "";
+  }
+
+  /** La línea de estado de la subida: vacía, «Subiendo…», «Añadida…» o el error. */
+  function setUploadState(text, kind = "") {
+    const node = ui.galleryUploadState;
+    if (!node) return;
+    setText(node, text);
+    node.dataset.kind = kind;
+    setHidden(node, !text);
   }
 
   function thumbImage(url) {
@@ -3082,6 +3472,13 @@
     }
     ui.danceBtn.addEventListener("click", () => sendAction("gesture", { category: "dance" }, { button: ui.danceBtn }));
     ui.hideBtn.addEventListener("click", () => sendAction("hide_image", {}, { button: ui.hideBtn }));
+    ui.galleryAddBtn.addEventListener("click", () => ui.galleryFile.click());
+    ui.galleryFile.addEventListener("change", onGalleryFile);
+    ui.galleryUploadBtn.addEventListener("click", onGalleryUpload);
+    ui.galleryUploadCancel.addEventListener("click", () => {
+      discardPendingUpload();
+      setUploadState("");
+    });
     ui.muteBtn.addEventListener("click", onMuteClick);
 
     ui.sayForm.addEventListener("submit", onSaySubmit);

@@ -202,10 +202,16 @@
       <!-- ===== Juegos del stand (docs/juegos.md) ===== -->
       <section class="card" id="juegos" aria-labelledby="juegos-title">
         <h2 id="juegos-title">Juegos</h2>
-        <p class="help">Juegos en la pantalla de Sonnia, de uno en uno. También se los pueden pedir a ella: «¿jugamos a algo?». El interruptor de cada juego vale para todas las Sonnias: apagado, Sonnia no lo ofrece y no se puede empezar.</p>
+        <p class="help">Juegos en la pantalla de Sonnia, de uno en uno. También se los pueden pedir a ella: «¿jugamos a algo?». Todos los juegos vienen encendidos. Si uno falla, apágalo aquí con su interruptor: deja de ofrecerse en todas las Sonnias al momento, sin reinstalar.</p>
         <p class="trivia-state game-state" id="game-state" aria-live="polite">No hay ningún juego en marcha.</p>
+        <fieldset class="game-controls" id="game-controls" data-cap="game_controls" hidden>
+          <legend class="game-controls-title">Control del juego</legend>
+          <p class="help game-controls-help">Por si falla la voz o la cámara: lleva la partida a mano. Sonnia lo cuenta en cuanto calla.</p>
+          <div class="game-control-list" id="game-control-list"></div>
+          <p class="cap-note" data-cap-note="game_controls" hidden>Esta Sonnia no tiene control a mano de los juegos: hay que instalarle una versión más nueva de la app. Mientras, «Terminar juego» la saca del juego.</p>
+        </fieldset>
         <div class="game-list" id="game-list"></div>
-        <div class="row">
+        <div class="row" id="game-stop-row">
           <button type="button" class="btn" id="game-stop-btn" data-cap="games" data-extra="game_active">Terminar juego</button>
         </div>
         <p class="note" id="game-note" hidden>Los juegos necesitan a Sonnia en «Conversando».</p>
@@ -255,7 +261,7 @@
       <!-- ===== Imágenes de la galería ===== -->
       <section class="card" id="imagenes" aria-labelledby="imagenes-title">
         <h2 id="imagenes-title">Mostrar una imagen</h2>
-        <p class="help">Toca una imagen para que salga en la pantalla de Sonia. Se quita sola al rato.</p>
+        <p class="help">Toca una imagen para que salga en la pantalla de Sonnia. Se quita sola al rato. Las que añadas desde aquí llevan una «×» para quitarlas.</p>
         <p class="now-showing" id="now-showing">No hay ninguna imagen en pantalla.</p>
         <div class="thumbs" id="thumbs" aria-live="polite">
           <p class="muted">Cargando imágenes…</p>
@@ -265,6 +271,23 @@
           <input type="text" id="caption-input" maxlength="120" autocomplete="off" data-cap="images" placeholder="Por ejemplo: Ven a conocernos">
         </label>
         <p class="cap-note" data-cap-note="images" hidden>Mostrar imágenes no está disponible con el motor de voz actual.</p>
+        <div class="gallery-add">
+          <button type="button" class="btn" id="gallery-add-btn" data-cap="gallery_upload">Añadir imagen</button>
+          <input type="file" id="gallery-file" accept="image/*" data-cap="gallery_upload" hidden>
+          <div class="gallery-upload" id="gallery-upload" hidden>
+            <img id="gallery-upload-preview" alt="Vista previa de la imagen elegida">
+            <label class="field">
+              <span class="field-label">Nombre de la imagen (Sonnia la conoce por él)</span>
+              <input type="text" id="gallery-upload-name" maxlength="60" autocomplete="off" data-cap="gallery_upload" placeholder="Por ejemplo: logo del GDG">
+            </label>
+            <div class="gallery-upload-actions">
+              <button type="button" class="btn btn-primary" id="gallery-upload-btn" data-cap="gallery_upload">Subir a la galería</button>
+              <button type="button" class="btn" id="gallery-upload-cancel">Cancelar</button>
+            </div>
+          </div>
+          <p class="gallery-upload-state" id="gallery-upload-state" role="status" aria-live="polite" hidden></p>
+        </div>
+        <p class="cap-note" data-cap-note="gallery_upload" hidden>Esta Sonnia no puede recibir imágenes desde el panel: hay que instalarle una versión más nueva de la app.</p>
       </section>
 
       <!-- ===== Animación de stand ===== -->

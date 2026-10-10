@@ -20,6 +20,8 @@ deja elegir cuál se controla.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import contextlib
 import json
 import logging
@@ -28,11 +30,13 @@ import random
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeGuard
 
-from sonia.actions.gallery import Gallery
+from sonia.actions.gallery import UPLOAD_MAX_BYTES, Gallery, GalleryError
 from sonia.actions.registry import ActionRegistry
+from sonia.clock import resolve_timezone
 from sonia.config import Settings
 from sonia.games.banks import is_bank_id
 from sonia.games.manager import normalize_game_banks, normalize_games_judge, normalize_games_off
@@ -104,6 +108,9 @@ CAPABILITIES = [
     "guest_avatar_editor",
     #: El registro lleva ``logger`` y ``tags`` (filtros del registro de «Developer»).
     "log_tags",
+    #: Subir imágenes a la galería y quitar las subidas (``add_gallery_image``,
+    #: ``remove_gallery_image``); el estado lleva ``gallery`` con los ids al día.
+    "gallery_upload",
 ]
 
 #: Ajustes que se guardan en la nube y comparten todas las Sonnias. El modo, el
@@ -174,6 +181,9 @@ AWAY_MESSAGE_MAX_LEN = 140
 #: la nube guarda todos los ajustes compartidos en un documento de 256 KB.
 TRIVIA_BANK_MAX_LEN = 100_000
 
+#: Tope del texto de un control a mano de los juegos («Probar palabra», una predicción...).
+GAME_CONTROL_VALUE_MAX_LEN = 200
+
 #: Tope de todos los ajustes compartidos juntos, en JSON. La nube los guarda en un solo
 #: documento de 256 KB (``MAX_SETTINGS_BYTES`` en ``cloud/panel``) y, si no caben, descarta
 #: el cambio sin avisar: lo guardado volvería atrás al confirmarlo. Se deja margen.
@@ -197,6 +207,13 @@ MIC_DEAF_S = 30.0
 
 #: Cada cuánto se guarda el gasto del día.
 USAGE_SAVE_S = 30.0
+
+#: Cada cuánto se vuelve a mirar la galería para el estado (``gallery``): el equipo
+#: también puede dejar imágenes en las carpetas a mano.
+GALLERY_REFRESH_S = 5.0
+
+#: Largo máximo de ``data_base64`` (la imagen subida, con algo de margen).
+UPLOAD_MAX_BASE64 = (UPLOAD_MAX_BYTES // 3 + 2) * 4 + 64
 
 
 def default_tuning() -> dict[str, dict[str, float]]:
@@ -448,6 +465,13 @@ class StandControl:
         #: motor baja un instante hasta que suma la sesión cerrada.
         self._trial_peak = self._trial_base
         self._trial_ended = False
+        #: Ids de la galería para el estado (las subidas empiezan por ``subida-``). Se
+        #: leen en un hilo (``_refresh_gallery``): ``status()`` no toca el disco.
+        self._gallery_listing: dict[str, list[str]] | None = None
+        self._gallery_checked_at = 0.0
+        #: Las subidas se escriben de una en una (el id libre se elige antes de escribir).
+        self._gallery_lock = asyncio.Lock()
+        self._tz = resolve_timezone(settings.timezone)
         hub.add_listener(self._watch_outgoing)
         hub.on(p.MSG_ANIMATIONS, self._on_animations)
         hub.on(p.MSG_ANIMATION_PLAYING, self._on_animation_playing)
@@ -553,6 +577,7 @@ class StandControl:
         elif state.mode != "conversation":
             logger.info("El panel dejó a Sonnia en modo %s: no se abre GPT-Live", state.mode)
         self._loop_task = asyncio.create_task(self._loop(), name="sonia-panel-loop")
+        self._spawn(self._refresh_gallery(), "gallery")
         if (
             self._voice_cache is not None
             and self._settings.live.api_key
@@ -628,6 +653,8 @@ class StandControl:
                     await self._set_avatar_editor_open(False)
                 if time.monotonic() - self._last_usage_save >= USAGE_SAVE_S:
                     self._save_usage()
+                if time.monotonic() - self._gallery_checked_at >= GALLERY_REFRESH_S:
+                    await self._refresh_gallery()
                 if self.trial_over and not self._trial_ended:
                     await self._end_trial()
                 if (
@@ -837,7 +864,10 @@ class StandControl:
         if self._registry is None or "show_image" not in self._registry:
             raise _BadRequest("No hay acción para mostrar imágenes.")
         ctx = ActionContext(
-            camera=None, avatar=self._hub, gallery_dir=str(self._settings.gallery_dir)
+            camera=None,
+            avatar=self._hub,
+            gallery_dir=str(self._settings.gallery_dir),
+            gallery_upload_dir=self._settings.gallery_upload_dir,
         )
         args: dict[str, Any] = {"image_id": image_id}
         if caption:
@@ -848,6 +878,58 @@ class StandControl:
     async def _act_hide_image(self, params: dict[str, Any]) -> tuple[bool, str]:
         await self._hub.hide_image()
         return True, "Imagen retirada."
+
+    async def _act_add_gallery_image(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Añadir imagen»: la guarda en la carpeta de subidas (``GALLERY_UPLOAD_DIR``).
+
+        El panel ya la manda reducida (1280 px, JPEG de ~220 KB o PNG pequeño). Aquí
+        se comprueba otra vez por el contenido y se escribe en un hilo; el vigilante
+        de la galería se la cuenta a GPT-Live con la nota ``[Galería]``.
+        """
+        name = _text(params, "name", max_len=120)
+        raw = params.get("data_base64")
+        if not isinstance(raw, str) or not raw.strip():
+            raise _BadRequest("Elige una imagen primero.")
+        if len(raw) > UPLOAD_MAX_BASE64:
+            raise _BadRequest(f"La imagen pesa demasiado (máximo {UPLOAD_MAX_BYTES // 1024} KB).")
+        if raw.startswith("data:"):
+            raw = raw.partition(",")[2]
+        try:
+            data = base64.b64decode(raw.strip(), validate=True)
+        except (binascii.Error, ValueError):
+            raise _BadRequest("La imagen llegó dañada: vuelve a elegirla.") from None
+        gallery = self.gallery()
+        async with self._gallery_lock:
+            try:
+                image_id = await asyncio.to_thread(
+                    gallery.add_upload, name, data, now=datetime.now(self._tz)
+                )
+            except GalleryError as exc:
+                raise _BadRequest(str(exc)) from None
+            except OSError as exc:
+                logger.warning("No se pudo guardar la imagen subida: %s", exc)
+                raise _BadRequest("No se pudo guardar la imagen en este equipo.") from None
+        await self._refresh_gallery()
+        return True, f"Imagen añadida: {image_id}"
+
+    async def _act_remove_gallery_image(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """La «×» de una imagen subida. Las que trae la app no se quitan desde el panel."""
+        image_id = _text(params, "id", max_len=120)
+        if not image_id:
+            raise _BadRequest("Falta la imagen que quitar.")
+        gallery = self.gallery()
+        async with self._gallery_lock:
+            try:
+                removed = await asyncio.to_thread(gallery.remove_upload, image_id)
+            except OSError as exc:
+                logger.warning("No se pudo quitar la imagen subida %s: %s", image_id, exc)
+                raise _BadRequest("No se pudo borrar la imagen en este equipo.") from None
+        if not removed:
+            raise _BadRequest(
+                "Esa imagen no se puede quitar: solo se quitan las que se subieron desde el panel."
+            )
+        await self._refresh_gallery()
+        return True, f"Imagen quitada: {image_id}"
 
     async def _act_gesture(self, params: dict[str, Any]) -> tuple[bool, str]:
         self._need_sonia_on_stage()
@@ -1130,6 +1212,39 @@ class StandControl:
         if games is None or not games.active:
             return True, "No hay ningún juego en marcha."
         _, message = await games.stop("panel")
+        return True, message
+
+    async def _act_game_control(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Control del juego»: llevar a mano la partida en marcha por si falla la voz o la
+        cámara (``controls`` del estado de los juegos). ``control`` es el id del botón y
+        ``value``, el texto de su campo si lo tiene."""
+        from sonia.games.manager import CONTROL_STOP
+
+        games = self._need_games()
+        control = params.get("control")
+        if not isinstance(control, str) or not control.strip():
+            raise _BadRequest("Falta el control del juego.")
+        control = control.strip()
+        value = _text(params, "value", max_len=GAME_CONTROL_VALUE_MAX_LEN)
+        if not games.active:
+            raise _BadRequest("No hay ningún juego en marcha.")
+        # Terminar vale siempre, como «Terminar juego»; lo demás hace hablar a Sonnia o
+        # vuelve a empezar, así que pide lo mismo que empezar un juego.
+        if control != CONTROL_STOP:
+            self._need_sonia_on_stage()
+            if self.state.mode != "conversation":
+                raise _BadRequest(
+                    "Los juegos necesitan a Sonnia conversando: pásala a «Conversando»."
+                )
+            if self.state.debug:
+                raise _BadRequest("En modo debug Sonnia no conversa: desactívalo antes.")
+            if self._avatar_editor_open:
+                raise _BadRequest("Cierra antes el editor de personaje.")
+            if self._hub.client_count == 0:
+                raise _BadRequest("La pantalla de Sonnia no está conectada.")
+        ok, message = await games.panel_control(control, value)
+        if not ok:
+            raise _BadRequest(message)
         return True, message
 
     async def _act_set_game_enabled(self, params: dict[str, Any]) -> tuple[bool, str]:
@@ -1614,6 +1729,10 @@ class StandControl:
                 "cost_usd": round(usage_s / 60.0 * settings.panel.live_price_per_minute, 2),
             },
             "image": self._image,
+            # Ids de la galería al día, también para la nube, que solo aprende los del
+            # ``hello``. Las subidas (con «×») empiezan por ``subida-``. ``None`` hasta la
+            # primera lectura.
+            "gallery": self._gallery_listing,
             "animations": self._animations,
             "current_animation": self._current_animation if self._hub.client_count else None,
             "disabled_animations": self.state.disabled_animations,
@@ -1798,7 +1917,18 @@ class StandControl:
         task.add_done_callback(self._tasks.discard)
 
     def gallery(self) -> Gallery:
-        return Gallery(self._settings.gallery_dir)
+        return Gallery(self._settings.gallery_dir, self._settings.gallery_upload_dir)
+
+    async def _refresh_gallery(self) -> None:
+        """Vuelve a leer la galería para el estado, en un hilo. Nunca lanza."""
+        self._gallery_checked_at = time.monotonic()
+        gallery = self.gallery()
+        try:
+            ids = await asyncio.to_thread(gallery.ids)
+        except Exception:  # noqa: BLE001 - sin la lista nueva se queda la anterior
+            logger.exception("No se pudo leer la galería")
+            return
+        self._gallery_listing = {"ids": ids}
 
 
 class _BadRequest(Exception):

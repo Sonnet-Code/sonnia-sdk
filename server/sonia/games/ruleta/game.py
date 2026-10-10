@@ -124,6 +124,21 @@ GIVE_UP = "se_rinden"
 #: Lo que sale en la tarjeta de «predice el futuro de la IA» (no tiene banco).
 FUTURE_PROMPT = "¿Qué pasará con la inteligencia artificial en los próximos años?"
 
+#: Control a mano desde el panel (``panel_controls``): la nota de «explica en 20 segundos»
+#: con «Bien» y «Flojo», y la probabilidad que se le da a una predicción escrita a mano.
+PANEL_GOOD_SCORE = 8
+PANEL_BAD_SCORE = 4
+PANEL_PROBABILITY = (30, 85)
+#: Largo de cada opción de la trivia relámpago en su botón del panel.
+PANEL_OPTION_MAX = 32
+
+#: Lo que lee el equipo del stand en el panel cuando un control no vale ahora.
+PANEL_SPINNING = "La ruleta está girando: espera a que pare y salga el reto."
+PANEL_ROUND_OVER = "Este reto ya terminó: gira otra vez o termina el juego."
+PANEL_NOT_NOW = "Ese control no vale para este reto."
+PANEL_NO_ROUND = "No hay ninguna vuelta en marcha."
+PANEL_NO_PREDICTION = "Escribe antes la predicción del visitante."
+
 _SONIA = re.compile(r"\bSonia\b")
 _SONNIA = re.compile(r"\bSonnia\b")
 _SPACES = re.compile(r"\s+")
@@ -709,6 +724,77 @@ class RuletaGame(Game):
     def _left(round_: Round) -> str:
         left = max(0, round_.tries - round_.misses)
         return t.LEFT_ONE if left == 1 else t.LEFT_MANY.format(left=left)
+
+    # -- control a mano desde el panel (``docs/juegos.md``, «Control a mano») ------
+
+    def panel_controls(self) -> list[dict[str, Any]]:
+        """Girando, ninguno; en el reto, su respuesta y «Cambiar de reto»; con el
+        resultado en pantalla, «Girar»."""
+        round_ = self._round
+        if round_ is None or self._phase in ("idle", "spinning"):
+            return []
+        if self._phase == "result":
+            return [{"id": "spin", "label": "Girar"}]
+        return [*self._answer_controls(round_), {"id": "spin", "label": "Cambiar de reto"}]
+
+    def _answer_controls(self, round_: Round) -> list[dict[str, Any]]:
+        """Los controles que cierran el reto en curso, con los mismos ids en todos:
+        ``right``, ``wrong`` y ``pass`` (las letras en la trivia relámpago y el texto en la
+        predicción)."""
+        give_up = {"id": "pass", "label": "Se rinde"}
+        if round_.kind == "trivia":
+            options = [
+                {"id": letter, "label": f"{letter}: {_clip(for_screen(option), PANEL_OPTION_MAX)}"}
+                for letter, option in zip(OPTION_LETTERS, round_.options, strict=False)
+            ]
+            return [*options, {"id": "pass", "label": "No lo sabe"}]
+        if round_.kind == "explica":
+            return [
+                {"id": "right", "label": f"Bien (nota {PANEL_GOOD_SCORE})"},
+                {"id": "wrong", "label": f"Flojo (nota {PANEL_BAD_SCORE})"},
+                give_up,
+            ]
+        if round_.kind == "futuro":
+            return [
+                {
+                    "id": "predict",
+                    "label": "Poner su predicción",
+                    "kind": "text",
+                    "placeholder": "La IA escribirá todo el código",
+                },
+                give_up,
+            ]
+        if round_.kind == "sonnet" and round_.task:
+            return [
+                {"id": "right", "label": "Lo hizo"},
+                {"id": "wrong", "label": "No lo hizo"},
+                give_up,
+            ]
+        return [{"id": "right", "label": "Acertó"}, {"id": "wrong", "label": "Falló"}, give_up]
+
+    async def panel_control(self, control: str, value: str) -> str:
+        """El control del panel con las mismas jugadas que GPT-Live: «Girar» es
+        ``ruleta_spin``; la nota de «explica», ``ruleta_score``; la predicción,
+        ``ruleta_prediccion``; lo demás, ``ruleta_answer``."""
+        round_ = self._round
+        if round_ is None or self._phase == "idle":
+            raise GameError(PANEL_NO_ROUND)
+        if self._phase == "spinning":
+            raise GameError(PANEL_SPINNING)
+        if control not in {c["id"] for c in self.panel_controls()}:
+            raise GameError(PANEL_ROUND_OVER if self._phase == "result" else PANEL_NOT_NOW)
+        if control == "spin":
+            return await self.spin_again({})
+        if control == "predict":
+            if not clean_prediction(value):
+                raise GameError(PANEL_NO_PREDICTION)
+            probability = self.host.rng.randint(*PANEL_PROBABILITY)
+            return await self.predict({"prediccion": value, "probabilidad": probability})
+        if round_.kind == "explica" and control in ("right", "wrong"):
+            note = PANEL_GOOD_SCORE if control == "right" else PANEL_BAD_SCORE
+            return await self.score({"nota": note})
+        answers = {"right": "acierto", "wrong": "fallo", "pass": GIVE_UP}
+        return await self.answer({"respuesta": answers.get(control, control)})
 
     # -- el giro ----------------------------------------------------------------
 

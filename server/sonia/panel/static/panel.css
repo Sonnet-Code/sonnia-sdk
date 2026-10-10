@@ -881,6 +881,70 @@ summary:focus-visible,
   margin-top: 4px;
 }
 
+/* «Control del juego»: la partida a mano por si falla la voz o la cámara */
+.game-controls {
+  min-width: 0;
+  margin: 0 0 12px;
+  padding: 10px 12px 12px;
+  border: 2px solid var(--blue);
+  border-radius: var(--radius-sm);
+}
+
+/* La leyenda como un título más, dentro del marco */
+.game-controls-title {
+  float: left;
+  width: 100%;
+  margin: 0 0 4px;
+  padding: 0;
+  font-weight: 700;
+}
+
+.game-controls-title + * {
+  clear: both;
+}
+
+.game-controls-help {
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+
+.game-control-list {
+  display: grid;
+  gap: 8px;
+}
+
+.game-control-list:empty {
+  display: none;
+}
+
+.game-control-row,
+.game-control-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.game-control-row > .btn {
+  flex: 1 1 120px;
+}
+
+/* El campo y su botón en una fila si caben; si no, el botón debajo y a todo el ancho */
+.game-control-form > input {
+  flex: 3 1 120px;
+  min-width: 0;
+  width: auto;
+}
+
+.game-control-form > .btn {
+  flex: 1 0 auto;
+}
+
+/* «Reiniciar» y «Terminar», los de todos los juegos, aparte */
+.game-control-common {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
 /* ---------- Imágenes ---------- */
 
 .now-showing {
@@ -950,6 +1014,87 @@ summary:focus-visible,
 .thumbs .retry {
   grid-column: 1 / -1;
 }
+
+/* Imagen subida desde el panel: la «×» para quitarla va en la esquina */
+.thumb-wrap {
+  position: relative;
+  display: grid;
+}
+
+.thumb-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--bad);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.thumb-remove:hover:not(:disabled) {
+  border-color: var(--bad);
+  background: var(--bad-bg);
+}
+
+.thumb-remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Añadir imagen a la galería */
+.gallery-add {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  justify-items: start;
+}
+
+.gallery-upload {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px;
+  border: 2px dashed var(--line-strong);
+  border-radius: 12px;
+}
+
+.gallery-upload img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 8px;
+  /* Fondo oscuro, como la escena de Sonia */
+  background: var(--navy);
+}
+
+.gallery-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.gallery-upload-state {
+  margin: 0;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+.gallery-upload-state[data-kind="ok"] { color: var(--ok); }
+.gallery-upload-state[data-kind="error"] { color: var(--bad); }
 
 /* ---------- Formularios ---------- */
 

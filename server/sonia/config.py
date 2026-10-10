@@ -766,6 +766,10 @@ class Settings(BaseSettings):
     #: equipo añade o quita se le cuenta a la sesión abierta con una nota silenciosa
     #: ``[Galería]`` (0 = no mirar: la lista nueva llega con la siguiente sesión).
     gallery_watch_seconds: float = 5.0
+    #: ``GALLERY_UPLOAD_DIR``: dónde se guardan las imágenes que se suben desde el
+    #: panel. Escribible y fuera de ``assets``: en la ``.app`` de macOS ``assets`` va
+    #: dentro del paquete y escribir ahí rompe la firma.
+    gallery_upload_dir: str = str(_HOME / "cache" / "gallery")
     #: ``MEETING``: Sonia está en una videollamada (Google Meet), no en el stand.
     #: Lo pone ``sonia reunion``; cambia sus instrucciones (``live/prompts.py``) y
     #: quita la animación de stand (docs/reunion.md).

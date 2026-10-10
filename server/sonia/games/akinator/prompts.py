@@ -29,6 +29,8 @@ __all__ = [
     "MISS_SCRIPT",
     "NOT_CLEAR_SCRIPT",
     "NO_GUESS_SCRIPT",
+    "PANEL_ANSWER_SCRIPT",
+    "PANEL_READY_SCRIPT",
     "RESUME_SCRIPT",
     "WIN_SCRIPT",
     "build_rules",
@@ -123,6 +125,17 @@ NO_ANSWER_SCRIPT = (
 RESUME_SCRIPT = (
     "Ya estáis jugando al Akinator dev: no hace falta empezarlo otra vez. Llevas {asked} de {max} "
     "preguntas.{guess} Sigue donde ibas."
+)
+
+#: Control a mano desde el panel (``AkinatorGame.panel_control``): lo que el equipo marca por
+#: el visitante. El manager le pone delante que lo hizo el equipo.
+PANEL_READY_SCRIPT = (
+    "El visitante ya tiene algo pensado. Empieza con tu primera pregunta de sí o no, una sola, y "
+    "espera lo que conteste."
+)
+PANEL_ANSWER_SCRIPT = (
+    "El visitante contesta «{answer}» a tu última pregunta. Reacciona en pocas palabras y sigue "
+    "con otra pregunta de sí o no; si ya lo tienes claro, delega «akinator: adivina X»."
 )
 RESUME_GUESS = " Tu respuesta «{answer}» está en la pantalla esperando que diga si acertaste."
 
