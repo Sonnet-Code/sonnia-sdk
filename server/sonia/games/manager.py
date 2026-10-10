@@ -36,6 +36,7 @@ from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, S
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar
 
+from sonia.busy import TEXT_CAMERA, TEXT_GAME
 from sonia.games.banks import BANK_MAX_CHARS, GameBank, is_bank_id
 from sonia.games.base import (
     INSTRUCT_MAX_CHARS,
@@ -80,6 +81,11 @@ STICKY_STATE = "game"
 
 #: Tope de espera a que Sonia calle antes de contar un juego arrancado desde el panel.
 PANEL_WAIT_S = 3.0
+
+#: «Encendiendo la cámara…» (``sonia.busy``): cada cuánto se mira si ya llegó el primer
+#: frame de un juego de cámara y hasta cuándo como mucho.
+CAMERA_BUSY_POLL_S = 0.1
+CAMERA_BUSY_MAX_S = 10.0
 
 #: Fallos seguidos de ``Game.tick`` tras los que la partida se cancela (un juego roto no
 #: puede llenar el registro 20 veces por segundo).
@@ -597,6 +603,12 @@ class GameManager:
         self._pending = None
         self._engine.touch()
         logger.info("Juego %s en marcha (%s)", game_id, source)
+        # Aviso de espera (``sonia.busy``) hasta la primera pantalla del juego (su ``start``;
+        # si falla, ``_end_now`` lo apaga) y, en los de cámara, hasta su primer frame: abrir
+        # la cámara tarda segundos y no se ve nada.
+        await self.set_busy(game_id, "game", TEXT_GAME)
+        if "camera" in game.needs:
+            self._spawn(self._camera_busy(match, game), "game-camera-busy")
         with contextlib.suppress(Exception):
             await self._screen.hide_image()
         try:
@@ -610,6 +622,8 @@ class GameManager:
             await self._abort(match, game)
             return False, f"No se pudo empezar {game.spoken}: falló al prepararse."
         if match != self._match or self._phase != "playing":
+            if match == self._match:
+                await self.set_busy(game_id, "game", None)
             await self._release_orphaned_vision(game)
             return False, f"{game.title} se canceló al empezar."
         await self._ensure_started(game)
@@ -620,6 +634,29 @@ class GameManager:
             "game-intro",
         )
         return True, f"{game.title} en marcha."
+
+    async def _camera_busy(self, match: int, game: Game) -> None:
+        """«Encendiendo la cámara…» desde que arranca un juego de cámara hasta su primer frame.
+
+        La cámara tarda en abrir (el dispositivo y su primer frame, dentro del ``start``
+        del juego) y el visitante no ve nada mientras. Mira cada ``CAMERA_BUSY_POLL_S``
+        el último frame del stream; se rinde a los ``CAMERA_BUSY_MAX_S`` y se cancela con
+        la partida (``_end_now``, que además apaga los avisos del juego).
+        """
+        stream = self._vision.stream
+        deadline = self._clock() + CAMERA_BUSY_MAX_S
+        shown = False
+        try:
+            while match == self._match and self._clock() < deadline:
+                if stream.latest() is not None:
+                    break
+                if not shown:
+                    shown = True
+                    await self.set_busy(game.id, "camera", TEXT_CAMERA)
+                await self._sleep(CAMERA_BUSY_POLL_S)
+        finally:
+            if shown and match == self._match:
+                await self.set_busy(game.id, "camera", None)
 
     async def _resume(self, game: Game) -> str:
         try:
@@ -1000,6 +1037,8 @@ class GameManager:
             self._screen_started = True
             self._screen.clear_sticky(STICKY_STATE)
             await self._screen.set_sticky(STICKY_START, msg)
+            # Primera pantalla del juego: ya no se prepara.
+            await self.set_busy(game_id, "game", None)
             return
         await self._ensure_started(game)
         msg = p.msg_game(game_id, event, self._next_seq(), data)
