@@ -42,6 +42,7 @@ from sonia.games.base import (
 )
 from sonia.games.ruleta import texts as t
 from sonia.games.ruleta.banks import RIDDLES, SONNET, TECHS, Riddle, SonnetChallenge, Tech
+from sonia.prompts import BOOK
 from sonia.types import ActionSpec
 
 __all__ = [
@@ -163,6 +164,12 @@ def _in_sentence(name: str) -> str:
         if name.startswith(article):
             return article.lower() + name[len(article) :]
     return name
+
+
+def _text(name: str, fallback: str, **values: Any) -> str:
+    """El texto en uso de la pieza ``juegos/ruleta/<name>`` (``sonia.prompts``): el de la
+    nube si lo hay y vale; si no, el de la app (``fallback``). Con sus marcadores rellenos."""
+    return BOOK.render(f"{t.PROMPTS}/{name}", fallback=fallback, **values)
 
 
 def _seconds(value: float) -> str:
@@ -453,15 +460,16 @@ class RuletaGame(Game):
         await self.host.instruct(self._rules_text())
         await self._spin()
         logger.info("Ruleta en marcha (%s)", source)
-        return t.START_TEXT
+        return _text("empezar", t.START_TEXT)
 
     async def resume(self) -> str:
         round_ = self._round
         if self._phase == "spinning" or round_ is None:
-            return t.RESUME_SPINNING
+            return _text("seguir_girando", t.RESUME_SPINNING)
         if self._phase == "challenge":
-            return t.RESUME_CHALLENGE.format(spoken=self._segments[round_.segment].spoken)
-        return t.RESUME_RESULT
+            spoken = self._segments[round_.segment].spoken
+            return _text("seguir_reto", t.RESUME_CHALLENGE, spoken=spoken)
+        return _text("seguir_resultado", t.RESUME_RESULT)
 
     async def stop(self, reason: StopReason) -> None:
         logger.info(
@@ -531,11 +539,11 @@ class RuletaGame(Game):
         if self._phase == "challenge" and round_ is not None:
             if round_.kind == "explica" and not round_.time_up:
                 return None  # está explicando: nada de empujones
-            return t.NUDGE_CHALLENGE
+            return _text("empujon_reto", t.NUDGE_CHALLENGE)
         if self._phase == "result":
-            return t.NUDGE_RESULT
+            return _text("empujon_resultado", t.NUDGE_RESULT)
         if self._phase == "spinning":
-            return t.NUDGE_SPINNING
+            return _text("empujon_girando", t.NUDGE_SPINNING)
         return None
 
     def snapshot(self) -> dict[str, Any]:
@@ -587,7 +595,7 @@ class RuletaGame(Game):
         if skipped and self._round is not None:
             logger.info("Ruleta: se salta el reto %s sin jugarlo", self._round.kind)
         await self._spin()
-        return t.SKIP_TEXT if skipped else t.SPIN_TEXT
+        return _text("saltar", t.SKIP_TEXT) if skipped else _text("girar", t.SPIN_TEXT)
 
     async def answer(self, arguments: dict[str, Any]) -> str:
         """``ruleta_answer``: la letra, acierto, fallo o se rinden, según el reto."""
@@ -604,7 +612,10 @@ class RuletaGame(Game):
         if value != GIVE_UP:
             raise GameError(t.WRONG_PLAY[round_.kind])
         await self._resolve(round_, "pass")
-        text = t.EXPLAIN_PASS if round_.kind == "explica" else t.FUTURE_PASS
+        if round_.kind == "explica":
+            text = _text("explica_rendirse", t.EXPLAIN_PASS)
+        else:
+            text = _text("futuro_rendirse", t.FUTURE_PASS)
         return text + self._after(round_)
 
     async def score(self, arguments: dict[str, Any]) -> str:
@@ -614,7 +625,7 @@ class RuletaGame(Game):
             raise GameError(t.WRONG_PLAY[round_.kind])
         round_.score = _as_int(arguments.get("nota"), 1, 10, 5)
         await self._resolve(round_, "done")
-        return t.EXPLAIN_SCORE.format(score=round_.score) + self._after(round_)
+        return _text("explica_nota", t.EXPLAIN_SCORE, score=round_.score) + self._after(round_)
 
     async def predict(self, arguments: dict[str, Any]) -> str:
         """``ruleta_prediccion``: la predicción resumida y su probabilidad."""
@@ -627,8 +638,11 @@ class RuletaGame(Game):
         round_.prediction = prediction
         round_.probability = _as_int(arguments.get("probabilidad"), 0, 100, 50)
         await self._resolve(round_, "done")
-        script = t.FUTURE_DONE.format(
-            prediction=for_live(prediction), probability=round_.probability
+        script = _text(
+            "futuro_hecho",
+            t.FUTURE_DONE,
+            prediction=for_live(prediction),
+            probability=round_.probability,
         )
         return script + self._after(round_)
 
@@ -646,16 +660,23 @@ class RuletaGame(Game):
         right_option = for_live(round_.options[round_.correct])
         if value == GIVE_UP:
             await self._resolve(round_, "pass")
-            script = t.TRIVIA_PASS.format(right_letter=right_letter, right_option=right_option)
+            script = _text(
+                "trivia_no_lo_sabe",
+                t.TRIVIA_PASS,
+                right_letter=right_letter,
+                right_option=right_option,
+            )
         elif value in OPTION_LETTERS:
             round_.chosen = OPTION_LETTERS.index(value)
             option = for_live(round_.options[round_.chosen])
             if round_.chosen == round_.correct:
                 await self._resolve(round_, "win")
-                script = t.TRIVIA_RIGHT.format(letter=value, option=option)
+                script = _text("trivia_acierto", t.TRIVIA_RIGHT, letter=value, option=option)
             else:
                 await self._resolve(round_, "lose")
-                script = t.TRIVIA_WRONG.format(
+                script = _text(
+                    "trivia_fallo",
+                    t.TRIVIA_WRONG,
                     letter=value,
                     option=option,
                     right_letter=right_letter,
@@ -671,22 +692,22 @@ class RuletaGame(Game):
         answer = for_live(round_.answer)
         if value == "acierto":
             await self._resolve(round_, "win")
-            return t.RIDDLE_RIGHT.format(answer=answer) + self._after(round_)
+            return _text("adivinanza_acierto", t.RIDDLE_RIGHT, answer=answer) + self._after(round_)
         if value == GIVE_UP:
             await self._resolve(round_, "pass")
-            return t.RIDDLE_PASS.format(answer=answer) + self._after(round_)
+            return _text("adivinanza_rendirse", t.RIDDLE_PASS, answer=answer) + self._after(round_)
         if value != "fallo":
             raise GameError(t.WRONG_PLAY["adivinanza"])
         round_.misses += 1
         if round_.misses >= round_.tries:
             await self._resolve(round_, "lose")
-            return t.RIDDLE_LOST.format(answer=answer) + self._after(round_)
+            return _text("adivinanza_perdida", t.RIDDLE_LOST, answer=answer) + self._after(round_)
         # Con el primer fallo sale la pista, si aún no había salido.
         hint_now = not round_.hint_shown
         round_.hint_shown = True
         self._hint_at = None
         await self.host.send("challenge", self._challenge_data(round_))
-        script = t.RIDDLE_MISS.format(left=self._left(round_))
+        script = _text("adivinanza_fallo", t.RIDDLE_MISS, left=self._left(round_))
         if hint_now:
             script += t.RIDDLE_MISS_HINT.format(hint=for_live(round_.hint))
         return script
@@ -698,27 +719,28 @@ class RuletaGame(Game):
             # Un reto de stand: se le cree, como en la trivia.
             if value == "acierto":
                 await self._resolve(round_, "win")
-                text = t.SONNET_DONE
+                text = _text("sonnet_reto_cumplido", t.SONNET_DONE)
             elif value == "fallo":
                 await self._resolve(round_, "lose")
-                text = t.SONNET_TASK_FAILED
+                text = _text("sonnet_reto_fallido", t.SONNET_TASK_FAILED)
             else:
                 await self._resolve(round_, "pass")
-                text = t.SONNET_TASK_PASS
+                text = _text("sonnet_reto_rendirse", t.SONNET_TASK_PASS)
             return text + self._after(round_)
         answer = for_live(round_.answer)
         if value == "acierto":
             await self._resolve(round_, "win")
-            return t.SONNET_RIGHT.format(answer=answer) + self._after(round_)
+            return _text("sonnet_acierto", t.SONNET_RIGHT, answer=answer) + self._after(round_)
         if value == GIVE_UP:
             await self._resolve(round_, "pass")
-            return t.SONNET_QUESTION_PASS.format(answer=answer) + self._after(round_)
+            script = _text("sonnet_pregunta_rendirse", t.SONNET_QUESTION_PASS, answer=answer)
+            return script + self._after(round_)
         round_.misses += 1
         if round_.misses >= round_.tries:
             await self._resolve(round_, "lose")
-            return t.SONNET_LOST.format(answer=answer) + self._after(round_)
+            return _text("sonnet_perdida", t.SONNET_LOST, answer=answer) + self._after(round_)
         await self.host.send("challenge", self._challenge_data(round_))
-        return t.SONNET_MISS.format(left=self._left(round_))
+        return _text("sonnet_fallo", t.SONNET_MISS, left=self._left(round_))
 
     @staticmethod
     def _left(round_: Round) -> str:
@@ -972,7 +994,8 @@ class RuletaGame(Game):
         ):
             return
         self._quiz_reminded = True
-        self.host.spawn(self._say_if_current(round_.spin, t.QUIZ_REMIND_TEXT, 0.0), "recordatorio")
+        text = _text("trivia_recordatorio", t.QUIZ_REMIND_TEXT)
+        self.host.spawn(self._say_if_current(round_.spin, text, 0.0), "recordatorio")
 
     async def _tick_hint(self, now: float, round_: Round) -> None:
         if self._hint_at is None or round_.hint_shown or now < self._hint_at:
@@ -980,7 +1003,7 @@ class RuletaGame(Game):
         self._hint_at = None
         round_.hint_shown = True
         await self.host.send("challenge", self._challenge_data(round_))
-        text = t.HINT_TEXT.format(hint=for_live(round_.hint))
+        text = _text("adivinanza_pista", t.HINT_TEXT, hint=for_live(round_.hint))
         self.host.spawn(self._say_if_current(round_.spin, text, HINT_WAIT_S), "pista")
 
     async def _tick_explain(self, now: float, round_: Round) -> None:
@@ -1010,7 +1033,10 @@ class RuletaGame(Game):
         round_ = self._round
         if round_ is None or round_.spin != spin or self._phase != "challenge":
             return
-        await self.host.speak(t.TIME_UP_TEXT if played else t.TIME_UP_SAY_TEXT)
+        if played:
+            await self.host.speak(_text("explica_tiempo", t.TIME_UP_TEXT))
+        else:
+            await self.host.speak(_text("explica_tiempo_sin_grabar", t.TIME_UP_SAY_TEXT))
 
     async def _say_if_current(self, spin: int, text: str, wait_s: float) -> None:
         """Que Sonia diga ``text`` si el reto de la vuelta ``spin`` sigue en juego."""
@@ -1036,7 +1062,8 @@ class RuletaGame(Game):
 
     def _after(self, round_: Round) -> str:
         """Lo que va tras el resultado: el equipo del stand al llegar a :data:`WIN_MARK` y
-        la pregunta de otra vuelta."""
+        la pregunta de otra vuelta. Cada trozo va con un espacio delante (las piezas de la
+        nube llegan sin espacios en los bordes)."""
         text = ""
         superado = round_.outcome == "win" or (
             round_.kind == "explica" and round_.score >= GOOD_SCORE
@@ -1044,8 +1071,9 @@ class RuletaGame(Game):
         contact = self.host.settings.trivia.win_contact.strip()
         if superado and contact and self._wins >= WIN_MARK and not self._contact_said:
             self._contact_said = True
-            text += t.WIN_CONTACT_TEXT.format(wins=self._wins, contact=contact)
-        return text + t.AGAIN_TEXT
+            fallback = t.WIN_CONTACT_TEXT.strip()
+            text += " " + _text("equipo", fallback, wins=self._wins, contact=contact)
+        return text + " " + _text("otra_vuelta", t.AGAIN_TEXT.strip())
 
     # -- textos para GPT-Live -----------------------------------------------------
 
@@ -1053,13 +1081,15 @@ class RuletaGame(Game):
         names = [self._segments[i].spoken for i in self._live_segments()]
         listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" y {names[-1]}"
         contact = self.host.settings.trivia.win_contact.strip() or t.NO_CONTACT
-        return _fit(t.RULES_TEXT.format(segments=listed, contact=contact))
+        return _fit(_text("reglas", t.RULES_TEXT, segments=listed, contact=contact))
 
     def _rules_for(self, round_: Round) -> str:
         settings = self.host.settings.games.ruleta
         if round_.kind == "trivia":
             a, b, c = (for_live(_clip(o, 90)) for o in round_.options)
-            text = t.TRIVIA_RULES.format(
+            text = _text(
+                "trivia_reglas",
+                t.TRIVIA_RULES,
                 question=for_live(_clip(round_.prompt, 300)),
                 a=a,
                 b=b,
@@ -1067,7 +1097,9 @@ class RuletaGame(Game):
                 seconds=_seconds(round_.timer_s),
             )
         elif round_.kind == "adivinanza":
-            text = t.RIDDLE_RULES.format(
+            text = _text(
+                "adivinanza_reglas",
+                t.RIDDLE_RULES,
                 riddle=for_live(round_.prompt),
                 answer=for_live(round_.answer),
                 variants=self._variants(round_),
@@ -1080,18 +1112,22 @@ class RuletaGame(Game):
                 if round_.description
                 else ""
             )
-            text = t.EXPLAIN_RULES.format(
+            text = _text(
+                "explica_reglas",
+                t.EXPLAIN_RULES,
                 tech_upper=for_live(round_.prompt).upper(),
                 tech=_in_sentence(for_live(round_.prompt)),
                 seconds=_seconds(round_.timer_s),
                 description=description,
             )
         elif round_.kind == "futuro":
-            text = t.FUTURE_RULES
+            text = _text("futuro_reglas", t.FUTURE_RULES)
         elif round_.task:
-            text = t.SONNET_TASK_RULES.format(task=for_live(round_.prompt))
+            text = _text("sonnet_reto_reglas", t.SONNET_TASK_RULES, task=for_live(round_.prompt))
         else:
-            text = t.SONNET_QUESTION_RULES.format(
+            text = _text(
+                "sonnet_pregunta_reglas",
+                t.SONNET_QUESTION_RULES,
                 question=for_live(round_.prompt),
                 answer=for_live(round_.answer),
                 variants=self._variants(round_),
@@ -1107,18 +1143,25 @@ class RuletaGame(Game):
 
     def _announce_for(self, round_: Round) -> str:
         if round_.kind == "trivia":
-            return t.TRIVIA_ANNOUNCE.format(question=for_live(_clip(round_.prompt, 300)))
+            question = for_live(_clip(round_.prompt, 300))
+            return _text("trivia_anuncio", t.TRIVIA_ANNOUNCE, question=question)
         if round_.kind == "adivinanza":
-            return t.RIDDLE_ANNOUNCE.format(riddle=for_live(round_.prompt))
+            return _text("adivinanza_anuncio", t.RIDDLE_ANNOUNCE, riddle=for_live(round_.prompt))
         if round_.kind == "explica":
-            return t.EXPLAIN_ANNOUNCE.format(
-                tech=_in_sentence(for_live(round_.prompt)), seconds=_seconds(round_.timer_s)
+            return _text(
+                "explica_anuncio",
+                t.EXPLAIN_ANNOUNCE,
+                tech=_in_sentence(for_live(round_.prompt)),
+                seconds=_seconds(round_.timer_s),
             )
         if round_.kind == "futuro":
-            return t.FUTURE_ANNOUNCE
+            return _text("futuro_anuncio", t.FUTURE_ANNOUNCE)
         if round_.task:
-            return t.SONNET_TASK_ANNOUNCE.format(task=for_live(round_.prompt))
-        return t.SONNET_QUESTION_ANNOUNCE.format(question=for_live(round_.prompt))
+            return _text(
+                "sonnet_reto_anuncio", t.SONNET_TASK_ANNOUNCE, task=for_live(round_.prompt)
+            )
+        question = for_live(round_.prompt)
+        return _text("sonnet_pregunta_anuncio", t.SONNET_QUESTION_ANNOUNCE, question=question)
 
     # -- la pantalla ------------------------------------------------------------
 

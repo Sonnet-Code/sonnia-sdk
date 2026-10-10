@@ -12,6 +12,11 @@ y las reglas insisten en que en la pantalla nada cambia sin delegar (lección de
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
+from sonia.games.base import INSTRUCT_MAX_CHARS
+from sonia.prompts import PROMPT_MAX_LEN, PromptSpec
+
 # ---------------------------------------------------------------------------
 # Al empezar (``instruct``)
 # ---------------------------------------------------------------------------
@@ -297,3 +302,377 @@ RESUME_RESULT = (
     "Ya estáis jugando a la ruleta de Sonia y el último reto ya terminó. Pregunta si quieren "
     "otra vuelta: si sí, delega «ruleta: girar»; si no, delega terminar el juego."
 )
+
+# ---------------------------------------------------------------------------
+# Piezas editables desde el panel de la nube (``sonia.prompts``, petición de Jean del
+# 10-oct-2026). ``game.py`` pide el texto en uso al usarlo; con los de la app, lo que
+# recibe GPT-Live es idéntico al de siempre (``tests/test_prompts_ruleta.py``). Fase 2:
+# los trozos que se pegan a otros (NEW_CHALLENGE, VARIANTS_TEXT, EXPLAIN_DESCRIPTION,
+# FACT_TEXT, RIDDLE_MISS_HINT, LEFT_*, NO_CONTACT), las reconducciones fuera de turno
+# (``GameError``), la frase grabada TIME_PHRASE y las descripciones de las jugadas.
+# ---------------------------------------------------------------------------
+
+#: Prefijo de los ids de las piezas y su grupo en el panel.
+PROMPTS = "juegos/ruleta"
+GROUP = "Juego: Ruleta"
+
+_INSTRUCT = "Le llega a Sonia sin que hable, 1200 caracteres como mucho (con todo ya relleno). "
+_SCRIPT = "Lo que Sonia tiene que decir ahora; ella lo dice con sus palabras. "
+_RESULT = (
+    "Va tras la jugada que registra el resultado; detrás se añade la pregunta de otra vuelta. "
+)
+
+
+def _spec(
+    name: str,
+    title: str,
+    default: Callable[[], str],
+    note: str,
+    *,
+    fields: tuple[str, ...] = (),
+    required: tuple[str, ...] = (),
+    instruct: bool = False,
+) -> PromptSpec:
+    return PromptSpec(
+        id=f"{PROMPTS}/{name}",
+        group=GROUP,
+        title=title,
+        default=default,
+        fields=fields,
+        required=required,
+        applies="ronda",
+        help=(_INSTRUCT if instruct else "") + note,
+        max_len=INSTRUCT_MAX_CHARS if instruct else PROMPT_MAX_LEN,
+    )
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """Las piezas de la ruleta que se pueden editar desde el panel, en su orden."""
+    answer = "{answer}: la respuesta, solo para que Sonia juzgue (no la dice). "
+    variants = "{variants}: «; también valen: ...» con las variantes del banco, o nada. "
+    return [
+        _spec(
+            "reglas",
+            "Reglas de la ruleta, al empezar",
+            lambda: RULES_TEXT,
+            "{segments}: los retos que pueden salir («trivia relámpago, adivinanza geek... y "
+            "...»). {contact}: con quién hablar si preguntan por premios (TRIVIA_WIN_CONTACT o "
+            "«el equipo del stand»).",
+            fields=("segments", "contact"),
+            instruct=True,
+        ),
+        _spec("empezar", "Guion al empezar: la ruleta ya gira", lambda: START_TEXT, _SCRIPT),
+        _spec("girar", "Guion de otra vuelta", lambda: SPIN_TEXT, _SCRIPT),
+        _spec("saltar", "Guion al cambiar de reto con uno a medias", lambda: SKIP_TEXT, _SCRIPT),
+        _spec(
+            "otra_vuelta",
+            "Final de cada resultado: ¿otra vuelta?",
+            lambda: AGAIN_TEXT.strip(),
+            "Se añade detrás de cada resultado. Tiene que seguir pidiendo que delegue girar o "
+            "terminar el juego.",
+        ),
+        _spec(
+            "equipo",
+            "Al superar el tercer reto: que pase a saludar al equipo",
+            lambda: WIN_CONTACT_TEXT.strip(),
+            "Se añade una vez por partida al resultado del tercer reto superado. {wins}: los "
+            "retos superados. {contact}: a quién saludar (TRIVIA_WIN_CONTACT).",
+            fields=("wins", "contact"),
+            required=("contact",),
+        ),
+        # -- trivia relámpago --
+        _spec(
+            "trivia_reglas",
+            "Trivia relámpago: reglas del reto",
+            lambda: TRIVIA_RULES,
+            "{question}: la pregunta. {a}, {b}, {c}: las opciones (Sonia no sabe cuál es la "
+            "buena). {seconds}: los segundos del contador.",
+            fields=("question", "a", "b", "c", "seconds"),
+            required=("a", "b", "c"),
+            instruct=True,
+        ),
+        _spec(
+            "trivia_anuncio",
+            "Trivia relámpago: anuncio del reto",
+            lambda: TRIVIA_ANNOUNCE,
+            _SCRIPT + "{question}: la pregunta, para que la lea.",
+            fields=("question",),
+            required=("question",),
+        ),
+        _spec(
+            "trivia_recordatorio",
+            "Trivia relámpago: se acabó el tiempo sin respuesta",
+            lambda: QUIZ_REMIND_TEXT,
+            _SCRIPT,
+        ),
+        _spec(
+            "trivia_acierto",
+            "Trivia relámpago: acierto",
+            lambda: TRIVIA_RIGHT,
+            _RESULT + "{letter}: la letra que eligió. {option}: su opción.",
+            fields=("letter", "option"),
+        ),
+        _spec(
+            "trivia_fallo",
+            "Trivia relámpago: fallo",
+            lambda: TRIVIA_WRONG,
+            _RESULT + "{letter} y {option}: lo que eligió. {right_letter} y {right_option}: "
+            "la buena.",
+            fields=("letter", "option", "right_letter", "right_option"),
+        ),
+        _spec(
+            "trivia_no_lo_sabe",
+            "Trivia relámpago: no lo sabe",
+            lambda: TRIVIA_PASS,
+            _RESULT + "{right_letter} y {right_option}: la buena.",
+            fields=("right_letter", "right_option"),
+        ),
+        # -- adivinanza geek --
+        _spec(
+            "adivinanza_reglas",
+            "Adivinanza geek: reglas del reto",
+            lambda: RIDDLE_RULES,
+            "{riddle}: la adivinanza. "
+            + answer
+            + variants
+            + "{tries}: los intentos. {hint_seconds}: los segundos hasta que sale la pista.",
+            fields=("riddle", "answer", "variants", "tries", "hint_seconds"),
+            required=("answer",),
+            instruct=True,
+        ),
+        _spec(
+            "adivinanza_anuncio",
+            "Adivinanza geek: anuncio del reto",
+            lambda: RIDDLE_ANNOUNCE,
+            _SCRIPT + "{riddle}: la adivinanza, para que la lea.",
+            fields=("riddle",),
+            required=("riddle",),
+        ),
+        _spec(
+            "adivinanza_pista",
+            "Adivinanza geek: sale la pista sola",
+            lambda: HINT_TEXT,
+            _SCRIPT + "{hint}: la pista, para que la diga.",
+            fields=("hint",),
+            required=("hint",),
+        ),
+        _spec(
+            "adivinanza_acierto",
+            "Adivinanza geek: acierto",
+            lambda: RIDDLE_RIGHT,
+            _RESULT + "{answer}: la respuesta.",
+            fields=("answer",),
+        ),
+        _spec(
+            "adivinanza_fallo",
+            "Adivinanza geek: fallo con intentos",
+            lambda: RIDDLE_MISS,
+            "Lo devuelve la jugada del fallo (sin pregunta de otra vuelta: el reto sigue); con "
+            "el primer fallo se le añade la pista. {left}: «Le queda un intento.» o «Le quedan "
+            "N intentos.».",
+            fields=("left",),
+        ),
+        _spec(
+            "adivinanza_perdida",
+            "Adivinanza geek: sin intentos",
+            lambda: RIDDLE_LOST,
+            _RESULT + "{answer}: la respuesta.",
+            fields=("answer",),
+        ),
+        _spec(
+            "adivinanza_rendirse",
+            "Adivinanza geek: se rinden",
+            lambda: RIDDLE_PASS,
+            _RESULT + "{answer}: la respuesta.",
+            fields=("answer",),
+        ),
+        # -- explica en 20 segundos --
+        _spec(
+            "explica_reglas",
+            "Explica en 20 segundos: reglas del reto",
+            lambda: EXPLAIN_RULES,
+            "{tech}: la tecnología como va en una frase («la nube»). {tech_upper}: en "
+            "mayúsculas. {seconds}: los segundos para explicarla. {description}: « (para ti: "
+            "de qué va)» con la nota del banco, o nada.",
+            fields=("tech_upper", "tech", "seconds", "description"),
+            required=("tech",),
+            instruct=True,
+        ),
+        _spec(
+            "explica_anuncio",
+            "Explica en 20 segundos: anuncio del reto",
+            lambda: EXPLAIN_ANNOUNCE,
+            _SCRIPT + "{tech}: la tecnología. {seconds}: los segundos para explicarla.",
+            fields=("tech", "seconds"),
+            required=("tech",),
+        ),
+        _spec(
+            "explica_tiempo",
+            "Explica en 20 segundos: se acabó el tiempo (con el «¡Tiempo!» grabado)",
+            lambda: TIME_UP_TEXT,
+            _SCRIPT + "Ya sonó «¡Tiempo!»: tiene que pedirle que delegue la nota.",
+        ),
+        _spec(
+            "explica_tiempo_sin_grabar",
+            "Explica en 20 segundos: se acabó el tiempo (sin el «¡Tiempo!» grabado)",
+            lambda: TIME_UP_SAY_TEXT,
+            _SCRIPT + "No pudo sonar «¡Tiempo!» grabado: que lo diga ella y delegue la nota.",
+        ),
+        _spec(
+            "explica_nota",
+            "Explica en 20 segundos: la nota",
+            lambda: EXPLAIN_SCORE,
+            _RESULT + "{score}: la nota que puso Sonia.",
+            fields=("score",),
+        ),
+        _spec(
+            "explica_rendirse",
+            "Explica en 20 segundos: no quiere explicarlo",
+            lambda: EXPLAIN_PASS,
+            _RESULT,
+        ),
+        # -- predice el futuro de la IA --
+        _spec(
+            "futuro_reglas",
+            "Futuro de la IA: reglas del reto",
+            lambda: FUTURE_RULES,
+            "La predicción se resume en 120 caracteres como mucho (el tope de la pantalla).",
+            instruct=True,
+        ),
+        _spec(
+            "futuro_anuncio", "Futuro de la IA: anuncio del reto", lambda: FUTURE_ANNOUNCE, _SCRIPT
+        ),
+        _spec(
+            "futuro_hecho",
+            "Futuro de la IA: la predicción en pantalla",
+            lambda: FUTURE_DONE,
+            _RESULT + "{prediction}: la predicción resumida. {probability}: su probabilidad.",
+            fields=("prediction", "probability"),
+        ),
+        _spec(
+            "futuro_rendirse",
+            "Futuro de la IA: no quiere predecir",
+            lambda: FUTURE_PASS,
+            _RESULT,
+        ),
+        # -- reto sorpresa de Sonnet Code --
+        _spec(
+            "sonnet_pregunta_reglas",
+            "Sonnet Code, pregunta: reglas del reto",
+            lambda: SONNET_QUESTION_RULES,
+            "{question}: la pregunta. " + answer + variants + "{tries}: los intentos.",
+            fields=("question", "answer", "variants", "tries"),
+            required=("answer",),
+            instruct=True,
+        ),
+        _spec(
+            "sonnet_pregunta_anuncio",
+            "Sonnet Code, pregunta: anuncio del reto",
+            lambda: SONNET_QUESTION_ANNOUNCE,
+            _SCRIPT + "{question}: la pregunta, para que la haga.",
+            fields=("question",),
+            required=("question",),
+        ),
+        _spec(
+            "sonnet_acierto",
+            "Sonnet Code, pregunta: acierto",
+            lambda: SONNET_RIGHT,
+            _RESULT + "{answer}: la respuesta.",
+            fields=("answer",),
+        ),
+        _spec(
+            "sonnet_fallo",
+            "Sonnet Code, pregunta: fallo con intentos",
+            lambda: SONNET_MISS,
+            "Lo devuelve la jugada del fallo (sin pregunta de otra vuelta: el reto sigue). "
+            "{left}: «Le queda un intento.» o «Le quedan N intentos.».",
+            fields=("left",),
+        ),
+        _spec(
+            "sonnet_perdida",
+            "Sonnet Code, pregunta: sin intentos",
+            lambda: SONNET_LOST,
+            _RESULT + "{answer}: la respuesta.",
+            fields=("answer",),
+        ),
+        _spec(
+            "sonnet_pregunta_rendirse",
+            "Sonnet Code, pregunta: se rinde",
+            lambda: SONNET_QUESTION_PASS,
+            _RESULT + "{answer}: la respuesta.",
+            fields=("answer",),
+        ),
+        _spec(
+            "sonnet_reto_reglas",
+            "Sonnet Code, reto de stand: reglas del reto",
+            lambda: SONNET_TASK_RULES,
+            "{task}: el reto, del banco de retos de Sonnet Code.",
+            fields=("task",),
+            instruct=True,
+        ),
+        _spec(
+            "sonnet_reto_anuncio",
+            "Sonnet Code, reto de stand: anuncio del reto",
+            lambda: SONNET_TASK_ANNOUNCE,
+            _SCRIPT + "{task}: el reto, para que se lo cuente.",
+            fields=("task",),
+            required=("task",),
+        ),
+        _spec(
+            "sonnet_reto_cumplido",
+            "Sonnet Code, reto de stand: cumplido",
+            lambda: SONNET_DONE,
+            _RESULT,
+        ),
+        _spec(
+            "sonnet_reto_fallido",
+            "Sonnet Code, reto de stand: no le salió",
+            lambda: SONNET_TASK_FAILED,
+            _RESULT,
+        ),
+        _spec(
+            "sonnet_reto_rendirse",
+            "Sonnet Code, reto de stand: no quiere hacerlo",
+            lambda: SONNET_TASK_PASS,
+            _RESULT,
+        ),
+        # -- empujones y seguir --
+        _spec(
+            "empujon_reto",
+            "Empujón con un reto en juego",
+            lambda: NUDGE_CHALLENGE,
+            "Tras un turno del visitante sin delegación; es una orden corta, no una frase "
+            "que decir (el código le añade que, si no, siga sin decir nada).",
+        ),
+        _spec(
+            "empujon_resultado",
+            "Empujón con el resultado en pantalla",
+            lambda: NUDGE_RESULT,
+            "Tras un turno del visitante sin delegación; orden corta, no una frase que decir.",
+        ),
+        _spec(
+            "empujon_girando",
+            "Empujón mientras gira",
+            lambda: NUDGE_SPINNING,
+            "Tras un turno del visitante sin delegación; orden corta, no una frase que decir.",
+        ),
+        _spec(
+            "seguir_girando",
+            "Si vuelve a pedir la ruleta mientras gira",
+            lambda: RESUME_SPINNING,
+            _SCRIPT,
+        ),
+        _spec(
+            "seguir_reto",
+            "Si vuelve a pedir la ruleta con un reto en juego",
+            lambda: RESUME_CHALLENGE,
+            _SCRIPT + "{spoken}: el reto en pantalla («adivinanza geek»).",
+            fields=("spoken",),
+        ),
+        _spec(
+            "seguir_resultado",
+            "Si vuelve a pedir la ruleta con el resultado en pantalla",
+            lambda: RESUME_RESULT,
+            _SCRIPT,
+        ),
+    ]
