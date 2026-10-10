@@ -111,9 +111,9 @@ Reglas de pantalla:
 | Ciclo | `Open(id, título)` y `Close(id)`. Ya los llama `GameControllerBase` en `start` y `end`. `Close` solo cierra si la pantalla es de ese juego. |
 | Tarjeta | `Card`, `ContentOf(id)`, `LayerOf(id)`, `SetContentHeight(id, px)`, `SetTitle(texto, colores = true)` (mayúsculas, letras en los colores de Google), `SetCaption("RONDA 2 DE 6")`, `HeaderRight` (hueco a la derecha de la cabecera), `SetCardVisible(bool)`, `SetCardTop(fracción)`, `PopCard()` (rebote de ronda nueva), `RefreshLayout()`, `CardWidth` (960), `ContentWidth` (872). La tarjeta mide lo que su contenido. Va arriba (a 0,105 del alto) y, mientras se ve la vista en vivo, justo debajo de ella, salvo que el juego la coloque con `SetCardTop`. |
 | Contador circular | `StartCountdown(segundos)`, `StopCountdown(ocultar = true)` (si no se oculta, se queda quieto donde iba), `PlaceCountdown(padre, ancla, posición, diámetro)`, `Countdown`. Por defecto cuelga de la esquina de arriba a la derecha de la tarjeta; verde, amarillo y rojo según se agota, y late en los 5 últimos segundos. Solo visual: el tiempo de verdad lo lleva el orquestador. |
-| Rótulos | `ShowBanner(texto, color)` (salta sobre el borde de abajo de la tarjeta: «¡Correcto!» en `GameColors.Green`), `HideBanner()`. `ShowResult(título, marcador, frase, won)`: tarjeta final en el sitio de la del juego; con `won`, dorada y con lluvia de confeti. `HideResult()`. |
+| Rótulos | `ShowBanner(texto, color)` (salta sobre el borde de abajo de la tarjeta: «¡Correcto!» en `GameColors.Green`), `HideBanner()`. `ShowResult(título, marcador, frase, won)`: tarjeta final arriba, en lugar de la del juego (la vista en vivo se aparta mientras se ve); con `won`, dorada y con lluvia de confeti. `HideResult()`. |
 | Confeti y destellos | `Burst(punto, cantidad, velocidad, ángulo)`, `BurstFrom(rect)`, `Sparkles(punto, n)`, `SparklesAt(rect, n)`, `Rain(segundos)`, `Celebrate()` (lo de ganar la trivia), `EffectsPoint(rect)`, `Effects`. Coordenadas de la capa de efectos: (0, 0) es el centro de la pantalla. |
-| Cámara | Plano de panel automático: mientras hay juego o vista en vivo, la cámara sube y se aleja lo justo para que Sonnia quede debajo de lo que haya en la franja alta (`TopStripBottom`: la tarjeta o el resultado, la vista en vivo y lo reservado), interpolando entre el plano de la trivia (lo de arriba acaba hacia 650 px) y uno largo (vista en vivo y tarjeta, hacia 1100 px). `ReserveTopStrip(px)` si tu `Layer` baja más que la tarjeta. `RequestPanelShot(Vector3 extra)` fija otro desplazamiento (metros: y sube, z negativo aleja) y `RequestPanelShot()` vuelve al automático; `Open` y `Close` ya lo piden y lo sueltan. |
+| Cámara | Plano de panel automático: mientras hay juego o vista en vivo, la cámara sube y se aleja lo justo para que Sonnia quede debajo de lo que haya en la franja alta (`TopStripBottom`: la tarjeta o el resultado, la vista en vivo y lo reservado), interpolando entre dos planos calibrados con capturas para dejar unos 100 px entre lo de arriba y la coronilla de Sonnia: `(0, 0.08, -0.2)` con lo de arriba hasta 644 px (una tarjeta como la de la trivia) y `(0, 0.55, -1.43)` con la vista en vivo y la tarjeta hasta 1062 px. El margen es por la pose: el plano base sale de dónde tiene Sonnia la cabeza cuando llega el avatar y varía algo de una vez a otra. `ReserveTopStrip(px)` si tu `Layer` baja más que la tarjeta. `RequestPanelShot(Vector3 extra)` fija otro desplazamiento (metros: y sube, z negativo aleja) y `RequestPanelShot()` vuelve al automático; `Open` y `Close` ya lo piden y lo sueltan. |
 | Kit | `DisplayFont` (Manrope ExtraBold, la de la pantalla del stand), `BodyFont` (Manrope SemiBold), `MonoFont` (Geist Mono). `NewRect`, `NewImage`, `NewRound(nombre, padre, color, radio)`, `NewText(nombre, padre, texto, tamaño, color, alineación, fuente)`, `NewGroup`, `SetRadius(image, radio)`. Sprites: `RoundSprite` (radio 36, cortado en 9), `FrameSprite` (solo el contorno), `GlowSprite`, `DotSprite`, `RingSprite` (con `Image.Type.Filled` hace de arco), `CheckSprite`, `CrossSprite`, `StarSprite`, `SparkleSprite`, `PieceSprite`. |
 
 ## `CameraPreviewPanel` (vista en vivo)
@@ -125,7 +125,7 @@ Sale sola con el primer frame `SNCV` tras `camera_preview` encendido y se retira
 | Estado | `IsVisible`, `IsOn`, `FramesShown`, evento `VisibilityChanged(bool)`. |
 | Piezas | `Frame` (el marco 16:9), `Overlay` (encima de la imagen, del tamaño del marco y sin recortar: tus marcas), `Root`. |
 | Colocación | Por defecto 960 px de ancho y arriba a 0,105 del alto, como la tarjeta. `SetPlacement(fracción de arriba, ancho)` para agrandarla (las poses), `ResetPlacement()`, `FrameSize`, `BottomFraction` (para poner la tarjeta debajo: `Hud.SetCardTop(Preview.BottomFraction + 0.02f)`). Al retirarse vuelve a su sitio. |
-| A mano | `Hide()`. `HandleSwitch`, `HandleFrame` y `HandleReconnect` los llama el router. |
+| A mano | `Hide()`; `Suppressed` la aparta sin dejar de recibir frames (lo usa el resultado final). `HandleSwitch`, `HandleFrame` y `HandleReconnect` los llama el router. |
 
 Los esqueletos y las marcas de la cámara los dibuja el orquestador sobre la imagen; lo que va en `Overlay` son las piezas de pantalla (pictograma, contador...).
 
@@ -145,13 +145,16 @@ Desde tu worktree, con tu secuencia ya escrita:
 
 ```bash
 SONIA_UNITY_LOCKS=$SP/unity-locks \
-  scripts/juegos_capturas.sh --juego wordle --puerto 8791 --salida $SP/capturas-wordle
+  scripts/juegos_capturas.sh --juego wordle --puerto 8791 \
+    --clon $SP/f0unity/clon --salida <tu scratchpad>/capturas-wordle
 ```
 
-- `$SP` es el scratchpad de la sesión principal (donde están los candados) y la salida va en tu scratchpad, nunca en `unity/Temp` ni en el repo. Un puerto distinto por agente.
-- La primera vez clona el proyecto (`--clon`, por defecto `$TMPDIR/sonia-clon-<tu worktree>`, unos segundos) y Unity tarda unos minutos en compilar e importar; las siguientes reutilizan el clon.
+- `$SP` es el scratchpad de la sesión principal (donde están los candados y el clon compartido) y la salida va en tu scratchpad, nunca en `unity/Temp` ni en el repo. Un puerto distinto por agente.
+- **Clon compartido.** Todos usan el mismo clon (`--clon`, o `SONIA_UNITY_CLONE`): cada clon nuevo acaba ocupando gigas, porque Unity reescribe `Library` al compilar. El script no crea uno nuevo si no se le pide con `SONIA_UNITY_NEW_CLONE=1`. Cada pasada le copia al clon los scripts de quien la lanza (`rsync --delete`, sin tocar los `.meta`) y Unity recompila: la primera tras otro agente tarda unos 2 minutos. Por eso tu rama tiene que traer la herramienta (si no, el script te pide juntar `juegos/base`).
+- El script no arranca con menos de 5 GB libres (`SONIA_MIN_FREE_GB`), espera si otro Unity tiene abierto el clon (alguien sin candado) y borra antes `Library/ilpp.pid` y un `Temp/UnityLockfile` que haya quedado de una pasada cortada.
 - Deja en la salida `<name>.png` por cada `Capture`, `capturas.txt`, `unity.log` y `orquestador.log`. Cada línea de `capturas.txt` dice el instante, el juego en pantalla, si había vista en vivo, el plano de cámara y dónde acaba lo de la franja alta frente a la coronilla de Sonnia, en px desde arriba; si algo le tapa la cabeza, lo avisa con «¡LO DE ARRIBA TAPA LA CABEZA DE SONNIA!».
-- Código de salida: 0 con `dev_done`; 2 argumentos; 3 tiempo agotado (`--timeout`, 600 s); 4 Unity salió de Play; 5 error en la herramienta; otro, el de Unity (por ejemplo, scripts que no compilan: mira `unity.log`).
+- Código de salida: 0 con `dev_done`; 2 argumentos; 3 tiempo agotado (`--timeout`, 600 s); 4 Unity salió de Play; 5 error en la herramienta; otro, el de Unity (por ejemplo, scripts que no compilan: mira `unity.log`). Si el orquestador falso termina sin `dev_done` (un paso roto: mira `orquestador.log`), el script cierra Unity a los 20 s.
+- Con `--juego ejemplo` corre la secuencia de ejemplo de `juegos_demo.py` (la pantalla común con la vista en vivo), útil para probar la receta antes de tener la tuya.
 - **Revisa las capturas tú**, abriéndolas. Manos, cara y animaciones se validan con varias capturas seguidas, no con una suelta.
 
 ### Paso a paso, a mano
@@ -180,7 +183,7 @@ Lo mismo que hace el script:
 
 - Abre `SampleScene`, deja `SoniaClient` sin conectar y la webcam de Unity apagada, y entra en Play.
 - En Play ata la cámara principal a una RenderTexture fija de 1080x1920 y la cámara del HUD a otra igual: el encuadre y los Canvas se calculan con la proporción de la pantalla del stand, sea cual sea la «pantalla» del modo batch. Los Canvas en Overlay pasan a Screen Space - Camera sobre la cámara del HUD.
-- Espera al avatar de Genies (como mucho `-sonia-avatar-timeout`; si no llega, sigue con el doble), a que la pantalla del stand esté montada y 2,5 s de calma, y entonces conecta `SoniaClient` a `-sonia-ws`: el orquestador falso empieza al recibir el `client_hello`.
+- Espera al avatar de Genies (como mucho `-sonia-avatar-timeout`; si no llega, sigue con el doble) y a su camiseta de staff, que se hornea aparte (como mucho 20 s más), a que la pantalla del stand esté montada y 2,5 s de calma, y entonces conecta `SoniaClient` a `-sonia-ws`: el orquestador falso empieza al recibir el `client_hello`.
 - Cada `dev_capture` renderiza la escena con la cámara principal, encima el HUD (su cámara aparte, sobre transparente, compuesto con alfa premultiplicado como lo mezcla la UI) y guarda `<name>.png`. Lo que llegue detrás del `dev_capture` espera a que la captura esté hecha (`SoniaClient.PauseDispatch`): la captura ve todo lo anterior y nada de lo siguiente. `dev_done` sale con código 0.
 - Para tus pruebas, el resto del protocolo funciona igual que con el orquestador de verdad (`speech_start`, `transcript`, `state`, `play_animation`...): mándalo con `Send` en tu secuencia.
 
