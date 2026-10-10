@@ -928,10 +928,15 @@ summary:focus-visible,
   flex: 1 1 120px;
 }
 
+/* El campo y su botón en una fila si caben; si no, el botón debajo y a todo el ancho */
 .game-control-form > input {
-  flex: 1 1 160px;
+  flex: 3 1 120px;
   min-width: 0;
   width: auto;
+}
+
+.game-control-form > .btn {
+  flex: 1 0 auto;
 }
 
 /* «Reiniciar» y «Terminar», los de todos los juegos, aparte */
