@@ -20,7 +20,7 @@ Resumen del trabajo de la noche del 9 al 10 de octubre: la sesión principal fue
 - **Panel** (tarjeta «Juegos»):
   - un botón por juego y «Terminar juego»;
   - un interruptor por juego para apagarlo desde el móvil si falla, sin reinstalar;
-  - los bancos editables;
+  - los bancos editables, que están en «Developer»;
   - el modelo de poses, `n` por defecto y `s` si el equipo va sobrado.
 - **Cámara**, solo en poses, piedra, papel o tijera y búsqueda:
   - imagen en vivo encima de Sonnia, en espejo, con «En vivo · no se graba»;
