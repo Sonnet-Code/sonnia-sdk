@@ -1,8 +1,8 @@
 """Akinator dev: los textos que se mandan a GPT-Live, idénticos a los de antes con los de la app.
 
 La instantánea (``snapshots/prompts_akinator.json``) se sacó con el código de antes de hacer
-editables los prompts (``sonia.prompts``). Sin red ni APIs: el juego suelto con
-``FakeGameHost``.
+editables los prompts (``sonia.prompts``). Con una versión de la nube se usa esa y no la de la
+app. Sin red ni APIs: el juego suelto con ``FakeGameHost``.
 """
 
 from __future__ import annotations
@@ -10,13 +10,15 @@ from __future__ import annotations
 from typing import Any
 
 from sonia.config import Settings
-from sonia.games import NOT_SAID, GameError
+from sonia.games import INSTRUCT_MAX_CHARS, NOT_SAID, GameError
 from sonia.games.akinator import AkinatorGame
+from sonia.games.akinator.bank import Theme
 from sonia.games.akinator.game import GUESS_REMIND_S
-from sonia.games.akinator.prompts import build_rules
+from sonia.games.akinator.prompts import RULES_MARGIN, build_rules, prompt_specs
+from sonia.prompts import BOOK
 from tests.games.fakes import FakeGameHost, game_settings, make_game
 from tests.games.test_akinator import SMALL_BANK, ask, questions, say, visitor_speaks
-from tests.prompt_snapshots import assert_snapshot
+from tests.prompt_snapshots import assert_snapshot, cloud_prompts
 
 
 def with_akinator(**update: Any) -> Settings:
@@ -178,3 +180,44 @@ async def collect() -> dict[str, Any]:
 
 async def test_los_textos_del_akinator_no_cambian() -> None:
     assert_snapshot("prompts_akinator", await collect())
+
+
+def test_las_piezas_de_la_app_validan_y_estan_registradas() -> None:
+    specs = prompt_specs()
+    assert specs and len({spec.id for spec in specs}) == len(specs)
+    for spec in specs:
+        assert spec.id.startswith("juegos/akinator/") and spec.group == "Juego: Akinator"
+        assert spec.id in BOOK and BOOK.source(spec.id) == "app"
+        assert BOOK.validate(spec.id, BOOK.default(spec.id)) == [], spec.id
+    assert BOOK.spec("juegos/akinator/reglas").max_len == INSTRUCT_MAX_CHARS
+
+
+async def test_con_la_version_de_la_nube_se_usa_solo_esa() -> None:
+    cloud = {
+        "juegos/akinator/reglas": "JUEGO DE ADIVINAR: {max} preguntas, desde la {min}. Temas: {themes}.",
+        "juegos/akinator/acierto": "Ganaste con «{answer}» en {asked}.",
+        "juegos/akinator/empujon_adivina": "AKINATOR: delega el resultado.",
+    }
+    with cloud_prompts(cloud):
+        game, host, _ = await started()
+        visitor_speaks(game, host)
+        await ask(game, *questions(6))
+        await game.guess({"respuesta": "Kotlin"})
+        nudge = game.nudge()
+        script = await game.result({"acierto": "si", "respuesta_real": "Kotlin"})
+    (rules,) = host.instructions
+    assert rules.startswith("JUEGO DE ADIVINAR: 20 preguntas, desde la 5. Temas: Lenguajes")
+    assert "AKINATOR EN MARCHA" not in rules
+    assert nudge == "AKINATOR: delega el resultado."
+    assert script == "Ganaste con «Kotlin» en 6."
+    # Fuera del ``with`` vuelve la de la app.
+    assert BOOK.source("juegos/akinator/reglas") == "app"
+
+
+def test_los_temas_caben_en_lo_que_dejan_las_reglas_de_la_nube() -> None:
+    themes = [Theme(f"Tema {n}", ("Uno", "Dos", "Tres")) for n in range(40)]
+    long_rules = "R" * 900 + " {max} {min} Temas: {themes}"
+    with cloud_prompts({"juegos/akinator/reglas": long_rules}):
+        text = build_rules(20, 5, themes)
+    assert text.startswith("R" * 900) and "Tema 0" in text
+    assert len(text) <= INSTRUCT_MAX_CHARS - RULES_MARGIN

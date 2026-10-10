@@ -5,14 +5,19 @@ OpenAI, Unity...). Las reglas entran al empezar por ``instructions.append`` y no
 1200 caracteres (``INSTRUCT_MAX_CHARS``): con el prompt muy largo dejó de delegar
 (7 de octubre de 2026). Los guiones vuelven como resultado de cada jugada, marcados con
 ``PARA SONIA:``.
+
+Las piezas se pueden cambiar desde el panel de la nube (``sonia.prompts``, :func:`prompt_specs`):
+el juego pide cada una con :func:`live_text` al usarla. Los trozos que se pegan a otra pieza
+(``RESUME_GUESS``, ``GIVEUP_REASON_MISS``, ``LOSE_CONTACT_TEXT``) siguen en el código.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from sonia.games.akinator.bank import Theme, themes_for_live
 from sonia.games.base import INSTRUCT_MAX_CHARS
+from sonia.prompts import BOOK, PROMPT_MAX_LEN, PromptSpec
 
 __all__ = [
     "ASKING_NUDGE",
@@ -35,6 +40,8 @@ __all__ = [
     "WIN_SCRIPT",
     "build_rules",
     "build_start_script",
+    "live_text",
+    "prompt_specs",
 ]
 
 #: Margen bajo el tope de ``instruct`` por si cambia algo al montarlo.
@@ -185,16 +192,229 @@ LAST_QUESTION_TEXT = (
 def build_rules(max_questions: int, min_questions: int, themes: Sequence[Theme]) -> str:
     """Las reglas del juego para GPT-Live (``instruct``), de menos de 1200 caracteres.
 
-    Los temas del banco caben en lo que sobra: con muchos, llevan menos ejemplos cada uno.
+    Los temas del banco caben en lo que sobra de las reglas en uso (las de la nube, si las
+    hay): con muchos, llevan menos ejemplos cada uno.
     """
-    bare = RULES_TEXT.format(max=max_questions, min=min_questions, themes="")
-    budget = INSTRUCT_MAX_CHARS - RULES_MARGIN - len(bare)
+
+    def rules(line: str) -> str:
+        return live_text("reglas", RULES_TEXT, max=max_questions, min=min_questions, themes=line)
+
+    budget = INSTRUCT_MAX_CHARS - RULES_MARGIN - len(rules(""))
     line = themes_for_live(themes, budget)
-    text = RULES_TEXT.format(max=max_questions, min=min_questions, themes=line or "tecnología")
-    return text[:INSTRUCT_MAX_CHARS]
+    return rules(line or "tecnología")[:INSTRUCT_MAX_CHARS]
 
 
 def build_start_script(themes: Sequence[Theme]) -> str:
     """El guion de arranque que lee Sonia: explica el juego y espera a que el visitante piense."""
     names = ", ".join(theme.name.lower() for theme in themes[:START_THEMES])
-    return START_SCRIPT.format(themes=names or "tecnología")
+    return live_text("arranque", START_SCRIPT, themes=names or "tecnología")
+
+
+# -- prompts editables desde la nube (``sonia.prompts``) ---------------------------------
+
+#: Ids de las piezas: ``juegos/akinator/<pieza>``.
+PROMPT_PREFIX = "juegos/akinator/"
+PROMPT_GROUP = "Juego: Akinator"
+
+
+def live_text(piece: str, app_text: str, **values: object) -> str:
+    """El texto en uso de la pieza (el de la nube si lo hay y vale; si no, ``app_text``, el
+    de la app), con sus marcadores rellenos con ``values``."""
+    return BOOK.render(PROMPT_PREFIX + piece, fallback=app_text, **values)
+
+
+def _piece(
+    piece: str,
+    title: str,
+    default: Callable[[], str],
+    *,
+    fields: tuple[str, ...] = (),
+    required: tuple[str, ...] = (),
+    help: str = "",
+    instruct: bool = False,
+) -> PromptSpec:
+    return PromptSpec(
+        id=PROMPT_PREFIX + piece,
+        group=PROMPT_GROUP,
+        title=title,
+        default=default,
+        fields=fields,
+        required=required,
+        applies="ronda",
+        help=help,
+        max_len=INSTRUCT_MAX_CHARS if instruct else PROMPT_MAX_LEN,
+    )
+
+
+_ASKED = "{asked}: cuántas preguntas lleva Sonia. "
+_MAX = "{max}: cuántas preguntas puede hacer como mucho (GAME_AKINATOR_MAX_QUESTIONS). "
+_ANSWER = "{answer}: la respuesta de la que se habla («Kotlin»). "
+_NUDGE = (
+    "Empujón tras un turno del visitante sin delegar: una orden corta, sin frases que pueda "
+    "repetir (el código añade al final que es una nota interna). "
+)
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """Las piezas del Akinator dev editables desde el panel, en su orden."""
+    return [
+        _piece(
+            "reglas",
+            "Reglas del juego (al empezar, sin hablar)",
+            lambda: RULES_TEXT,
+            fields=("max", "min", "themes"),
+            instruct=True,
+            help=_MAX + "{min}: desde qué pregunta puede arriesgar (GAME_AKINATOR_MIN_QUESTIONS). "
+            "{themes}: los temas del banco con ejemplos, recortados para que todo quepa en "
+            "1200 caracteres.",
+        ),
+        _piece(
+            "arranque",
+            "Guion de arranque: presenta el juego y espera",
+            lambda: START_SCRIPT,
+            fields=("themes",),
+            help="{themes}: los primeros temas del banco, en minúsculas.",
+        ),
+        _piece(
+            "reanudar",
+            "Guion si vuelve a pedir el juego que ya está en marcha",
+            lambda: RESUME_SCRIPT,
+            fields=("asked", "max", "guess"),
+            help=_ASKED
+            + _MAX
+            + "{guess}: si hay una respuesta suya en pantalla, la frase que lo dice (con su "
+            "espacio delante); si no, nada.",
+        ),
+        _piece(
+            "adivina",
+            "Guion al arriesgar una respuesta («¿Es… X?»)",
+            lambda: GUESS_SCRIPT,
+            fields=("answer",),
+            help=_ANSWER,
+        ),
+        _piece(
+            "pronto",
+            "Guion si arriesga antes de la pregunta mínima",
+            lambda: EARLY_GUESS_SCRIPT,
+            fields=("asked", "min"),
+            help=_ASKED + "{min}: desde qué pregunta puede arriesgar.",
+        ),
+        _piece(
+            "repetida",
+            "Guion si arriesga una respuesta que ya falló",
+            lambda: REPEATED_GUESS_SCRIPT,
+            fields=("answer",),
+            help=_ANSWER,
+        ),
+        _piece(
+            "acierto",
+            "Guion cuando Sonia acierta",
+            lambda: WIN_SCRIPT,
+            fields=("answer", "asked"),
+            help=_ANSWER + _ASKED,
+        ),
+        _piece(
+            "derrota",
+            "Guion cuando gana el visitante",
+            lambda: LOSE_SCRIPT,
+            fields=("answer", "contact"),
+            required=("contact",),
+            help=_ANSWER + "{contact}: la frase que manda al ganador con el equipo del stand "
+            "(TRIVIA_WIN_CONTACT) y dice que no hay premios, con su espacio delante; nada si "
+            "no hay contacto.",
+        ),
+        _piece(
+            "fallo",
+            "Guion cuando falla y le quedan preguntas",
+            lambda: MISS_SCRIPT,
+            fields=("answer", "left"),
+            help=_ANSWER + "{left}: cuántas preguntas le quedan.",
+        ),
+        _piece(
+            "se_rinde",
+            "Guion cuando se rinde y pregunta qué era",
+            lambda: GIVEUP_SCRIPT,
+            fields=("reason",),
+            help="{reason}: por qué se rinde (la frase de que su última respuesta no era y ya "
+            "no puede arriesgar más, con su espacio detrás), o nada.",
+        ),
+        _piece(
+            "no_claro",
+            "Guion si no quedó claro si acertó",
+            lambda: NOT_CLEAR_SCRIPT,
+        ),
+        _piece(
+            "sin_adivinar",
+            "Guion si delega el resultado sin haber arriesgado nada",
+            lambda: NO_GUESS_SCRIPT,
+        ),
+        _piece(
+            "sin_respuesta",
+            "Aviso si dice que acertó sin decir qué era",
+            lambda: NO_ANSWER_SCRIPT,
+        ),
+        _piece(
+            "panel_listo",
+            "Panel: «Ya lo pensó»",
+            lambda: PANEL_READY_SCRIPT,
+        ),
+        _piece(
+            "panel_respuesta",
+            "Panel: «Sí», «No» o «No sé» a la pregunta en curso",
+            lambda: PANEL_ANSWER_SCRIPT,
+            fields=("answer",),
+            help="{answer}: lo que contesta el visitante («sí», «no» o «no sé»).",
+        ),
+        _piece(
+            "empujon_arranque",
+            "Empujón: aún no hizo la primera pregunta",
+            lambda: START_NUDGE,
+            help=_NUDGE,
+        ),
+        _piece(
+            "empujon_adivina",
+            "Empujón: hay una respuesta suya en pantalla",
+            lambda: GUESS_NUDGE,
+            help=_NUDGE,
+        ),
+        _piece(
+            "empujon_rendida",
+            "Empujón: se rindió y espera saber qué era",
+            lambda: GIVEUP_NUDGE,
+            help=_NUDGE,
+        ),
+        _piece(
+            "empujon_tope",
+            "Empujón: ya hizo todas sus preguntas",
+            lambda: LIMIT_NUDGE,
+            fields=("max",),
+            help=_NUDGE + _MAX,
+        ),
+        _piece(
+            "empujon_turno_largo",
+            "Empujón: el visitante habló largo mientras pregunta",
+            lambda: ASKING_NUDGE,
+            help=_NUDGE,
+        ),
+        _piece(
+            "recuerda_resultado",
+            "Recordatorio: su respuesta sigue en pantalla sin resultado",
+            lambda: GUESS_REMIND_TEXT,
+        ),
+        _piece(
+            "quedan_pocas",
+            "Aviso silencioso: quedan cinco preguntas",
+            lambda: FEW_LEFT_TEXT,
+            fields=("asked", "max"),
+            instruct=True,
+            help=_ASKED + _MAX,
+        ),
+        _piece(
+            "ultima_pregunta",
+            "Aviso silencioso: acaba de hacer la última pregunta",
+            lambda: LAST_QUESTION_TEXT,
+            fields=("max",),
+            instruct=True,
+            help=_MAX,
+        ),
+    ]
