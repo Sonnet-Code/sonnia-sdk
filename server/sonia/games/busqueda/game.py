@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 from sonia.actions.games import game_action
+from sonia.busy import TEXT_LOOK
 from sonia.games.banks import GameBank
 from sonia.games.base import Game, GameError, GameHost, GameResult, StopReason
 from sonia.games.busqueda import texts as t
@@ -453,7 +454,12 @@ class BusquedaGame(Game):
             await self.host.send(
                 "checking", {"n": self._checks, "max": cfg.max_checks}, sticky=False
             )
-            answer = await asyncio.wait_for(self.host.judge.ask(question), JUDGE_TIMEOUT_S)
+            # La pastilla de espera, solo mientras la foto está en juicio.
+            await self._judge_busy(TEXT_LOOK)
+            try:
+                answer = await asyncio.wait_for(self.host.judge.ask(question), JUDGE_TIMEOUT_S)
+            finally:
+                await self._judge_busy(None)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - un fallo del modelo es una mirada sin respuesta
@@ -468,6 +474,13 @@ class BusquedaGame(Game):
             if round_no == self._round:
                 self._answered += 1
         return answer
+
+    async def _judge_busy(self, text: str | None) -> None:
+        """Enciende (``text``) o apaga (``None``) el aviso del juez; nunca tumba la mirada."""
+        try:
+            await self.host.set_busy("judge", text)
+        except Exception:  # noqa: BLE001 - sin aviso en pantalla, el juego sigue
+            logger.debug("Búsqueda: no se pudo cambiar el aviso de espera", exc_info=True)
 
     async def _periodic(self, fut: asyncio.Future[None], round_no: int, question: str) -> None:
         """Una mirada del reloj: si se ve el objeto, la ronda se gana."""
