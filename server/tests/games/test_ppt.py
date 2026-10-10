@@ -778,15 +778,24 @@ def test_la_frase_grabada_se_declara() -> None:
 def test_la_secuencia_del_orquestador_falso() -> None:
     steps = load_demo(PptGame.id)
     names = [s.name for s in steps if isinstance(s, Capture)]
-    assert names == [
+    # Una captura por estado (empezar, cuenta, «ya», acierto, fallo, sin mano y final), más
+    # fotogramas seguidos del puño y de cada forma de la mano de Sonnia; en orden y sin repetir.
+    for state in (
         "ppt-1-empezar",
-        "ppt-2-cuenta",
-        "ppt-3-ya",
+        "ppt-2a-puno-arriba",
+        "ppt-2b-cuenta",
+        "ppt-3a-ya-tijera",
         "ppt-4-acierto",
+        "ppt-5a-ya-papel",
         "ppt-5-fallo",
+        "ppt-6a-ya-piedra",
         "ppt-6-sin-mano",
         "ppt-7-final",
-    ]
+    ):
+        assert state in names, state
+    assert len(names) == len(set(names))
+    states = [int(n.split("-")[1][0]) for n in names]
+    assert states == sorted(states)
     msgs = [s for s in steps if isinstance(s, GameMsg)]
     assert msgs[0].event == "start" and msgs[-1].event == "end"
     assert msgs[-1].data["result"] == "win"

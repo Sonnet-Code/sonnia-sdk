@@ -128,16 +128,50 @@ Tiempos fijos en `game.py`: `READY_LEAD_S` (0,8), `AUDIO_LAG_S` (0,12), `REACTIO
 
 ## Unity
 
-`PptController` (sobre `GameControllerBase` y `GameHud`) y `SoniaHandPoser`, en `Games/Ppt/`:
+`PptController` (sobre `GameControllerBase` y `GameHud`) y `SoniaHandPoser`, en `Games/Ppt/`.
 
-- La tarjeta común con el marcador «Sonnia 1 - 2 Tú», «AL MEJOR DE 3», las dos jugadas en grande
-  tras cada tirada («Piedra contra tijera») y el resultado final; la vista en vivo encima de Sonnia
-  (`CameraPreviewPanel`), sin taparle la cara.
-- `SoniaHandPoser`: el brazo derecho al frente con IK de dos huesos, como `TriviaHat`; el puño se
-  agita tres veces al ritmo de la frase grabada y en el «ya» la mano toma su forma (piedra, papel o
-  tijera) moviendo los dedos con los músculos del humanoide.
-- **Plan B**: si la mano no queda bien, una constante del controlador la apaga y la jugada de
-  Sonnia sale solo en la tarjeta.
+**Pantalla.** La vista en vivo arriba (la manda el orquestador, con el jugador resaltado) y, debajo,
+la tarjeta común:
+
+- En la cabecera, «AL MEJOR DE 3 · RONDA 2» (y «· OTRA VEZ» si se repite).
+- El marcador «SONNIA 1 – 2 TÚ», que late al sumar.
+- Una fila con las dos jugadas en grande: la de Sonnia a la izquierda y la del visitante a la
+  derecha, con «contra» en medio («PIEDRA contra TIJERA»). La ganadora sale en verde con brillo y
+  la perdedora apagada; en un empate, las dos en ámbar; sin lectura, «¿?» en rojo.
+- Durante la cuenta esa fila enseña «PIEDRA», «PAPEL», «TIJERA» y «¡YA!» al ritmo de los golpes del
+  puño.
+- El rótulo de la tarjeta dice el resultado de la ronda («¡GANAS TÚ!», «¡GANA SONNIA!»,
+  «¡EMPATE!», «¡NO TE VI LA MANO!» o «¡NO TE ENTENDÍ LA MANO!»), con confeti si gana el visitante, y
+  la cara de Sonnia reacciona (alegría si gana ella, sorpresa si pierde).
+- El final, con `Hud.ShowResult` 1,5 s después del último resultado: «¡GANASTE!» con «Pasa a ver a
+  Brian o Mariel del equipo», «¡GANA SONNIA!» o «¡EMPATE!», y el marcador.
+
+**La mano de Sonnia (`SoniaHandPoser`).**
+
+- El brazo derecho delante del pecho con IK de dos huesos (como `TriviaHat`), la palma hacia el
+  público y los dedos hacia arriba: es como mejor se lee la jugada en la pantalla vertical (con los
+  dedos hacia la cámara, el papel se vería de canto). La cara queda libre.
+- `ready` sube el puño. `countdown` lo agita: baja en cada tiempo de la frase (tres golpes, cada uno
+  rápido hacia abajo y más lento hacia arriba, inclinando el puño como un martillo) y en el cuarto,
+  el «¡ya!», la mano se abre en su forma en 0,13 s y empuja un poco hacia el público.
+- El «¡ya!» sale del audio de la frase que está sonando (`AudioStreamPlayer.GetPlaybackPosition`:
+  la primera voz nueva tras `countdown`, menos el adelanto del lip-sync), así que la mano se abre a
+  la vez que la voz. Sin audio, cuenta desde que llega el mensaje más 0,12 s; sin `go_s`, agita en
+  bucle hasta `go`. Si llega `go` y en 0,4 s no se ha abierto, se abre. Al cambiar de reloj se funde
+  la diferencia para que el puño no salte.
+- Tras el resultado la mano se queda enseñando su jugada 2,4 s y baja sola con un fundido (y como
+  mucho a los 9 s con el brazo arriba, por si se pierde un mensaje). Al cerrarse la pantalla, baja.
+- Los dedos van con los músculos del humanoide: al enganchar el avatar se calcula con
+  `HumanPoseHandler` la rotación local de cada falange de la mano derecha para cada forma, y cada
+  fotograma solo se mezclan esas rotaciones con las de la animación (no se toca el resto del
+  cuerpo). Con los límites de Unity el puño se queda en garra, así que los dedos cerrados se doblan
+  1,9 veces lo del músculo y el pulgar 1,4, cruzado por delante de los dedos como en ✊. Los valores
+  están en el inspector de `SoniaHandPoser` y salieron de una galería de variantes renderizadas con
+  el avatar de Sonnia.
+- Corre en `LateUpdate` con orden 12650, después de la cara, los ojos y el gorro de la trivia; si el
+  avatar cambia, se vuelve a enganchar.
+- **Plan B**: `PptController.SoniaHandEnabled = false` quita la mano y la jugada de Sonnia sale
+  solo en la tarjeta (por si en algún avatar los dedos no quedaran bien).
 
 ## Pruebas y capturas
 

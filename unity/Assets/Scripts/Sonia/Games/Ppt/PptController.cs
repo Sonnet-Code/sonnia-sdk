@@ -53,7 +53,7 @@ namespace Sonia.Games.Ppt
         private const float GoSafety = 0.4f;
 
         // El final espera a que el resultado de la última ronda se vea este tiempo.
-        private const float FinalDelay = 1.6f;
+        private const float FinalDelay = 1.5f;
 
         // La mano baja sola este tiempo después de enseñar el resultado.
         private const float LowerAfterResult = 2.4f;
