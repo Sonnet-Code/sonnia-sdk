@@ -214,6 +214,12 @@ namespace Sonia
         private float _restSpeed = 1f;
         private bool _maskRightArm;
 
+        // Brazo derecho retenido por otro componente (la mano de piedra, papel o tijera):
+        // 0 libre, 1 retenido del todo; va y viene con un fundido corto.
+        private float _armHold;
+        private bool _armHoldTarget;
+        private const float ArmHoldFadeSeconds = 0.25f;
+
         /// <summary>Se lanza al empezar un gesto al hablar (nombre).</summary>
         public event Action<string> GestureStarted;
 
@@ -460,6 +466,24 @@ namespace Sonia
             _maskRightArm = masked;
         }
 
+        /// <summary>
+        /// Otro componente se queda con el brazo derecho y quiere el torso quieto (la mano de
+        /// piedra, papel o tijera): las acciones dejan de mover ese brazo y los gestos al hablar
+        /// se apagan en todo el torso, para que ni el hombro ni la columna desplacen la mano. El
+        /// reposo sigue. Entra y sale con un fundido de <c>0,25</c> s; al soltarlo, los gestos
+        /// vuelven solos.
+        /// </summary>
+        public void HoldRightArm(bool held)
+        {
+            _armHoldTarget = held;
+        }
+
+        /// <summary>Cuánto está retenido el brazo derecho (0 libre, 1 del todo), para pruebas.</summary>
+        public float RightArmHold
+        {
+            get { return Ease(_armHold); }
+        }
+
         // ------------------------------------------------------------------
         // Acciones (cuerpo entero, una vez)
         // ------------------------------------------------------------------
@@ -673,6 +697,7 @@ namespace Sonia
         {
             EnsureBound();
             float dt = UnityEngine.Time.deltaTime;
+            _armHold = Mathf.MoveTowards(_armHold, _armHoldTarget ? 1f : 0f, dt / ArmHoldFadeSeconds);
             AdvanceRest(dt);
             AdvanceOneShots(_actions, dt);
             AdvanceOneShots(_gestures, dt);
@@ -688,12 +713,16 @@ namespace Sonia
                 return;
             }
 
+            // Lo que dejan pasar del brazo retenido las acciones (en ese brazo) y los gestos
+            // al hablar (en todo el torso).
+            float armFree = 1f - Ease(_armHold);
             for (int b = 0; b < _bones.Count; b++)
             {
                 Bone bone = _bones[b];
                 Quaternion rotation = bone.Transform.localRotation;
                 bool touched = false;
                 bool masked = _maskRightArm && bone.RightArm;
+                float actionScale = bone.RightArm ? armFree : 1f;
                 if (rest && !masked)
                 {
                     foreach (Track track in _rest)
@@ -711,9 +740,10 @@ namespace Sonia
                 {
                     foreach (Track track in _actions)
                     {
-                        if (track.Joints[b] >= 0 && track.Weight > 0f)
+                        float w = track.Weight * actionScale;
+                        if (track.Joints[b] >= 0 && w > 0f)
                         {
-                            rotation = Quaternion.Slerp(rotation, Target(track, b, track.Ratio), track.Weight);
+                            rotation = Quaternion.Slerp(rotation, Target(track, b, track.Ratio), w);
                             touched = true;
                         }
                     }
@@ -723,7 +753,7 @@ namespace Sonia
                 {
                     foreach (Track track in _gestures)
                     {
-                        float w = track.Weight * bodyWeight;
+                        float w = track.Weight * bodyWeight * armFree;
                         if (track.Joints[b] >= 0 && w > 0f)
                         {
                             rotation = Quaternion.Slerp(rotation, Target(track, b, track.Ratio), w);

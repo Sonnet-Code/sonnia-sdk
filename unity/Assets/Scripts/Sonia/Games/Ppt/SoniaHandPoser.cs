@@ -1,9 +1,11 @@
 // La mano de Sonnia en piedra, papel o tijera (docs/juegos/piedra_papel_tijera.md).
 //
-// Sonnia sube el brazo derecho y enseña la mano a la cámara delante del pecho,
-// como quien enseña un gesto: palma hacia el público y dedos hacia arriba, que
-// es como mejor se lee piedra, papel o tijera en la pantalla vertical (con los
-// dedos apuntando a la cámara, el papel se vería de canto).
+// Sonnia levanta el brazo derecho con el antebrazo delante y enseña la mano a la
+// cámara a la altura de la cara, a su lado (sin taparla), como cuando se juega de
+// verdad: palma hacia el público y dedos hacia arriba, que es como mejor se lee
+// piedra, papel o tijera a 3 m en la pantalla vertical (con los dedos apuntando a
+// la cámara, el papel se vería de canto). Delante del pecho quedaba pequeña y
+// pegada a la camiseta.
 //
 //   Raise         sube el puño (el «preparados» de antes de la cuenta).
 //   BeginCount    agita el puño con la frase grabada «¡Piedra, papel o tijera…
@@ -25,7 +27,11 @@
 // (y en código para el componente que se añade en Play).
 //
 // Corre en LateUpdate al final (12650: tras la cara, la cabeza, los ojos y el
-// gorro de la trivia), así que nadie pisa el brazo mientras enseña la mano.
+// gorro de la trivia), así que nadie pisa el brazo mientras enseña la mano. Con
+// la mano arriba retiene además el brazo en la capa de Genies
+// (GeniesGestureLayer.HoldRightArm): sin gestos al hablar en el torso ni acciones
+// en ese brazo, para que ni el hombro ni la columna desplacen la mano mientras
+// Sonnia habla en el resultado. Al bajar, los gestos vuelven solos.
 
 using System;
 using UnityEngine;
@@ -114,16 +120,16 @@ namespace Sonia.Games.Ppt
     {
         [Header("Brazo (metros, respecto al hombro derecho: x a su derecha, y arriba, z hacia la cámara)")]
         [SerializeField]
-        [Tooltip("Dónde va la muñeca con el puño arriba, antes de cada golpe.")]
-        private Vector3 wristOffset = new Vector3(-0.04f, -0.12f, 0.27f);
+        [Tooltip("Dónde va la muñeca con el puño arriba, antes de cada golpe: por encima del hombro y un poco por fuera, para que la mano quede a la altura de la cara y a su lado.")]
+        private Vector3 wristOffset = new Vector3(0.065f, 0.14f, 0.25f);
 
         [SerializeField]
-        [Tooltip("Hacia dónde va el codo (pista del IK), respecto al hombro.")]
-        private Vector3 elbowHint = new Vector3(0.32f, -0.42f, -0.08f);
+        [Tooltip("Hacia dónde va el codo (pista del IK), respecto al hombro: abajo y por fuera, con el antebrazo delante casi vertical.")]
+        private Vector3 elbowHint = new Vector3(0.36f, -0.4f, 0.04f);
 
         [SerializeField]
         [Tooltip("Hacia dónde apuntan los dedos (en los ejes del avatar): casi arriba, un poco hacia la cámara y hacia dentro.")]
-        private Vector3 fingersDirection = new Vector3(-0.12f, 1f, 0.12f);
+        private Vector3 fingersDirection = new Vector3(-0.1f, 1f, 0.08f);
 
         [SerializeField]
         [Tooltip("Hacia dónde mira la palma (en los ejes del avatar): al público.")]
@@ -138,7 +144,7 @@ namespace Sonia.Games.Ppt
         [SerializeField]
         [Range(0f, 0.2f)]
         [Tooltip("Cuánto baja el puño en cada golpe, en metros.")]
-        private float pumpDrop = 0.09f;
+        private float pumpDrop = 0.06f;
 
         [SerializeField]
         [Range(0f, 40f)]
@@ -153,7 +159,12 @@ namespace Sonia.Games.Ppt
         [SerializeField]
         [Range(0f, 0.1f)]
         [Tooltip("Cuánto avanza la mano hacia la cámara al enseñarla, en metros.")]
-        private float revealPush = 0.035f;
+        private float revealPush = 0.04f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Dónde se queda la mano enseñando su jugada, en golpes (0 arriba del todo, 1 abajo): tras abrirse abajo en el «¡ya!» sube hasta aquí, a la altura de la cara.")]
+        private float revealDrop = 0.3f;
 
         [Header("Tiempos")]
         [SerializeField]
@@ -230,6 +241,8 @@ namespace Sonia.Games.Ppt
         private const float MaxFollowDegrees = 20f;
 
         private AvatarBinder _binder;
+        private GeniesGestureLayer _gestureLayer;
+        private bool _armHeld;
         private Transform _avatar;
         private Animator _animator;
         private Transform _shoulder;
@@ -325,6 +338,7 @@ namespace Sonia.Games.Ppt
         private void Awake()
         {
             _binder = GetComponentInChildren<AvatarBinder>(true);
+            _gestureLayer = GetComponentInChildren<GeniesGestureLayer>(true);
         }
 
         private void OnEnable()
@@ -345,13 +359,14 @@ namespace Sonia.Games.Ppt
             _up = false;
             _blend = 0f;
             _counting = false;
+            HoldArm(false);
         }
 
         // ------------------------------------------------------------------
         // API (la usa PptController)
         // ------------------------------------------------------------------
 
-        /// <summary>Sube el puño delante del pecho («preparados»).</summary>
+        /// <summary>Sube el puño a la altura de la cara, a su lado («preparados»).</summary>
         public void Raise()
         {
             if (!_up)
@@ -511,6 +526,7 @@ namespace Sonia.Games.Ppt
                 _broken = true;
                 _up = false;
                 _blend = 0f;
+                HoldArm(false);
                 Debug.LogException(ex, this);
                 Debug.LogWarning("[Sonia] Piedra, papel o tijera: la mano de Sonnia se apaga por un error.", this);
             }
@@ -532,6 +548,10 @@ namespace Sonia.Games.Ppt
 
             float rate = _up ? 1f / Mathf.Max(0.05f, raiseSeconds) : 1f / Mathf.Max(0.05f, lowerSeconds);
             _blend = Mathf.Clamp01(_blend + ((_up ? 1f : -1f) * rate * dt));
+
+            // Sin gestos al hablar en el torso ni acciones en este brazo mientras la mano esté
+            // arriba; al bajar se sueltan a la vez que el brazo vuelve a la animación.
+            HoldArm(_up && _bound);
             if (!_bound || _blend <= 0f)
             {
                 return;
@@ -575,9 +595,10 @@ namespace Sonia.Games.Ppt
 
             if (_revealed)
             {
-                // El último golpe: la mano baja, se abre y empuja un poco hacia el público.
+                // El último golpe: la mano se abre abajo, sube a la altura de la cara y empuja
+                // un poco hacia el público.
                 float since = Time.time - _revealedAt;
-                drop = Mathf.Lerp(1f, 0.85f, Mathf.Clamp01(since / 0.25f));
+                drop = Mathf.Lerp(1f, revealDrop, GameUi.EaseOutCubic(Mathf.Clamp01(since / 0.3f)));
                 push = revealPush * GameUi.EaseOutBack(Mathf.Clamp01(since / 0.22f));
             }
 
@@ -753,6 +774,32 @@ namespace Sonia.Games.Ppt
                 Quaternion shaped = Quaternion.Slerp(_targets[from, i], _targets[to, i], change);
                 bone.localRotation = Quaternion.Slerp(bone.localRotation, shaped, weight);
             }
+        }
+
+        /// <summary>Retiene (o suelta) el brazo derecho en la capa de gestos de Genies.</summary>
+        private void HoldArm(bool held)
+        {
+            if (held == _armHeld)
+            {
+                return;
+            }
+
+            if (_gestureLayer == null && held)
+            {
+                _gestureLayer = FindAnyObjectByType<GeniesGestureLayer>();
+            }
+
+            if (_gestureLayer != null)
+            {
+                _gestureLayer.HoldRightArm(held);
+                Log(held ? "brazo retenido: sin gestos al hablar" : "brazo suelto: vuelven los gestos");
+            }
+            else if (held)
+            {
+                Log("sin capa de gestos de Genies: los gestos al hablar no se apagan");
+            }
+
+            _armHeld = held;
         }
 
         // ------------------------------------------------------------------

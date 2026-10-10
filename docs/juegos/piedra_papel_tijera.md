@@ -184,23 +184,36 @@ la vista y por encima de los subtítulos.
 
 **La mano de Sonnia (`SoniaHandPoser`).**
 
-- El brazo derecho delante del pecho con IK de dos huesos (como `TriviaHat`), la palma hacia el
-  público y los dedos hacia arriba: es como mejor se lee la jugada en la pantalla vertical (con los
-  dedos hacia la cámara, el papel se vería de canto). La mano va a la altura de la parte alta del
-  pecho: la cara queda libre y los subtítulos de abajo no la tapan.
+- El brazo derecho levantado, con el antebrazo delante, casi vertical, y la mano a la altura de la
+  cara y a su lado, sin taparla, como cuando se juega de verdad. Va con IK de dos huesos (como
+  `TriviaHat`): la muñeca, 14 cm por encima del hombro, 6,5 cm por fuera y 25 cm hacia la cámara
+  (`wristOffset`), y el codo abajo y por fuera (`elbowHint`). La palma mira al público y los dedos
+  hacia arriba, que es como mejor se lee la jugada en la pantalla vertical (con los dedos hacia la
+  cámara, el papel se vería de canto). Hasta el 10 de octubre por la mañana la mano iba delante del
+  pecho y quedaba pequeña, pegada a la camiseta, y a 2 o 3 m no se leía como jugada. Ahora queda
+  por debajo de las tarjetas del juego, del rótulo del resultado y del aviso de espera, y por
+  encima de los subtítulos: con los de Sonnia y los del visitante a la vez, la pastilla «TÚ» sube
+  hasta los 1500 px, y por eso el golpe de la cuenta es de 6 cm (el puño no baja tanto).
 - Los ejes del brazo son los del avatar, pero siguen en parte (60 %) al pecho desde la postura que
   tenía al empezar a subir la mano: si el cuerpo se balancea al hablar o se inclina con un gesto, la
   mano va con él y la muñeca no se tuerce.
-- `ready` sube el puño. `countdown` lo agita: baja en cada tiempo de la frase (tres golpes, cada uno
+- `ready` sube el puño. `countdown` lo agita: baja 6 cm en cada tiempo de la frase (tres golpes, cada uno
   rápido hacia abajo y más lento hacia arriba, inclinando el puño como un martillo) y en el cuarto,
-  el «¡ya!», la mano se abre en su forma en 0,13 s y empuja un poco hacia el público.
+  el «¡ya!», la mano se abre en su forma en 0,13 s, sube en 0,3 s a la altura de la cara
+  (`revealDrop`) y empuja un poco hacia el público.
 - El «¡ya!» sale del audio de la frase que está sonando (`AudioStreamPlayer.GetPlaybackPosition`:
   la primera voz nueva tras `countdown`, menos el adelanto del lip-sync), así que la mano se abre a
   la vez que la voz. Sin audio, cuenta desde que llega el mensaje más 0,12 s; sin `go_s`, agita en
   bucle hasta `go`. Si llega `go` y en 0,4 s no se ha abierto, se abre. Al cambiar de reloj se funde
   la diferencia para que el puño no salte.
-- Tras el resultado la mano se queda enseñando su jugada 2,4 s y baja sola con un fundido (y como
-  mucho a los 9 s con el brazo arriba, por si se pierde un mensaje). Al cerrarse la pantalla, baja.
+- Se queda enseñando la jugada mientras juzga Gemini (de 1 a 3 s) y, tras el resultado, 2,4 s
+  más; luego baja sola con un fundido (y como mucho a los 9 s del «¡ya!» con el brazo arriba, por si
+  se pierde un mensaje). Al cerrarse la pantalla, baja.
+- Con la mano arriba, el brazo es solo suyo: retiene el brazo derecho en `GeniesGestureLayer`
+  (`HoldRightArm`), que apaga con un fundido de 0,25 s los gestos al hablar del director en todo el
+  torso y las acciones del cuerpo de Genies en ese brazo (el reposo sigue). Así, si Sonnia habla en
+  el resultado, ni el hombro ni la columna desplazan la mano ni le cambian la pose. Al bajar la
+  mano, los gestos vuelven solos.
 - Los dedos van con los músculos del humanoide: al enganchar el avatar se calcula con
   `HumanPoseHandler` la rotación local de cada falange de la mano derecha para cada forma, y cada
   fotograma solo se mezclan esas rotaciones con las de la animación (no se toca el resto del
@@ -219,6 +232,13 @@ enseñó cada forma con capturas de cerca de cada dos fotogramas, de lado y desd
 plano 9:16. Así salieron dos fallos que una captura suelta no habría enseñado: durante la cuenta los
 dedos ya tenían la forma final (se veía el papel antes del «ya») y el puño se quedaba en garra. Los
 músculos del puño y de la tijera salieron de una galería de 16 variantes (pulgar y cierre).
+
+**La altura de la mano** (10 de octubre de 2026 por la mañana, con la demo
+`server/sonia/games/ppt/demo.py` en Unity en batch): fotogramas 9:16 del puño arriba, de la cuenta,
+del «¡ya!» y de 0,5, 1 y 3 s después, con el aviso «Mirando tu mano…» mientras juzga, los
+subtítulos de Sonnia y del visitante a la vez, la frase de la cuenta con voz y Sonnia hablando en
+el resultado con gestos del director (`openClarify`, `emphasizeShort`, voz sintética). La mano no se
+mueve mientras habla, ninguna pastilla ni tarjeta la tapa y, al bajarla, los gestos vuelven.
 
 ## Pruebas y capturas
 

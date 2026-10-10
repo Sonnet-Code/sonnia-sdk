@@ -53,6 +53,7 @@ __all__ = [
     "EXAMPLE",
     "MSG_DEV_CAPTURE",
     "MSG_DEV_DONE",
+    "Audio",
     "Capture",
     "GameMsg",
     "Preview",
@@ -97,6 +98,17 @@ class Send:
     """Un mensaje JSON del protocolo tal cual (``speech_start``, ``transcript``, ``state``...)."""
 
     msg: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class Audio:
+    """Frames binarios de voz de Sonia tal cual (``encode_audio_frame``), todos de una vez.
+
+    Unity los encola y los reproduce a su ritmo, así que van entre un ``speech_start`` y un
+    ``speech_end`` (con :class:`Send`) para ver a Sonnia hablando: boca, gestos al hablar.
+    """
+
+    frames: tuple[bytes, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,8 +164,8 @@ class WaitEvent:
     timeout: float = 10.0
 
 
-Step = Wait | Send | GameMsg | Preview | Capture | WaitEvent
-_STEP_TYPES = (Wait, Send, GameMsg, Preview, Capture, WaitEvent)
+Step = Wait | Send | Audio | GameMsg | Preview | Capture | WaitEvent
+_STEP_TYPES = (Wait, Send, Audio, GameMsg, Preview, Capture, WaitEvent)
 
 
 def example_steps() -> list[Step]:
@@ -402,6 +414,10 @@ async def _run_steps(
                 elif isinstance(step, Send):
                     session.log(f"{stamp} {step.msg.get('type')}")
                     await session.send(step.msg)
+                elif isinstance(step, Audio):
+                    session.log(f"{stamp} audio, {len(step.frames)} frames")
+                    for frame in step.frames:
+                        await session.send(frame)
                 elif isinstance(step, GameMsg):
                     session.seq += 1
                     msg = p.msg_game(step.game or game, step.event, session.seq, step.data)
