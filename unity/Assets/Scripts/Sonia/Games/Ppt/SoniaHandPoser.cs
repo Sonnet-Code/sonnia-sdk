@@ -115,7 +115,7 @@ namespace Sonia.Games.Ppt
         [Header("Brazo (metros, respecto al hombro derecho: x a su derecha, y arriba, z hacia la cámara)")]
         [SerializeField]
         [Tooltip("Dónde va la muñeca con el puño arriba, antes de cada golpe.")]
-        private Vector3 wristOffset = new Vector3(-0.04f, -0.17f, 0.27f);
+        private Vector3 wristOffset = new Vector3(-0.04f, -0.12f, 0.27f);
 
         [SerializeField]
         [Tooltip("Hacia dónde va el codo (pista del IK), respecto al hombro.")]
