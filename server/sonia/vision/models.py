@@ -2,10 +2,11 @@
 
 ``docs/plan-juegos.md``, sección 6. Se descargan una vez a ``GAMES_MODELS_DIR``
 (``cache/games/modelos``), con la revisión fijada y comprobados por SHA-256, como los de
-las caras (``sonia/faces/model.py``). La app los lleva dentro (``scripts/build_orquestador.sh``)
-y los copia a su carpeta de datos al arrancar (``sonia.paths.SEEDED``); si faltan, el motor
-los baja en segundo plano al arrancar y, hasta que terminan, los juegos de cámara no se
-ofrecen.
+las caras (``sonia/faces/model.py``). La app los lleva todos dentro, los dos de poses (``n`` y
+``s``) y los de manos (``scripts/build_orquestador.sh``), y los copia a su carpeta de datos al
+arrancar (``sonia.paths.SEEDED``). Al arrancar solo exige el de poses de ``GAME_POSES_MODEL``
+y los de manos: si faltan, el motor los baja en segundo plano y, hasta que llegan, los juegos
+de cámara no se ofrecen. El otro de poses se baja la primera vez que se pide desde el panel.
 
 Para bajarlos a mano (o antes de congelar el orquestador), desde ``server/``::
 
@@ -24,16 +25,20 @@ from typing import Any
 import httpx
 
 __all__ = [
+    "DEFAULT_POSE_VARIANT",
     "HAND_LANDMARKS",
     "PALM_DETECTOR",
     "POSE_MODELS",
+    "POSE_VARIANTS",
     "GameModel",
     "GameModelError",
+    "all_game_models",
     "download_game_models",
     "game_models",
     "games_models_dir",
     "load_onnx",
     "model_present",
+    "pose_variant",
 ]
 
 logger = logging.getLogger(__name__)
@@ -54,7 +59,8 @@ class GameModel:
 _HF = "https://huggingface.co"
 
 #: YOLOv8-pose exportado a ONNX (Ultralytics, AGPL-3.0; demo sin ánimo de lucro). Entrada
-#: 640x640 RGB, salida ``[1, 56, 8400]``. ``s`` acierta más; ``n`` tarda la mitad.
+#: 640x640 RGB, salida ``[1, 56, 8400]``. ``n`` (por defecto) gasta la mitad de CPU; ``s``
+#: acierta algo más con gente tapada. La app lleva los dos y se cambia desde el panel.
 POSE_MODELS: dict[str, GameModel] = {
     "s": GameModel(
         "yolov8s-pose.onnx",
@@ -90,10 +96,32 @@ PALM_DETECTOR = GameModel(
 )
 
 
-def game_models(pose_variant: str = "s") -> tuple[GameModel, ...]:
-    """Los modelos que usan los juegos: el de poses de ``GAME_POSES_MODEL`` y los de manos."""
-    pose = POSE_MODELS.get(pose_variant, POSE_MODELS["s"])
+#: Las variantes del modelo de poses, de la ligera a la precisa (así las ofrece el panel).
+POSE_VARIANTS = ("n", "s")
+
+#: La de ``GAME_POSES_MODEL`` por defecto: la mitad de CPU que ``s`` con Unity en marcha y
+#: de frente detecta casi igual (10 de octubre de 2026, ``docs/juegos-vision.md``).
+DEFAULT_POSE_VARIANT = "n"
+
+
+def pose_variant(raw: Any) -> str | None:
+    """``n`` o ``s`` a partir de lo que llegue (ajustes, panel); ``None`` si no es ninguna."""
+    if not isinstance(raw, str):
+        return None
+    value = raw.strip().lower()
+    return value if value in POSE_MODELS else None
+
+
+def game_models(pose_variant_id: str = DEFAULT_POSE_VARIANT) -> tuple[GameModel, ...]:
+    """Lo que exige la app al arrancar: el modelo de poses de ``GAME_POSES_MODEL`` y los de
+    manos. El otro de poses se baja la primera vez que se pide (``set_variant``)."""
+    pose = POSE_MODELS[pose_variant(pose_variant_id) or DEFAULT_POSE_VARIANT]
     return (pose, PALM_DETECTOR, HAND_LANDMARKS)
+
+
+def all_game_models() -> tuple[GameModel, ...]:
+    """Todos: los dos de poses y los de manos (los que lleva la app, ``python -m``)."""
+    return (*(POSE_MODELS[v] for v in POSE_VARIANTS), PALM_DETECTOR, HAND_LANDMARKS)
 
 
 def games_models_dir(settings: Any | None = None) -> Path:
@@ -196,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     """Baja todos los modelos de los juegos (los dos de poses y los de manos)."""
     args = sys.argv[1:] if argv is None else argv
     folder = Path(args[0]).expanduser() if args else games_models_dir()
-    every = (*POSE_MODELS.values(), PALM_DETECTOR, HAND_LANDMARKS)
+    every = all_game_models()
     try:
         downloaded = download_game_models(folder, every)
     except GameModelError as exc:

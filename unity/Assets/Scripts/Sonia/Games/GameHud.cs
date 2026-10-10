@@ -54,21 +54,27 @@ namespace Sonia
         private float countdownSize = 150f;
 
         [Header("Cámara (plano de panel automático)")]
+        // Calibrado con capturas 1080x1920 (RunHudCheck, 10 de octubre de 2026): con
+        // la tarjeta hasta 644 px, (0, 0,08, -0,2) deja la coronilla de Sonnia entre
+        // 96 y 122 px por debajo; con la vista en vivo y la tarjeta hasta 1062 px,
+        // (0, 0,55, -1,43) la deja a unos 100 px. Entre medias se interpola. El margen
+        // es por la pose: el plano base sale de dónde está la cabeza cuando llega el
+        // avatar y cambia de una vez a otra (CameraFramingController).
         [SerializeField]
         [Tooltip("Borde de abajo de lo de la franja alta (px desde arriba) con el que se calibra el plano corto.")]
-        private float shortShotBottom = 650f;
+        private float shortShotBottom = 644f;
 
         [SerializeField]
         [Tooltip("Desplazamiento de la cámara sobre el plano de panel (metros) cuando lo de arriba acaba en shortShotBottom.")]
-        private Vector3 shortShotExtra = new Vector3(0f, 0.3f, -0.8f);
+        private Vector3 shortShotExtra = new Vector3(0f, 0.08f, -0.2f);
 
         [SerializeField]
         [Tooltip("Borde de abajo de lo de la franja alta (px desde arriba) con el que se calibra el plano largo (vista en vivo y tarjeta).")]
-        private float tallShotBottom = 1100f;
+        private float tallShotBottom = 1062f;
 
         [SerializeField]
         [Tooltip("Desplazamiento de la cámara sobre el plano de panel (metros) cuando lo de arriba acaba en tallShotBottom.")]
-        private Vector3 tallShotExtra = new Vector3(0f, 0.75f, -2f);
+        private Vector3 tallShotExtra = new Vector3(0f, 0.55f, -1.43f);
 
         [Header("Tiempos")]
         [SerializeField]
@@ -890,9 +896,11 @@ namespace Sonia
             _resultAt = _clock + ResultDelay;
             _bannerAt = -1f;
             StopCountdown();
-            _result.anchorMin = _card.anchorMin;
-            _result.anchorMax = _card.anchorMax;
-            _result.anchoredPosition = _card.anchoredPosition;
+            // Arriba del todo, en la franja de la tarjeta: la vista en vivo se aparta
+            // mientras se ve el resultado (y Sonnia sube).
+            _result.anchorMin = new Vector2(0.5f, 1f - cardTop);
+            _result.anchorMax = _result.anchorMin;
+            _result.anchoredPosition = Vector2.zero;
             RectTransform body = (RectTransform)_result.Find("Contenido");
             bool wasActive = _result.gameObject.activeSelf;
             _result.gameObject.SetActive(true);
@@ -1083,15 +1091,15 @@ namespace Sonia
         {
             // A saltos de 40 px: que un cambio pequeño de la tarjeta no mueva la cámara.
             float quantized = Mathf.Round(bottomPixels / 40f) * 40f;
-            float t = Mathf.Clamp((quantized - shortShotBottom) / Mathf.Max(1f, tallShotBottom - shortShotBottom), 0f, 1.25f);
+            float t = Mathf.Clamp((quantized - shortShotBottom) / Mathf.Max(1f, tallShotBottom - shortShotBottom), 0f, 1.6f);
             return Vector3.LerpUnclamped(shortShotExtra, tallShotExtra, t);
         }
 
-        /// <summary>Borde de abajo (px desde arriba) de un rectángulo anclado arriba en el centro, como la tarjeta.</summary>
+        /// <summary>Borde de abajo (px desde arriba) de un rectángulo con un ancla de punto, como la tarjeta.</summary>
         private static float BottomOf(RectTransform rect)
         {
-            float top = ((1f - rect.anchorMin.y) * ReferenceHeight) - rect.anchoredPosition.y;
-            return top + (rect.sizeDelta.y * (1f - rect.pivot.y)) + (rect.sizeDelta.y * rect.pivot.y);
+            float pivotFromTop = ((1f - rect.anchorMin.y) * ReferenceHeight) - rect.anchoredPosition.y;
+            return pivotFromTop + (rect.sizeDelta.y * rect.pivot.y);
         }
 
         private void UpdatePanelShot()
@@ -1174,6 +1182,11 @@ namespace Sonia
                 return;
             }
 
+            if (_preview != null)
+            {
+                _preview.Suppressed = _resultShown && (_open || _resultAlpha > 0.001f);
+            }
+
             AnimateCard(dt);
             AnimateBanner();
             AnimateCountdown(dt);
@@ -1224,6 +1237,11 @@ namespace Sonia
                 }
 
                 _game = string.Empty;
+            }
+
+            if (_preview != null)
+            {
+                _preview.Suppressed = false;
             }
 
             _root.gameObject.SetActive(false);

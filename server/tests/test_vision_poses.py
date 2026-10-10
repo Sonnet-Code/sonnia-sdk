@@ -215,6 +215,7 @@ async def test_sin_camara_no_detecta(tmp_path: Path) -> None:
     assert detector.latest() is None
 
 
-def test_variante_desconocida_usa_la_s(tmp_path: Path) -> None:
-    assert YoloPoseDetector(FakeStream(), tmp_path, variant="x").variant == "s"
-    assert YoloPoseDetector(FakeStream(), tmp_path, variant="n").variant == "n"
+def test_variante_por_defecto_n_y_desconocida_tambien(tmp_path: Path) -> None:
+    assert YoloPoseDetector(FakeStream(), tmp_path).variant == "n"
+    assert YoloPoseDetector(FakeStream(), tmp_path, variant="x").variant == "n"
+    assert YoloPoseDetector(FakeStream(), tmp_path, variant=" S ").variant == "s"
