@@ -12,6 +12,10 @@ Pasa por cada estado de la pantalla y pide una captura 9:16 en cada uno (``docs/
 4. Una pantalla que se conecta a mitad de partida: el primer `guess` que recibe trae el tablero
    de cuatro intentos (el último, con la pista más larga que cabe) y las filas que no había visto
    salen ya puestas.
+5. Tres veces en que lo dejan antes de acabar (`stop_game` por voz o «Terminar juego» del panel):
+   con tres intentos hechos (la fila ya pintada no se vuelve a voltear: solo sale la palabra con
+   su pista y el rótulo «lo dejamos aquí»), sin ningún intento, y con una pantalla que se
+   conecta justo entonces y recibe el tablero entero ya con la palabra.
 
 Los mensajes salen de las mismas reglas que el juego (:func:`~sonia.games.wordle.logic.score_guess`
 y :func:`~sonia.games.wordle.logic.used_letters`); un test comprueba que son los que manda
@@ -27,6 +31,9 @@ from sonia.games.wordle.logic import GREEN, WORD_LENGTH, score_guess, used_lette
 from sonia.ws import protocol as p
 
 __all__ = [
+    "GIVE_UP",
+    "GIVE_UP_NONE",
+    "GIVE_UP_REPLAY",
     "HINT_AFTER",
     "LONG",
     "LOST",
@@ -36,6 +43,7 @@ __all__ = [
     "guess_data",
     "start_data",
     "steps",
+    "stopped_data",
 ]
 
 ROWS = 6
@@ -64,6 +72,23 @@ WON_GUESSES = ["CLOUD", "SWIFT", "REDIS", "PIXEL", "REACT"]
 LOST_GUESSES = ["LINUX", "CLOUD", "CRASH", "CHECK", "PIXEL", "MERGE"]
 MANY_GUESSES = ["LINUX", "CLOUD", "PIXEL"]
 LONG_GUESSES = ["LINUX", "CLOUD", "PIXEL", "CRASH"]
+
+#: Lo dejan antes de acabar: con tres intentos hechos, sin ninguno y con una pantalla que se
+#: conecta justo entonces (palabras y pistas del banco de la app).
+GIVE_UP = (
+    "CLASS",
+    "El molde con el que se crean objetos en la programación orientada a objetos.",
+)
+GIVE_UP_GUESSES = ["LINUX", "REACT", "MODEL"]
+GIVE_UP_NONE = (
+    "FLASK",
+    "Microframework web de Python: con pocas líneas ya tienes un servidor.",
+)
+GIVE_UP_REPLAY = (
+    "PROXY",
+    "Intermediario que hace las peticiones en tu nombre y esconde de dónde vienen.",
+)
+GIVE_UP_REPLAY_GUESSES = ["LINUX", "CLOUD", "PIXEL"]
 
 #: Las palabras que no valen de la primera partida: lo que dice el juego en cada caso.
 INVALID_SHORT = {"letters": "WEB", "reason": "length", "message": "Tienen que ser 5 letras"}
@@ -94,7 +119,34 @@ def guess_data(
         "hint": hint if show_hint else "",
         "result": result,
         "word": secret if result else "",
+        "stopped": False,
     }
+
+
+def stopped_data(words: list[str], secret: str, hint: str) -> dict[str, Any]:
+    """Lo que manda el juego cuando lo dejan con la partida en marcha (``stop_requested``).
+
+    No es un intento nuevo: es el último estado con la palabra y su pista (``result: lose``,
+    ``stopped: true``). ``row`` es el del último intento, o -1 si no hubo ninguno.
+    """
+    board = [{"letters": w, "marks": score_guess(w, secret)} for w in words]
+    last = board[-1] if board else None
+    return {
+        "row": len(words) - 1,
+        "letters": last["letters"] if last else "",
+        "marks": last["marks"] if last else "",
+        "board": board,
+        "used": used_letters([(row["letters"], row["marks"]) for row in board]),
+        "hint": hint,
+        "result": "lose",
+        "word": secret,
+        "stopped": True,
+    }
+
+
+def stopped_end(words: list[str], secret: str) -> dict[str, Any]:
+    """El ``end`` de lo que dejaron a medias (el que manda el manager tras ``finish``)."""
+    return {"word": secret, "attempts": len(words), "stopped": True, "result": "lose"}
 
 
 def start_data(rows: int = ROWS, hint_after: int = HINT_AFTER) -> dict[str, Any]:
@@ -183,5 +235,41 @@ def steps() -> list[Step]:
         Capture("wordle-10-reconexion", settle_s=3.0),
         GameMsg("end", {"result": "cancel"}),
         Wait(1.5),
+    ]
+    # Lo dejan con tres intentos hechos: la fila ya pintada NO se vuelve a voltear (la primera
+    # captura va medio segundo después, cuando un volteo repetido se vería a medias).
+    secret, hint = GIVE_UP
+    words = GIVE_UP_GUESSES
+    out += [GameMsg("start", start_data()), Wait(1.0)]
+    for count in range(1, len(words) + 1):
+        out += [GameMsg("guess", guess_data(words[:count], secret, hint)), Wait(2.2)]
+    out += [
+        GameMsg("guess", stopped_data(words, secret, hint)),
+        Capture("wordle-11a-dejan-sin-volteo", settle_s=0.5),
+        Capture("wordle-11b-dejan-palabra", settle_s=1.6),
+        GameMsg("end", stopped_end(words, secret)),
+        Capture("wordle-11c-dejan-final", settle_s=1.2),
+        Wait(5.0),
+    ]
+    # Lo dejan sin haber probado ninguna palabra: no hay fila que enseñar, solo la palabra.
+    secret, hint = GIVE_UP_NONE
+    out += [
+        GameMsg("start", start_data()),
+        Wait(1.0),
+        GameMsg("guess", stopped_data([], secret, hint)),
+        Capture("wordle-12a-dejan-sin-intentos", settle_s=1.4),
+        GameMsg("end", stopped_end([], secret)),
+        Capture("wordle-12b-dejan-sin-intentos-final", settle_s=1.2),
+        Wait(5.0),
+    ]
+    # Lo dejan justo cuando una pantalla se acaba de conectar: le llega el tablero entero (que no
+    # había visto) ya con la palabra, sin voltear nada.
+    secret, hint = GIVE_UP_REPLAY
+    out += [
+        GameMsg("start", start_data()),
+        GameMsg("guess", stopped_data(GIVE_UP_REPLAY_GUESSES, secret, hint)),
+        Capture("wordle-13-dejan-reconexion", settle_s=1.5),
+        GameMsg("end", stopped_end(GIVE_UP_REPLAY_GUESSES, secret)),
+        Wait(5.0),
     ]
     return out

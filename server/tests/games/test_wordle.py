@@ -174,6 +174,7 @@ async def test_un_intento_se_colorea_y_se_cuenta() -> None:
     assert event["board"] == [{"letters": "FLASK", "marks": marks}]
     assert event["used"]["g"] + event["used"]["y"] + event["used"]["x"] == "AFKLS"
     assert event["hint"] == "" and event["result"] == "" and event["word"] == ""
+    assert event["stopped"] is False
     # A GPT-Live le llega un resumen corto, el intento y cuántos quedan.
     assert script.startswith("Intento 1 de 6, «FLASK»: ")
     assert describe_marks("FLASK", marks) in script
@@ -550,7 +551,7 @@ def demo_games(steps: list[Step]) -> list[list[GameMsg]]:
 
 async def test_la_secuencia_del_orquestador_falso_es_la_del_juego_real() -> None:
     # Se juega con el juego de verdad lo mismo que dice la secuencia y se comparan los mensajes.
-    won, lost, many, replay = demo_games(wordle_demo.steps())
+    won, lost, many, replay = demo_games(wordle_demo.steps())[:4]
     plan: list[tuple[list[GameMsg], tuple[str, str], list[str], dict[str, Any], str]] = [
         (won, wordle_demo.WON, wordle_demo.WON_GUESSES, {}, "win"),
         (lost, wordle_demo.LOST, wordle_demo.LOST_GUESSES, {}, "lose"),
@@ -579,6 +580,32 @@ async def test_la_secuencia_del_orquestador_falso_es_la_del_juego_real() -> None
         else:
             result, data = host.finished[0]
             assert result == outcome and end.data == {**(data or {}), "result": result}
+
+
+async def test_los_finales_al_dejarlo_de_la_secuencia_son_los_del_juego_real() -> None:
+    # Lo dejan con intentos, sin ninguno y con una pantalla que se conecta justo entonces: la
+    # secuencia manda lo mismo que el juego de verdad cuando le piden terminar.
+    stops = demo_games(wordle_demo.steps())[4:]
+    assert len(stops) == 3
+    plan = [
+        (stops[0], wordle_demo.GIVE_UP, wordle_demo.GIVE_UP_GUESSES),
+        (stops[1], wordle_demo.GIVE_UP_NONE, []),
+        (stops[2], wordle_demo.GIVE_UP_REPLAY, wordle_demo.GIVE_UP_REPLAY_GUESSES),
+    ]
+    for messages, (secret, hint), words in plan:
+        game, host = make_wordle(secret, hint=hint)
+        await game.start("voice", {})
+        for word in words:
+            await play(game, word)
+        script = await game.stop_requested("voice")
+        assert script is not None and f"la palabra era {secret}" in script
+        stopped = [m.data for m in messages if m.event == "guess" and m.data["stopped"]]
+        assert stopped == [host.last("guess")] and stopped[0]["stopped"] is True
+        assert stopped[0]["word"] == secret and stopped[0]["hint"] == hint
+        result, data = host.finished[0]
+        end = messages[-1]
+        assert end.event == "end" and end.data == {**(data or {}), "result": result}
+        assert end.data["stopped"] is True
 
 
 async def test_los_intentos_invalidos_de_la_secuencia_son_los_del_juego_real() -> None:
@@ -617,6 +644,10 @@ def test_la_secuencia_pasa_por_cada_estado_y_pide_su_captura() -> None:
         "ocho-filas",
         "solapados",
         "reconexion",
+        "dejan-sin-volteo",
+        "dejan-palabra",
+        "dejan-sin-intentos",
+        "dejan-reconexion",
     ):
         assert any(state in name for name in captures), state
     # Cada captura va tras el mensaje que quiere ver: nunca la primera de la secuencia.
@@ -743,8 +774,15 @@ async def test_stop_game_ensena_la_palabra_y_se_la_pasa_a_sonia() -> None:
     last = screen.game_msgs("guess")[-1]["data"]
     assert (last["result"], last["word"], last["hint"]) == ("lose", secret, hint)
     assert [row["letters"] for row in last["board"]] == ["LINUX"]
+    # No es un intento nuevo: la misma fila, marcada como «lo dejan» (Unity no la voltea otra vez).
+    assert last["stopped"] is True and last["row"] == 0
     await settle()
-    assert screen.game_msgs("end")[-1]["data"] == {"word": secret, "attempts": 1, "result": "lose"}
+    assert screen.game_msgs("end")[-1]["data"] == {
+        "word": secret,
+        "attempts": 1,
+        "stopped": True,
+        "result": "lose",
+    }
     assert not manager.active and screen.replay() == []
     assert "vuelve a conversar con normalidad" in engine.instructions[-1]
     late = await registry.execute("wordle_guess", {"palabra": "REACT"}, ctx)

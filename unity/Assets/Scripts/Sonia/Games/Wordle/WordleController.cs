@@ -63,6 +63,12 @@ namespace Sonia.Games.Wordle
         [JsonProperty("hint")] public string Hint = string.Empty;
         [JsonProperty("result")] public string Result = string.Empty;
         [JsonProperty("word")] public string Word = string.Empty;
+
+        /// <summary>
+        /// Lo terminaron con la partida en marcha (por voz o desde el panel): no es un intento
+        /// nuevo, es el último estado con la palabra y su pista. Sin intentos, <c>row</c> vale -1.
+        /// </summary>
+        [JsonProperty("stopped")] public bool Stopped;
     }
 
     /// <summary>data de invalid: la palabra no vale (no es de cinco letras, lleva símbolos o ya la probaron).</summary>
@@ -74,12 +80,13 @@ namespace Sonia.Games.Wordle
         [JsonProperty("message")] public string Message = string.Empty;
     }
 
-    /// <summary>data del end de este juego: la palabra y los intentos.</summary>
+    /// <summary>data del end de este juego: la palabra y los intentos (y si lo dejaron a medias).</summary>
     [Serializable]
     public class WordleEndData
     {
         [JsonProperty("word")] public string Word = string.Empty;
         [JsonProperty("attempts")] public int Attempts;
+        [JsonProperty("stopped")] public bool Stopped;
     }
 
     /// <summary>Pantalla de «Wordle de tecnología» (id <c>wordle</c>).</summary>
@@ -160,6 +167,7 @@ namespace Sonia.Games.Wordle
         private bool[] _rowDone;
         private int _revealing;
         private bool _hintShown;
+        private bool _wordShown;
         private bool _celebrated;
         private WordleGuessData _last;
         private Coroutine _invalidRoutine;
@@ -188,6 +196,7 @@ namespace Sonia.Games.Wordle
             _hintAfter = start.HintAfter;
             _last = null;
             _hintShown = false;
+            _wordShown = false;
             _celebrated = false;
             if (Hud == null || Content == null)
             {
@@ -237,6 +246,13 @@ namespace Sonia.Games.Wordle
         protected override void ShowDefaultResult(string result, string dataJson)
         {
             WordleEndData end = ParseData<WordleEndData>(dataJson);
+            if (end.Stopped && _wordShown)
+            {
+                // Lo dejaron a medias: el tablero ya enseña la palabra y su pista, y se queda unos
+                // segundos antes de retirarse. Otra tarjeta de «¡casi!» sobraría.
+                return;
+            }
+
             string word = !string.IsNullOrEmpty(end.Word)
                 ? end.Word
                 : (_last != null ? _last.Word : string.Empty);
@@ -282,6 +298,12 @@ namespace Sonia.Games.Wordle
             }
 
             WordleGuessData guess = ParseData<WordleGuessData>(dataJson);
+            if (guess.Stopped)
+            {
+                HandleStopped(guess);
+                return;
+            }
+
             List<WordleRowData> board = guess.Board ?? new List<WordleRowData>();
             int row = guess.Row;
             if (row < 0 || row >= _rows)
@@ -349,23 +371,15 @@ namespace Sonia.Games.Wordle
             int attempts = guess.Row + 1;
             if (guess.Result == GameResults.Win)
             {
-                Hud.SetCaption("¡EN " + attempts + (attempts == 1 ? " INTENTO!" : " INTENTOS!"));
-                ShowWord(guess, true);
+                ShowOutcome(guess);
                 Celebrate(guess);
                 return;
             }
 
             if (guess.Result == GameResults.Lose)
             {
-                Hud.SetCaption("SIN INTENTOS");
-                ShowWord(guess, false);
-                if (!_celebrated)
-                {
-                    _celebrated = true;
-                    PlayReaction("emotions-0049-traitsKind", "Peace");
-                    ShowEmotion(FacialExpressionController.Emotion.Joy, 2f);
-                }
-
+                ShowOutcome(guess);
+                GentleReaction();
                 return;
             }
 
@@ -388,6 +402,59 @@ namespace Sonia.Games.Wordle
             {
                 ShowEmotion(FacialExpressionController.Emotion.Surprise, 1.2f);
             }
+        }
+
+        /// <summary>
+        /// El final de la partida en el tablero: el rótulo de la cabecera y la palabra con su pista.
+        /// Solo enseña la palabra una vez, aunque lleguen el último intento y luego el end.
+        /// </summary>
+        private void ShowOutcome(WordleGuessData guess)
+        {
+            if (guess.Stopped)
+            {
+                Hud.SetCaption("LO DEJAMOS AQUÍ");
+            }
+            else if (guess.Result == GameResults.Win)
+            {
+                int attempts = guess.Row + 1;
+                Hud.SetCaption("¡EN " + attempts + (attempts == 1 ? " INTENTO!" : " INTENTOS!"));
+            }
+            else
+            {
+                Hud.SetCaption("SIN INTENTOS");
+            }
+
+            if (!_wordShown)
+            {
+                ShowWord(guess, guess.Result == GameResults.Win);
+            }
+        }
+
+        /// <summary>Sonnia se lo toma con calma: el gesto amable de la derrota, una sola vez.</summary>
+        private void GentleReaction()
+        {
+            if (_celebrated)
+            {
+                return;
+            }
+
+            _celebrated = true;
+            PlayReaction("emotions-0049-traitsKind", "Peace");
+            ShowEmotion(FacialExpressionController.Emotion.Joy, 2f);
+        }
+
+        /// <summary>
+        /// Lo terminan con la partida en marcha: no es un intento nuevo, así que no se vuelve a
+        /// voltear ninguna fila. Se corta lo que se anima, se dejan puestas las filas (también las
+        /// que esta pantalla no había visto) y sale la palabra con su pista y el rótulo
+        /// «lo dejamos aquí».
+        /// </summary>
+        private void HandleStopped(WordleGuessData guess)
+        {
+            CancelInvalid();
+            _last = guess;
+            FinishNow(false);
+            GentleReaction();
         }
 
         /// <summary>Al acertar: la fila baila, hay confeti y Sonnia lo celebra.</summary>
@@ -565,6 +632,7 @@ namespace Sonia.Games.Wordle
         /// <summary>Al terminar: la palabra en fichas con su pista (en verde si la acertaron).</summary>
         private void ShowWord(WordleGuessData guess, bool won)
         {
+            _wordShown = true;
             string word = Clean(guess.Word);
             _infoLabel.text = won ? "¡LA PALABRA ERA!" : "LA PALABRA ERA";
             _infoLabel.color = won ? GameColors.Gold : Color.white;
@@ -640,7 +708,7 @@ namespace Sonia.Games.Wordle
             ApplyUsed(_last.Used);
             if (_last.Result == GameResults.Win || _last.Result == GameResults.Lose)
             {
-                ShowWord(_last, _last.Result == GameResults.Win);
+                ShowOutcome(_last);
                 if (won && !_celebrated)
                 {
                     Celebrate(_last);
