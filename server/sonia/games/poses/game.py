@@ -652,7 +652,7 @@ class PosesGame(Game):
         if verdict is None or pose not in verdict.counts:
             return count, total
         seen = max(0, int(verdict.people))
-        judged = min(max(0, int(verdict.counts[pose])), seen)
+        judged = min(max(0, int(verdict.counts[pose])), seen, max(total, MAX_JUDGED_PLAYERS))
         # Quién juega: el juez cuenta a todos los que ve, también a quien pasa por el fondo,
         # y la detección local solo a los que están cerca (``GAME_POSES_MIN_PERSON``). Si lo
         # local vio jugadores, el total es el suyo, nunca menos que los que hicieron la pose;
