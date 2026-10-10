@@ -17,6 +17,7 @@ from sonia.games.base import INSTRUCT_MAX_CHARS
 __all__ = [
     "FEW_LEFT_TEXT",
     "GIVEUP_NUDGE",
+    "START_NUDGE",
     "GIVEUP_SCRIPT",
     "GUESS_NUDGE",
     "GUESS_SCRIPT",
@@ -131,6 +132,10 @@ LIMIT_NUDGE = (
     "AKINATOR: ya hiciste tus {max} preguntas y no puedes hacer más. Si el visitante te dijo qué "
     "era, delega «akinator: resultado» con lo que era. Si no, delega «akinator: adivina X» con tu "
     "mejor idea, o ríndete y pregúntale qué era."
+)
+START_NUDGE = (
+    "AKINATOR: si el visitante ya te dijo que tiene algo en mente y aún no has hecho tu primera "
+    "pregunta, hazla ahora: una pregunta corta de sí o no. Si no, no digas nada."
 )
 GIVEUP_NUDGE = (
     "AKINATOR: te has rendido y esperas que te diga qué era. Si ya te lo dijo, delega «akinator: "

@@ -705,7 +705,12 @@ async def test_los_empujones_dependen_de_la_fase() -> None:
     game, host = await start_game()
     assert game.nudge() is None, "esperando: nada que empujar"
     visitor_speaks(game, host)
-    await ask(game, *questions(6))
+    start_nudge = game.nudge()
+    assert start_nudge is not None and "primera pregunta" in start_nudge
+    check_for_live(start_nudge)
+    await ask(game, *questions(1))
+    assert game.nudge() is None, "ya preguntó: no hay que empujar"
+    await ask(game, *questions(6)[1:])
     assert game.nudge() is None, "preguntando sin delegar es lo normal"
     await game.guess({"respuesta": "Kotlin"})
     guess_nudge = game.nudge()
@@ -991,6 +996,37 @@ async def test_empujon_si_el_visitante_habla_con_una_respuesta_en_pantalla_sin_d
     await manager.tick(clock())
     await settle()
     assert len(engine.spoken) == 1 and "akinator: resultado" in engine.spoken[0]
+
+
+async def test_empujon_de_arranque_si_el_visitante_avisa_y_sonia_no_pregunta() -> None:
+    manager, engine, _, clock, registry, ctx = await manager_rig()
+    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    clock.advance(5)
+    manager.on_user_text(clock())
+    started = clock()
+    clock.advance(1)
+    manager.on_user_turn_end(clock(), started)
+    # Sonia no dice nada: a los 3 s se le recuerda que haga su primera pregunta.
+    clock.advance(4)
+    await manager.tick(clock())
+    await settle()
+    assert len(engine.spoken) == 1 and "primera pregunta" in engine.spoken[0]
+
+
+async def test_si_sonia_ya_pregunto_no_hay_empujon_de_arranque() -> None:
+    manager, engine, _, clock, registry, ctx = await manager_rig()
+    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    clock.advance(5)
+    manager.on_user_text(clock())
+    started = clock()
+    clock.advance(1)
+    manager.on_user_turn_end(clock(), started)
+    # Antes de que venza el empujón, Sonia hace su primera pregunta.
+    await feed_sonia(manager, "¡Vamos! ¿Es un lenguaje de programación?")
+    clock.advance(4)
+    await manager.tick(clock())
+    await settle()
+    assert engine.spoken == []
 
 
 async def test_el_panel_ve_el_estado_de_la_partida() -> None:

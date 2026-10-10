@@ -55,6 +55,7 @@ from sonia.games.akinator.prompts import (
     REPEATED_GUESS_SCRIPT,
     RESUME_GUESS,
     RESUME_SCRIPT,
+    START_NUDGE,
     WIN_SCRIPT,
     build_rules,
     build_start_script,
@@ -362,6 +363,9 @@ class AkinatorGame(Game):
             self._ready = True
 
     def nudge(self) -> str | None:
+        if self._phase == "waiting" and self._ready and self._counter.count == 0:
+            # El visitante ya habló y Sonia no ha empezado a preguntar.
+            return START_NUDGE
         if self._phase == "guessing":
             return GUESS_NUDGE
         if self._phase == "giving_up":
