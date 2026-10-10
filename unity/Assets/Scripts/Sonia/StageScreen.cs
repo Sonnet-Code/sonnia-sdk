@@ -13,12 +13,13 @@
 //
 // Reglas:
 //  - La invitación solo sale si Sonia puede conversar (stage_mode, talk), está en
-//    reposo, no hay subtítulos recientes y no hay imagen, trivia ni modo Fuera.
+//    reposo, no hay subtítulos recientes y no hay imagen, trivia, juego (ni su
+//    vista en vivo) ni modo Fuera.
 //  - Los subtítulos de Sonia crecen con su voz: lo que acaba de llegar sale
 //    atenuado y se aclara enseguida. Si la frase llega entera en speech_start
 //    (las frases grabadas), lo que aún no ha dicho se ve atenuado y se va
 //    encendiendo al ritmo estimado de la voz: el karaoke del diseño.
-//  - Con una imagen o la trivia en la franja alta, el QR se aparta.
+//  - Con una imagen, la trivia o un juego en la franja alta, el QR se aparta.
 
 using System.Collections.Generic;
 using System.Text;
@@ -117,6 +118,7 @@ namespace Sonia
         private Canvas _hud;
         private ImagePanelController _imagePanel;
         private TriviaController _trivia;
+        private GameHud _games;
         private PresenceController _presence;
         private bool _built;
 
@@ -162,6 +164,24 @@ namespace Sonia
         public bool IsBuilt
         {
             get { return _built; }
+        }
+
+        /// <summary>Fuente de los titulares (Manrope ExtraBold), para que los juegos usen la misma. Null hasta montarse.</summary>
+        public TMP_FontAsset DisplayFont
+        {
+            get { return _display; }
+        }
+
+        /// <summary>Fuente de los textos de lectura (Manrope SemiBold).</summary>
+        public TMP_FontAsset SemiboldFont
+        {
+            get { return _semibold; }
+        }
+
+        /// <summary>Fuente de las etiquetas (Geist Mono).</summary>
+        public TMP_FontAsset MonoFont
+        {
+            get { return _mono; }
         }
 
         /// <summary>
@@ -226,8 +246,9 @@ namespace Sonia
 
         private void Start()
         {
-            // La trivia y la presencia las añade SoniaBootstrap por código en su Awake.
+            // La trivia, los juegos y la presencia las añade SoniaBootstrap por código en su Awake.
             _trivia = GetComponentInChildren<TriviaController>(true);
+            _games = GetComponentInChildren<GameHud>(true);
             _presence = GetComponentInChildren<PresenceController>(true);
             Build();
         }
@@ -561,7 +582,7 @@ namespace Sonia
             float now = Time.time;
             float dt = Time.deltaTime;
             bool imageUp = _imagePanel != null && _imagePanel.IsVisible;
-            bool triviaUp = _trivia != null && _trivia.IsActive;
+            bool triviaUp = (_trivia != null && _trivia.IsActive) || (_games != null && _games.HoldsTopStrip);
             bool away = _presence != null && (_presence.IsAway || !_presence.TargetPresent);
             bool hasText = _sonia.Length > 0 || _pendingText != null || _visitor.Length > 0;
             bool recent = _speaking || now - _lastActivity < lingerSeconds;

@@ -52,6 +52,21 @@ namespace Sonia
         public const string TriviaEnd = "trivia_end";
         public const string Activity = "activity";
 
+        /// <summary>Sobre común de los juegos (docs/plan-juegos.md): lo reparte <see cref="GameRouter"/>.</summary>
+        public const string Game = "game";
+
+        /// <summary>Enciende o apaga la vista en vivo de la cámara (frames binarios "SNCV").</summary>
+        public const string CameraPreview = "camera_preview";
+
+        /// <summary>
+        /// Solo del orquestador falso de las pruebas (scripts/juegos_demo.py): la
+        /// herramienta de capturas en batch guarda una captura con ese nombre.
+        /// </summary>
+        public const string DevCapture = "dev_capture";
+
+        /// <summary>Solo del orquestador falso: la herramienta de capturas en batch termina.</summary>
+        public const string DevDone = "dev_done";
+
         // De Unity hacia el orquestador.
         public const string ClientHello = "client_hello";
         public const string Interrupt = "interrupt";
@@ -66,6 +81,34 @@ namespace Sonia
         public const string AvatarEditor = "avatar_editor";
         public const string AvatarSaved = "avatar_saved";
         public const string GuestState = "guest_state";
+
+        /// <summary>Un evento de un juego hacia el orquestador (la ruleta se paró...).</summary>
+        public const string GameEvent = "game_event";
+    }
+
+    /// <summary>Capacidades que Unity anuncia en <c>client_hello.features</c>.</summary>
+    public static class ClientFeatures
+    {
+        /// <summary>Sabe mostrar la vista en vivo de la cámara (<c>camera_preview</c> y frames "SNCV").</summary>
+        public const string CameraPreview = "camera_preview";
+    }
+
+    /// <summary>Eventos comunes a todos los juegos dentro del sobre <c>game</c>.</summary>
+    public static class GameEvents
+    {
+        /// <summary>Empieza la partida: monta la pantalla del juego. Lleva <c>data.title</c>.</summary>
+        public const string Start = "start";
+
+        /// <summary>Fin de la partida: <c>data.result</c> vale win, lose o cancel. Retira la pantalla.</summary>
+        public const string End = "end";
+    }
+
+    /// <summary>Valores de <c>data.result</c> en el evento <c>end</c>.</summary>
+    public static class GameResults
+    {
+        public const string Win = "win";
+        public const string Lose = "lose";
+        public const string Cancel = "cancel";
     }
 
     /// <summary>Valores posibles del campo <c>state</c> del mensaje <c>state</c>.</summary>
@@ -355,6 +398,71 @@ namespace Sonia
     }
 
     /// <summary>
+    /// Sobre común de los juegos (orquestador → Unity):
+    /// <c>{"type":"game","game":"wordle","event":"guess","seq":7,"data":{...}}</c>.
+    /// <see cref="GameRouter"/> lo reparte por <see cref="Game"/> y el controlador
+    /// de cada juego deserializa <see cref="DataJson"/> con sus propias clases.
+    /// </summary>
+    public sealed class GameMessage
+    {
+        /// <summary>Id del juego ("ruleta", "wordle"...).</summary>
+        public string Game;
+
+        /// <summary>Evento: <see cref="GameEvents.Start"/>, <see cref="GameEvents.End"/> o uno propio del juego.</summary>
+        public string Event;
+
+        /// <summary>Contador global del orquestador: sube en cada mensaje de juego y vuelve a 1 si se reinicia.</summary>
+        public long Seq;
+
+        /// <summary>El objeto <c>data</c> en JSON compacto; "{}" si no venía.</summary>
+        public string DataJson = "{}";
+    }
+
+    /// <summary>
+    /// Enciende o apaga la vista en vivo de la cámara encima de Sonia, durante los
+    /// juegos que la usan. La imagen llega en frames binarios "SNCV".
+    /// </summary>
+    [Serializable]
+    public class CameraPreviewMessage
+    {
+        [JsonProperty("on")] public bool On;
+
+        /// <summary>Que se vea en espejo (si el frame no viene ya en espejo, Unity lo voltea).</summary>
+        [JsonProperty("mirror")] public bool Mirror = true;
+    }
+
+    /// <summary>Herramienta de capturas en batch: guarda una captura 1080x1920 con este nombre.</summary>
+    [Serializable]
+    public class DevCaptureMessage
+    {
+        [JsonProperty("name")] public string Name;
+    }
+
+    /// <summary>Herramienta de capturas en batch: se acabó la secuencia, Unity sale.</summary>
+    [Serializable]
+    public class DevDoneMessage
+    {
+    }
+
+    /// <summary>Un frame de la vista en vivo (binario "SNCV") con su JPEG ya separado de la cabecera.</summary>
+    public sealed class PreviewFrame
+    {
+        /// <summary>Sube en cada frame; Unity descarta los que llegan con uno menor.</summary>
+        public uint Seq;
+
+        /// <summary>Píxeles del JPEG que anuncia la cabecera.</summary>
+        public int Width;
+
+        public int Height;
+
+        /// <summary>Bit 0 de los flags: la imagen ya viene en espejo.</summary>
+        public bool Mirrored;
+
+        /// <summary>La imagen, con los esqueletos y las marcas del juego ya dibujados.</summary>
+        public byte[] Jpeg;
+    }
+
+    /// <summary>
     /// El panel pide pasar a la escena de editar personaje. <see cref="Target"/>
     /// dice de quién: "sonia" (por defecto, también si falta) o "guest", el
     /// invitado del Modo Jean.
@@ -629,6 +737,12 @@ namespace Sonia
         /// <summary>Escala de int16 a float.</summary>
         private const float PcmScale = 1f / 32768f;
 
+        /// <summary>Cabecera de los frames de la vista en vivo: magic, seq, ancho, alto y flags.</summary>
+        public const int PreviewHeaderSize = 16;
+
+        /// <summary>Bit 0 de los flags de la vista en vivo: la imagen ya va en espejo.</summary>
+        public const uint PreviewFlagMirrored = 1u;
+
         // --------------------------------------------------------------
         // Frames binarios de audio
         // --------------------------------------------------------------
@@ -691,6 +805,76 @@ namespace Sonia
             frame.IsLast = (flags & FlagLast) != 0u;
             frame.Samples = samples;
             return true;
+        }
+
+        /// <summary>
+        /// Decodifica un frame de la vista en vivo ("SNCV": magic, seq uint32, ancho
+        /// y alto uint16, flags uint32, little endian, y el JPEG detrás). Devuelve
+        /// false si es demasiado corto, si la marca no coincide o si no trae imagen.
+        /// </summary>
+        public static bool TryDecodePreviewFrame(byte[] data, int length, out PreviewFrame frame)
+        {
+            frame = null;
+            if (data == null || length <= PreviewHeaderSize || length > data.Length)
+            {
+                return false;
+            }
+
+            if (data[0] != (byte)'S' || data[1] != (byte)'N' || data[2] != (byte)'C' || data[3] != (byte)'V')
+            {
+                return false;
+            }
+
+            uint seq = data[4] | ((uint)data[5] << 8) | ((uint)data[6] << 16) | ((uint)data[7] << 24);
+            int width = data[8] | (data[9] << 8);
+            int height = data[10] | (data[11] << 8);
+            uint flags = data[12] | ((uint)data[13] << 8) | ((uint)data[14] << 16) | ((uint)data[15] << 24);
+            byte[] jpeg = new byte[length - PreviewHeaderSize];
+            Buffer.BlockCopy(data, PreviewHeaderSize, jpeg, 0, jpeg.Length);
+            frame = new PreviewFrame
+            {
+                Seq = seq,
+                Width = width,
+                Height = height,
+                Mirrored = (flags & PreviewFlagMirrored) != 0u,
+                Jpeg = jpeg
+            };
+            return true;
+        }
+
+        /// <summary>
+        /// Lee el sobre <c>game</c>. Devuelve null si falta el juego o el evento;
+        /// <c>data</c> se pasa tal cual, en texto, para que lo lea cada juego.
+        /// </summary>
+        public static GameMessage ParseGameMessage(JObject payload)
+        {
+            if (payload == null)
+            {
+                return null;
+            }
+
+            string game = payload.Value<string>("game");
+            string eventName = payload.Value<string>("event");
+            if (string.IsNullOrEmpty(game) || string.IsNullOrEmpty(eventName))
+            {
+                return null;
+            }
+
+            long seq = 0;
+            JToken seqToken = payload["seq"];
+            if (seqToken != null && (seqToken.Type == JTokenType.Integer || seqToken.Type == JTokenType.Float))
+            {
+                seq = seqToken.Value<long>();
+            }
+
+            JObject data = payload["data"] as JObject;
+            return new GameMessage
+            {
+                Game = game,
+                Event = eventName,
+                Seq = seq,
+                DataJson = data != null ? data.ToString(Formatting.None) : "{}"
+            };
         }
 
         // --------------------------------------------------------------
@@ -763,13 +947,74 @@ namespace Sonia
         /// <summary>Identifica al cliente justo después de conectar.</summary>
         public static string ClientHelloMessage(string client, string version)
         {
+            return ClientHelloMessage(client, version, null, null);
+        }
+
+        /// <summary>
+        /// Identifica al cliente y anuncia los juegos que sabe pintar
+        /// (<c>games</c>, los ids de los controladores registrados) y sus
+        /// capacidades (<c>features</c>, como <see cref="ClientFeatures.CameraPreview"/>).
+        /// Un orquestador anterior ignora los dos campos.
+        /// </summary>
+        public static string ClientHelloMessage(string client, string version, IList<string> games, IList<string> features)
+        {
             JObject message = new JObject
             {
                 ["type"] = MessageTypes.ClientHello,
                 ["client"] = string.IsNullOrEmpty(client) ? ClientName : client,
                 ["version"] = string.IsNullOrEmpty(version) ? "0.1.0" : version
             };
+
+            if (games != null)
+            {
+                message["games"] = new JArray(games);
+            }
+
+            if (features != null)
+            {
+                message["features"] = new JArray(features);
+            }
+
             return message.ToString(Formatting.None);
+        }
+
+        /// <summary>
+        /// Evento de un juego hacia el orquestador:
+        /// <c>{"type":"game_event","game":"ruleta","event":"wheel_stopped","data":{...}}</c>.
+        /// </summary>
+        public static string GameEventMessage(string game, string eventName, JObject data)
+        {
+            JObject message = new JObject
+            {
+                ["type"] = MessageTypes.GameEvent,
+                ["game"] = game ?? string.Empty,
+                ["event"] = eventName ?? string.Empty,
+                ["data"] = data ?? new JObject()
+            };
+            return message.ToString(Formatting.None);
+        }
+
+        /// <summary>
+        /// Ids de juego y nombres de evento válidos (los mismos que acepta el
+        /// orquestador): minúscula inicial y luego minúsculas, cifras o "_", hasta 40.
+        /// </summary>
+        public static bool IsValidGameName(string name)
+        {
+            if (string.IsNullOrEmpty(name) || name.Length > 40 || name[0] < 'a' || name[0] > 'z')
+            {
+                return false;
+            }
+
+            for (int i = 1; i < name.Length; i++)
+            {
+                char c = name[i];
+                if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>El usuario ha interrumpido a Sonia.</summary>

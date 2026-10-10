@@ -34,10 +34,10 @@ import json
 import logging
 import re
 import time
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 
@@ -48,6 +48,7 @@ from sonia.agenda import AgendaBook, Schedule
 from sonia.clock import Clock, clock_for, place_of, resolve_timezone, spoken_now, spoken_time
 from sonia.config import Settings
 from sonia.faces import FaceWatcher, Sighting
+from sonia.games.manager import GameManager
 from sonia.gestures.director import GestureDirector
 from sonia.live.audio import MicGate, rms
 from sonia.live.client import APPEND_MAX_CHARS, LiveClient, WsConnect, describe_error
@@ -73,10 +74,15 @@ from sonia.types import (
     CameraSource,
     Frame,
 )
+from sonia.vision.games import build_game_vision
 from sonia.vision.policy import VisionPolicy
 from sonia.vision.presence import PresenceWatch
 from sonia.ws import protocol as p
 from sonia.ws.hub import MessageCallback
+
+if TYPE_CHECKING:
+    from sonia.games.base import Game
+    from sonia.llm import LLMClient
 
 __all__ = ["LiveEngine"]
 
@@ -211,12 +217,21 @@ MOMENT_FOCUS = {
 #: Tope para preparar un momento (la foto y su descripción): mientras, no sale otro número.
 MOMENT_PREP_S = 15.0
 
+#: Por qué no empieza un juego con la trivia en marcha (lo lee GPT-Live o el panel).
+TRIVIA_PLAYING_TEXT = (
+    "Ahora mismo hay una trivia en marcha: termínala antes (o sigue con ella) para empezar "
+    "otro juego."
+)
+
 
 class HubLike(AvatarLink, Protocol):
     """Lo que el motor usa del hub WebSocket (y las acciones del avatar)."""
 
+    @property
+    def client_count(self) -> int: ...
     def on(self, type: str, callback: MessageCallback) -> None: ...
     async def broadcast_json(self, msg: dict[str, Any]) -> None: ...
+    async def broadcast_bytes(self, data: bytes) -> None: ...
     async def send_audio(self, utterance_id: int, chunk: AudioChunk) -> None: ...
     async def set_sticky(self, key: str, msg: dict[str, Any]) -> None: ...
     def clear_sticky(self, key: str) -> None: ...
@@ -303,8 +318,12 @@ class LiveEngine:
         clock: Clock | None = None,
         faces: FaceWatcher | None = None,
         presence: PresenceWatch | None = None,
+        vision_llm: LLMClient | None = None,
+        games: Sequence[type[Game]] | None = None,
         tick_s: float = 0.05,
     ) -> None:
+        """``vision_llm``: el modelo de visión, para la búsqueda relámpago. ``games``: los
+        juegos (por defecto, los encendidos del registro; ninguno en una videollamada)."""
         self._settings = settings
         self._voice_cache = voice_cache
         self._live = settings.live
@@ -427,9 +446,20 @@ class LiveEngine:
 
         # Modo trivia (``sonia.trivia``): GPT-Live la conduce; aquí van la clave y la pantalla.
         self._trivia: TriviaGame | None = (
-            TriviaGame(settings.trivia, settings.trivia_file, host=self, screen=hub)
+            TriviaGame(
+                settings.trivia,
+                settings.trivia_file,
+                host=self,
+                screen=hub,
+                busy=self._trivia_busy,
+            )
             if settings.trivia.enabled
             else None
+        )
+
+        # Juegos del stand (``sonia.games``, docs/juegos.md): uno a la vez y nunca con la trivia.
+        self._games: GameManager | None = self._build_games(
+            settings, hub, camera, voice_cache, vision_llm, games
         )
 
         # Fecha y hora del stand (``TIMEZONE``) y agenda del evento en vivo (``sonia.agenda``).
@@ -491,6 +521,69 @@ class LiveEngine:
     @property
     def trivia(self) -> TriviaGame | None:
         return self._trivia
+
+    @property
+    def games(self) -> GameManager | None:
+        """Los juegos del stand, o ``None`` si esta Sonnia no tiene ninguno encendido."""
+        return self._games
+
+    def _build_games(
+        self,
+        settings: Settings,
+        hub: HubLike,
+        camera: CameraSource | None,
+        voice_cache: VoiceCache | None,
+        vision_llm: LLMClient | None,
+        games: Sequence[type[Game]] | None,
+    ) -> GameManager | None:
+        """El ``GameManager`` con la visión de los juegos, o ``None`` si no hay juegos."""
+        if games is None:
+            from sonia.games.registry import enabled_games
+
+            games = [] if self._meeting else enabled_games(settings)
+        if not games or not settings.games.enabled:
+            return None
+        usb_camera = camera is not None and settings.vision.source == "opencv"
+        manager = GameManager(
+            settings,
+            engine=self,
+            screen=hub,
+            voice_cache=voice_cache,
+            games=games,
+            camera_ready=lambda: usb_camera,
+            meeting=self._meeting,
+            busy=self._games_busy,
+            trivia_draw=self._trivia.draw_one if self._trivia is not None else None,
+        )
+        manager.attach_vision(
+            build_game_vision(
+                settings=settings,
+                camera=camera,
+                send_json=hub.broadcast_json,
+                send_bytes=hub.broadcast_bytes,
+                preview_supported=manager.preview_supported,
+                vision_llm=vision_llm,
+            )
+        )
+        hub.on(p.MSG_CLIENT_HELLO, manager.on_client_hello)
+        hub.on(p.MSG_GAME_EVENT, manager.on_game_event)
+        logger.info("Juegos del stand: %s", ", ".join(g.id for g in manager.games()))
+        return manager
+
+    def _trivia_busy(self) -> str | None:
+        """Para la trivia: un juego en marcha no la deja empezar."""
+        return self._games.busy_reason() if self._games is not None else None
+
+    def _games_busy(self) -> str | None:
+        """Para los juegos: la trivia en marcha no los deja empezar."""
+        if self._trivia is not None and self._trivia.active:
+            return TRIVIA_PLAYING_TEXT
+        return None
+
+    def _playing(self) -> bool:
+        """¿Hay una trivia o un juego en pantalla? (pausas de la animación y de la renovación)"""
+        trivia = self._trivia is not None and self._trivia.active
+        return trivia or (self._games is not None and self._games.active)
 
     # -- entrada ------------------------------------------------------------
 
@@ -744,10 +837,16 @@ class LiveEngine:
         if self._trivia is not None:
             with contextlib.suppress(Exception):
                 await self._trivia.on_session_lost()
+        if self._games is not None:
+            with contextlib.suppress(Exception):
+                await self._games.on_session_lost()
 
     async def _shutdown(self) -> None:
         if self._gestures is not None:
             self._gestures.close()
+        if self._games is not None:
+            with contextlib.suppress(Exception):
+                await self._games.close()
         for task in [*self._tasks, self._vision_task, self._image_hide_task]:
             if task is not None and not task.done():
                 task.cancel()
@@ -866,6 +965,8 @@ class LiveEngine:
         await hub.broadcast_json(p.msg_speech_end(segment.uid))
         if self._gestures is not None:
             self._gestures.on_speech_end(segment.uid, text)
+        if self._games is not None and text:
+            await self._games.on_assistant_text(text, True)
         logger.info(
             "Sonia (%s%d, %.2f s): %s",
             "stand, " if segment.ambient else "",
@@ -897,6 +998,8 @@ class LiveEngine:
         if self._trivia is not None:
             # La trivia retenida mientras pregunta por Sonnet Code sale cuando arranca.
             await self._trivia.on_assistant_text(text)
+        if self._games is not None:
+            await self._games.on_assistant_text(text, False)
 
     async def _on_input_transcript(self, event: dict[str, Any]) -> None:
         delta = event.get("delta")
@@ -919,6 +1022,8 @@ class LiveEngine:
         self._touch()
         if self._trivia is not None:
             self._trivia.on_user_text(now)
+        if self._games is not None:
+            self._games.on_user_text(now)
         await self._hub.broadcast_json(p.msg_transcript("user", self._user_text, False))
         if not self._audible:
             await self._set_state(AssistantState.LISTENING)
@@ -940,6 +1045,8 @@ class LiveEngine:
             self._expect_response_until = now + RESPONSE_WAIT_S
         if self._trivia is not None and text:
             self._trivia.on_user_turn_end(now, self._user_turn_started_at)
+        if self._games is not None and text:
+            self._games.on_user_turn_end(now, self._user_turn_started_at)
 
     # -- delegación y acciones ----------------------------------------------
 
@@ -966,6 +1073,8 @@ class LiveEngine:
         )
         if self._trivia is not None:
             self._trivia.on_delegation(now)
+        if self._games is not None:
+            self._games.on_delegation(now)
         if not self._audible:
             await self._set_state(AssistantState.THINKING)
 
@@ -1107,6 +1216,7 @@ class LiveEngine:
             last_frame=self._last_frame,
             extra={
                 "trivia": self._trivia,
+                "games": self._games,
                 "moves": self._moves,
                 "gestures": self._gestures,
                 "agenda": self._agenda,
@@ -1309,6 +1419,8 @@ class LiveEngine:
 
         if self._trivia is not None:
             await self._trivia.tick(now)
+        if self._games is not None:
+            await self._games.tick(now)
 
         if self._state is not AssistantState.IDLE:
             self._maybe_look(turn_start=False)
@@ -1365,7 +1477,7 @@ class LiveEngine:
         """Abre una sesión limpia en un momento de calma si toca."""
         reason = ""
         limit = self._settings.idle_reset_seconds
-        playing = self._trivia is not None and self._trivia.active
+        playing = self._playing()
         if (
             limit > 0
             and not playing
@@ -1408,7 +1520,7 @@ class LiveEngine:
         """
         if self._showcase is None or not self._showcase_enabled or now < self._next_showcase_at:
             return
-        if self._trivia is not None and self._trivia.active:
+        if self._playing():
             return
         if now < self._ambient_expected_until:
             return
@@ -1680,6 +1792,8 @@ class LiveEngine:
         self._active_event.clear()
         if self._trivia is not None:
             await self._trivia.on_session_lost()
+        if self._games is not None:
+            await self._games.on_session_lost()
         await self.interrupt(tell_model=False)
         if self._vision_task is not None and not self._vision_task.done():
             self._vision_task.cancel()
@@ -2001,6 +2115,7 @@ class LiveEngine:
             "camera_ok": self._camera_ok,
             "last_error": self.last_error,
             "trivia": self._trivia.snapshot() if self._trivia is not None else None,
+            "games": self._games.snapshot() if self._games is not None else None,
             "gestures": self._gestures.snapshot() if self._gestures is not None else None,
         }
 
