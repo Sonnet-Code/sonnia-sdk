@@ -692,7 +692,9 @@ def secret_of(manager: GameManager) -> str:
 
 async def test_partida_ganada_por_voz() -> None:
     manager, engine, screen, _, registry, ctx = await rig()
-    result = await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx
+    )
     assert result.text.startswith(SCRIPT_PREFIX) and "5 letras" in result.text
     assert manager.active and manager.phase == "playing"
     # «start» va el primero, con el título en pantalla, y queda fijo.
@@ -733,7 +735,7 @@ async def test_partida_ganada_por_voz() -> None:
 
 async def test_partida_perdida_por_voz() -> None:
     manager, engine, screen, _, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     secret = secret_of(manager)
     words = [w for w in wrong_words(secret, 7) if w != secret][:6]
     texts = [(await registry.execute("wordle_guess", {"palabra": w}, ctx)).text for w in words]
@@ -748,7 +750,7 @@ async def test_partida_perdida_por_voz() -> None:
 
 async def test_unity_que_se_reconecta_recibe_la_rejilla_y_el_tablero() -> None:
     manager, _, screen, _, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     assert [m["event"] for m in screen.replay()] == ["start"]
     await registry.execute("wordle_guess", {"palabra": "LINUX"}, ctx)
     await registry.execute("wordle_guess", {"palabra": "REACT"}, ctx)
@@ -765,7 +767,7 @@ async def test_stop_game_ensena_la_palabra_y_se_la_pasa_a_sonia() -> None:
     # Terminarlo por voz con la partida en marcha ya no cancela a secas: se enseña la palabra
     # con su pista (la pantalla de la derrota) y GPT-Live recibe cuál era para decirla.
     manager, engine, screen, _, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     await registry.execute("wordle_guess", {"palabra": "LINUX"}, ctx)
     secret = secret_of(manager)
     hint = {e.word: e.hint for e in parse_words(bank_text()).entries}[secret]
@@ -792,7 +794,7 @@ async def test_stop_game_ensena_la_palabra_y_se_la_pasa_a_sonia() -> None:
 
 async def test_cancelar_en_pleno_intento_no_rompe_nada() -> None:
     manager, engine, screen, _, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     original = screen.set_sticky
 
     async def slow(key: str, msg: dict[str, Any]) -> None:
@@ -819,9 +821,11 @@ async def test_cancelar_en_pleno_intento_no_rompe_nada() -> None:
 
 async def test_empezar_otra_vez_mientras_se_juega_sigue_donde_iba() -> None:
     manager, _, _, _, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     await registry.execute("wordle_guess", {"palabra": "LINUX"}, ctx)
-    result = await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx
+    )
     assert "llevan 1 de 6 intentos (LINUX)" in result.text
     assert manager.phase == "playing"
 
@@ -834,7 +838,7 @@ async def test_la_jugada_tiene_un_esquema_estricto() -> None:
     assert set(spec.parameters["properties"]) == {"palabra"}
     assert not brands_in(spec.description) and "no la inventes" in spec.description
     assert not brands_in(json.dumps(spec.parameters, ensure_ascii=False))
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     for arguments in ({}, {"palabra": None}, {"palabra": 5}):
         result = await registry.execute("wordle_guess", arguments, ctx)
         assert result.text.startswith("Error: argumentos inválidos")
@@ -845,7 +849,7 @@ async def test_la_jugada_tiene_un_esquema_estricto() -> None:
 
 async def test_se_abandona_a_los_90_segundos_sin_actividad() -> None:
     manager, engine, screen, clock, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     await registry.execute("wordle_guess", {"palabra": "LINUX"}, ctx)
     # Su propio tiempo (90 s) manda sobre el general (60 s).
     clock.advance(75)
@@ -865,7 +869,7 @@ async def test_se_abandona_a_los_90_segundos_sin_actividad() -> None:
 
 async def test_si_se_cae_la_sesion_la_partida_se_cancela() -> None:
     manager, _, screen, _, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     await manager.on_session_lost()
     assert not manager.active
     assert screen.game_msgs("end")[-1]["data"] == {"result": "cancel"}
@@ -873,19 +877,23 @@ async def test_si_se_cae_la_sesion_la_partida_se_cancela() -> None:
 
 async def test_una_unity_que_no_sabe_pintarlo_no_lo_ofrece() -> None:
     manager, _, _, _, registry, ctx = await rig(unity_games=[])
-    result = await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx
+    )
     assert "no sabe pintar" in result.text and not manager.active
 
 
 async def test_no_convive_con_la_trivia() -> None:
     manager, _, _, _, registry, ctx = await rig(busy=lambda: "Hay una trivia en marcha.")
-    result = await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx
+    )
     assert "trivia" in result.text and not manager.active
 
 
 async def test_el_nudge_solo_corre_mientras_se_juega_y_dispara_tras_hablar() -> None:
     manager, engine, _, clock, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     now = clock()
     manager.on_user_text(now)
     manager.on_user_turn_end(now + 2, now)  # habló y no se delegó nada
@@ -897,7 +905,7 @@ async def test_el_nudge_solo_corre_mientras_se_juega_y_dispara_tras_hablar() -> 
 
 async def test_si_delega_no_hay_empujon() -> None:
     manager, engine, _, clock, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     now = clock()
     manager.on_user_text(now)
     manager.on_delegation(now + 1)

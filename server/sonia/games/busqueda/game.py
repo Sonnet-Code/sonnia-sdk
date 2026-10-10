@@ -213,6 +213,7 @@ class BusquedaGame(Game):
         )
         self._open_round(now, first=True)
         await self.host.send("round", self._state("ready"))
+        self.host.spawn(self._wait_go(), "busqueda-salida")
         entry = self._objects[0]
         logger.info(
             "Búsqueda: %d rondas de %s s (miradas cada %s s, tope %d por ronda): %s",
@@ -306,6 +307,11 @@ class BusquedaGame(Game):
             self._tick_running(now)
         elif phase == "between" and self._speech_over(now):
             self._next_round(now)
+
+    async def _wait_go(self) -> None:
+        """Si pregunta antes si sigue a Sonnet Code, la primera ronda cuenta desde que sale."""
+        if await self.host.wait_go() and self._phase == "ready" and self._round == 1:
+            self._ready_at = self.host.now()
 
     def _ready_over(self, now: float) -> bool:
         """¿Terminó Sonia de anunciar la ronda? (o se acabó la paciencia)."""

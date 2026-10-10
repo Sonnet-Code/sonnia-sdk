@@ -836,7 +836,9 @@ async def _managed(plan: Callable[[PptGame], list[HandReading]]) -> Any:
 
 async def test_partida_entera_por_voz() -> None:
     manager, engine, screen, registry, ctx, _ = await _managed(wins)
-    result = await registry.execute("start_game", {"juego": PptGame.id}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": PptGame.id, "sigue_a_sonnet_code": True}, ctx
+    )
     assert result.text.startswith(SCRIPT_PREFIX) and "piedra, papel o tijera" in result.text
     assert manager.active and manager.phase == "playing"
     await run_until(lambda: not manager.active)
@@ -859,7 +861,7 @@ async def test_partida_entera_por_voz() -> None:
 
 async def test_stop_game_a_media_partida() -> None:
     manager, _, screen, registry, ctx, _ = await _managed(wins)
-    await registry.execute("start_game", {"juego": PptGame.id}, ctx)
+    await registry.execute("start_game", {"juego": PptGame.id, "sigue_a_sonnet_code": True}, ctx)
     await run_until(lambda: bool(screen.game_msgs("countdown")))
     result = await registry.execute("stop_game", {}, ctx)
     assert "terminado" in result.text
@@ -873,7 +875,7 @@ async def test_stop_game_a_media_partida() -> None:
 
 async def test_unity_que_se_reconecta_vuelve_a_pintar_la_partida() -> None:
     manager, _, screen, registry, ctx, _ = await _managed(by_throw(wins, nothing))
-    await registry.execute("start_game", {"juego": PptGame.id}, ctx)
+    await registry.execute("start_game", {"juego": PptGame.id, "sigue_a_sonnet_code": True}, ctx)
     await run_until(lambda: bool(screen.game_msgs("result")))
     replay = screen.replay()
     assert replay[0]["event"] == "start"

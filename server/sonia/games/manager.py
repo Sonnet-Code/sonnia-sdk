@@ -18,6 +18,13 @@ Lleva un juego a la vez y todo lo común, para que cada juego solo haga lo suyo:
   cambia el modo o la Unity que se conecta no sabe pintarlo.
 - **Reconexión de Unity.** El ``start`` de la partida y su último estado son mensajes
   fijos del hub: se repiten tras ``hello``.
+- **Seguir a Sonnet Code.** Por voz, si el visitante no ha dicho ya que sigue a Sonnet
+  Code (``start_game`` sin ``sigue_a_sonnet_code``), el guion pide preguntárselo antes de
+  explicar el juego y la partida queda retenida (:class:`_FollowHold`): la pantalla espera
+  con el escenario y su QR a la vista, la vista en vivo también, ``GameHost.wait_go`` frena
+  el primer paso con tiempos y no hay abandono, empujones ni ``Game.tick``. Se suelta con
+  lo primero que pase: «Ya nos sigue» en el panel, una jugada delegada (o ``start_game``
+  otra vez), el turno del visitante seguido de una frase de Sonia o :data:`FOLLOW_GRACE_S`.
 - **Estado y órdenes del panel**: :meth:`snapshot`, :meth:`capabilities`, ``games_off``,
   los bancos editables (``game_banks``), el modelo de poses (``games_pose_model``,
   :meth:`set_pose_model`) y el juez de las rondas de cámara (``games_judge``,
@@ -34,6 +41,7 @@ import logging
 import random
 import time
 from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar
 
@@ -47,8 +55,9 @@ from sonia.games.base import (
     GameResult,
     StopReason,
 )
+from sonia.prompts import BOOK, PromptSpec
 from sonia.types import ActionResult
-from sonia.vision.contracts import GameVision, JudgeMode, judge_mode
+from sonia.vision.contracts import GameVision, JudgeMode, Overlay, judge_mode
 from sonia.vision.models import DEFAULT_POSE_VARIANT, POSE_VARIANTS, pose_variant
 from sonia.ws import protocol as p
 
@@ -141,9 +150,34 @@ PANEL_CONTROL_TEXT = (
     "parte del juego, sin hablar del panel). "
 )
 
-#: Controles del panel que pone el manager para todos los juegos.
+#: Controles del panel que pone el manager para todos los juegos. «Ya nos sigue» solo sale
+#: mientras la partida espera a que el visitante siga a Sonnet Code.
 CONTROL_RESTART = "restart"
 CONTROL_STOP = "stop"
+CONTROL_FOLLOW = "follow"
+
+#: Para jugar hay que seguir a Sonnet Code, como en la trivia (``trivia/seguir_sonnet_code``;
+#: Jean, 10 de octubre de 2026). Va delante del guion de arranque de cada juego. El juego se
+#: prepara ya y sale en pantalla cuando Sonia arranca: si esperaba a una segunda delegación
+#: («ya las sigo»), GPT-Live se la saltaba cuando el visitante contestaba mientras ella
+#: hablaba (pruebas de la trivia con la API real del 8 de octubre de 2026).
+FOLLOW_TEXT = (
+    "Antes de empezar, pregúntale solo si ya sigue a Sonnet Code en Instagram y LinkedIn "
+    "(@sonnetcode); si no, que escanee el QR de la pantalla y las siga. No lo puedes comprobar: "
+    "créele. Espera su respuesta: no expliques todavía el juego, que aún no sale en tu pantalla. "
+    "Si no quiere seguirlas, dile con cariño que es lo único que piden los juegos y, si aun así "
+    "no quiere, delega terminarlo. Cuando te diga que ya las sigue (no antes), sigue este guion:"
+)
+
+#: Lo que se le pasa a GPT-Live cuando el equipo pulsa «Ya nos sigue» en el panel.
+FOLLOW_PANEL_TEXT = (
+    "JUEGO: ya sigue a Sonnet Code. Si aún no has arrancado {spoken}, arráncalo ya como dice su "
+    "guion, sin volver a preguntárselo ni hablar del equipo del stand."
+)
+
+#: Margen de la partida retenida mientras el visitante sigue a Sonnet Code con el móvil (el de
+#: la trivia): ni abandono ni empujones. Pasado, el juego sale en pantalla.
+FOLLOW_GRACE_S = 45.0
 
 #: Sin juego elegido (``start_game`` con ``no_lo_dijo``).
 CHOOSE_TEXT = (
@@ -154,6 +188,27 @@ NOTHING_TO_PLAY_TEXT = (
     "Ahora mismo no hay ningún juego disponible en tu pantalla. Díselo con cariño y ofrécele "
     "charlar o la trivia."
 )
+
+
+@dataclass
+class _FollowHold:
+    """La partida retenida mientras Sonia pregunta si sigue a Sonnet Code."""
+
+    #: Cuándo empezó (reloj del manager) y cuándo sale sola (:data:`FOLLOW_GRACE_S`).
+    since: float
+    deadline: float
+    #: Se activa al soltarla: ``GameHost.wait_go`` espera a esto.
+    go: asyncio.Event = field(default_factory=asyncio.Event)
+    #: Lo que no salió a la pantalla: los datos del ``start`` (``None``: el juego no mandó
+    #: ninguno) y el último estado fijo ``(evento, datos)``.
+    start: dict[str, Any] | None = None
+    state: tuple[str, dict[str, Any] | None] | None = None
+    #: La vista en vivo que pidió el juego: ``(espejo, overlay)``.
+    preview: tuple[bool, Overlay | None] | None = None
+    #: Terminó un turno del visitante empezado después: la próxima frase de Sonia la suelta.
+    answered: bool = False
+    #: Se está soltando: lo que se mande ya va a la pantalla.
+    released: bool = False
 
 
 class GameEngineLink(Protocol):
@@ -296,6 +351,8 @@ class GameManager:
         self._delegated_at = float("-inf")
         self._tick_failures = 0
         self._pending: tuple[GameResult, dict[str, Any] | None] | None = None
+        #: Retenida mientras se pregunta si sigue a Sonnet Code (``None``: no se retiene).
+        self._hold: _FollowHold | None = None
         self._tasks: set[asyncio.Task[Any]] = set()
 
     # -- montaje --------------------------------------------------------------
@@ -465,6 +522,8 @@ class GameManager:
             except Exception:  # noqa: BLE001
                 logger.exception("Falló panel_controls de %s", game.id)
                 controls = []
+        if self.following:
+            controls.insert(0, {"id": CONTROL_FOLLOW, "label": "Ya nos sigue"})
         controls.append({"id": CONTROL_RESTART, "label": "Reiniciar"})
         controls.append({"id": CONTROL_STOP, "label": "Terminar"})
         return controls
@@ -472,9 +531,11 @@ class GameManager:
     async def panel_control(self, control: str, value: str = "") -> tuple[bool, str]:
         """Un control a mano del panel con el juego en marcha (acción ``game_control``).
 
-        ``restart`` empieza el mismo juego desde cero y ``stop`` lo termina, para todos; el
-        resto los resuelve el juego (:meth:`Game.panel_control`) y su guion se le pasa a
-        GPT-Live en cuanto calla. Nunca lanza: ``(ok, mensaje para el equipo)``.
+        ``restart`` empieza el mismo juego desde cero y ``stop`` lo termina, para todos;
+        ``follow`` («Ya nos sigue») saca a la pantalla la partida retenida mientras se pregunta
+        si sigue a Sonnet Code y le dice a Sonia que arranque. El resto los resuelve el juego
+        (:meth:`Game.panel_control`) y su guion se le pasa a GPT-Live en cuanto calla. Nunca
+        lanza: ``(ok, mensaje para el equipo)``.
         """
         game = self._active
         if game is None:
@@ -487,6 +548,17 @@ class GameManager:
         if self._phase != "playing":
             return False, f"{game.title} ya está terminando."
         self._note_activity()
+        if control == CONTROL_FOLLOW:
+            if not self.following:
+                return False, f"{game.title} ya está en la pantalla."
+            await self._release_hold("«Ya nos sigue» en el panel")
+            prompt = BOOK.render(
+                "juegos/ya_nos_sigue", fallback=FOLLOW_PANEL_TEXT, spoken=game.spoken
+            )
+            self._spawn(self._speak_when_quiet(self._match, prompt), "game-follow")
+            return True, "Hecho."
+        # El equipo lleva la partida a mano: ya está jugando.
+        await self._release_hold("un control del panel")
         try:
             script = await game.panel_control(control, str(value or ""))
         except GameError as exc:
@@ -673,14 +745,21 @@ class GameManager:
     # -- arranque y final -----------------------------------------------------
 
     async def start(
-        self, game_id: str, source: str = "panel", options: dict[str, Any] | None = None
+        self,
+        game_id: str,
+        source: str = "panel",
+        options: dict[str, Any] | None = None,
+        *,
+        ask_follow: bool = False,
     ) -> tuple[bool, str]:
         """Empieza ``game_id``. Nunca lanza.
 
         Con ``source="voice"`` (``start_game``) devuelve el guion de arranque para
         GPT-Live. Con ``panel`` se lo pasa a GPT-Live en cuanto calla y devuelve un texto
         para el equipo del stand. Si no se puede, ``(False, motivo)`` con los juegos que
-        sí se pueden jugar.
+        sí se pueden jugar. Con ``ask_follow`` (solo por voz), el guion pide antes preguntarle
+        si sigue a Sonnet Code (:data:`FOLLOW_TEXT`) y la partida queda retenida hasta que
+        Sonia arranca (:class:`_FollowHold`).
         """
         game = self._games.get(game_id)
         if game is None:
@@ -688,6 +767,8 @@ class GameManager:
         active = self._active
         if active is game and self._phase == "playing":
             self._note_activity()
+            # Lo vuelve a pedir tras el «ya las sigo»: si esperaba, sale ya.
+            await self._release_hold("start_game otra vez")
             return True, await self._resume(game)
         if active is not None and self._phase == "playing":
             return False, (
@@ -718,16 +799,20 @@ class GameManager:
         # si se olvidara, su final de turno daría un empujón de más (banco de pruebas).
         self._tick_failures = 0
         self._pending = None
+        # Mientras pregunta si sigue a Sonnet Code, la pantalla espera: el QR sigue a la vista.
+        hold = ask_follow and source == "voice"
+        self._hold = _FollowHold(now, now + FOLLOW_GRACE_S) if hold else None
         self._engine.touch()
         logger.info("Juego %s en marcha (%s)", game_id, source)
         # Aviso de espera (``sonia.busy``) hasta la primera pantalla del juego (su ``start``;
         # si falla, ``_end_now`` lo apaga) y, en los de cámara, hasta su primer frame: abrir
-        # la cámara tarda segundos y no se ve nada.
+        # la cámara tarda segundos y no se ve nada. Retenida, la cámara se mira al soltarla.
         await self.set_busy(game_id, "game", TEXT_GAME)
-        if "camera" in game.needs:
+        if "camera" in game.needs and not hold:
             self._spawn(self._camera_busy(match, game), "game-camera-busy")
-        with contextlib.suppress(Exception):
-            await self._screen.hide_image()
+        if not hold:
+            with contextlib.suppress(Exception):
+                await self._screen.hide_image()
         try:
             script = await game.start(source, dict(options or {}))
         except GameError as exc:
@@ -744,6 +829,11 @@ class GameManager:
             await self._release_orphaned_vision(game)
             return False, f"{game.title} se canceló al empezar."
         await self._ensure_started(game)
+        if self.following:
+            # Preparado: sin aviso de espera encima del escenario hasta que salga.
+            await self.set_busy(game_id, "game", None)
+            logger.info("Juego %s retenido: Sonia pregunta si sigue a Sonnet Code", game_id)
+            script = BOOK.text("juegos/seguir_sonnet_code", FOLLOW_TEXT) + " " + script
         if source == "voice":
             return True, script
         self._spawn(
@@ -807,7 +897,8 @@ class GameManager:
         game = self._active
         if game is None:
             return False, "No hay ningún juego en marcha."
-        if reason in ("voice", "panel") and self._phase == "playing":
+        if reason in ("voice", "panel") and self._phase == "playing" and not self.following:
+            # Retenida, no llegó a salir en pantalla: no hay final que enseñar.
             ending = await self._stop_with_ending(game, reason)
             if ending is not None:
                 return True, ending
@@ -917,6 +1008,9 @@ class GameManager:
         self._pending = None
         self._nudge_at = 0.0
         self._match += 1
+        hold, self._hold = self._hold, None
+        if hold is not None:
+            hold.go.set()
         self._cancel_tasks()
         host = self._hosts.get(game.id)
         if host is not None:
@@ -997,6 +1091,8 @@ class GameManager:
                 )
             )
         self._note_activity()
+        # El visitante ya está jugando: si esperaba a que siguiera a Sonnet Code, sale ya.
+        await self._release_hold("una jugada delegada")
         try:
             script = await play(game, arguments)
         except GameError as exc:
@@ -1015,6 +1111,9 @@ class GameManager:
         game = self._active
         if game is None or self._phase != "playing":
             return
+        hold = self._hold
+        if hold is not None and final and hold.answered and not hold.released:
+            await self._release_hold("el visitante contestó y Sonia terminó una frase")
         try:
             await game.on_assistant_text(text, final)
         except Exception:  # noqa: BLE001
@@ -1035,6 +1134,13 @@ class GameManager:
         """Terminó un turno del visitante: si el juego lo pide y no se delegó nada, empujón."""
         game = self._active
         if game is None or self._phase != "playing":
+            return
+        hold = self._hold
+        if hold is not None:
+            # Sin empujones mientras se pregunta. El turno que pidió el juego empezó antes.
+            if not hold.answered and started_at >= hold.since:
+                hold.answered = True
+                logger.info("Juego %s: el visitante contestó; sale tras la frase de Sonia", game.id)
             return
         try:
             # Primero el juego (puede decidir su empujón por el turno, como el Akinator con
@@ -1064,6 +1170,12 @@ class GameManager:
         """Lo llama el ciclo del motor (cada 50 ms): empujón, abandono y ``Game.tick``."""
         game = self._active
         if game is None or self._phase != "playing":
+            return
+        hold = self._hold
+        if hold is not None:
+            # Retenida: ni empujones, ni abandono, ni reloj del juego.
+            if not hold.released and now >= hold.deadline:
+                await self._release_hold(f"{FOLLOW_GRACE_S:.0f} s sin soltarla")
             return
         quiet = self._engine.quiet_for()
         if self._nudge_at and now >= self._nudge_at and quiet >= 0.5:
@@ -1148,6 +1260,14 @@ class GameManager:
         if event == p.GAME_EVENT_END:
             logger.warning("Juego %s: «end» no se manda a mano; usa finish()", game_id)
             return
+        hold = self._hold
+        if hold is not None and not hold.released:
+            # La pantalla espera: se guarda el ``start`` y el último estado fijo para soltarlos.
+            if event == p.GAME_EVENT_START:
+                hold.start, hold.state = dict(data or {}), None
+            elif sticky:
+                hold.state = (event, dict(data) if data is not None else None)
+            return
         if event == p.GAME_EVENT_START:
             payload = {"title": game.title, **(data or {})}
             msg = p.msg_game(game_id, event, self._next_seq(), payload)
@@ -1166,8 +1286,92 @@ class GameManager:
 
     async def _ensure_started(self, game: Game) -> None:
         """``start`` va siempre el primero: si el juego no lo mandó, sale solo con el título."""
+        hold = self._hold
+        if hold is not None and not hold.released:
+            return  # sale al soltarla
         if not self._screen_started:
             await self.send(game.id, p.GAME_EVENT_START, None, sticky=True)
+
+    # -- seguir a Sonnet Code (la partida retenida) ----------------------------
+
+    @property
+    def following(self) -> bool:
+        """¿Espera la partida a que el visitante siga a Sonnet Code (aún no sale en pantalla)?"""
+        hold = self._hold
+        return hold is not None and not hold.released
+
+    async def wait_go(self, game_id: str) -> bool:
+        """``GameHost.wait_go``: espera a que la partida de ``game_id`` salga en pantalla.
+
+        ``True`` si hubo que esperar; ``False`` si no estaba retenida (vuelve al momento).
+        """
+        hold = self._hold
+        if hold is None or not self.is_active(game_id):
+            return False
+        await hold.go.wait()
+        return True
+
+    def defer_preview(self, game_id: str, mirror: bool, overlay: Overlay | None) -> bool:
+        """``preview.start`` de un juego retenido: se apunta y se enciende al soltarlo.
+
+        ``False`` si no está retenido (la vista se enciende ya).
+        """
+        hold = self._hold
+        if hold is None or hold.released or not self.is_active(game_id):
+            return False
+        hold.preview = (mirror, overlay)
+        return True
+
+    def defer_overlay(self, game_id: str, overlay: Overlay | None) -> bool:
+        """``preview.set_overlay`` con la vista aún apuntada: cambia lo que se encenderá."""
+        hold = self._hold
+        if hold is None or hold.released or hold.preview is None or not self.is_active(game_id):
+            return False
+        hold.preview = (hold.preview[0], overlay)
+        return True
+
+    def drop_preview(self, game_id: str) -> None:
+        """``preview.stop`` con la vista aún apuntada: ya no se encenderá al soltarla."""
+        hold = self._hold
+        if hold is not None and not hold.released and self.is_active(game_id):
+            hold.preview = None
+
+    async def _release_hold(self, why: str) -> None:
+        """Saca a la pantalla la partida retenida: ``start`` con su último estado, la vista en
+        vivo y ``wait_go``. ``why`` va al registro. Si no estaba retenida, no hace nada."""
+        hold = self._hold
+        game = self._active
+        if hold is None or hold.released or game is None:
+            return
+        hold.released = True
+        logger.info("Juego %s: sale en pantalla (%s)", game.id, why)
+        self._note_activity()
+        try:
+            # Lo guardado sale lo primero, antes de cualquier espera: así nada se le adelanta.
+            await self.send(game.id, p.GAME_EVENT_START, hold.start, sticky=True)
+            if hold.state is not None:
+                event, data = hold.state
+                await self.send(game.id, event, data, sticky=True)
+            with contextlib.suppress(Exception):
+                await self._screen.hide_image()
+            if hold.preview is not None:
+                mirror, overlay = hold.preview
+                try:
+                    if not await self._vision.preview.start(
+                        game.id, mirror=mirror, overlay=overlay
+                    ):
+                        logger.warning("Juego %s: la vista en vivo no se pudo encender", game.id)
+                except Exception:  # noqa: BLE001 - sin vista en vivo se juega igual
+                    logger.exception("Juego %s: falló la vista en vivo al salir", game.id)
+            if "camera" in game.needs and self._active is game:
+                self._spawn(self._camera_busy(self._match, game), "game-camera-busy")
+        finally:
+            hold.go.set()
+            # Los que esperaban en ``wait_go`` siguen antes que el siguiente ``tick`` del juego
+            # (la búsqueda y la ruleta ponen ahí su reloj en marcha).
+            await asyncio.sleep(0)
+            if self._hold is hold:
+                self._hold = None
 
     async def play_animation(self, game_id: str, clip: str) -> None:
         if not self.is_active(game_id) or not clip.strip():
@@ -1425,6 +1629,34 @@ class GameManager:
 
 #: Cómo se pide una frase fija que no está grabada.
 FIXED_TEXT = "Di ahora en voz alta, tal cual y sin añadir nada, esta frase: «{text}»"
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """Los textos comunes de los juegos editables desde el panel (``sonia.prompts``)."""
+    return [
+        PromptSpec(
+            id="juegos/seguir_sonnet_code",
+            group="Juegos",
+            title="Arranque: pedir que siga a Sonnet Code antes de empezar",
+            default=lambda: FOLLOW_TEXT,
+            applies="ronda",
+            help=(
+                "Va delante del guion de arranque de cada juego cuando se empieza por voz y el "
+                "visitante no ha dicho ya que sigue a Sonnet Code; termina en «sigue este "
+                "guion:» y detrás va el del juego. Hasta que Sonia arranca, el juego no sale en "
+                "pantalla."
+            ),
+        ),
+        PromptSpec(
+            id="juegos/ya_nos_sigue",
+            group="Juegos",
+            title="«Ya nos sigue» en el panel: que arranque el juego",
+            default=lambda: FOLLOW_PANEL_TEXT,
+            fields=("spoken",),
+            applies="ronda",
+            help="{spoken}: el nombre del juego. Se le dice en cuanto calla.",
+        ),
+    ]
 
 
 def _spoken_list(items: Sequence[str]) -> str:

@@ -17,7 +17,7 @@ def hint_of(word: str) -> str:
 
 async def test_por_voz_sin_ningun_intento_la_palabra_sale_en_el_final() -> None:
     manager, _, screen, _, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     secret = secret_of(manager)
     result = await registry.execute("stop_game", {}, ctx)
     assert result.text.startswith(SCRIPT_PREFIX) and secret in result.text
@@ -41,7 +41,7 @@ async def test_por_voz_sin_ningun_intento_la_palabra_sale_en_el_final() -> None:
 
 async def test_desde_el_panel_ensena_la_palabra_y_sonia_la_dice() -> None:
     manager, engine, screen, _, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     await registry.execute("wordle_guess", {"palabra": "LINUX"}, ctx)
     secret = secret_of(manager)
     ok, text = await manager.stop("panel")
@@ -87,7 +87,7 @@ async def test_el_juego_suelto_cierra_con_la_derrota_y_su_pista() -> None:
 
 async def test_una_pantalla_que_se_reconecta_al_dejarlo_recibe_el_tablero_con_la_palabra() -> None:
     manager, _, screen, _, registry, ctx = await rig()
-    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    await registry.execute("start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}, ctx)
     await registry.execute("wordle_guess", {"palabra": "LINUX"}, ctx)
     await registry.execute("wordle_guess", {"palabra": "REACT"}, ctx)
     secret = secret_of(manager)

@@ -188,6 +188,16 @@ class GameHost(Protocol):
         """
         ...
 
+    async def wait_go(self) -> bool:
+        """Espera a que la partida salga en pantalla, si está retenida mientras Sonia pregunta
+        si sigue a Sonnet Code (``start_game`` por voz, ``docs/juegos.md``).
+
+        Llámala antes del primer paso con tiempos (colocarse, la cuenta, la primera ronda):
+        hasta entonces, lo que mandes con :meth:`send` y la vista en vivo esperan. ``True`` si
+        hubo que esperar; ``False`` si no estaba retenida y vuelve al momento.
+        """
+        ...
+
     # -- pantalla de Unity ----------------------------------------------------
 
     async def send(

@@ -997,7 +997,9 @@ async def test_partida_entera_por_voz_con_el_manager() -> None:
     ctx = ActionContext(camera=None, avatar=None, gallery_dir="", extra={"games": manager})
 
     assert "game:busqueda" in manager.capabilities()
-    result = await registry.execute("start_game", {"juego": "busqueda"}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": "busqueda", "sigue_a_sonnet_code": True}, ctx
+    )
     assert result.text.startswith(SCRIPT_PREFIX) and "ronda 1 de 3" in result.text
     assert manager.active and manager.phase == "playing"
     # `start` va primero, con el título, y queda fijo; la ronda lista, después.

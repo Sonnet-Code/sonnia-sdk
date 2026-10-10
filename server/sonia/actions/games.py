@@ -2,11 +2,13 @@
 
 Las delega GPT-Live (``docs/juegos.md``):
 
-- ``start_game(juego)``: en cuanto el visitante quiere jugar. ``juego`` es un enum fijo
-  con los juegos encendidos al arrancar (las herramientas del backend se fijan al abrir
-  cada sesión) más :data:`~sonia.games.base.NOT_SAID` si no dijo a cuál. Lo que se puede
-  jugar en ese momento (Unity, cámara, el panel, otra partida, la trivia) se comprueba
-  al llamar, y si no se puede, el resultado propone los que sí.
+- ``start_game(juego, sigue_a_sonnet_code)``: en cuanto el visitante quiere jugar.
+  ``juego`` es un enum fijo con los juegos encendidos al arrancar (las herramientas del
+  backend se fijan al abrir cada sesión) más :data:`~sonia.games.base.NOT_SAID` si no dijo
+  a cuál. Lo que se puede jugar en ese momento (Unity, cámara, el panel, otra partida, la
+  trivia) se comprueba al llamar, y si no se puede, el resultado propone los que sí. Si
+  no ha dicho ya que sigue a Sonnet Code, el juego se prepara y el guion pide
+  preguntárselo antes (como la trivia; ``GameManager``, «Seguir a Sonnet Code»).
 - ``stop_game()``: termina el que haya.
 - Las jugadas de cada juego (``wordle_guess``...), creadas con :func:`game_action`: el
   handler recibe la partida en marcha, si es la suya.
@@ -45,6 +47,12 @@ NO_GAMES = "Los juegos no están disponibles ahora mismo."
 
 _NO_ARGS: dict[str, Any] = {"type": "object", "properties": {}, "required": []}
 
+#: El parámetro ``sigue_a_sonnet_code`` de ``start_game``, igual que el de ``start_trivia``.
+FOLLOW_ARG_TEXT = (
+    "true solo si el visitante ya ha dicho que sigue a Sonnet Code en Instagram y LinkedIn. "
+    "Si no lo ha dicho, no lo pongas."
+)
+
 
 def games_of(ctx: ActionContext) -> GameManager | None:
     """El manager de los juegos del contexto (``ctx.extra["games"]``), o ``None``."""
@@ -55,14 +63,22 @@ def games_of(ctx: ActionContext) -> GameManager | None:
 
 
 async def start_game(ctx: ActionContext, arguments: dict[str, Any]) -> ActionResult:
-    """Empieza un juego en la pantalla y devuelve cómo arrancarlo (sus reglas van aparte)."""
+    """Empieza un juego en la pantalla y devuelve cómo arrancarlo (sus reglas van aparte).
+
+    Como la trivia, el juego empieza ya aunque no se sepa si sigue a Sonnet Code: el guion
+    pide preguntarlo antes y la pantalla espera a que Sonia arranque. Con «aún no empieza,
+    vuelve a delegar» GPT-Live no volvía a delegar si el visitante le contestaba mientras
+    hablaba (pruebas de la trivia con la API real del 8 de octubre de 2026).
+    """
     manager = games_of(ctx)
     if manager is None:
         return ActionResult(text=NO_GAMES)
     juego = arguments["juego"]
     if juego == NOT_SAID:
         return ActionResult(text=f"{SCRIPT_PREFIX} {manager.choose_text()}")
-    ok, script = await manager.start(juego, "voice")
+    ok, script = await manager.start(
+        juego, "voice", ask_follow=arguments.get("sigue_a_sonnet_code") is not True
+    )
     if not ok:
         return ActionResult(text=f"No se pudo empezar el juego: {script}")
     return ActionResult(text=f"{SCRIPT_PREFIX} {script}")
@@ -116,7 +132,11 @@ def build_start_game(games: Sequence[type[Game]]) -> ActionSpec:
                     "type": "string",
                     "enum": [NOT_SAID, *(g.id for g in games)],
                     "description": f"El juego que quiere el visitante, o {NOT_SAID} si no lo dijo.",
-                }
+                },
+                "sigue_a_sonnet_code": {
+                    "type": "boolean",
+                    "description": FOLLOW_ARG_TEXT,
+                },
             },
             "required": ["juego"],
         },

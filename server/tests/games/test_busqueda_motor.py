@@ -54,7 +54,9 @@ async def test_una_ronda_por_voz_de_punta_a_punta_en_el_motor(
         assert {"start_game", "stop_game", "busqueda_check"} <= set(tools)
 
         # GPT-Live delega empezar: una sola delegación; el guion lleva el objeto y la ronda.
-        script = await _backend_call(conn, "b1", "start_game", {"juego": "busqueda"})
+        script = await _backend_call(
+            conn, "b1", "start_game", {"juego": "busqueda", "sigue_a_sonnet_code": True}
+        )
         assert script.startswith(SCRIPT_PREFIX) and "ronda 1 de 3" in script
         await rig.rec.wait_for(
             lambda msgs: any(m.get("event") == "round" for m in rig.rec.of_type("game", msgs))
@@ -161,7 +163,9 @@ async def test_una_partida_de_tres_rondas_hasta_el_final_en_el_motor(
             await rig.rec.wait_for(lambda _msgs: len(events(kind)) >= count, limit=6.0)
             return events(kind)[count - 1]
 
-        await _backend_call(conn, "b1", "start_game", {"juego": "busqueda"})
+        await _backend_call(
+            conn, "b1", "start_game", {"juego": "busqueda", "sigue_a_sonnet_code": True}
+        )
         for number in (1, 2, 3):
             ronda = await wait_event("round", number)
             assert ronda["data"]["index"] == number and ronda["data"]["found"] == number - 1

@@ -82,7 +82,9 @@ async def test_partidas_al_azar_nunca_cuelgan_ni_fallan(
     ctx = ActionContext(camera=None, avatar=None, gallery_dir="", extra={"games": manager})
 
     with caplog.at_level(logging.INFO, logger="sonia"):
-        result = await registry.execute("start_game", {"juego": "busqueda"}, ctx)
+        result = await registry.execute(
+            "start_game", {"juego": "busqueda", "sigue_a_sonnet_code": True}, ctx
+        )
         assert "ronda 1 de 3" in result.text
         game = manager.current
         assert isinstance(game, BusquedaGame)

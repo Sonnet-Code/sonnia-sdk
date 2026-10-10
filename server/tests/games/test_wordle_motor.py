@@ -45,7 +45,9 @@ async def test_el_wordle_por_voz_de_punta_a_punta_en_el_motor(tmp_path: Path) ->
         assert tools["wordle_guess"]["parameters"]["required"] == ["palabra"]
 
         # Empezar: el guion vuelve como resultado; la pantalla recibe el start.
-        script = await _backend_call(conn, "w1", "start_game", {"juego": "wordle"})
+        script = await _backend_call(
+            conn, "w1", "start_game", {"juego": "wordle", "sigue_a_sonnet_code": True}
+        )
         assert script.startswith(SCRIPT_PREFIX) and "5 letras" in script
         await rig.rec.wait_type("game")
         start = rig.rec.of_type("game")[0]

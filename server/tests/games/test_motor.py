@@ -109,7 +109,9 @@ async def test_partida_por_voz_en_el_motor(tmp_path: Path) -> None:
         tools = [t.get("name") for t in session["delegation"]["responses"]["tools"]]
         assert "start_game" in tools and "stop_game" in tools
         # GPT-Live delega «empieza la sonda».
-        script = await _backend_call(conn, "g1", "start_game", {"juego": "sonda"})
+        script = await _backend_call(
+            conn, "g1", "start_game", {"juego": "sonda", "sigue_a_sonnet_code": True}
+        )
         assert script == f"{SCRIPT_PREFIX} Arranca la sonda."
         await rig.rec.wait_type("game")
         start = rig.rec.of_type("game")[0]
@@ -192,10 +194,14 @@ async def test_no_se_pisa_con_la_trivia_en_el_motor(tmp_path: Path) -> None:
         assert trivia is not None and games is not None
         ok, _ = await trivia.start("panel")
         assert ok
-        script = await _backend_call(conn, "g1", "start_game", {"juego": "sonda"})
+        script = await _backend_call(
+            conn, "g1", "start_game", {"juego": "sonda", "sigue_a_sonnet_code": True}
+        )
         assert TRIVIA_PLAYING_TEXT in script and not games.active
         await trivia.stop("panel")
-        script = await _backend_call(conn, "g2", "start_game", {"juego": "sonda"})
+        script = await _backend_call(
+            conn, "g2", "start_game", {"juego": "sonda", "sigue_a_sonnet_code": True}
+        )
         assert script.startswith(SCRIPT_PREFIX) and games.active
         script = await _backend_call(
             conn, "g3", "start_trivia", {"nivel": "sin_elegir", "sigue_a_sonnet_code": True}
@@ -206,7 +212,9 @@ async def test_no_se_pisa_con_la_trivia_en_el_motor(tmp_path: Path) -> None:
 async def test_una_unity_vieja_no_recibe_juegos(tmp_path: Path) -> None:
     async with games_rig(tmp_path, unity_games=["otro"]) as rig:
         conn = await rig.conn()
-        script = await _backend_call(conn, "g1", "start_game", {"juego": "sonda"})
+        script = await _backend_call(
+            conn, "g1", "start_game", {"juego": "sonda", "sigue_a_sonnet_code": True}
+        )
         assert "versión anterior" in script
         assert rig.rec.of_type("game") == []
 

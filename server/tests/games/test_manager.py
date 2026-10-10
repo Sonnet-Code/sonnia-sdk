@@ -691,7 +691,9 @@ async def test_start_game_y_stop_game() -> None:
     registry = build_default_registry(include_look=False, games=[ProbeGame])
     assert {"start_game", "stop_game"} <= set(registry.names())
     ctx = ActionContext(camera=None, avatar=None, gallery_dir="", extra={"games": manager})
-    result = await registry.execute("start_game", {"juego": "otro"}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": "otro", "sigue_a_sonnet_code": True}, ctx
+    )
     assert result.text.startswith("Error: argumentos inválidos")  # enum fijo
     result = await registry.execute("start_game", {"juego": NOT_SAID}, ctx)
     assert CHOOSE_TEXT.split(":")[0] in result.text and "la sonda" in result.text

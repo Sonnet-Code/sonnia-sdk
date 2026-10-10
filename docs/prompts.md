@@ -54,6 +54,13 @@ Con los textos de la app, lo que reciben los modelos es idéntico, byte a byte, 
 
 Si se cambia a propósito un texto de la app, se regeneran las referencias.
 
+## Piezas comunes de los juegos
+
+Además de las de cada juego (`juegos/<juego>/…`), el `GameManager` registra dos para todos (grupo «Juegos», `prompt_specs()` en `server/sonia/games/manager.py`):
+
+- `juegos/seguir_sonnet_code`: va delante del guion de arranque de cada juego cuando se empieza por voz sin saber si sigue a Sonnet Code (`docs/juegos.md`, «Seguir a Sonnet Code antes de jugar»). Termina en «sigue este guion:» y detrás va el del juego.
+- `juegos/ya_nos_sigue`: lo que se le dice a Sonia cuando el equipo pulsa «Ya nos sigue» en el panel (`{spoken}`: el nombre del juego).
+
 ## Añadir una pieza nueva
 
 1. El texto de la app se queda en su módulo, como constante o archivo.

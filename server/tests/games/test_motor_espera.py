@@ -32,7 +32,9 @@ async def test_start_game_avisa_hasta_la_primera_pantalla(
     async with games_rig(tmp_path) as rig:
         assert rig.engine.games is not None
         conn = await rig.conn()
-        await _backend_call(conn, "g1", "start_game", {"juego": "sonda"})
+        await _backend_call(
+            conn, "g1", "start_game", {"juego": "sonda", "sigue_a_sonnet_code": True}
+        )
         expected = [
             f"busy:{TEXT_THINK}",
             f"busy:{TEXT_GAME}",

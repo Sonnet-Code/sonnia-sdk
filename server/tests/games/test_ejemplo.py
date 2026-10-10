@@ -186,7 +186,9 @@ async def test_partida_entera_por_voz() -> None:
     registry = build_default_registry(include_look=False, games=[AdivinaGame])
     ctx = ActionContext(camera=None, avatar=None, gallery_dir="", extra={"games": manager})
 
-    result = await registry.execute("start_game", {"juego": "adivina"}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": "adivina", "sigue_a_sonnet_code": True}, ctx
+    )
     assert result.text.startswith(SCRIPT_PREFIX)
     assert manager.active and manager.phase == "playing"
     # «start» va el primero, con el título, y queda fijo para una Unity que se reconecte.
@@ -214,7 +216,7 @@ async def test_stop_game_cancela_la_partida() -> None:
     manager.use_cloud_banks({LANGUAGES.id: BANK})
     registry = build_default_registry(include_look=False, games=[AdivinaGame])
     ctx = ActionContext(camera=None, avatar=None, gallery_dir="", extra={"games": manager})
-    await registry.execute("start_game", {"juego": "adivina"}, ctx)
+    await registry.execute("start_game", {"juego": "adivina", "sigue_a_sonnet_code": True}, ctx)
     result = await registry.execute("stop_game", {}, ctx)
     assert "terminado" in result.text
     assert screen.game_msgs("end")[-1]["data"]["result"] == "cancel"

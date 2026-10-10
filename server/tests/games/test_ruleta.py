@@ -817,7 +817,9 @@ def _wheel_stopped(screen: Any) -> dict[str, Any]:
 
 async def test_partida_entera_por_voz() -> None:
     manager, engine, screen, clock, registry, ctx = await _manager("1,1,0,0,0")
-    result = await registry.execute("start_game", {"juego": "ruleta"}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": "ruleta", "sigue_a_sonnet_code": True}, ctx
+    )
     assert result.text == f"{SCRIPT_PREFIX} {t.START_TEXT}"
     assert [m["event"] for m in screen.game_msgs()] == ["start", "spin"]
     assert screen.game_msgs("start")[0]["data"]["title"] == "La ruleta de Sonnia"
@@ -854,7 +856,7 @@ async def test_partida_entera_por_voz() -> None:
 
 async def test_la_reconexion_repite_el_estado_completo() -> None:
     manager, _, screen, _, registry, ctx = await _manager()
-    await registry.execute("start_game", {"juego": "ruleta"}, ctx)
+    await registry.execute("start_game", {"juego": "ruleta", "sigue_a_sonnet_code": True}, ctx)
     assert [m["event"] for m in screen.replay()] == ["start", "spin"]
     await manager.on_game_event(_wheel_stopped(screen))
     await settle()
@@ -867,7 +869,7 @@ async def test_la_reconexion_repite_el_estado_completo() -> None:
 
 async def test_sin_unity_la_ruleta_sigue_y_el_abandono_la_cancela() -> None:
     manager, engine, screen, clock, registry, ctx = await _manager()
-    await registry.execute("start_game", {"juego": "ruleta"}, ctx)
+    await registry.execute("start_game", {"juego": "ruleta", "sigue_a_sonnet_code": True}, ctx)
     clock.advance(SPIN_SECONDS + SPIN_GRACE_S)
     await manager.tick(clock())
     await settle()
@@ -881,7 +883,7 @@ async def test_sin_unity_la_ruleta_sigue_y_el_abandono_la_cancela() -> None:
 
 async def test_la_sesion_perdida_cancela_la_partida() -> None:
     manager, _, screen, _, registry, ctx = await _manager()
-    await registry.execute("start_game", {"juego": "ruleta"}, ctx)
+    await registry.execute("start_game", {"juego": "ruleta", "sigue_a_sonnet_code": True}, ctx)
     await manager.on_session_lost()
     assert not manager.active and screen.game_msgs("end")[-1]["data"]["result"] == "cancel"
 

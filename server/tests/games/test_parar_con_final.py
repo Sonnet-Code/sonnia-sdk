@@ -64,7 +64,7 @@ async def test_por_voz_no_cancela_y_devuelve_el_guion() -> None:
     manager, engine, screen, _ = await make_manager([FinalGame])
     registry = build_default_registry(include_look=False, games=[FinalGame])
     ctx = ActionContext(camera=None, avatar=None, gallery_dir="", extra={"games": manager})
-    await registry.execute("start_game", {"juego": "final"}, ctx)
+    await registry.execute("start_game", {"juego": "final", "sigue_a_sonnet_code": True}, ctx)
     result = await registry.execute("stop_game", {}, ctx)
     assert result.text == f"{SCRIPT_PREFIX} {FINAL}"
     game = final_game(manager)
@@ -94,7 +94,7 @@ async def test_sin_gancho_se_cancela_como_siempre() -> None:
     manager, engine, screen, _ = await make_manager([PlainGame])
     registry = build_default_registry(include_look=False, games=[PlainGame])
     ctx = ActionContext(camera=None, avatar=None, gallery_dir="", extra={"games": manager})
-    await registry.execute("start_game", {"juego": "simple"}, ctx)
+    await registry.execute("start_game", {"juego": "simple", "sigue_a_sonnet_code": True}, ctx)
     result = await registry.execute("stop_game", {}, ctx)
     assert result.text.startswith("Juego terminado.")
     assert screen.game_msgs("end")[-1]["data"] == {"result": "cancel"}

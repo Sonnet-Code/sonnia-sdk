@@ -530,6 +530,8 @@ class PptGame(Game):
             "Piedra, papel o tijera: «ya» de la frase grabada a %s",
             f"{self._go_s:.2f} s" if self._go_s is not None else "(sin grabar: transcripción)",
         )
+        # Si pregunta antes si sigue a Sonnet Code, la partida espera a que arranque.
+        await host.wait_go()
         await self._wait_spoken(INTRO_START_S, INTRO_LIMIT_S)
         say_failures = 0
         max_throws = self.rounds * THROWS_PER_ROUND

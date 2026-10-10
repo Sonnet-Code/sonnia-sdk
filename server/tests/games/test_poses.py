@@ -589,7 +589,9 @@ async def test_partida_por_voz_con_el_manager() -> None:
     manager, engine, screen, clock = await make_manager([PosesGame], vision=vision)
     crowd.game = manager.game("poses")  # type: ignore[assignment]
     registry = build_default_registry(include_look=False, games=[PosesGame])
-    result = await registry.execute("start_game", {"juego": "poses"}, _ctx(manager))
+    result = await registry.execute(
+        "start_game", {"juego": "poses", "sigue_a_sonnet_code": True}, _ctx(manager)
+    )
     assert result.text.startswith(SCRIPT_PREFIX) and "rondas" in result.text
     first = screen.game_msgs()[0]
     assert first["event"] == "start" and first["data"]["title"] == "Simón dice con poses"
@@ -623,11 +625,15 @@ async def test_stop_game_a_mitad_de_partida() -> None:
     manager, _, screen, clock = await make_manager([PosesGame], vision=vision)
     crowd.game = manager.game("poses")  # type: ignore[assignment]
     registry = build_default_registry(include_look=False, games=[PosesGame])
-    await registry.execute("start_game", {"juego": "poses"}, _ctx(manager))
+    await registry.execute(
+        "start_game", {"juego": "poses", "sigue_a_sonnet_code": True}, _ctx(manager)
+    )
     await _drive(manager, clock, until_off=False, steps=300)
     assert manager.active
     # Otra vez start_game: sigue la misma partida.
-    again = await registry.execute("start_game", {"juego": "poses"}, _ctx(manager))
+    again = await registry.execute(
+        "start_game", {"juego": "poses", "sigue_a_sonnet_code": True}, _ctx(manager)
+    )
     assert "Ya están jugando" in again.text
     result = await registry.execute("stop_game", {}, _ctx(manager))
     assert "terminado" in result.text

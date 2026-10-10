@@ -38,8 +38,11 @@ def test_cada_modulo_declara_sus_piezas_y_no_se_repite_ninguna() -> None:
     for prompt_id in flat:
         assert prompt_id in BOOK
         top, rest = prompt_id.split("/", 1)
-        if top == "juegos":
+        if top == "juegos" and "/" in rest:
             assert rest.split("/", 1)[0] in games, prompt_id
+        elif top == "juegos":
+            # Las comunes a todos los juegos (``sonia.games.manager``): seguir a Sonnet Code.
+            assert prompt_id in {"juegos/seguir_sonnet_code", "juegos/ya_nos_sigue"}, prompt_id
         else:
             assert top in {"juez", "gestos", "trivia"}, prompt_id
 

@@ -11,6 +11,8 @@ Cada juego tiene el suyo (:class:`ManagedGameHost`), que pasa por el
 - ``send`` pone el ``seq``, guarda el último estado como mensaje fijo y manda ``start``
   el primero; ``play_animation`` va siempre con ``whole=True``.
 - Las tareas de :meth:`ManagedGameHost.spawn` se cancelan al terminar la partida.
+- Mientras la partida espera a que el visitante siga a Sonnet Code, ``send`` y la vista en
+  vivo se guardan y salen al soltarla, y ``wait_go`` espera hasta entonces.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from sonia.vision.contracts import (
     CameraStream,
     GameReferee,
     HandDetector,
+    Overlay,
     PoseDetector,
     PreviewStreamer,
     VisionJudge,
@@ -52,6 +55,7 @@ class ManagedGameHost:
         self._manager = manager
         self._game_id = game_id
         self._tasks: set[asyncio.Task[Any]] = set()
+        self._preview = _HeldPreview(manager, game_id)
 
     @property
     def game_id(self) -> str:
@@ -98,6 +102,9 @@ class ManagedGameHost:
         if self._manager.is_active(self._game_id):
             self._manager.touch()
 
+    async def wait_go(self) -> bool:
+        return await self._manager.wait_go(self._game_id)
+
     # -- pantalla de Unity ----------------------------------------------------
 
     async def send(
@@ -122,7 +129,7 @@ class ManagedGameHost:
 
     @property
     def preview(self) -> PreviewStreamer:
-        return self._manager.vision.preview
+        return self._preview
 
     @property
     def poses(self) -> PoseDetector:
@@ -171,3 +178,32 @@ class ManagedGameHost:
 
     def draw_trivia(self, level: str | None = None) -> TriviaQuestion | None:
         return self._manager.draw_trivia(level)
+
+
+class _HeldPreview:
+    """La vista en vivo de un juego: mientras su partida espera a que el visitante siga a
+    Sonnet Code, ``start`` se apunta y la enciende el manager al soltarla."""
+
+    def __init__(self, manager: GameManager, game_id: str) -> None:
+        self._manager = manager
+        self._game_id = game_id
+
+    @property
+    def active(self) -> bool:
+        return self._manager.vision.preview.active
+
+    async def start(
+        self, owner: str, *, mirror: bool = True, overlay: Overlay | None = None
+    ) -> bool:
+        if owner == self._game_id and self._manager.defer_preview(owner, mirror, overlay):
+            return True
+        return await self._manager.vision.preview.start(owner, mirror=mirror, overlay=overlay)
+
+    def set_overlay(self, overlay: Overlay | None) -> None:
+        if not self._manager.defer_overlay(self._game_id, overlay):
+            self._manager.vision.preview.set_overlay(overlay)
+
+    async def stop(self, owner: str) -> None:
+        if owner == self._game_id:
+            self._manager.drop_preview(owner)
+        await self._manager.vision.preview.stop(owner)

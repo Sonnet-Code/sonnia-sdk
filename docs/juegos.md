@@ -86,6 +86,7 @@ Los ganchos que fallan van al registro y no tumban nada; si `tick` falla 20 vece
 | `say_fixed(text)` | Una frase exacta en el tiempo: grabada si está en `cache/voice`; si no, por `commentary` pidiéndole que la diga tal cual. `False` si Sonia ya hablaba o no hay sesión. |
 | `wait_idle(limit_s)`, `quiet_for()` | Esperar a que nadie hable / cuánto lleva Sonia callada. |
 | `touch()` | Hay actividad: llámala si ves gente con la cámara aunque nadie hable, para que la partida no se dé por abandonada. |
+| `wait_go()` | Espera a que la partida salga en pantalla si está retenida mientras Sonia pregunta si siguen a Sonnet Code (abajo). Llámala antes del primer paso con tiempos; `True` si hubo que esperar, `False` si vuelve al momento. |
 | `send(event, data, sticky=True)` | Un mensaje de tu pantalla (abajo). |
 | `play_animation(clip)` | Una animación o gesto de Sonia, entero (`whole=True`). |
 | `finish(result, data)` | El juego terminó: `win`, `lose` o `cancel` (abajo). |
@@ -134,9 +135,20 @@ class WordleGame(Game):
 
 ### `start_game` y `stop_game`
 
-- `start_game(juego)`: `juego` es un enum fijo con los juegos encendidos al arrancar (registro y ajustes) más `no_lo_dijo`. Con `no_lo_dijo`, el guion le pide preguntar a cuál, con la lista de los que se pueden jugar ahora. Si el juego no se puede (apagado en el panel, Unity vieja, sin cámara, banco vacío…), el resultado dice por qué y propone los que sí. Si ya hay otro juego en marcha, dice cuál y que hay que terminarlo antes; si es el mismo, `resume()`. Si hay una trivia, igual.
+- `start_game(juego, sigue_a_sonnet_code)`: `juego` es un enum fijo con los juegos encendidos al arrancar (registro y ajustes) más `no_lo_dijo`; `sigue_a_sonnet_code`, opcional, como en `start_trivia` (abajo). Con `no_lo_dijo`, el guion le pide preguntar a cuál, con la lista de los que se pueden jugar ahora. Si el juego no se puede (apagado en el panel, Unity vieja, sin cámara, banco vacío…), el resultado dice por qué y propone los que sí. Si ya hay otro juego en marcha, dice cuál y que hay que terminarlo antes; si es el mismo, `resume()`. Si hay una trivia, igual.
 - `stop_game()`: termina el que haya (`stop("voice")`). Si el juego tiene `stop_requested` y cierra enseñando su final, el resultado es su guion (con `PARA SONIA:`); si no, se cancela.
 - Sin ningún juego encendido no se registra ninguna de las dos ni sale la línea de juegos en el prompt.
+
+### Seguir a Sonnet Code antes de jugar
+
+Jean, 10 de octubre de 2026: «todos los juegos deben requerir seguir a Sonnet Code». Va como en la trivia (`docs/trivia.md`, «Requisito y nivel»), en el `GameManager` y para todos los juegos:
+
+- **Una sola delegación.** Si `start_game` llega por voz sin `sigue_a_sonnet_code: true`, el juego se prepara ya (`Game.start`) y el guion lleva delante la pieza `juegos/seguir_sonnet_code` (`FOLLOW_TEXT`): que pregunte solo si sigue a Sonnet Code en Instagram y LinkedIn y, si no, que escanee el QR; que le crea, que no explique aún el juego y, si no quiere, que delegue terminarlo; cuando diga que ya las sigue, el guion del juego. Desde el panel no se pide: lo empieza el equipo.
+- **La partida espera (`_FollowHold`).** Los `send` del juego no van a Unity: se guardan el `start` y el último estado fijo (lo suelto, `sticky=False`, se tira), así que el escenario sigue a la vista con su QR. La vista en vivo (`host.preview.start`) se apunta y se enciende al soltar. `GameHost.wait_go()` frena el primer paso con tiempos: Simón dice antes de colocarse, piedra, papel o tijera antes de esperar al jugador y la cuenta, la búsqueda cuenta el tope de su primera ronda desde que sale y la ruleta, el de su primera vuelta. Ni abandono, ni empujones, ni `Game.tick` mientras dura.
+- **Se suelta con lo primero que pase** (queda en el registro: «sale en pantalla (…)»): «Ya nos sigue» en el panel (`follow`, que además le dice a Sonia que arranque con `juegos/ya_nos_sigue`), una jugada delegada o un control del juego en el panel, otro `start_game` del mismo juego, el primer turno del visitante tras el arranque seguido del final de una frase de Sonia (su arranque o su insistencia) o `FOLLOW_GRACE_S` (45 s). Al soltar sale `start` con el último estado, la vista en vivo y el aviso de la cámara si aún no hay imagen.
+- **Si no quiere**, GPT-Live delega `stop_game`: como no llegó a salir, no hay final que enseñar (ni la palabra del Wordle) ni `end` a Unity.
+
+Tests: `tests/games/test_seguir.py`.
 
 ## La pantalla (`send` y `finish`)
 
@@ -321,8 +333,8 @@ El contrato:
 
 - **`Game.panel_controls()`**: los controles que valen ahora, en orden. Un botón es `{"id": "spin", "label": "Girar"}`; un campo de texto con su botón, `{"id": "guess", "label": "Probar palabra", "kind": "text", "placeholder": "5 letras"}`. Por defecto, ninguno.
 - **`Game.panel_control(control, value) -> str`**: hace lo del control reutilizando el handler de la jugada de GPT-Live (la misma pantalla y el mismo guion) y devuelve el guion para Sonia. Si no vale ahora (fuera de turno, un id que no conoce, un texto que no vale), `GameError` con un mensaje para el equipo; la partida no se toca.
-- **`GameManager.snapshot()["controls"]`**: los del juego (solo con la partida en `playing`) más «Reiniciar» (`restart`) y «Terminar» (`stop`), que pone el manager para todos; `[]` sin juego en pantalla.
-- **`await GameManager.panel_control(control, value) -> (ok, mensaje)`**: `restart` termina el juego y empieza otra partida del mismo, `stop` lo termina como «Terminar juego». El resto va al juego, y su guion le llega a GPT-Live por `commentary` en cuanto calla, con `PANEL_CONTROL_TEXT` delante (que lo cuente como parte del juego, sin hablar del panel). Nunca lanza.
+- **`GameManager.snapshot()["controls"]`**: los del juego (solo con la partida en `playing`) más «Reiniciar» (`restart`) y «Terminar» (`stop`), que pone el manager para todos; delante, «Ya nos sigue» (`follow`) mientras la partida espera a que el visitante siga a Sonnet Code; `[]` sin juego en pantalla.
+- **`await GameManager.panel_control(control, value) -> (ok, mensaje)`**: `restart` termina el juego y empieza otra partida del mismo, `stop` lo termina como «Terminar juego» y `follow` saca a la pantalla la partida que esperaba y le dice a Sonia que arranque. El resto va al juego (y también suelta la partida si esperaba), y su guion le llega a GPT-Live por `commentary` en cuanto calla, con `PANEL_CONTROL_TEXT` delante (que lo cuente como parte del juego, sin hablar del panel). Nunca lanza.
 - **Orden del panel `game_control`** (`control` y `value`, este opcional y de hasta 200 caracteres, `GAME_CONTROL_VALUE_MAX_LEN`): pide lo mismo que `game_start` («Conversando», sin modo debug, sin editor de personaje, sin Modo Jean y con la pantalla conectada), salvo `stop`, que vale siempre.
 - **Capacidad `game_controls`**: el panel solo pinta «Control del juego» en las Sonnias que la anuncian. A las anteriores les deja el botón «Terminar juego» de siempre y una nota.
 
@@ -330,6 +342,7 @@ El panel pinta tal cual la lista y solo la rehace si cambia, para no borrar lo q
 
 | Juego | Momento de la partida | Controles (`id` · botón) | Qué hacen |
 |---|---|---|---|
+| Todos | Esperando a que siga a Sonnet Code | `follow` · «Ya nos sigue» (el primero) | Saca el juego a la pantalla, con la vista en vivo, y le dice a Sonia que arranque sin volver a preguntarlo. |
 | Ruleta | Girando | ninguno | — |
 | | Trivia relámpago | `A`, `B`, `C` · la letra y su opción; `pass` · «No lo sabe» | `ruleta_answer` con la letra o `se_rinden`. |
 | | Adivinanza | `right` · «Acertó», `wrong` · «Falló», `pass` · «Se rinde» | `ruleta_answer`. «Falló» gasta un intento y saca la pista; el reto sigue hasta el tercer fallo. |

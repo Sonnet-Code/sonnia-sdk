@@ -404,6 +404,9 @@ class FakeGameHost:
         #: Preguntas de la trivia que dará ``draw_trivia``, en orden.
         self.trivia_questions: deque[TriviaQuestion] = deque(trivia_questions)
         self.trivia_levels: list[str | None] = []
+        #: ``wait_go`` espera a este evento (``None``: no hay retención) y cuántas veces esperó.
+        self.held: asyncio.Event | None = None
+        self.waited_go = 0
 
     # -- reloj ---------------------------------------------------------------
 
@@ -432,6 +435,16 @@ class FakeGameHost:
 
     async def wait_idle(self, limit_s: float | None = None) -> bool:
         return self.idle
+
+    async def wait_go(self) -> bool:
+        """Con ``held`` (un ``asyncio.Event``), espera a que se active, como una partida
+        retenida mientras se pregunta si sigue a Sonnet Code."""
+        held = self.held
+        if held is None:
+            return False
+        self.waited_go += 1
+        await held.wait()
+        return True
 
     def quiet_for(self) -> float:
         return self.quiet

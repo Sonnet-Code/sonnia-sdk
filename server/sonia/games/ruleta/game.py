@@ -459,6 +459,7 @@ class RuletaGame(Game):
         await self.host.send("start", {"segments": self._segment_data()})
         await self.host.instruct(self._rules_text())
         await self._spin()
+        self.host.spawn(self._wait_go(), "ruleta-salida")
         logger.info("Ruleta en marcha (%s)", source)
         return _text("empezar", t.START_TEXT)
 
@@ -833,6 +834,11 @@ class RuletaGame(Game):
             candidates.remove(self._previous)
         weights = [self._weights[i] for i in candidates]
         return self.host.rng.choices(candidates, weights=weights, k=1)[0]
+
+    async def _wait_go(self) -> None:
+        """Si pregunta antes si sigue a Sonnet Code, la primera vuelta cuenta desde que sale."""
+        if await self.host.wait_go() and self._phase == "spinning" and self._spins == 1:
+            self._spin_deadline = self.host.now() + SPIN_SECONDS + SPIN_GRACE_S
 
     async def _spin(self) -> None:
         """Elige la casilla, prepara su reto y manda ``spin``. ``GameError`` si no hay retos."""

@@ -525,6 +525,8 @@ class PosesGame(Game):
     async def _run(self) -> None:
         """Las rondas, de la colocación al final. Un fallo cancela la partida con una frase."""
         try:
+            # Si pregunta antes si sigue a Sonnet Code, la colocación espera a que arranque.
+            await self.host.wait_go()
             await self._place(first=True)
             for index in range(len(self._plan)):
                 if not await self._play_round(index):

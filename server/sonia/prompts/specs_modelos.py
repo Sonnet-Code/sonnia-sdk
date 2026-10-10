@@ -25,6 +25,7 @@ MODULES: tuple[str, ...] = (
     "sonia.vision.referee",
     "sonia.gestures.prompt",
     "sonia.trivia.game",
+    "sonia.games.manager",
     "sonia.games.ruleta.texts",
     "sonia.games.poses.game",
     "sonia.games.akinator.prompts",

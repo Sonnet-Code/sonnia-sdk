@@ -838,7 +838,9 @@ async def feed_sonia(manager: Any, text: str) -> None:
 
 async def test_partida_entera_por_voz_con_acierto() -> None:
     manager, engine, screen, clock, registry, ctx = await manager_rig()
-    result = await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx
+    )
     assert (
         result.text.startswith(SCRIPT_PREFIX) and "todavía no hagas ninguna pregunta" in result.text
     )
@@ -881,7 +883,7 @@ async def test_partida_entera_por_voz_con_acierto() -> None:
 
 async def test_partida_con_fallo_y_seguir_hasta_perder() -> None:
     manager, engine, screen, clock, registry, ctx = await manager_rig()
-    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    await registry.execute("start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx)
     clock.advance(5)
     manager.on_user_text(clock())
     for n in range(1, 11):
@@ -910,7 +912,7 @@ async def test_partida_con_fallo_y_seguir_hasta_perder() -> None:
 
 async def test_una_unity_que_se_reconecta_recibe_el_start_y_el_ultimo_estado() -> None:
     manager, _, screen, clock, registry, ctx = await manager_rig()
-    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    await registry.execute("start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx)
     clock.advance(5)
     manager.on_user_text(clock())
     for n in range(1, 6):
@@ -928,7 +930,7 @@ async def test_una_unity_que_se_reconecta_recibe_el_start_y_el_ultimo_estado() -
 
 async def test_stop_game_cancela_y_las_jugadas_ya_no_llegan() -> None:
     manager, _, screen, clock, registry, ctx = await manager_rig()
-    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    await registry.execute("start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx)
     result = await registry.execute("stop_game", {}, ctx)
     assert "terminado" in result.text
     assert screen.game_msgs("end")[-1]["data"]["result"] == "cancel"
@@ -945,7 +947,7 @@ async def test_las_jugadas_fuera_de_turno_devuelven_un_guion_y_nunca_una_excepci
     # Sin partida.
     result = await registry.execute("akinator_guess", {"respuesta": "Kotlin"}, ctx)
     assert "No hay ninguna partida" in result.text
-    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    await registry.execute("start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx)
     # Resultado antes de arriesgar nada.
     result = await registry.execute(
         "akinator_result", {"acierto": "si", "respuesta_real": NOT_SAID}, ctx
@@ -968,7 +970,9 @@ async def test_las_jugadas_fuera_de_turno_devuelven_un_guion_y_nunca_una_excepci
     assert "ya ha terminado" in result.text
     assert manager.phase == "finishing"
     # Empezar de nuevo mientras enseña el final lo cierra al momento.
-    result = await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    result = await registry.execute(
+        "start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx
+    )
     assert result.text.startswith(SCRIPT_PREFIX)
     assert manager.phase == "playing"
     assert screen.game_msgs("start")[-1]["data"]["max"] == 20
@@ -976,7 +980,7 @@ async def test_las_jugadas_fuera_de_turno_devuelven_un_guion_y_nunca_una_excepci
 
 async def test_abandono_sin_voz_cancela_la_partida() -> None:
     manager, engine, screen, clock, registry, ctx = await manager_rig()
-    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    await registry.execute("start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx)
     clock.advance(30)
     await manager.tick(clock())
     assert manager.active
@@ -989,7 +993,7 @@ async def test_abandono_sin_voz_cancela_la_partida() -> None:
 
 async def test_se_cancela_si_se_cae_la_sesion() -> None:
     manager, _, screen, _, registry, ctx = await manager_rig()
-    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    await registry.execute("start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx)
     await manager.on_session_lost()
     assert not manager.active
     assert screen.game_msgs("end")[-1]["data"]["result"] == "cancel"
@@ -997,7 +1001,7 @@ async def test_se_cancela_si_se_cae_la_sesion() -> None:
 
 async def test_empujon_si_el_visitante_habla_con_una_respuesta_en_pantalla_sin_delegar() -> None:
     manager, engine, _, clock, registry, ctx = await manager_rig()
-    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    await registry.execute("start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx)
     clock.advance(5)
     manager.on_user_text(clock())
     for n in range(1, 7):
@@ -1022,7 +1026,7 @@ async def test_empujon_si_el_visitante_habla_con_una_respuesta_en_pantalla_sin_d
 
 async def test_empujon_de_arranque_si_el_visitante_avisa_y_sonia_no_pregunta() -> None:
     manager, engine, _, clock, registry, ctx = await manager_rig()
-    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    await registry.execute("start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx)
     clock.advance(5)
     manager.on_user_text(clock())
     started = clock()
@@ -1037,7 +1041,7 @@ async def test_empujon_de_arranque_si_el_visitante_avisa_y_sonia_no_pregunta() -
 
 async def test_si_sonia_ya_pregunto_no_hay_empujon_de_arranque() -> None:
     manager, engine, _, clock, registry, ctx = await manager_rig()
-    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    await registry.execute("start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx)
     clock.advance(5)
     manager.on_user_text(clock())
     started = clock()
@@ -1053,7 +1057,7 @@ async def test_si_sonia_ya_pregunto_no_hay_empujon_de_arranque() -> None:
 
 async def test_el_panel_ve_el_estado_de_la_partida() -> None:
     manager, _, _, clock, registry, ctx = await manager_rig()
-    await registry.execute("start_game", {"juego": "akinator"}, ctx)
+    await registry.execute("start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}, ctx)
     clock.advance(5)
     manager.on_user_text(clock())
     await feed_sonia(manager, "¿Es un lenguaje de programación?")
@@ -1153,7 +1157,9 @@ async def test_en_el_motor_cuenta_las_preguntas_de_sonia_con_parciales_y_finales
         tools = [t.get("name") for t in conn.start["session"]["delegation"]["responses"]["tools"]]
         assert {"start_game", "akinator_guess", "akinator_result"} <= set(tools)
 
-        script = await _backend_call(conn, "g1", "start_game", {"juego": "akinator"})
+        script = await _backend_call(
+            conn, "g1", "start_game", {"juego": "akinator", "sigue_a_sonnet_code": True}
+        )
         assert script.startswith(SCRIPT_PREFIX) and "todavía no hagas ninguna pregunta" in script
         await rig.rec.wait_type("game", 2)
         assert [m["event"] for m in rig.rec.of_type("game")] == ["start", "waiting"]
