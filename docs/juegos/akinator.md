@@ -110,13 +110,16 @@ Constantes del juego (en `game.py`): tres respuestas fallidas como mucho antes d
 
 ## Pruebas y capturas
 
-- `server/tests/games/test_akinator.py`: el banco (bien y mal formado, mínimo, tope, el de la nube), las reglas (1200 caracteres, sin marcas del stack, con un banco enorme), el flujo entero (empezar, contar, arriesgar, acertar, fallar, rendirse, tres fallos), las jugadas fuera de turno, los empujones, la reconexión de Unity, el abandono y la sesión perdida, con el `GameHost` falso y con el `GameManager` de punta a punta.
-- `server/tests/games/test_akinator_preguntas.py`: el contador con transcripciones parciales y finales como las que da el motor (`clean_transcript`).
-- `server/sonia/games/akinator/demo.py`: la secuencia del orquestador falso (`scripts/juegos_demo.py --juego akinator`): una partida que Sonnia gana, otra que pierde y otra con otro máximo de preguntas, con una captura 9:16 por estado:
+- `server/tests/games/test_akinator.py`: el banco (bien y mal formado, mínimo, tope, el de la nube), las reglas (1200 caracteres, sin marcas del stack, con un banco enorme), el flujo entero (empezar, contar, arriesgar, acertar, fallar, rendirse, tres fallos), las jugadas fuera de turno, los empujones (también el de arranque), la reconexión de Unity, el abandono y la sesión perdida, con el `GameHost` falso y con el `GameManager` de punta a punta. Además una partida **dentro del `LiveEngine` real** (con un GPT-Live falso por WebSocket y un `Hub` de verdad): Sonnia habla en trozos con audio, el motor corta las frases por silencio y el contador sale bien con parciales, finales, una pregunta repetida y la apertura sin contar.
+- `server/tests/games/test_akinator_preguntas.py`: el contador con transcripciones parciales y finales como las que da el motor (`clean_transcript`), el «?» que llega tarde y una prueba aleatoria (300 transcripciones inventadas: nunca lanza ni baja).
+- `server/sonia/games/akinator/demo.py`: la secuencia del orquestador falso (`scripts/juegos_demo.py --juego akinator`), con una captura 9:16 por estado: una partida que Sonnia gana, otra que pierde, otra con otro máximo de preguntas y otra con pocos temas y una respuesta larguísima (textos largos):
 
   ```bash
   SONIA_UNITY_LOCKS=$SP/unity-locks scripts/juegos_capturas.sh --juego akinator --puerto 8794 --salida $SP/akinator/capturas
   ```
+
+- **Capturas revisadas** (10 de octubre de 2026, Unity en batch sobre el clon compartido, 1080x1920 en Play): empezar (`waiting`), pregunta corta, larga (cinco líneas) y última; Sonnia pensando con la mano en la barbilla (dos fotogramas); adivinanza entrando y ya puesta, con un nombre corto, uno de dos líneas y uno de 58 caracteres; rótulo «¡No era Java!»; resultado con confeti y con una respuesta larga; «me rindo»; «¡me ganaste!»; el máximo de 12 preguntas; pocos temas; y la pantalla cerrada tras cada final. Con `capturas.txt` sin avisos: lo de la franja alta acaba en el píxel 716 y la coronilla de Sonnia queda hacia el 850 (hacia el 800 con el resultado).
+- Lo que se arregló al verlas: el halo de la bola (un disco plano pisaba el texto: ahora es un degradado suave), el rótulo de fallo tapaba la línea de ayuda (ahora la oculta mientras sale), los destellos de la adivinanza caían sobre el título, la bola al rendirse y los nombres largos en el rótulo y en el resultado (se recortan con «…»). El último ajuste (recortar a 15 caracteres el nombre del rótulo de fallo para que quepa en la tarjeta) no se volvió a capturar.
 
 ## Pendiente
 
