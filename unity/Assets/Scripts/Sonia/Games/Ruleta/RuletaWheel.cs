@@ -2,8 +2,9 @@
 // RuletaController dentro de su contenido de la tarjeta.
 //
 // - Cinco casillas en los colores de Google (azul, rojo, amarillo y verde) y la de
-//   Sonnet Code en blanco, cada una con su icono y su texto, derechos cuando la casilla
-//   pasa por arriba.
+//   Sonnet Code en blanco, cada una con su icono (por dentro) y su texto (por fuera,
+//   donde la casilla es más ancha: se lee a 2-3 m). Las de la mitad de abajo giran su
+//   texto y su icono 180°, también mientras gira, para que siempre se lean de pie.
 // - Una lengüeta arriba que «hace clic» (salta y vuelve) cada vez que pasa una
 //   clavija, como una ruleta de feria.
 // - El giro: un pequeño impulso hacia atrás y varias vueltas que frenan poco a poco
@@ -46,6 +47,9 @@ namespace Sonia.Games.Ruleta
         /// <summary>Altura del eje de la lengüeta en su sprite (fracción, desde abajo).</summary>
         private const float PointerPivot = 0.86f;
 
+        /// <summary>Diámetro de las clavijas del borde.</summary>
+        private const float PegSize = 22f;
+
         /// <summary>Colores de las casillas, en el orden del protocolo, y de lo que va encima.</summary>
         public static readonly Color[] Fill =
         {
@@ -74,6 +78,7 @@ namespace Sonia.Games.Ruleta
         private readonly Image[] _pegs = new Image[Count];
         private readonly float[] _pegFlash = new float[Count];
         private readonly bool[] _off = new bool[Count];
+        private readonly bool[] _flipped = new bool[Count];
 
         private RectTransform _root;
         private RectTransform _spinner;
@@ -168,7 +173,7 @@ namespace Sonia.Games.Ruleta
                 rect.anchorMax = rect.anchorMin;
                 rect.pivot = new Vector2(0.5f, 0f);
                 rect.anchoredPosition = Vector2.zero;
-                rect.sizeDelta = new Vector2(5f, (wedgeDiameter * 0.5f) - 2f);
+                rect.sizeDelta = new Vector2(6f, (wedgeDiameter * 0.5f) - 2f);
                 rect.localRotation = Quaternion.Euler(0f, 0f, -Step * i);
             }
 
@@ -184,14 +189,14 @@ namespace Sonia.Games.Ruleta
                 face.localRotation = Quaternion.Euler(0f, 0f, -((Step * i) + (Step * 0.5f)));
                 _faces[i] = face;
 
-                float iconSize = diameter * 0.12f;
+                float iconSize = diameter * 0.1f;
                 Image icon = hud.NewImage("Icono", face, null, Ink[i]);
                 icon.preserveAspect = true;
                 RectTransform iconRect = icon.rectTransform;
                 iconRect.anchorMin = new Vector2(0.5f, 0.5f);
                 iconRect.anchorMax = iconRect.anchorMin;
                 iconRect.pivot = new Vector2(0.5f, 0.5f);
-                iconRect.anchoredPosition = new Vector2(0f, radius * 0.76f);
+                iconRect.anchoredPosition = new Vector2(0f, radius * 0.37f);
                 iconRect.sizeDelta = new Vector2(iconSize, iconSize);
                 _icons[i] = icon;
 
@@ -200,26 +205,26 @@ namespace Sonia.Games.Ruleta
                 glyphRect.anchorMin = new Vector2(0.5f, 0.5f);
                 glyphRect.anchorMax = glyphRect.anchorMin;
                 glyphRect.pivot = new Vector2(0.5f, 0.5f);
-                glyphRect.anchoredPosition = new Vector2(0f, radius * 0.76f);
+                glyphRect.anchoredPosition = new Vector2(0f, radius * 0.37f);
                 glyphRect.sizeDelta = new Vector2(iconSize * 1.4f, iconSize * 1.4f);
                 glyph.textWrappingMode = TextWrappingModes.NoWrap;
                 glyph.gameObject.SetActive(false);
                 _glyphs[i] = glyph;
 
-                // El texto, en una caja estrecha: la casilla se estrecha hacia el centro y
-                // el autoajuste lo encoge hasta que la línea de dentro cabe.
-                TextMeshProUGUI label = hud.NewText("Texto", face, string.Empty, diameter * 0.046f, Ink[i], TextAlignmentOptions.Center, hud.DisplayFont);
+                // El texto, por fuera, donde la casilla es más ancha: la caja cabe entera en
+                // la casilla y el autoajuste solo lo encoge si una palabra no entra.
+                TextMeshProUGUI label = hud.NewText("Texto", face, string.Empty, diameter * 0.056f, Ink[i], TextAlignmentOptions.Center, hud.DisplayFont);
                 label.enableAutoSizing = true;
-                label.fontSizeMin = diameter * 0.03f;
-                label.fontSizeMax = diameter * 0.046f;
+                label.fontSizeMin = diameter * 0.036f;
+                label.fontSizeMax = diameter * 0.056f;
                 label.lineSpacing = -12f;
                 label.verticalAlignment = VerticalAlignmentOptions.Middle;
                 RectTransform labelRect = label.rectTransform;
                 labelRect.anchorMin = new Vector2(0.5f, 0.5f);
                 labelRect.anchorMax = labelRect.anchorMin;
                 labelRect.pivot = new Vector2(0.5f, 0.5f);
-                labelRect.anchoredPosition = new Vector2(0f, radius * 0.48f);
-                labelRect.sizeDelta = new Vector2(radius * 0.5f, radius * 0.28f);
+                labelRect.anchoredPosition = new Vector2(0f, radius * 0.655f);
+                labelRect.sizeDelta = new Vector2(radius * 0.72f, radius * 0.28f);
                 _labels[i] = label;
             }
 
@@ -229,19 +234,19 @@ namespace Sonia.Games.Ruleta
                 Image peg = hud.NewImage("Clavija" + i, _spinner, icons.Disc, Color.white);
                 float angle = Step * i * Mathf.Deg2Rad;
                 float pegRadius = (wedgeDiameter * 0.5f) + 6f;
-                Place(peg.rectTransform, new Vector2(Mathf.Sin(angle) * pegRadius, Mathf.Cos(angle) * pegRadius), 18f);
+                Place(peg.rectTransform, new Vector2(Mathf.Sin(angle) * pegRadius, Mathf.Cos(angle) * pegRadius), PegSize);
                 _pegs[i] = peg;
             }
 
             // Buje.
             Image hubShadow = hud.NewImage("BujeSombra", _spinner, icons.Disc, new Color(0f, 0f, 0f, 0.35f));
-            Place(hubShadow.rectTransform, new Vector2(0f, -4f), diameter * 0.25f);
+            Place(hubShadow.rectTransform, new Vector2(0f, -4f), diameter * 0.215f);
             Image hub = hud.NewImage("Buje", _spinner, icons.Disc, GameColors.Navy);
-            Place(hub.rectTransform, Vector2.zero, diameter * 0.23f);
+            Place(hub.rectTransform, Vector2.zero, diameter * 0.2f);
             Image hubRing = hud.NewImage("BujeAro", _spinner, hud.RingSprite, Color.white);
-            Place(hubRing.rectTransform, Vector2.zero, diameter * 0.23f);
+            Place(hubRing.rectTransform, Vector2.zero, diameter * 0.2f);
             _hubDot = hud.NewImage("BujePunto", _spinner, hud.StarSprite, GameColors.Yellow);
-            Place(_hubDot.rectTransform, Vector2.zero, diameter * 0.11f);
+            Place(_hubDot.rectTransform, Vector2.zero, diameter * 0.095f);
 
             // Lengüeta (quieta, arriba, con el eje arriba): la punta toca el borde de las
             // casillas.
@@ -249,7 +254,7 @@ namespace Sonia.Games.Ruleta
             _pointer.anchorMin = new Vector2(0.5f, 0.5f);
             _pointer.anchorMax = _pointer.anchorMin;
             _pointer.pivot = new Vector2(0.5f, PointerPivot);
-            float pointerSize = diameter * 0.15f;
+            float pointerSize = diameter * 0.11f;
             _pointer.sizeDelta = new Vector2(pointerSize, pointerSize);
             float tip = (wedgeDiameter * 0.5f) - 2f;
             _pointer.anchoredPosition = new Vector2(0f, tip + (pointerSize * (PointerPivot - 0.03f)));
@@ -432,7 +437,7 @@ namespace Sonia.Games.Ruleta
             for (int i = 0; i < Count; i++)
             {
                 _pegFlash[i] = Mathf.MoveTowards(_pegFlash[i], 0f, dt * 5f);
-                float size = 18f + (8f * _pegFlash[i]);
+                float size = PegSize + (8f * _pegFlash[i]);
                 _pegs[i].rectTransform.sizeDelta = new Vector2(size, size);
                 _pegs[i].color = Color.Lerp(Color.white, GameColors.Yellow, _pegFlash[i]);
             }
@@ -473,6 +478,7 @@ namespace Sonia.Games.Ruleta
             if (_spinner != null)
             {
                 _spinner.localRotation = Quaternion.Euler(0f, 0f, _angle);
+                UprightFaces();
             }
 
             if (_pointer != null)
@@ -480,6 +486,35 @@ namespace Sonia.Games.Ruleta
                 // El clic: salta hacia el lado al que empuja la clavija y vuelve.
                 float kick = KickAngle * Mathf.Sin(Mathf.Clamp01(_kick) * Mathf.PI * 0.5f);
                 _pointer.localRotation = Quaternion.Euler(0f, 0f, kick);
+            }
+        }
+
+        /// <summary>
+        /// Las casillas con la bisectriz en la mitad de abajo de la pantalla giran 180° su
+        /// texto y su icono, para leerse de pie (con la ruleta girada R grados, la
+        /// bisectriz de la casilla i está a CenterOf(i) - R grados de arriba, en sentido horario).
+        /// </summary>
+        private void UprightFaces()
+        {
+            for (int i = 0; i < Count; i++)
+            {
+                if (_labels[i] == null)
+                {
+                    continue;
+                }
+
+                float screen = Mod360(CenterOf(i) - _angle);
+                bool flip = screen > 90f && screen < 270f;
+                if (flip == _flipped[i])
+                {
+                    continue;
+                }
+
+                _flipped[i] = flip;
+                Quaternion rotation = flip ? Quaternion.Euler(0f, 0f, 180f) : Quaternion.identity;
+                _labels[i].rectTransform.localRotation = rotation;
+                _icons[i].rectTransform.localRotation = rotation;
+                _glyphs[i].rectTransform.localRotation = rotation;
             }
         }
 
