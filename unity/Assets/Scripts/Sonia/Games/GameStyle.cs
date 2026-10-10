@@ -21,6 +21,13 @@ namespace Sonia
 
         // Tarjetas, como las de la trivia.
         public static readonly Color CardFill = new Color(0.035f, 0.07f, 0.15f, 0.93f);
+
+        /// <summary>
+        /// Lo que se ve de <see cref="CardFill"/> sobre el escenario (medido en las
+        /// capturas), pero opaco: la tarjeta de los juegos lo usa para que lo que vaya
+        /// detrás (los destellos) no se transparente.
+        /// </summary>
+        public static readonly Color CardFillOpaque = new Color32(27, 44, 74, 255);
         public static readonly Color CardBorder = new Color(0.44f, 0.66f, 1f, 0.55f);
         public static readonly Color OptionFill = new Color(0.1f, 0.16f, 0.3f, 0.96f);
         public static readonly Color RightFill = new Color(0.12f, 0.56f, 0.27f, 1f);

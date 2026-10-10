@@ -18,6 +18,7 @@ backend se los pase enteros a Sonia.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -37,6 +38,8 @@ __all__ = [
     "start_game",
     "stop_game",
 ]
+
+logger = logging.getLogger(__name__)
 
 NO_GAMES = "Los juegos no están disponibles ahora mismo."
 
@@ -73,6 +76,10 @@ async def stop_game(ctx: ActionContext, arguments: dict[str, Any]) -> ActionResu
     ok, message = await manager.stop("voice")
     if not ok:
         return ActionResult(text=message)
+    if manager.phase == "finishing":
+        # El juego cerró él mismo enseñando su final (``Game.stop_requested``): el mensaje es
+        # su guion para Sonia (la palabra del Wordle, por ejemplo).
+        return ActionResult(text=f"{SCRIPT_PREFIX} {message}")
     return ActionResult(
         text="Juego terminado. Sonia lo dice en una frase corta y sigue conversando con normalidad."
     )
@@ -158,10 +165,21 @@ def game_action[G: Game](
 
 
 def game_actions(games: Sequence[type[Game]]) -> list[ActionSpec]:
-    """``start_game``, ``stop_game`` y las jugadas de ``games`` (vacío si no hay juegos)."""
-    if not games:
-        return []
-    specs = [build_start_game(games), STOP_GAME]
+    """``start_game``, ``stop_game`` y las jugadas de ``games`` (vacío si no hay juegos).
+
+    Un juego cuyas jugadas no se pueden crear (``actions()`` lanza) se queda fuera, también
+    del enum de ``start_game``: un juego roto no tumba el arranque ni se ofrece.
+    """
+    usable: list[type[Game]] = []
+    plays: list[ActionSpec] = []
     for game in games:
-        specs.extend(game.actions())
-    return specs
+        try:
+            specs = list(game.actions())
+        except Exception:  # noqa: BLE001 - un juego roto no tumba el arranque
+            logger.exception("Las jugadas de %s no se pudieron crear: se deja fuera", game.id)
+            continue
+        usable.append(game)
+        plays.extend(specs)
+    if not usable:
+        return []
+    return [build_start_game(usable), STOP_GAME, *plays]

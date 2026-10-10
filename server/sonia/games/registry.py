@@ -47,22 +47,22 @@ class GameEntry:
 
 GAMES: tuple[GameEntry, ...] = (
     # A2: la ruleta de Sonnia (docs/juegos/ruleta.md).
-    GameEntry(RuletaGame, on=False),
+    GameEntry(RuletaGame, on=True),
     #
     # A3: Simón dice con poses (docs/juegos/poses.md).
-    GameEntry(PosesGame, on=False),
+    GameEntry(PosesGame, on=True),
     #
     # A4: Akinator dev (docs/juegos/akinator.md).
-    GameEntry(AkinatorGame, on=False),
+    GameEntry(AkinatorGame, on=True),
     #
     # A5: piedra, papel o tijera (docs/juegos/piedra_papel_tijera.md).
     GameEntry(PptGame, on=False),
     #
     # A6: Wordle de tecnología (docs/juegos/wordle.md).
-    GameEntry(WordleGame, on=False),
+    GameEntry(WordleGame, on=True),
     #
     # A7: búsqueda relámpago (docs/juegos/busqueda.md).
-    GameEntry(BusquedaGame, on=False),
+    GameEntry(BusquedaGame, on=True),
 )
 
 

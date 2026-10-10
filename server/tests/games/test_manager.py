@@ -3,12 +3,13 @@ perdida, bancos, frases grabadas y los textos para GPT-Live (sección 8 del plan
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, ClassVar
 
 import pytest
 
 from sonia.actions import build_default_registry
-from sonia.actions.games import STOP_GAME, build_start_game
+from sonia.actions.games import STOP_GAME, build_start_game, game_actions
 from sonia.games import NOT_SAID, BankParse, Game, GameBank, GameError, StopReason
 from sonia.games.banks import BANK_MAX_CHARS
 from sonia.games.manager import (
@@ -118,6 +119,62 @@ class CameraGame(Game):
         await self.host.poses.acquire(self.id, 8)
         await self.host.preview.start(self.id)
         return "Ponte delante."
+
+
+class SlowCameraGame(CameraGame):
+    """Como ``CameraGame``, pero la cámara tarda en abrir: ``start`` espera a ``gate``."""
+
+    id: ClassVar[str] = "lenta"
+    title: ClassVar[str] = "Lenta"
+    spoken: ClassVar[str] = "la lenta"
+
+    def __init__(self, host: Any) -> None:
+        super().__init__(host)
+        self.gate = asyncio.Event()
+        self.fail_after: Exception | None = None
+
+    async def start(self, source: str, options: dict[str, Any]) -> str:
+        gate = self.gate
+        await gate.wait()
+        script = await super().start(source, options)
+        if self.fail_after is not None:
+            raise self.fail_after
+        return script
+
+
+def slow(manager: Any) -> SlowCameraGame:
+    game = manager.game("lenta")
+    assert isinstance(game, SlowCameraGame)
+    return game
+
+
+class BrokenInitGame(ProbeGame):
+    """Un juego roto: lanza al crearse."""
+
+    id: ClassVar[str] = "rota"
+
+    def __init__(self, host: Any) -> None:
+        raise RuntimeError("rota al crearse")
+
+
+class BrokenActionsGame(ProbeGame):
+    """Un juego roto: sus jugadas no se pueden crear."""
+
+    id: ClassVar[str] = "rota_jugadas"
+
+    @classmethod
+    def actions(cls) -> list[Any]:
+        raise RuntimeError("jugadas rotas")
+
+
+class BrokenBanksGame(ProbeGame):
+    """Un juego roto: sus bancos no se pueden declarar."""
+
+    id: ClassVar[str] = "rota_bancos"
+
+    @classmethod
+    def banks(cls) -> list[GameBank[Any]]:
+        raise RuntimeError("bancos rotos")
 
 
 class JudgeGame(Game):
@@ -297,6 +354,61 @@ async def test_la_camara_se_suelta_al_terminar() -> None:
     await manager.start("camara", "voice")
     assert vision.stream.owners == {"camara"} and "camara" in vision.poses.owners
     assert vision.preview.owners == {"camara"}
+    await manager.stop("panel")
+    assert not vision.stream.owners and not vision.poses.owners and not vision.preview.owners
+
+
+async def test_si_la_partida_se_cancela_mientras_abre_la_camara_no_se_queda_abierta() -> None:
+    """La sesión se cae mientras ``start`` aún está abriendo la cámara: lo que pida
+    después de que el manager soltara la visión se suelta también (si no, la cámara se
+    quedaba leyendo hasta la siguiente partida de ese juego)."""
+    vision = FakeVision()
+    manager, _, _, _ = await make_manager([SlowCameraGame], vision=vision)
+    game = slow(manager)
+    starting = asyncio.create_task(manager.start("lenta", "voice"))
+    await settle()
+    assert manager.active and not vision.stream.owners
+    await manager.on_session_lost()
+    assert not manager.active
+    game.gate.set()
+    ok, text = await starting
+    assert not ok and "se canceló" in text
+    assert not vision.stream.owners and not vision.poses.owners and not vision.preview.owners
+
+
+async def test_si_falla_al_empezar_con_la_partida_ya_cerrada_suelta_la_camara() -> None:
+    vision = FakeVision()
+    manager, _, _, _ = await make_manager([SlowCameraGame], vision=vision)
+    game = slow(manager)
+    game.fail_after = GameError("No hay nadie delante.")
+    starting = asyncio.create_task(manager.start("lenta", "voice"))
+    await settle()
+    await manager.stop("panel")
+    game.gate.set()
+    ok, _ = await starting
+    assert not ok
+    assert not vision.stream.owners and not vision.poses.owners and not vision.preview.owners
+
+
+async def test_una_partida_nueva_del_mismo_juego_no_pierde_su_camara() -> None:
+    """Si el mismo juego ya está otra vez en pantalla cuando termina el ``start``
+    rezagado, la cámara es de la partida nueva y no se toca."""
+    vision = FakeVision()
+    manager, _, _, _ = await make_manager([SlowCameraGame], vision=vision)
+    game = slow(manager)
+    first_gate = game.gate
+    first = asyncio.create_task(manager.start("lenta", "voice"))
+    await settle()
+    await manager.on_session_lost()
+    game.gate = asyncio.Event()
+    game.gate.set()
+    ok, _ = await manager.start("lenta", "voice")
+    assert ok and vision.stream.owners == {"lenta"}
+    first_gate.set()
+    ok, _ = await first
+    assert not ok
+    assert vision.stream.owners == {"lenta"} and "lenta" in vision.poses.owners
+    assert vision.preview.owners == {"lenta"}
     await manager.stop("panel")
     assert not vision.stream.owners and not vision.poses.owners and not vision.preview.owners
 
@@ -588,6 +700,31 @@ async def test_start_game_y_stop_game() -> None:
 def test_sin_juegos_no_hay_acciones_de_juegos() -> None:
     names = build_default_registry(include_look=False).names()
     assert "start_game" not in names and "stop_game" not in names
+
+
+async def test_un_juego_roto_se_queda_fuera_y_el_manager_sigue() -> None:
+    """Si un juego lanza al crearse, en ``actions()`` o en ``banks()``, no tumba el arranque:
+    se apunta y se deja fuera; los demás siguen."""
+    manager, _, _, _ = await make_manager(
+        [BrokenInitGame, BrokenActionsGame, BrokenBanksGame, ProbeGame]
+    )
+    assert [g.id for g in manager.games()] == ["sonda"]
+    assert "games" in manager.capabilities() and "game_banks" in manager.capabilities()
+    assert [g["id"] for g in manager.snapshot()["games"]] == ["sonda"]
+    ok, text = await manager.start("rota", "voice")
+    assert not ok and "«rota»" in text
+    ok, _ = await manager.start("sonda", "voice")
+    assert ok
+
+
+def test_un_juego_con_las_jugadas_rotas_no_entra_en_start_game() -> None:
+    specs = game_actions([BrokenActionsGame, ProbeGame])
+    names = [spec.name for spec in specs]
+    assert names == ["start_game", "stop_game"]
+    assert specs[0].parameters["properties"]["juego"]["enum"] == [NOT_SAID, "sonda"]
+    assert game_actions([BrokenActionsGame]) == []
+    registry = build_default_registry(include_look=False, games=[BrokenActionsGame, ProbeGame])
+    assert "start_game" in registry.names()
 
 
 async def test_ningun_texto_para_gpt_live_nombra_el_stack() -> None:

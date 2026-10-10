@@ -337,18 +337,59 @@ Cada agente apunta los de su juego en su tabla (además de `start` y `end`). En 
 
 ##### `ruleta` (La ruleta de Sonnia, `docs/juegos/ruleta.md`)
 
+Las casillas van siempre en este orden (`segment` es su índice): `0` trivia relámpago, `1` adivinanza geek, `2` explica en 20 segundos, `3` predice el futuro de la IA y `4` reto sorpresa de Sonnet Code. `spin` es el número de la vuelta en la partida (1, 2...). Los textos ya vienen con «Sonnia».
+
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `start` | → Unity | `title`, `segments`: `[{id, label, title, icon, off}]` (`id`: `trivia`, `adivinanza`, `explica`, `futuro` o `sonnet`; `label`, el texto de la casilla, «Trivia relámpago»; `title`, el de la tarjeta del reto, «TRIVIA RELÁMPAGO»; `icon`: `bolt`, `riddle`, `mic`, `crystal` o `star`; `off`: sin reto en esta partida, apagada) | sí (el de la partida) | Monta la ruleta quieta en la tarjeta común. |
+| `spin` | → Unity | `spin`, `segment` (la casilla de destino), `duration_s` (4,6), `wins` (retos superados) | sí | Gira y frena hasta `segment`; al parar, `wheel_stopped`. Repetido con el mismo `spin` (reconexión), se ignora. |
+| `wheel_stopped` | → orquestador | `spin`, `segment` | — | La ruleta paró. Si no llega en `duration_s` + 3 s, el orquestador sigue solo; uno de otra vuelta o tarde se ignora, y la casilla la manda el orquestador. |
+| `challenge` | → Unity | `spin`, `segment`, `kind` (el `id` de la casilla), `title`, `prompt` (la pregunta, la adivinanza, la tecnología, la pregunta del futuro o el reto), `wins`; según el reto: `options` (las tres de la trivia), `tries` y `misses` (intentos y fallos), `hint` (la pista, vacía hasta que sale), `task` (Sonnet Code: reto de stand y no pregunta), `timer` (`{seconds, running}`: el contador empieza a correr con `running`) y `time_up` (explica: se acabó el tiempo) | sí | La tarjeta del reto. Mientras se juega llega otra vez con lo que cambia (la pista, un fallo, el contador, el «¡Tiempo!»). Si llega con la ruleta aún girando, la ruleta para ya en `segment`; si llega de una vuelta que Unity no vio girar, la pinta con la ruleta ya parada. |
+| `result` | → Unity | lo de `challenge` sin `timer`, más `outcome` (`win`, `lose`, `pass`: se rindieron, o `done`: la nota y la predicción) y lo de cada reto: `chosen` y `correct` (trivia; `chosen` -1 si no lo sabía), `answer` (la solución de la adivinanza y de la pregunta de Sonnet Code), `score` (la nota, 1 a 10) o `prediction` y `probability` (0 a 100) | sí | El resultado en la tarjeta, el rótulo, el confeti y la reacción de Sonnia. Se queda hasta el siguiente `spin` o el `end`. |
+
+`end` llega con `cancel` (la ruleta no termina sola: `stop_game`, el panel o el abandono) y la pantalla se retira al momento.
 
 ##### `poses` (Simón dice con poses, `docs/juegos/poses.md`)
 
+`start` lleva además `rounds` (las rondas de la partida). Los eventos propios llevan todos el **estado completo** de la pantalla, el mismo objeto, y `phase` es el nombre del evento:
+
+```json
+{"phase": "result", "round": 2, "rounds": 6, "pose": "brazos_arriba", "label": "Brazos arriba", "meme": "Pasaron todos los tests", "demo": "", "order": "¡Simón dice: pasaron todos los tests, brazos arriba!", "simon": true, "seconds": 0.0, "count": 7, "total": 9, "players": 9, "hint": "", "done": 0, "possible": 0, "fell": 0}
+```
+
+- `pose`: `brazos_arriba`, `un_brazo`, `pose_t`, `manos_cabeza`, `biceps` o `barbilla` (vacío en `placement` y `final`). `label`: la instrucción para la pantalla; `meme`: la frase del meme; `demo`: cómo la demuestra Sonnia (vacío: la pose por código; el nombre de un clip del set, ese clip; `ninguna`, sin demostración). Un `pose` desconocido: pictograma genérico y sin demostración.
+- `order`: la orden tal cual sonó (vacío antes de `command`). `simon`: si dijo «Simón dice» (`false`: ronda trampa).
+- `count` y `total` solo en `result`; `seconds` solo en `window`; `hint` solo en `placement`; `done`, `possible` y `fell` solo en `final`.
+
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `placement` | → Unity | Estado; `players` (cuántos juegan) y `hint` («Un paso atrás: a unos 2 m», «Pónganse delante, a unos 2 m» o vacío). | sí | La gente se coloca (al empezar y si alguien se pega a mitad de partida): vista en vivo grande, cuántos juegan y el aviso. Sin pose de Sonnia. |
+| `round` | → Unity | Estado con `round`, `pose`, `label`, `meme` y `demo`; `order` vacío. | sí | Empieza la ronda: «RONDA 2 DE 6», el pictograma de la pose y Sonnia empieza a demostrarla y la sostiene hasta `result`. |
+| `command` | → Unity | Estado con `order` y `simon`. | sí | Suena la orden: sale su rótulo, tal cual se dijo (no revela si es trampa). |
+| `window` | → Unity | Estado con `seconds` (`GAME_POSES_WINDOW_SECONDS`). | sí | Terminó la orden y se abre la ventana en la que se cuenta: contador circular de `seconds`. |
+| `result` | → Unity | Estado con `count` de `total`. | sí | Resultado de la ronda: «7 de 9» o, si `simon` es `false`, «¡Cayeron 4!» («¡Nadie cayó!» con 0). Sonnia suelta la pose. |
+| `final` | → Unity | Estado con `done` de `possible` (jugadas bien hechas del grupo: la pose con «Simón dice» y quedarse quieto en las trampas) y `fell` (caídos en las trampas). | sí | El total del grupo y la celebración. Después llega `end` con `result: win` y el mismo `data`. |
+
+Unity no manda `game_event` en este juego.
 
 ##### `akinator` (Akinator dev, `docs/juegos/akinator.md`)
 
+El orquestador manda el **estado entero** en cada evento (menos `start` y `end`), así que el último fijo repinta la pantalla si Unity se reconecta; el nombre del evento solo dice qué acaba de pasar, para animarlo.
+
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `start` | orquestador → Unity | `title`, `max` (preguntas de sí o no como mucho), `themes` (nombres de los temas del banco; la pantalla no los pinta, Sonnia los dice) | sí | Monta la tarjeta: la bola de cristal, la pregunta, un punto por pregunta y la línea de ayuda. |
+| `waiting` | orquestador → Unity | el estado (abajo) | sí | «Piensa en algo… y no lo digas» con los puntos vacíos, hasta que el visitante avisa. |
+| `question` | orquestador → Unity | el estado | sí | Subió el contador o cambió la pregunta en curso: «PREGUNTA 7 DE 20», los puntos y la pregunta. |
+| `guess` | orquestador → Unity | el estado, con `guess` | sí | Sonnia arriesga una respuesta: la tarjeta grande «¿Es… Kotlin?» con destellos. |
+| `miss` | orquestador → Unity | el estado, con `missed` (el último es el que acaba de fallar) | sí | Falló y sigue preguntando: rótulo «¡No era Kotlin!» y vuelve a la pregunta. |
+| `giveup` | orquestador → Unity | el estado | sí | Se rinde (sin preguntas o sin intentos, o dice «¿qué era?»): «Me rindo… ¿Qué era?». |
+| `reveal` | orquestador → Unity | el estado, con `outcome` y `answer` | sí | El resultado en pantalla ya: `outcome` `sonnia` (la adivinó: confeti, «¡Lo sabía!») o `visitor` («¡Me ganaste!», `answer` es lo que era). |
+| `end` | orquestador → Unity | `result` (`win` si la adivinó, `lose` si no, `cancel`), `outcome`, `answer`, `asked`, `tries` | no | Retira la pantalla (tras el resultado, lo retira con un fundido). |
+
+El estado (`data` de todos los eventos menos `start` y `end`): `phase` (`waiting`, `asking`, `guessing`, `giving_up` o `revealed`), `asked` (preguntas hechas, sin pasar de `max`), `max`, `question` (la pregunta en curso, con «Sonnia»), `guess` (la respuesta que arriesga, vacía si no hay), `missed` (las respuestas que ya fallaron), `outcome` (`sonnia` o `visitor`, solo en `revealed`) y `answer` (lo que era, solo en `revealed`).
+
+De Unity al orquestador, el Akinator no manda ningún `game_event`.
 
 ##### `piedra_papel_tijera` (Piedra, papel o tijera, `docs/juegos/piedra_papel_tijera.md`)
 
@@ -372,11 +413,26 @@ El `end` lleva `data` `{"winner", "score"}` además de `result` (`win` si gana e
 
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `start` | orquestador → Unity | `{"title": "Wordle de tecnología", "rows": 6, "cols": 5, "hint_after": 4}` | sí | Monta la rejilla vacía de `rows`×`cols` (3 a 8 filas), la pista candada («sale tras `hint_after` intentos»; sin pista si `hint_after` es 0 o no cabe) y las 26 letras sin usar. |
+| `guess` | orquestador → Unity | `{"row": 2, "letters": "LINUX", "marks": "gyxxg", "board": [{"letters": "CLOUD", "marks": "xyyxx"}, ...], "used": {"g": "LX", "y": "IO", "x": "CDNU"}, "hint": "", "result": "", "word": "", "stopped": false}` | sí | Un intento: las letras entran en la fila `row` (desde 0), las fichas se voltean con sus `marks` (`g` verde, `y` amarilla, `x` gris) y sale la pista si viene en `hint`. Lleva el **estado completo**: `board` con todas las filas hasta esta (para repintar tras reconectar, sin animar las ya vistas) y `used` con cada letra en su mejor color. `result` vale `win` o `lose` en el último intento y vacío mientras se juega; entonces `word` trae la palabra (y, al perder, `hint` trae siempre la pista); con `win`, confeti. **Si lo terminan por voz o desde el panel con la partida en marcha**, llega el último estado con `stopped: true`, `result: lose`, `word` y `hint`: **no es un intento nuevo** y Unity no vuelve a voltear ninguna fila; cambia el rótulo de la cabecera a «lo dejamos aquí» y enseña la palabra con su pista (las filas que no hubiera visto salen ya puestas desde `board`). `row` es el del último intento, o `-1` sin ninguno (`letters`, `marks` y `board` vacíos). |
+| `invalid` | orquestador → Unity | `{"letters": "WEB", "reason": "length", "message": "Tienen que ser 5 letras"}` | no | La palabra no vale y no gasta intento: la primera fila libre se sacude con lo que se entendió (`letters`, hasta cinco letras, puede venir vacío) y un rótulo de una línea dice `message` (de 25 caracteres como mucho). `reason`: `length`, `chars`, `empty` o `repeated`. |
+| `end` | orquestador → Unity | `{"word": "KAFKA", "attempts": 3, "result": "win"}` | no | El final común (lo manda el manager tras `finish`): Unity enseña su tarjeta de resultado con la palabra y los intentos y se retira. `result`: `win` o `lose` (o `cancel`, sin más datos). Si lo dejaron con la partida en marcha, también `stopped: true` y no sale tarjeta de resultado: el tablero, que ya enseña la palabra y su pista, se queda unos segundos y se retira. |
+
+Unity no manda ningún `game_event` en este juego. Una Unity sin el controlador ignora todo esto.
 
 ##### `busqueda` (Búsqueda relámpago, `docs/juegos/busqueda.md`)
 
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `start` | → Unity | `{title, rounds, round_seconds, preview}` | sí | Monta la pantalla: `rounds` rondas de `round_seconds` segundos; `preview` dice que la vista en vivo ya está encendida (`camera_preview`). |
+| `round` | → Unity | `{index, total, object, color, seconds, found, phase: "ready"}` | sí | Ronda nueva, lista: la tarjeta con el objeto y el tiempo entero, parado. `index` desde 1; `object`, con su artículo («algo azul»); `color`, `#RRGGBB` o `""`; `found`, las rondas encontradas hasta ahora. |
+| `go` | → Unity | lo de `round` con `phase: "running"` | sí | El «¡Ya!»: arranca el contador de `seconds`. Estado completo de la ronda: tras reconectar repinta toda la pantalla. |
+| `checking` | → Unity | `{n, max}` | no | Va una foto al modelo de visión (la `n` de `max` de la ronda): el barrido de «mirando» sobre la vista en vivo. |
+| `found` | → Unity | lo de `round` con `phase: "found"`, `found` ya sumada, y `what` | sí | ¡Encontrado!: confeti, visto y `what`, lo que vio la cámara (solo el objeto, ya filtrado; si no vale, el `object` pedido). |
+| `timeout` | → Unity | lo de `round` con `phase: "timeout"` y `silent` | sí | ¡Tiempo!: se acabó sin verlo. Con `silent: true`, la cámara no contestó a ninguna mirada (no es que nadie lo trajera). |
+| `end` | → Unity | `{result, found, total, photos}` | no | El final (el común): `win` si encontraron la mitad o más, `lose` si no, `cancel` si se abandona o se cancela (también si la cámara falla dos rondas). `photos` son las fotos al modelo de visión de la partida. |
+
+Unity no manda ningún `game_event` en este juego.
 
 ### `error`
 

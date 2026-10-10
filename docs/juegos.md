@@ -59,6 +59,7 @@ class WordleGame(Game):
 | `unavailable_reason()` | Antes de empezar y en el panel | Por qué no se puede jugar (`None`: se puede). Solo lo propio: lo común ya lo mira el manager. Barata. |
 | `start(source, options)` | `start_game` o el panel | Reinicia el estado, carga los bancos (`await host.load_bank(...)`), manda `start` y la primera pantalla, pasa las reglas con `instruct` y devuelve el guion de arranque. Si no se puede, `GameError("motivo")`. |
 | `resume()` | GPT-Live vuelve a delegar empezar el mismo juego | El guion para seguir donde iba. |
+| `stop_requested(source)` | Le piden terminar con la partida en marcha (`voice`: `stop_game`; `panel`: «Terminar juego») | Opcional. Por defecto `None`: se cancela. Si quiere cerrar enseñando su final (el Wordle enseña la palabra), lo enseña, llama a `host.finish(...)` y devuelve el guion para Sonia: el manager no cancela, sigue el final normal y le pasa el guion a GPT-Live (por voz, como resultado de `stop_game`; desde el panel, por `speak` en cuanto calla). |
 | `stop(reason)` | Siempre, una vez, al terminar la partida | Suelta lo suyo. No hables aquí. `reason`: `finished`, `voice`, `panel`, `abandoned`, `session`, `unity`, `replaced`, `error` o `shutdown`. |
 | `tick(now)` | Cada 50 ms mientras se juega | Contadores, rondas, comprobaciones. Nada bloqueante. |
 | `on_assistant_text(text, final)` | Mientras habla Sonia | `text` es lo acumulado de la frase en curso; con `final=True`, la frase entera, una vez. |
@@ -133,7 +134,7 @@ class WordleGame(Game):
 ### `start_game` y `stop_game`
 
 - `start_game(juego)`: `juego` es un enum fijo con los juegos encendidos al arrancar (registro y ajustes) más `no_lo_dijo`. Con `no_lo_dijo`, el guion le pide preguntar a cuál, con la lista de los que se pueden jugar ahora. Si el juego no se puede (apagado en el panel, Unity vieja, sin cámara, banco vacío…), el resultado dice por qué y propone los que sí. Si ya hay otro juego en marcha, dice cuál y que hay que terminarlo antes; si es el mismo, `resume()`. Si hay una trivia, igual.
-- `stop_game()`: termina el que haya (`stop("voice")`).
+- `stop_game()`: termina el que haya (`stop("voice")`). Si el juego tiene `stop_requested` y cierra enseñando su final, el resultado es su guion (con `PARA SONIA:`); si no, se cancela.
 - Sin ningún juego encendido no se registra ninguna de las dos ni sale la línea de juegos en el prompt.
 
 ## La pantalla (`send` y `finish`)
@@ -279,7 +280,7 @@ El panel usa el `GameManager` del motor (`engine.games`, `None` si esta Sonnia n
 | Estado | `manager.snapshot()` (también en `engine.snapshot()["games"]`): `enabled`, `active` (id o `null`), `title`, `phase` (`off`, `playing`, `finishing`), `elapsed_s`, `state` (el `snapshot()` del juego), `games` (`[{id, title, needs, off, available, reason}]`), `games_off`, `banks` (`[{id, game, title, file, min_entries, source}]`, `source` = `cloud` o `app`), `unity_games` (o `null` si la pantalla no anunció juegos) y `preview`. |
 | Capacidades | `manager.capabilities()`: `games`, `game:<id>` (solo los que anuncia la Unity conectada) y `game_banks`. Van con las demás en `data-cap`. |
 | Empezar | Orden `game_start` (`game`): `await manager.start(id, "panel")` → `(ok, mensaje)`. Antes, lo mismo que la trivia: «Conversando», sin modo debug, sin editor de personaje y con la pantalla conectada. |
-| Terminar | Orden `game_stop`: `await manager.stop("panel")`. |
+| Terminar | Orden `game_stop`: `await manager.stop("panel")`. Si el juego cierra enseñando su final (`Game.stop_requested`, el Wordle), el mensaje dice que enseña su final y el manager se lo pasa a GPT-Live; si no, se cancela. |
 | Interruptores | Ajuste compartido `games_off` (lista de ids): normalízalo con `normalize_games_off` y aplícalo con `await manager.set_games_off(ids)` (también al arrancar, con lo guardado). Si se apaga el que está en marcha, se termina. |
 | Bancos | Cargar: `await asyncio.to_thread(manager.bank_text, bank_id)` (el de la nube o el de la app). Guardar (`set_game_bank`, `bank`, `text`): `ok, mensaje = manager.validate_bank(bank_id, text)`; si vale, guarda `game_banks` con `{**actual, bank_id: text}` (o sin esa clave si `text` está vacío: «Volver al de la app») y aplica con `manager.use_cloud_banks(valor)`. Normaliza lo que llega de la nube con `normalize_game_banks`. |
 | Frases grabadas | `await asyncio.to_thread(manager.fixed_phrases)` se suma a las frases de «Preparar voces», de la grabación automática y del contador de frases grabadas. |
