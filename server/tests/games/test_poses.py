@@ -444,6 +444,35 @@ async def test_con_barullo_la_ronda_no_espera_de_mas() -> None:
     assert host.now() - began < 0.2
 
 
+async def test_la_ronda_no_sale_en_pantalla_hasta_que_suena_la_orden() -> None:
+    """Si Sonia alarga la explicación (o vuelve a hablar), el pictograma, la demostración y
+    el rótulo de la orden salen con la frase grabada, no antes (con GPT-Live real salían
+    5,9 s antes)."""
+    game, host, _ = crowd_game()
+    await game.start("voice", {})
+    host.tasks[0].cancel()
+    attempts: list[float] = []
+    original = host.say_fixed
+
+    async def say_fixed(text: str) -> bool:
+        assert not sent(host, "round") and not sent(host, "command"), (
+            "la ronda salió en pantalla antes de sonar la orden"
+        )
+        attempts.append(host.now())
+        if len(attempts) == 1:
+            return False  # Sonia sigue hablando: la frase grabada no suena
+        return await original(text)
+
+    host.say_fixed = say_fixed  # type: ignore[method-assign]
+    host.quiet = 0.0  # Sonia no calla: las esperas agotan sus topes
+    assert await game._play_round(0)
+    # Se esperó a que callara entre un intento y otro, y hasta entonces nada salió en pantalla.
+    assert len(attempts) == 2 and attempts[1] - attempts[0] >= poses_game.CALM_MAX_S - 0.5
+    events = [m["event"] for m in host.sent]
+    assert events[-4:] == ["round", "command", "window", "result"]
+    assert [text for text, _ in host.fixed] == [sent(host, "command")[0]["order"]]
+
+
 async def test_la_ventana_se_abre_cuando_termina_la_orden() -> None:
     game, host, _ = crowd_game()
     await game.start("voice", {})
