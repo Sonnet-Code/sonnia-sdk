@@ -80,6 +80,7 @@ namespace Sonia.Games.Ruleta
         private TextMeshProUGUI _riddle;
         private RectTransform _hintBox;
         private TextMeshProUGUI _hintText;
+        private RectTransform _hintWaiting;
         private AnswerBox _riddleAnswer;
         private TriesRow _riddleTries;
 
@@ -315,6 +316,14 @@ namespace Sonia.Games.Ruleta
             _riddle = BandText(view, "Adivinanza", 72f, 232f, 44f, 28f, Color.white);
             _riddle.lineSpacing = -4f;
 
+            // Hasta que sale la pista, su hueco avisa de que llegará.
+            _hintWaiting = Band(view, "PistaEnCamino", 318f, 134f, 20f);
+            Image waitingBorder = _hud.NewImage("Borde", _hintWaiting, _hud.FrameSprite, GameUi.WithAlpha(GameColors.Yellow, 0.35f));
+            GameUi.Stretch(waitingBorder.rectTransform);
+            TextMeshProUGUI waitingText = _hud.NewText("Texto", _hintWaiting, "LA PISTA SALE EN UN RATITO", 26f, GameUi.WithAlpha(GameColors.Yellow, 0.6f), TextAlignmentOptions.Center, _hud.DisplayFont);
+            waitingText.characterSpacing = 5f;
+            GameUi.Stretch(waitingText.rectTransform);
+
             _hintBox = Band(view, "Pista", 318f, 134f, 20f);
             Image hintBorder = _hud.NewRound("Borde", _hintBox, GameUi.WithAlpha(GameColors.Yellow, 0.75f), 28f);
             GameUi.Stretch(hintBorder.rectTransform);
@@ -479,11 +488,11 @@ namespace Sonia.Games.Ruleta
             _futureHelp = BandText(view, "Ayuda", 440f, 80f, 30f, 20f, GameColors.Muted, _hud.BodyFont, 40f);
             _futureHelp.text = "Haz tu predicción y Sonnia le pone probabilidad";
 
-            _prediction = BandText(view, "Prediccion", 190f, 186f, 42f, 26f, Color.white, null, 20f);
+            _prediction = BandText(view, "Prediccion", 186f, 180f, 42f, 26f, Color.white, null, 20f);
             _prediction.fontStyle = FontStyles.Italic;
             _prediction.transform.parent.gameObject.SetActive(false);
 
-            _bar = Band(view, "Barra", 398f, 48f, 56f);
+            _bar = Band(view, "Barra", 380f, 46f, 56f);
             Image track = _hud.NewRound("Pista", _bar, GameUi.WithAlpha(Color.white, 0.14f), 24f);
             GameUi.Stretch(track.rectTransform);
             _barFill = _hud.NewRound("Relleno", _bar, GameColors.Green, 24f);
@@ -495,7 +504,7 @@ namespace Sonia.Games.Ruleta
             fillRect.sizeDelta = new Vector2(48f, 0f);
             _bar.gameObject.SetActive(false);
 
-            _percent = BandText(view, "Porcentaje", 452f, 84f, 64f, 32f, Color.white);
+            _percent = BandText(view, "Porcentaje", 432f, 78f, 60f, 32f, Color.white);
             _percent.transform.parent.gameObject.SetActive(false);
         }
 
@@ -559,6 +568,7 @@ namespace Sonia.Games.Ruleta
                     _riddle.text = prompt;
                     _riddleAnswer.Root.gameObject.SetActive(false);
                     _hintBox.gameObject.SetActive(false);
+                    _hintWaiting.gameObject.SetActive(true);
                     break;
                 case "explica":
                     _tech.text = prompt;
@@ -599,6 +609,7 @@ namespace Sonia.Games.Ruleta
                     bool hint = !string.IsNullOrEmpty(data.Hint) && string.IsNullOrEmpty(data.Outcome);
                     _hintText.text = GameUi.Plain(data.Hint);
                     _hintBox.gameObject.SetActive(hint);
+                    _hintWaiting.gameObject.SetActive(!hint && string.IsNullOrEmpty(data.Outcome));
                     PaintTries(_riddleTries, data.Tries, data.Misses);
                     break;
                 case "sonnet":
@@ -682,6 +693,7 @@ namespace Sonia.Games.Ruleta
                     break;
                 case "adivinanza":
                     _hintBox.gameObject.SetActive(false);
+                    _hintWaiting.gameObject.SetActive(false);
                     PaintTries(_riddleTries, data.Tries, data.Misses);
                     PaintAnswer(_riddleAnswer, outcome, data.Answer, null);
                     break;
@@ -741,7 +753,7 @@ namespace Sonia.Games.Ruleta
         {
             Color fill = outcome == "win" ? GameColors.RightFill : outcome == "lose" ? GameColors.WrongFill : new Color(0.16f, 0.3f, 0.62f, 1f);
             box.Fill.color = fill;
-            box.Label.text = label ?? (outcome == "win" ? "¡ACERTASTE! ERA" : "LA RESPUESTA ERA");
+            box.Label.text = label ?? (outcome == "win" ? "¡ERA ESO!" : "LA RESPUESTA ERA");
             box.Label.gameObject.SetActive(!string.IsNullOrEmpty(box.Label.text));
             RectTransform textRect = box.Text.rectTransform;
             textRect.offsetMax = new Vector2(-24f, string.IsNullOrEmpty(box.Label.text) ? -10f : -44f);

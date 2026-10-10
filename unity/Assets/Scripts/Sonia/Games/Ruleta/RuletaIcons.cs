@@ -81,12 +81,14 @@ namespace Sonia.Games.Ruleta
                 return (ball && !shine) || InPolygon(stand, x, y);
             });
 
-            // Lengüeta: círculo arriba y punta hacia abajo (hacia la ruleta).
+            // Lengüeta: triángulo con la punta hacia abajo (hacia la ruleta) y el eje
+            // redondo arriba, en (0,5; 0,82).
             Vector2[] tip =
             {
-                new Vector2(0.20f, 0.62f), new Vector2(0.80f, 0.62f), new Vector2(0.5f, 0.02f),
+                new Vector2(0.16f, 0.86f), new Vector2(0.84f, 0.86f), new Vector2(0.5f, 0.03f),
             };
-            Pointer = Paint("RuletaPointer", (x, y) => Circle(x, y, 0.5f, 0.68f, 0.31f) || InPolygon(tip, x, y));
+            Pointer = Paint("RuletaPointer", (x, y) =>
+                InPolygon(tip, x, y) || RoundBox(x, y, 0.5f, 0.86f, 0.34f, 0.1f, 0.1f));
         }
 
         public void Destroy()

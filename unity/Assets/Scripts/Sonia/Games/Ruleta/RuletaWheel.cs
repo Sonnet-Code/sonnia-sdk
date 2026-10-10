@@ -43,6 +43,9 @@ namespace Sonia.Games.Ruleta
         /// <summary>Salto de la lengüeta en cada clic (grados).</summary>
         private const float KickAngle = 22f;
 
+        /// <summary>Altura del eje de la lengüeta en su sprite (fracción, desde abajo).</summary>
+        private const float PointerPivot = 0.86f;
+
         /// <summary>Colores de las casillas, en el orden del protocolo, y de lo que va encima.</summary>
         public static readonly Color[] Fill =
         {
@@ -181,14 +184,14 @@ namespace Sonia.Games.Ruleta
                 face.localRotation = Quaternion.Euler(0f, 0f, -((Step * i) + (Step * 0.5f)));
                 _faces[i] = face;
 
-                float iconSize = diameter * 0.13f;
+                float iconSize = diameter * 0.12f;
                 Image icon = hud.NewImage("Icono", face, null, Ink[i]);
                 icon.preserveAspect = true;
                 RectTransform iconRect = icon.rectTransform;
                 iconRect.anchorMin = new Vector2(0.5f, 0.5f);
                 iconRect.anchorMax = iconRect.anchorMin;
                 iconRect.pivot = new Vector2(0.5f, 0.5f);
-                iconRect.anchoredPosition = new Vector2(0f, radius * 0.72f);
+                iconRect.anchoredPosition = new Vector2(0f, radius * 0.76f);
                 iconRect.sizeDelta = new Vector2(iconSize, iconSize);
                 _icons[i] = icon;
 
@@ -197,24 +200,26 @@ namespace Sonia.Games.Ruleta
                 glyphRect.anchorMin = new Vector2(0.5f, 0.5f);
                 glyphRect.anchorMax = glyphRect.anchorMin;
                 glyphRect.pivot = new Vector2(0.5f, 0.5f);
-                glyphRect.anchoredPosition = new Vector2(0f, radius * 0.72f);
+                glyphRect.anchoredPosition = new Vector2(0f, radius * 0.76f);
                 glyphRect.sizeDelta = new Vector2(iconSize * 1.4f, iconSize * 1.4f);
                 glyph.textWrappingMode = TextWrappingModes.NoWrap;
                 glyph.gameObject.SetActive(false);
                 _glyphs[i] = glyph;
 
-                TextMeshProUGUI label = hud.NewText("Texto", face, string.Empty, diameter * 0.05f, Ink[i], TextAlignmentOptions.Center, hud.DisplayFont);
+                // El texto, en una caja estrecha: la casilla se estrecha hacia el centro y
+                // el autoajuste lo encoge hasta que la línea de dentro cabe.
+                TextMeshProUGUI label = hud.NewText("Texto", face, string.Empty, diameter * 0.046f, Ink[i], TextAlignmentOptions.Center, hud.DisplayFont);
                 label.enableAutoSizing = true;
-                label.fontSizeMin = diameter * 0.034f;
-                label.fontSizeMax = diameter * 0.05f;
-                label.lineSpacing = -14f;
+                label.fontSizeMin = diameter * 0.03f;
+                label.fontSizeMax = diameter * 0.046f;
+                label.lineSpacing = -12f;
                 label.verticalAlignment = VerticalAlignmentOptions.Middle;
                 RectTransform labelRect = label.rectTransform;
                 labelRect.anchorMin = new Vector2(0.5f, 0.5f);
                 labelRect.anchorMax = labelRect.anchorMin;
                 labelRect.pivot = new Vector2(0.5f, 0.5f);
-                labelRect.anchoredPosition = new Vector2(0f, radius * 0.45f);
-                labelRect.sizeDelta = new Vector2(radius * 0.62f, radius * 0.3f);
+                labelRect.anchoredPosition = new Vector2(0f, radius * 0.48f);
+                labelRect.sizeDelta = new Vector2(radius * 0.5f, radius * 0.28f);
                 _labels[i] = label;
             }
 
@@ -238,14 +243,16 @@ namespace Sonia.Games.Ruleta
             _hubDot = hud.NewImage("BujePunto", _spinner, hud.StarSprite, GameColors.Yellow);
             Place(_hubDot.rectTransform, Vector2.zero, diameter * 0.11f);
 
-            // Lengüeta (quieta, arriba, con el eje en su círculo).
+            // Lengüeta (quieta, arriba, con el eje arriba): la punta toca el borde de las
+            // casillas.
             _pointer = hud.NewRect("Lengueta", _root);
             _pointer.anchorMin = new Vector2(0.5f, 0.5f);
             _pointer.anchorMax = _pointer.anchorMin;
-            _pointer.pivot = new Vector2(0.5f, 0.68f);
-            float pointerSize = diameter * 0.17f;
+            _pointer.pivot = new Vector2(0.5f, PointerPivot);
+            float pointerSize = diameter * 0.15f;
             _pointer.sizeDelta = new Vector2(pointerSize, pointerSize);
-            _pointer.anchoredPosition = new Vector2(0f, radius + (pointerSize * 0.1f));
+            float tip = (wedgeDiameter * 0.5f) - 2f;
+            _pointer.anchoredPosition = new Vector2(0f, tip + (pointerSize * (PointerPivot - 0.03f)));
             Image pointerShadow = hud.NewImage("Sombra", _pointer, icons.Pointer, new Color(0f, 0f, 0f, 0.45f));
             GameUi.Stretch(pointerShadow.rectTransform);
             pointerShadow.rectTransform.anchoredPosition = new Vector2(0f, -6f);
@@ -253,15 +260,15 @@ namespace Sonia.Games.Ruleta
             GameUi.Stretch(pointerBody.rectTransform);
             Image pointerInner = hud.NewImage("Punta", _pointer, icons.Pointer, GameColors.Red);
             GameUi.Stretch(pointerInner.rectTransform);
-            pointerInner.rectTransform.offsetMin = new Vector2(pointerSize * 0.16f, pointerSize * 0.2f);
-            pointerInner.rectTransform.offsetMax = new Vector2(-pointerSize * 0.16f, -pointerSize * 0.08f);
+            pointerInner.rectTransform.offsetMin = new Vector2(pointerSize * 0.2f, pointerSize * 0.22f);
+            pointerInner.rectTransform.offsetMax = new Vector2(-pointerSize * 0.2f, -pointerSize * 0.06f);
             Image pointerPin = hud.NewImage("Eje", _pointer, icons.Disc, Color.white);
             RectTransform pin = pointerPin.rectTransform;
-            pin.anchorMin = new Vector2(0.5f, 0.68f);
+            pin.anchorMin = new Vector2(0.5f, PointerPivot);
             pin.anchorMax = pin.anchorMin;
             pin.pivot = new Vector2(0.5f, 0.5f);
             pin.anchoredPosition = Vector2.zero;
-            pin.sizeDelta = new Vector2(pointerSize * 0.2f, pointerSize * 0.2f);
+            pin.sizeDelta = new Vector2(pointerSize * 0.16f, pointerSize * 0.16f);
         }
 
         /// <summary>Pone las casillas que mandó el orquestador (las que falten, por defecto).</summary>
@@ -484,7 +491,7 @@ namespace Sonia.Games.Ruleta
                 if (_landed == i && _landedAt >= 0f)
                 {
                     float s = _clock - _landedAt;
-                    glow = 0.12f + (0.2f * (0.5f + (0.5f * Mathf.Sin(s * 7f)))) * Mathf.Clamp01(1.6f - (s * 0.15f));
+                    glow = (0.06f + (0.14f * (0.5f + (0.5f * Mathf.Sin(s * 7f))))) * Mathf.Clamp01(1.6f - (s * 0.15f));
                     float pop = s < 0.45f ? 1f + (0.08f * Mathf.Sin(s / 0.45f * Mathf.PI)) : 1f;
                     _faces[i].localScale = new Vector3(pop, pop, 1f);
                 }
@@ -512,7 +519,7 @@ namespace Sonia.Games.Ruleta
             for (int i = 0; i < Count; i++)
             {
                 bool dim = _off[i] || (_landed >= 0 && _landed != i);
-                float alpha = _off[i] ? 0.35f : dim ? 0.55f : 1f;
+                float alpha = _off[i] ? 0.4f : dim ? 0.72f : 1f;
                 Color fill = Fill[i];
                 _wedges[i].color = new Color(fill.r * alpha, fill.g * alpha, fill.b * alpha, 1f);
                 Color ink = Ink[i];

@@ -29,7 +29,7 @@ namespace Sonia.Games.Ruleta
         [Header("Ruleta")]
         [SerializeField]
         [Tooltip("Diámetro de la ruleta en la tarjeta (px de la referencia 1080x1920).")]
-        private float wheelDiameter = 500f;
+        private float wheelDiameter = 480f;
 
         [SerializeField]
         [Range(0f, 3f)]
@@ -214,7 +214,7 @@ namespace Sonia.Games.Ruleta
 
             _icons.Build();
             _wheelGroup = Hud.NewGroup("VistaRuleta", content);
-            _wheel.Build(Hud, _icons, (RectTransform)_wheelGroup.transform, new Vector2(0f, -((wheelDiameter * 0.5f) + 22f)), wheelDiameter);
+            _wheel.Build(Hud, _icons, (RectTransform)_wheelGroup.transform, new Vector2(0f, -((wheelDiameter * 0.5f) + 36f)), wheelDiameter);
             _wheel.Stopped += OnWheelStopped;
             _card.Build(Hud, _icons, content);
 
@@ -452,8 +452,9 @@ namespace Sonia.Games.Ruleta
 
             if (data.TimeUp && !_timeUp)
             {
+                // El contador, a cero (en rojo y con su latido), aunque fuera algo por detrás.
                 _timeUp = true;
-                Hud.StopCountdown(false);
+                Hud.StartCountdown(0.1f);
                 Hud.ShowBanner("¡Tiempo!", GameColors.Red);
                 _bannerUntil = -1f;
                 ShowEmotion(FacialExpressionController.Emotion.Surprise, 1.6f);
@@ -526,7 +527,7 @@ namespace Sonia.Games.Ruleta
                     // Adivinanza y reto de Sonnet Code.
                     if (outcome == "win")
                     {
-                        Win(data.Kind == "sonnet" && data.Task ? "¡Reto cumplido!" : "¡Acertaste!", _card.AnswerRect);
+                        Win(data.Kind == "sonnet" && data.Task ? "¡Genial!" : "¡Acertaste!", _card.AnswerRect);
                     }
                     else if (outcome == "lose")
                     {
