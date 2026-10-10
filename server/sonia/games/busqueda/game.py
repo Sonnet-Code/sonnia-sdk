@@ -257,6 +257,7 @@ class BusquedaGame(Game):
             "object": entry.name if entry is not None else "",
             "objects": [e.name for e in self._objects],
             "found": self._found,
+            "results": list(self._results),
             "seconds_left": round(left, 1),
             "checks": self._checks,
             "photos": self._photos,
