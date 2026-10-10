@@ -353,7 +353,7 @@ namespace Sonia.Games.Akinator
             SetPonder(true);
             ShowAsking();
             FillDots(before, _asked, false);
-            string missed = Shorten(GameUi.Plain(LastOf(state.Missed)), 24);
+            string missed = Shorten(GameUi.Plain(LastOf(state.Missed)), 15);
             Hud.ShowBanner(string.IsNullOrEmpty(missed) ? "¡No era!" : "¡No era " + missed + "!", GameColors.Red);
             _bannerUntil = _clock + missBannerSeconds;
             _hint.alpha = 0f;
