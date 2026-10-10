@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from sonia.actions.builtin import screen_busy
 from sonia.clock import spoken_now
 from sonia.types import ActionContext, ActionResult, ActionSpec
 
@@ -73,6 +74,9 @@ async def show_talk(ctx: ActionContext, arguments: dict[str, Any]) -> ActionResu
         return ActionResult(text=NO_AGENDA)
     if ctx.avatar is None:
         return ActionResult(text="El avatar no está conectado.")
+    busy = screen_busy(ctx, "la tarjeta de la charla")
+    if busy:
+        return ActionResult(text=busy)
     query = " ".join(str(arguments.get("charla") or "").split())
     talk = find_talk(book.schedule, query, now=book.now())
     if talk is None:

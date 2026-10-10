@@ -382,6 +382,48 @@ async def test_show_image_nunca_ensena_la_camara(gallery_dir: Path) -> None:
     assert avatar.shown == []
 
 
+async def test_show_image_con_un_juego_o_la_trivia_en_pantalla_no_ensena_nada(
+    gallery_dir: Path,
+) -> None:
+    """La franja alta es del juego: la imagen no se vería y Sonnia señalaría hacia nada
+    (pasó con GPT-Live real en un Wordle). Se contesta que lo cuente con palabras."""
+    from types import SimpleNamespace
+
+    registry = build_default_registry()
+    avatar = FakeAvatar()
+    playing = SimpleNamespace(active=True, current=SimpleNamespace(spoken="la ruleta de Sonia"))
+    ctx = ActionContext(
+        camera=None,
+        avatar=avatar,
+        gallery_dir=str(gallery_dir),
+        extra={"games": playing, "trivia": SimpleNamespace(active=False)},
+    )
+    result = await registry.execute("show_image", {"image_id": "diagrama"}, ctx)
+    assert avatar.shown == []
+    assert "la ruleta de Sonia" in result.text and "con palabras" in result.text
+    # Con la trivia, igual.
+    ctx = ActionContext(
+        camera=None,
+        avatar=avatar,
+        gallery_dir=str(gallery_dir),
+        extra={
+            "games": SimpleNamespace(active=False, current=None),
+            "trivia": SimpleNamespace(active=True),
+        },
+    )
+    result = await registry.execute("show_image", {"image_id": "diagrama"}, ctx)
+    assert avatar.shown == [] and "trivia" in result.text
+    # Sin nada en la pantalla, se enseña.
+    ctx = ActionContext(
+        camera=None,
+        avatar=avatar,
+        gallery_dir=str(gallery_dir),
+        extra={"games": SimpleNamespace(active=False, current=None), "trivia": None},
+    )
+    result = await registry.execute("show_image", {"image_id": "diagrama"}, ctx)
+    assert len(avatar.shown) == 1 and result.text == "Mostrando la imagen 'diagrama'."
+
+
 async def test_show_image_sin_image_id_es_error() -> None:
     ctx = make_ctx(avatar=FakeAvatar())
     result = await build_default_registry().execute("show_image", {}, ctx)

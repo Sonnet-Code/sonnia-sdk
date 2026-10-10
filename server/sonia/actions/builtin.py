@@ -115,6 +115,36 @@ SHOW_IMAGE_SPEC_PARAMETERS: dict[str, Any] = {
 }
 
 
+#: Con un juego o la trivia en pantalla, la franja alta es suya: la imagen no se vería y
+#: Sonia señalaría hacia nada (pasó con GPT-Live real: contestó una pregunta del pasillo con
+#: ``show_talk`` en pleno Wordle). Lo leen GPT-Live: sin marcas y con «Sonia».
+SCREEN_BUSY_GAME = (
+    "Ahora hay un juego en tu pantalla ({spoken}): no se puede enseñar {what} hasta que "
+    "termine. Cuéntalo con palabras."
+)
+SCREEN_BUSY_TRIVIA = (
+    "Ahora hay una trivia en tu pantalla: no se puede enseñar {what} hasta que termine. "
+    "Cuéntalo con palabras."
+)
+
+
+def screen_busy(ctx: ActionContext, what: str = "la imagen") -> str | None:
+    """Por qué no se puede enseñar ``what`` ahora (un juego o la trivia en pantalla), o ``None``.
+
+    Mira ``ctx.extra["games"]`` (el ``GameManager``: ``active`` y ``current``) y
+    ``ctx.extra["trivia"]`` (la ``TriviaGame``: ``active``), por sus atributos.
+    """
+    games = ctx.extra.get("games")
+    if games is not None and getattr(games, "active", False):
+        current = getattr(games, "current", None)
+        spoken = str(getattr(current, "spoken", "") or "").strip() or "un juego"
+        return SCREEN_BUSY_GAME.format(spoken=spoken, what=what)
+    trivia = ctx.extra.get("trivia")
+    if trivia is not None and getattr(trivia, "active", False):
+        return SCREEN_BUSY_TRIVIA.format(what=what)
+    return None
+
+
 async def show_image(ctx: ActionContext, arguments: dict[str, Any]) -> ActionResult:
     """Muestra una imagen en el panel de la escena de Unity."""
     image_id: str = arguments["image_id"]
@@ -122,6 +152,9 @@ async def show_image(ctx: ActionContext, arguments: dict[str, Any]) -> ActionRes
 
     if ctx.avatar is None:
         return ActionResult(text=NO_AVATAR)
+    busy = screen_busy(ctx, "la imagen")
+    if busy:
+        return ActionResult(text=busy)
 
     gallery = Gallery(ctx.gallery_dir)
     loaded = gallery.load(image_id)
