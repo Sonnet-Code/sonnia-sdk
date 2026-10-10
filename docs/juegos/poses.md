@@ -122,6 +122,8 @@ Los tiempos internos (colocación, espera a que calle, demostración, reintentos
   SONIA_UNITY_LOCKS=$SP/unity-locks scripts/juegos_capturas.sh --juego poses --puerto 8793 --salida <scratchpad>/capturas
   ```
 
+  Pasada del 10 de octubre de 2026: las 17 capturas revisadas, sin ningún aviso de que lo de arriba tape la cabeza de Sonnia. Las seis demostraciones se validaron además por fotogramas (entrada, sostenida y salida, con primeros planos de las manos y el cuerpo) con una secuencia propia en el scratchpad.
+
 ## Pendiente
 
 - Probarlo con la API real (gasta: lo decide Jean): que delegue `start_game` a la primera, que reaccione en una frase a cada resultado sin inventar números y que no diga las órdenes ella.
