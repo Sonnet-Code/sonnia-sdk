@@ -115,7 +115,7 @@ def test_el_banco_de_la_app_esta_bien_formado_y_es_un_borrador() -> None:
     assert parsed.warnings == []
     assert len(parsed.entries) >= 6
     for theme in parsed.entries:
-        assert len(theme.name) <= 30, "el nombre sale en la pantalla vertical"
+        assert len(theme.name) <= 30, "nombres cortos: Sonia los dice en voz alta"
         assert len(theme.examples) >= 3
         assert len(set(theme.examples)) == len(theme.examples)
     names = [t.name for t in parsed.entries]
