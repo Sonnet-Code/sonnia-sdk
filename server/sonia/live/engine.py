@@ -45,6 +45,7 @@ from sonia.actions.gallery import Gallery
 from sonia.actions.moves import MoveCatalog
 from sonia.actions.registry import ActionRegistry
 from sonia.agenda import AgendaBook, Schedule
+from sonia.busy import TEXT_SEARCH, TEXT_THINK, BusyBoard, BusyKind
 from sonia.clock import Clock, clock_for, place_of, resolve_timezone, spoken_now, spoken_time
 from sonia.config import Settings
 from sonia.faces import FaceWatcher, Sighting
@@ -108,6 +109,10 @@ DELEGATION_TIMEOUT_S = 90.0
 #: con menos, el gesto saldría en casi todas (enseñar una imagen, la agenda) y
 #: no solo en las que tardan de verdad.
 SLOW_TASK_S = 5.0
+
+#: Prefijo de las claves del aviso de espera (``sonia.busy``) que pone el motor: una por
+#: tarea delegada (``think``) y otra mientras esa tarea busca en internet (``search``).
+BUSY_PREFIX = "live:"
 
 #: Ventana en la que la próxima voz de Sonia se considera el número del stand pedido.
 AMBIENT_WAIT_S = 8.0
@@ -444,6 +449,10 @@ class LiveEngine:
         #: Momentos del stand pedidos: de qué tira el siguiente va por turnos.
         self._moment_turn = 0
 
+        #: Aviso de espera en pantalla (``sonia.busy``): uno por motor, para las tareas
+        #: delegadas y para los juegos (el ``GameManager`` pone las suyas).
+        self._busy_board = BusyBoard(hub.broadcast_json)
+
         # Modo trivia (``sonia.trivia``): GPT-Live la conduce; aquí van la clave y la pantalla.
         self._trivia: TriviaGame | None = (
             TriviaGame(
@@ -485,6 +494,7 @@ class LiveEngine:
         if gestures is not None:
             hub.on(p.MSG_GESTURE_CATALOG, gestures.on_catalog)
 
+        hub.on(p.MSG_CLIENT_HELLO, self._on_client_hello)
         hub.on(p.MSG_INTERRUPT, lambda msg: self._spawn(self._on_interrupt(), "interrupt"))
         hub.on(p.MSG_PLAYBACK_DONE, self._on_ws_playback_done)
         hub.on(p.MSG_TEXT_INPUT, self._on_ws_text_input)
@@ -523,6 +533,11 @@ class LiveEngine:
         return self._trivia
 
     @property
+    def busy_board(self) -> BusyBoard:
+        """El aviso de espera en pantalla (``sonia.busy``)."""
+        return self._busy_board
+
+    @property
     def games(self) -> GameManager | None:
         """Los juegos del stand, o ``None`` si esta Sonnia no tiene ninguno encendido."""
         return self._games
@@ -553,6 +568,7 @@ class LiveEngine:
             camera_ready=lambda: usb_camera,
             meeting=self._meeting,
             busy=self._games_busy,
+            busy_board=self._busy_board,
             trivia_draw=self._trivia.draw_one if self._trivia is not None else None,
         )
         try:
@@ -843,6 +859,10 @@ class LiveEngine:
         if self._games is not None:
             with contextlib.suppress(Exception):
                 await self._games.on_session_lost()
+        # Sin sesión no se espera nada: ni tareas delegadas ni juegos (que ya apagaron
+        # las suyas al terminar la partida). Todas fuera, por si alguna quedó suelta.
+        with contextlib.suppress(Exception):
+            await self._busy_board.clear_prefix("")
 
     async def _shutdown(self) -> None:
         if self._gestures is not None:
@@ -1078,6 +1098,7 @@ class LiveEngine:
             self._trivia.on_delegation(now)
         if self._games is not None:
             self._games.on_delegation(now)
+        await self._update_busy()
         if not self._audible:
             await self._set_state(AssistantState.THINKING)
 
@@ -1096,6 +1117,7 @@ class LiveEngine:
         delegation = (
             self._delegations.get(delegation_id) if isinstance(delegation_id, str) else None
         )
+        created = False
         if delegation is None and (kind == "response.created" or is_call):
             # Trabajo nuevo sin ``session.delegation.created`` (perdido o sin id
             # correlacionable): se le da una delegación para poder continuarlo.
@@ -1104,9 +1126,14 @@ class LiveEngine:
             delegation = _Delegation(new_id, time.monotonic())
             self._delegations[new_id] = delegation
             self._last_delegation_id = new_id
+            created = True
 
+        searching = False
         if delegation is not None and _is_web_search_event(kind, item):
             self._track_search(delegation, kind, nested)
+            searching = True
+        if created or searching:
+            await self._update_busy()
         if kind == "response.created" and delegation is not None:
             delegation.response_done = False
             delegation.calls_in_response = 0
@@ -1416,6 +1443,7 @@ class LiveEngine:
                 self._delegations.pop(delegation.id, None)
 
         await self._update_activity(now)
+        await self._update_busy()
 
         if not audible and now >= self._settle_after:
             await self._set_state(self._rest_state(now))
@@ -1447,6 +1475,38 @@ class LiveEngine:
         self._activity = activity
         logger.debug("Actividad para Unity: %s", activity)
         await self._hub.broadcast_json(p.msg_activity(activity))
+
+    async def _update_busy(self) -> None:
+        """El aviso de espera de las tareas delegadas (``sonia.busy``): una clave por tarea.
+
+        «Pensando…» desde que GPT-Live delega (no solo pasado ``SLOW_TASK_S``, como
+        ``activity``) hasta que la tarea termina, falla, se cancela o se olvida
+        (``DELEGATION_TIMEOUT_S``), y «Buscando en internet…» mientras busca. Lo llama el
+        tick (cada 50 ms) y, para que salga al momento, el sitio donde nace la tarea.
+
+        El estado ``thinking`` (GPT-Live preparando su respuesta) no lo enciende, a
+        propósito: se deduce de la transcripción y también salta con voces del pasillo
+        que GPT-Live decide no contestar, así que el aviso saldría sin que nadie espere
+        nada (se dejó fuera el 10 de octubre de 2026).
+        """
+        wanted: dict[str, tuple[BusyKind, str]] = {}
+        for delegation in self._delegations.values():
+            wanted[f"{BUSY_PREFIX}think:{delegation.id}"] = ("think", TEXT_THINK)
+            if delegation.searches:
+                wanted[f"{BUSY_PREFIX}search:{delegation.id}"] = ("search", TEXT_SEARCH)
+        board = self._busy_board
+        shown = board.keys
+        for key in shown:
+            if key.startswith(BUSY_PREFIX) and key not in wanted:
+                await board.clear(key)
+        for key, (kind, text) in wanted.items():
+            if key not in shown:
+                await board.set(key, kind, text)
+
+    async def _on_client_hello(self, msg: dict[str, Any]) -> None:
+        """Una Unity que se conecta (o se reconecta) ve la espera que haya en marcha."""
+        if self._busy_board.current() is not None:
+            await self._hub.broadcast_json(self._busy_board.message())
 
     def _session_open(self) -> bool:
         """¿Hay una sesión de GPT-Live oyendo el micro?"""
