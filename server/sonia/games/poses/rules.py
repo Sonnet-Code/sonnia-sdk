@@ -79,10 +79,12 @@ MIN_SCALE_PX = 6.0
 
 # -- escala y cabeza --------------------------------------------------------------
 
-#: Del centro de los hombros al de las caderas hay unos 1,3 S: con los hombros de perfil
-#: (encogidos en la imagen), el torso da una escala más fiel. Se divide de más a propósito
-#: para que solo mande cuando los hombros salen muy encogidos.
-TORSO_PER_SHOULDER = 1.6
+#: Del centro de los hombros al de las caderas hay entre 1,5 y 1,8 S (con los hombros del
+#: detector, algo por dentro de los de verdad): con los hombros de perfil (encogidos en la
+#: imagen), el torso da una escala más fiel. Se divide de más a propósito para que solo mande
+#: cuando los hombros salen muy encogidos: con 1,6, en una foto pública de frente con el
+#: torso largo los brazos arriba no llegaban.
+TORSO_PER_SHOULDER = 2.0
 #: Entre orejas hay unos 0,45 S (mismo uso que el torso: se divide de más). Con 0,5, en
 #: los primeros planos la escala salía inflada (foto pública de un doble bíceps).
 EARS_PER_SHOULDER = 0.6
