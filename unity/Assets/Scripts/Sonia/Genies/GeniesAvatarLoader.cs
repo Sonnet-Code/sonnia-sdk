@@ -522,10 +522,11 @@ namespace Sonia
                     TargetLods = new[] { quality },
                     OnLoadingComplete = _ => complete.TrySetResult(true)
                 }).Preserve();
+                UniTask<ManagedAvatar> watched = Watch(load);
                 try
                 {
                     stepLimit = patient;
-                    pending = await AwaitLoad(load, limit, patient);
+                    pending = await AwaitLoad(watched, limit, patient);
                 }
                 catch (TimeoutException)
                 {
@@ -537,7 +538,7 @@ namespace Sonia
                     }
 
                     // El SDK sigue montándolo: el avatar que entregue tarde se suelta.
-                    DiscardWhenLoaded(load).Forget();
+                    DiscardWhenLoaded(watched).Forget();
                     throw;
                 }
 
@@ -623,9 +624,41 @@ namespace Sonia
         }
 
         /// <summary>
+        /// La carga del SDK, para esperarla varias veces mientras sigue en marcha. Un UniTask,
+        /// también con Preserve, solo admite una espera registrada hasta que termina: al
+        /// esperarlo por tramos (AwaitLoad) o otra vez para soltarlo (DiscardWhenLoaded) daba
+        /// «Already continuation registered». La primera carga se tiraba a los 90 s y se
+        /// pedía otra en lugar de esperar hasta FirstLoadMinutes (stand, 10 de octubre de
+        /// 2026). Un UniTaskCompletionSource sí admite varias esperas a la vez.
+        /// </summary>
+        internal static UniTask<ManagedAvatar> Watch(UniTask<ManagedAvatar> load)
+        {
+            UniTaskCompletionSource<ManagedAvatar> source = new UniTaskCompletionSource<ManagedAvatar>();
+            Forward(load, source).Forget();
+            return source.Task;
+        }
+
+        private static async UniTaskVoid Forward(UniTask<ManagedAvatar> load, UniTaskCompletionSource<ManagedAvatar> source)
+        {
+            try
+            {
+                source.TrySetResult(await load);
+            }
+            catch (OperationCanceledException)
+            {
+                source.TrySetCanceled();
+            }
+            catch (Exception exception)
+            {
+                source.TrySetException(exception);
+            }
+        }
+
+        /// <summary>
         /// Espera a que el SDK entregue el avatar hasta <paramref name="total"/>, sin abandonar
         /// la carga ni pedir otra; cada <paramref name="step"/> deja en el registro cómo va.
-        /// Lanza TimeoutException al agotar <paramref name="total"/>.
+        /// Lanza TimeoutException al agotar <paramref name="total"/>. La carga tiene que admitir
+        /// varias esperas (Watch).
         /// </summary>
         private async UniTask<ManagedAvatar> AwaitLoad(UniTask<ManagedAvatar> load, TimeSpan step, TimeSpan total)
         {
@@ -734,7 +767,10 @@ namespace Sonia
             return sb.ToString();
         }
 
-        /// <summary>Suelta el avatar de una carga abandonada por tiempo cuando el SDK lo entregue.</summary>
+        /// <summary>
+        /// Suelta el avatar de una carga abandonada por tiempo cuando el SDK lo entregue. La
+        /// carga tiene que admitir otra espera (Watch).
+        /// </summary>
         private static async UniTaskVoid DiscardWhenLoaded(UniTask<ManagedAvatar> load)
         {
             try

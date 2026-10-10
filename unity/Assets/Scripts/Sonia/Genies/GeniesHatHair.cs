@@ -171,14 +171,15 @@ namespace Sonia
                 step = "montar la gemela";
                 spot = new GameObject("Genies (pelo bajo gorra)");
                 spot.transform.position = TwinPosition;
-                UniTask<ManagedAvatar> load = AvatarSdk.LoadAvatarAsync(new LoadAvatarOptions.ByDefinition
+                // Watch: se espera dos veces (con tope y, si no llega, para soltarla).
+                UniTask<ManagedAvatar> load = GeniesAvatarLoader.Watch(AvatarSdk.LoadAvatarAsync(new LoadAvatarOptions.ByDefinition
                 {
                     DefinitionToLoad = definition,
                     AvatarName = "Gemela con gorra",
                     Parent = spot.transform,
                     ShowLoadingSilhouette = false,
                     TargetLods = new[] { loader != null ? loader.Quality : AvatarLods.High }
-                }).Preserve();
+                }).Preserve());
                 try
                 {
                     twin = await load.Timeout(limit);
