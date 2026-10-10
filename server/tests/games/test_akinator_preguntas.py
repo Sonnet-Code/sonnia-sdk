@@ -232,3 +232,41 @@ def test_una_pregunta_que_se_repite_despues_de_otra_no_vuelve_a_contar() -> None
     run(counter, FIRST, SECOND)
     run(counter, sentence("¿", "Es", " un", " lenguaje", "?"))
     assert counter.count == 2
+
+
+def test_el_signo_que_llega_en_la_frase_siguiente_cierra_la_pregunta() -> None:
+    # El motor corta las frases por el silencio del audio, y el texto no va pegado a él: la
+    # pregunta puede quedar abierta al final de una frase y su «?» abrir la siguiente.
+    counter = QuestionCounter()
+    first = sentence("¡Ajá", "! ", "¿", "Es", " un", " lenguaje", " de", " programación")
+    second = sentence("?", " Vale", ".", " Mmm", "...")
+    changes = run(counter, first, second)
+    assert [c.count for c in changes] == [1]
+    assert counter.text == "¿Es un lenguaje de programación?"
+    # La que viene después sigue contando con normalidad.
+    run(counter, sentence("¿", "Lo", " creó", " Google", "?"))
+    assert counter.count == 2
+
+
+def test_el_signo_tardio_solo_cierra_la_pregunta_de_la_frase_anterior() -> None:
+    counter = QuestionCounter()
+    run(counter, sentence("¿", "Es", " de", " Google", "?"))
+    assert counter.count == 1
+    # Una frase que empieza por «?» sin pregunta abierta antes no cuenta nada.
+    run(counter, sentence("?", " Eso", " era", " todo", "."))
+    assert counter.count == 1
+    # Y una frase normal en medio olvida la pregunta abierta de antes.
+    counter = QuestionCounter()
+    run(counter, sentence("¿", "Es", " de", " Google"))
+    run(counter, sentence("Vale", ", ", "sigamos", "."))
+    run(counter, sentence("?", " Eso", " era", "."))
+    assert counter.count == 0
+
+
+def test_la_pregunta_abierta_se_reconoce() -> None:
+    from sonia.games.akinator.questions import open_question
+
+    assert open_question("Vale. ¿Es un lenguaje") == "¿Es un lenguaje"
+    assert open_question("Vale. ¿Es un lenguaje? Sí") == ""
+    assert open_question("Vale, sigamos") == ""
+    assert open_question("¿Una? ¿Otra") == "¿Otra"

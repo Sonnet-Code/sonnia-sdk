@@ -6,6 +6,8 @@ parciales y finales está en ``test_akinator_preguntas.py``.
 
 from __future__ import annotations
 
+import asyncio
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +38,8 @@ from tests.games.fakes import (
     make_manager,
     settle,
 )
+from tests.games.test_motor import games_rig
+from tests.test_live import _backend_call, pcm, wait_until
 
 BANK_FILE = Path(__file__).resolve().parents[3] / "assets" / "games" / "akinator" / "temas.md"
 
@@ -1023,3 +1027,98 @@ def test_la_pantalla_dice_sonnia_y_lo_hablado_sonia() -> None:
 def test_los_eventos_tienen_nombres_validos() -> None:
     for event in ("start", "waiting", "question", "guess", "miss", "giveup", "reveal"):
         assert p.is_game_name(event)
+
+
+# ---------------------------------------------------------------------------
+# Dentro del motor de verdad (LiveEngine, Hub y un GPT-Live falso por WebSocket)
+# ---------------------------------------------------------------------------
+
+
+async def sonia_says(conn: Any, *chunks: str, pause: float = 0.45) -> None:
+    """Sonia habla: llega su voz con su texto, en trozos, y luego calla (se cierra la frase)."""
+    for chunk in chunks:
+        await conn.audio(pcm(480))
+        await conn.say(chunk)
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(pause)
+
+
+def question_events(rig: Any) -> list[dict[str, Any]]:
+    return [m for m in rig.rec.of_type("game") if m["event"] == "question"]
+
+
+async def test_en_el_motor_cuenta_las_preguntas_de_sonia_con_parciales_y_finales(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "games" / "akinator").mkdir(parents=True)
+    shutil.copy(BANK_FILE, tmp_path / "games" / "akinator" / "temas.md")
+    monkeypatch.setattr("sonia.games.akinator.game.READY_GRACE_S", 0.0)
+    async with games_rig(tmp_path, games=[AkinatorGame]) as rig:
+        conn = await rig.conn()
+        instructions = conn.start["session"]["instructions"]
+        assert "el Akinator dev" in instructions and "AKINATOR EN MARCHA" not in instructions
+        tools = [t.get("name") for t in conn.start["session"]["delegation"]["responses"]["tools"]]
+        assert {"start_game", "akinator_guess", "akinator_result"} <= set(tools)
+
+        script = await _backend_call(conn, "g1", "start_game", {"juego": "akinator"})
+        assert script.startswith(SCRIPT_PREFIX) and "todavía no hagas ninguna pregunta" in script
+        await rig.rec.wait_type("game", 2)
+        assert [m["event"] for m in rig.rec.of_type("game")] == ["start", "waiting"]
+        await conn.wait_for(
+            lambda msgs: any(
+                m["type"] == "session.instructions.append" and "AKINATOR EN MARCHA" in m["content"]
+                for m in msgs
+            )
+        )
+
+        # La apertura de Sonia no lleva preguntas contadas ni aunque pregunte «¿listo?».
+        await sonia_says(conn, "¡Va", "mos! ", "Piensa", " en", " algo", ".", " ¿", "Listo", "?")
+        assert question_events(rig) == []
+
+        # El visitante avisa y Sonia hace la primera pregunta, en trozos, y calla.
+        await conn.hear("ya, listo")
+        game = rig.engine.games.game("akinator")  # type: ignore[union-attr]
+        assert isinstance(game, AkinatorGame)
+        await wait_until(lambda: game.snapshot()["ready"])
+        await sonia_says(
+            conn, "¡Ajá", "! ", "¿", "Es", " un", " lenguaje", " de", " programación", "?"
+        )
+        await wait_until(lambda: len(question_events(rig)) >= 1)
+        # El cierre de la frase la repite entera y no sube la cuenta.
+        await asyncio.sleep(0.3)
+        asked = [m["data"]["asked"] for m in question_events(rig)]
+        assert asked == [1], asked
+        assert question_events(rig)[0]["data"]["question"] == "¿Es un lenguaje de programación?"
+
+        # Otra pregunta distinta, y la repetición de la primera.
+        await sonia_says(conn, "Mmm", ". ", "¿", "Lo", " creó", " Google", "?")
+        await wait_until(lambda: len(question_events(rig)) >= 2)
+        await sonia_says(
+            conn, "Perdona", ", ", "¿", "Es", " un", " lenguaje", " de", " programación", "?"
+        )
+        await sonia_says(conn, "Y", " dime", ", ", "¿", "Se", " usa", " en", " móviles", "?")
+        await wait_until(lambda: len(question_events(rig)) >= 3)
+        await asyncio.sleep(0.3)
+        assert [m["data"]["asked"] for m in question_events(rig)] == [1, 2, 3]
+
+        # Arriesga (con 3 preguntas la rechaza una vez) y el veredicto cierra la partida.
+        result = await _backend_call(conn, "g2", "akinator_guess", {"respuesta": "Kotlin"})
+        assert "pronto" in result and not result.startswith(SCRIPT_PREFIX)
+        result = await _backend_call(conn, "g3", "akinator_guess", {"respuesta": "Kotlin"})
+        assert result.startswith(SCRIPT_PREFIX) and "«Kotlin»" in result
+        result = await _backend_call(
+            conn, "g4", "akinator_result", {"acierto": "si", "respuesta_real": "Kotlin"}
+        )
+        assert (
+            result.startswith(SCRIPT_PREFIX) and "Acertaste" in result and "3 preguntas" in result
+        )
+        await rig.rec.wait_for(
+            lambda msgs: any(m.get("event") == "end" for m in rig.rec.of_type("game", msgs)),
+            limit=10.0,
+        )
+        events = [m["event"] for m in rig.rec.of_type("game")]
+        assert events[-3:] == ["guess", "reveal", "end"], events
+        assert rig.rec.of_type("game")[-1]["data"]["result"] == "win"
+        assert rig.rec.of_type("game")[-2]["data"]["outcome"] == "sonnia"
+        seqs = [m["seq"] for m in rig.rec.of_type("game")]
+        assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)

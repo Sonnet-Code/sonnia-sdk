@@ -347,8 +347,23 @@ Cada agente apunta los de su juego en su tabla (además de `start` y `end`). En 
 
 ##### `akinator` (Akinator dev, `docs/juegos/akinator.md`)
 
+El orquestador manda el **estado entero** en cada evento (menos `start` y `end`), así que el último fijo repinta la pantalla si Unity se reconecta; el nombre del evento solo dice qué acaba de pasar, para animarlo.
+
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `start` | orquestador → Unity | `title`, `max` (preguntas de sí o no como mucho), `themes` (nombres de los temas del banco) | sí | Monta la tarjeta: la bola de cristal, la pregunta, un punto por pregunta y la línea de ayuda. |
+| `waiting` | orquestador → Unity | el estado (abajo) | sí | «Piensa en algo… y no lo digas», con los temas y los puntos vacíos, hasta que el visitante avisa. |
+| `question` | orquestador → Unity | el estado | sí | Subió el contador o cambió la pregunta en curso: «PREGUNTA 7 DE 20», los puntos y la pregunta. |
+| `guess` | orquestador → Unity | el estado, con `guess` | sí | Sonnia arriesga una respuesta: la tarjeta grande «¿Es… Kotlin?» con destellos. |
+| `miss` | orquestador → Unity | el estado, con `missed` (el último es el que acaba de fallar) | sí | Falló y sigue preguntando: rótulo «¡No era Kotlin!» y vuelve a la pregunta. |
+| `giveup` | orquestador → Unity | el estado | sí | Se rinde (sin preguntas o sin intentos, o dice «¿qué era?»): «Me rindo… ¿Qué era?». |
+| `reveal` | orquestador → Unity | el estado, con `outcome` y `answer` | sí | El resultado en pantalla ya: `outcome` `sonnia` (la adivinó: confeti, «¡Lo sabía!») o `visitor` («¡Me ganaste!», `answer` es lo que era). |
+| `end` | orquestador → Unity | `result` (`win` si la adivinó, `lose` si no, `cancel`), `outcome`, `answer`, `asked`, `tries` | no | Retira la pantalla (tras el resultado, lo retira con un fundido). |
+
+El estado (`data` de todos los eventos menos `start` y `end`): `phase` (`waiting`, `asking`, `guessing`, `giving_up` o `revealed`), `asked` (preguntas hechas, sin pasar de `max`), `max`, `question` (la pregunta en curso, con «Sonnia»), `guess` (la respuesta que arriesga, vacía si no hay), `missed` (las respuestas que ya fallaron), `outcome` (`sonnia` o `visitor`, solo en `revealed`) y `answer` (lo que era, solo en `revealed`).
+
+De Unity al orquestador, el Akinator no manda ningún `game_event`.
+
 
 ##### `piedra_papel_tijera` (Piedra, papel o tijera, `docs/juegos/piedra_papel_tijera.md`)
 

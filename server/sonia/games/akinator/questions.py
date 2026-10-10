@@ -21,6 +21,9 @@ curso (cada trozo que llega) y, al cerrarse la frase, una vez más con la frase 
   «¿cómo dices?» (una sola palabra, o frases hechas).
 - **No depende de que llegue el cierre de la frase.** Si no llega, la frase siguiente se
   reconoce porque su texto no continúa el anterior.
+- **Aguanta que el «?» llegue tarde.** El texto de la transcripción y el audio que corta el
+  motor en frases no van pegados: si la frase se cierra con una pregunta empezada («¿Es un
+  lenguaje de programación») y la siguiente empieza por su «?», se juntan.
 """
 
 from __future__ import annotations
@@ -121,6 +124,14 @@ def extract_questions(text: str) -> list[str]:
     return found
 
 
+def open_question(text: str) -> str:
+    """La pregunta empezada («¿...») y sin cerrar al final de ``text``, o vacío."""
+    opened = text.rfind(_OPEN)
+    if opened < 0 or "?" in text[opened:]:
+        return ""
+    return " ".join(text[opened:].split())
+
+
 def is_game_question(question: str) -> bool:
     """¿Es una pregunta del juego y no un «¿verdad?», un «¿listo?» o un «¿cómo dices?»?"""
     key = normalize(question)
@@ -155,6 +166,10 @@ class QuestionCounter:
     def __init__(self) -> None:
         self._seen: set[str] = set()
         self._anchor = ""
+        #: Pregunta empezada y sin cerrar al final del último texto visto...
+        self._tail = ""
+        #: ...y la de la frase anterior, a la que la actual puede cerrarle el «?».
+        self._carry = ""
         self.count = 0
         self.text = ""
 
@@ -163,15 +178,21 @@ class QuestionCounter:
 
         Devuelve qué cambió, o ``None`` si no hay ninguna pregunta nueva.
         """
+        if self._carry and text.lstrip().startswith("?"):
+            # El «?» de la pregunta de la frase anterior llegó tarde, en esta.
+            text = self._carry + text.lstrip()
         try:
             return self._feed(text)
         finally:
+            self._tail = open_question(text)
             if final:
                 self.end_sentence()
 
     def end_sentence(self) -> None:
         """La frase en curso se cerró: la siguiente empieza de cero (aunque no se contara nada)."""
         self._anchor = ""
+        self._carry = self._tail
+        self._tail = ""
 
     def _feed(self, text: str) -> QuestionUpdate | None:
         fresh: dict[str, str] = {}
