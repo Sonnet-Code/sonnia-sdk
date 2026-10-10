@@ -301,8 +301,10 @@ def steps() -> list[Step]:
     final = _state("final", players=players, done=17, possible=24, fell=2)
     out += [
         GameMsg("final", final),
-        Preview(8.0, draw=_scene(_rest(), ["no"] * players), off=True),
+        # Como de verdad: la vista en vivo se apaga al soltar la partida, antes del «end».
+        Preview(3.0, draw=_scene(_rest(), ["no"] * players), off=True),
         Capture("poses-08-final", settle_s=2.0),
+        Wait(1.5),
         GameMsg("end", {**final, "result": "win"}),
         Capture("poses-09-fin", settle_s=1.5),
     ]
