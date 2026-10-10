@@ -16,10 +16,12 @@ from sonia.vision.models import (
     POSE_MODELS,
     GameModel,
     GameModelError,
+    all_game_models,
     download_game_models,
     game_models,
     games_models_dir,
     model_present,
+    pose_variant,
 )
 
 DATA = b"modelo de mentira"
@@ -81,7 +83,18 @@ def test_los_modelos_son_los_del_plan_con_revision_fijada() -> None:
         assert model.url.startswith("https://huggingface.co/")
         assert len(model.sha256) == 64
     assert game_models("n") == (POSE_MODELS["n"], PALM_DETECTOR, HAND_LANDMARKS)
-    assert game_models("zzz")[0] is POSE_MODELS["s"]
+    # Por defecto (y con algo que no es n ni s), el ligero: GAME_POSES_MODEL=n.
+    assert game_models()[0] is POSE_MODELS["n"]
+    assert game_models("zzz")[0] is POSE_MODELS["n"]
+    assert game_models("s") == (POSE_MODELS["s"], PALM_DETECTOR, HAND_LANDMARKS)
+    # La app lleva los dos de poses y los de manos.
+    assert all_game_models() == (POSE_MODELS["n"], POSE_MODELS["s"], PALM_DETECTOR, HAND_LANDMARKS)
+    assert (pose_variant("N"), pose_variant(" s "), pose_variant("x"), pose_variant(None)) == (
+        "n",
+        "s",
+        None,
+        None,
+    )
 
 
 def test_la_carpeta_sale_de_los_ajustes_o_de_la_cache(tmp_path: Path) -> None:
