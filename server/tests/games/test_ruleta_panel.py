@@ -92,6 +92,8 @@ async def test_los_controles_cambian_segun_la_fase() -> None:
         ),
         ("sonnet", QUESTIONS, ["Acertó", "Falló", "Se rinde"]),
         ("sonnet", TASKS, ["Lo hizo", "No lo hizo", "Se rinde"]),
+        # El banco de la app: desde el 10 de octubre solo trae retos de stand.
+        ("sonnet", None, ["Lo hizo", "No lo hizo", "Se rinde"]),
     ],
 )
 async def test_cada_reto_tiene_sus_botones(
@@ -146,6 +148,8 @@ async def test_las_opciones_largas_se_cortan_en_el_boton() -> None:
         ("sonnet", TASKS, "right", "answer", {"respuesta": "acierto"}),
         ("sonnet", TASKS, "wrong", "answer", {"respuesta": "fallo"}),
         ("sonnet", TASKS, "pass", "answer", {"respuesta": "se_rinden"}),
+        ("sonnet", None, "right", "answer", {"respuesta": "acierto"}),
+        ("sonnet", None, "wrong", "answer", {"respuesta": "fallo"}),
         ("sonnet", QUESTIONS, "right", "answer", {"respuesta": "acierto"}),
         ("sonnet", QUESTIONS, "wrong", "answer", {"respuesta": "fallo"}),
         ("sonnet", QUESTIONS, "pass", "answer", {"respuesta": "se_rinden"}),

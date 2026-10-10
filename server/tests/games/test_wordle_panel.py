@@ -159,13 +159,6 @@ async def test_desde_el_manager_el_intento_llega_a_la_pantalla_y_a_sonia() -> No
     assert not manager.active
 
 
-@pytest.mark.xfail(
-    reason=(
-        "GameManager.panel_control pasa el guion con _speak_when_quiet, que solo habla en la "
-        "fase playing: un control que cierra la partida (host.finish) se queda sin decir"
-    ),
-    strict=False,
-)
 async def test_el_final_desde_el_panel_tambien_lo_dice_sonia() -> None:
     manager, engine, _, _, _, _ = await rig()
     await manager.start("wordle", "panel")
