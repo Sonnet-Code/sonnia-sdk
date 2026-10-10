@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import random
+import re
 import struct
 import zlib
 from datetime import datetime
@@ -308,3 +309,27 @@ async def test_el_panel_local_acepta_la_subida_y_la_sirve(tmp_path: Path) -> Non
             show = {"action": "show_image", "image_id": image_id}
             response = await http.post("/api/action", json=show, headers={"X-Sonia-Panel": "1"})
             assert response.json()["ok"] is True
+
+
+def test_los_controles_de_subir_se_apagan_en_las_apps_que_no_lo_anuncian() -> None:
+    # Las Sonnias ya instaladas no conocen ``add_gallery_image``: su panel deja el botón
+    # desactivado con el aviso, como con los demás ``data-cap``.
+    from sonia.panel.server import STATIC_DIR
+
+    page = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    script = (STATIC_DIR / "panel.js").read_text(encoding="utf-8")
+    for element in ("gallery-add-btn", "gallery-file", "gallery-upload-name", "gallery-upload-btn"):
+        assert re.search(rf'id="{element}"[^>]*data-cap="gallery_upload"', page), element
+    assert 'data-cap-note="gallery_upload"' in page
+    assert re.search(r'id="gallery-file"[^>]*accept="image/\*"', page)
+    # La «×» solo en las subidas, con su capacidad, y las acciones con sus parámetros.
+    assert '"data-cap": "gallery_upload"' in script
+    assert 'sendAction("remove_gallery_image", { id }' in script
+    assert '"add_gallery_image",\n      { name, data_base64: data }' in script
+    for element in (
+        "gallery-upload",
+        "gallery-upload-preview",
+        "gallery-upload-cancel",
+        "gallery-upload-state",
+    ):
+        assert f'id="{element}"' in page, element

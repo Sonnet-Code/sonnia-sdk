@@ -951,6 +951,87 @@ summary:focus-visible,
   grid-column: 1 / -1;
 }
 
+/* Imagen subida desde el panel: la «×» para quitarla va en la esquina */
+.thumb-wrap {
+  position: relative;
+  display: grid;
+}
+
+.thumb-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--bad);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.thumb-remove:hover:not(:disabled) {
+  border-color: var(--bad);
+  background: var(--bad-bg);
+}
+
+.thumb-remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Añadir imagen a la galería */
+.gallery-add {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  justify-items: start;
+}
+
+.gallery-upload {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px;
+  border: 2px dashed var(--line-strong);
+  border-radius: 12px;
+}
+
+.gallery-upload img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 8px;
+  /* Fondo oscuro, como la escena de Sonia */
+  background: var(--navy);
+}
+
+.gallery-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.gallery-upload-state {
+  margin: 0;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+.gallery-upload-state[data-kind="ok"] { color: var(--ok); }
+.gallery-upload-state[data-kind="error"] { color: var(--bad); }
+
 /* ---------- Formularios ---------- */
 
 .field {
