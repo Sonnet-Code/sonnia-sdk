@@ -97,8 +97,10 @@ NOSE_ABOVE_SHOULDERS = 0.4
 #: los brazos arriba va a 1,1 S; abiertos en V a 45°, a 0,65 S.
 UP_WRIST_ABOVE_NOSE = 0.45
 #: Y el codo (si se ve), al menos esto por encima del hombro: con las manos en la cabeza
-#: los codos quedan casi a la altura de los hombros, así que no cuentan como arriba.
-UP_ELBOW_ABOVE_SHOULDER = 0.4
+#: los codos quedan casi a la altura de los hombros, así que no cuentan como arriba. Con
+#: 0,4 se perdía la celebración con los puños arriba y los codos doblados (foto pública de
+#: un remero, 10 de octubre de 2026).
+UP_ELBOW_ABOVE_SHOULDER = 0.25
 #: Sin muñeca, el codo tiene que pasar de la nariz.
 UP_ELBOW_ABOVE_NOSE = 0.1
 
@@ -122,6 +124,9 @@ HEAD_REACH = 0.85
 #: Y no más abajo que esto bajo la nariz (la barbilla está a 0,2 S): el móvil en el pecho no
 #: es la cabeza.
 HEAD_LOWEST_BELOW_NOSE = 0.3
+#: Ni más arriba que esto sobre la nariz (la coronilla está a 0,4 S): los brazos estirados
+#: hacia arriba junto a la cabeza no son las manos en la cabeza.
+HEAD_HIGHEST_ABOVE_NOSE = 0.6
 #: Sin muñeca: el codo levantado por encima del hombro...
 HEAD_ELBOW_ABOVE_SHOULDER = 0.1
 #: ...pero sin llegar a lo de los brazos arriba.
@@ -318,7 +323,8 @@ def _hand_on_head(body: Body, arm: Arm) -> bool | None:
         head = (nose_x, nose_y - HEAD_CENTER_ABOVE_NOSE * s)
         if _dist(arm.wrist, head) > HEAD_REACH * s:
             return False
-        return arm.wrist[1] <= nose_y + HEAD_LOWEST_BELOW_NOSE * s
+        wy = arm.wrist[1]
+        return nose_y - HEAD_HIGHEST_ABOVE_NOSE * s <= wy <= nose_y + HEAD_LOWEST_BELOW_NOSE * s
     if arm.elbow is not None:
         above_shoulder = arm.elbow[1] < arm.shoulder[1] - HEAD_ELBOW_ABOVE_SHOULDER * s
         below_raised = arm.elbow[1] > nose_y - HEAD_ELBOW_MAX_ABOVE_NOSE * s
