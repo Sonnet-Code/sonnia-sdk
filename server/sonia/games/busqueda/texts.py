@@ -80,9 +80,9 @@ TIMEOUT_TEXT = (
 
 #: Se acabó el tiempo y la cámara no contestó a ninguna mirada: algo falla, no que nadie lo trajera.
 SILENT_TEXT = (
-    "BÚSQUEDA: se acabó el tiempo, pero esta ronda no he conseguido mirar bien la cámara: algo "
-    "falla con ella. Ya ha sonado «¡Tiempo!»: no lo repitas. Dilo con humor en una frase corta, "
-    "sin culpar a nadie, y di que sigues intentándolo."
+    "BÚSQUEDA: se acabó el tiempo, pero en esta ronda la cámara no contestó a ninguna mirada: "
+    "algo falla con ella. Ya ha sonado «¡Tiempo!»: no lo repitas. Dilo con humor en una frase "
+    "corta, sin culpar a nadie, y di que lo seguís intentando."
 )
 
 #: La cámara no contestó en dos rondas seguidas: se cancela el juego.
@@ -126,8 +126,8 @@ NOT_YET_TEXT = (
 
 #: ``busqueda_check`` y el modelo de visión no contestó.
 NO_ANSWER_TEXT = (
-    "No he podido mirar bien la cámara esta vez. Pídele que lo intente otra vez, bien a la "
-    "vista y quieto; el sistema sigue mirando. No digas que lo ves."
+    "La cámara no ha contestado esta vez. Pídele que lo intente otra vez, bien a la vista y "
+    "quieto; el sistema sigue mirando. No digas que lo ves."
 )
 
 #: ``busqueda_check`` y ya no quedan miradas en esta ronda.

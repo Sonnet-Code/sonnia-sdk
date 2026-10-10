@@ -569,7 +569,7 @@ async def test_el_juez_sin_respuesta_no_tira_el_juego_y_el_aviso_es_distinto() -
     timeout = host.last("timeout")
     assert timeout["silent"] is True
     # No se dice «nadie lo enseñó»: la cámara no contestó.
-    assert host.spoken[-1].startswith("BÚSQUEDA: se acabó el tiempo, pero esta ronda no he")
+    assert host.spoken[-1].startswith("BÚSQUEDA: se acabó el tiempo, pero en esta ronda la cámara")
     assert "nadie enseñó" not in host.spoken[-1]
     assert len(judge.questions) >= 9
 
