@@ -49,7 +49,7 @@ Aviso de espera en pantalla («la gente se desespera», Jean, 10 de octubre de 2
 | `camera` | Un juego de cámara arranca, hasta el primer frame de la cámara (10 s como mucho, o hasta que acaba la partida). | «Encendiendo la cámara…» |
 | `game` | Un juego se prepara (`start_game` o el panel), hasta su primera pantalla (`game` `start`) o hasta que no arranca. | «Preparando el juego…» |
 | `search` | El backend busca en internet (`web_search`). | «Buscando en internet…» |
-| `think` | Hay una tarea delegada en el backend, desde que empieza (no solo pasados los 5 s de `activity`) hasta que termina, falla o se da por perdida a los 90 s. | «Pensando…» |
+| `think` | Hay una tarea delegada en el backend que ya lleva 0,3 s (`THINK_DELAY_S`: una que acaba al momento no enciende la pastilla; no hace falta esperar los 5 s de `activity`), hasta que termina, falla o se da por perdida a los 90 s. | «Pensando…» |
 
 El estado `thinking` (GPT-Live preparando su respuesta) no enciende la pastilla, a propósito: se deduce de la transcripción y también salta con voces del pasillo que GPT-Live decide no contestar, así que saldría sin que nadie espere nada. `activity` sigue igual: la lluvia estilo Matrix y la mano en la barbilla (pasados 5 s) van aparte.
 
