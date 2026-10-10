@@ -12,7 +12,7 @@ No usa la cámara ni el modelo de visión, y no hay parser de lo que dice el vis
 
 ## Cómo se juega
 
-1. **Empezar.** `start_game(akinator)`, por voz o desde el panel. Sale la tarjeta «Piensa en algo… y no lo digas» con la bola de cristal y los temas del banco; los puntos de progreso (uno por pregunta, 20) salen con la primera pregunta. Las reglas entran en GPT-Live por `instruct` (menos de 1200 caracteres, con los temas del banco) y el guion de arranque le dice que explique el juego en dos frases, espere a que el visitante avise y no pregunte nada todavía.
+1. **Empezar.** `start_game(akinator)`, por voz o desde el panel. Sale la tarjeta «Piensa en algo… y no lo digas» con la bola de cristal y los 20 puntos de progreso vacíos (uno por pregunta). Los temas del banco no salen en la tarjeta (a 2 o 3 m no se leían y Sonnia los dice), pero sí entran en las reglas y en lo que le pide decir al empezar. Las reglas entran en GPT-Live por `instruct` (menos de 1200 caracteres, con los temas del banco) y el guion de arranque le dice que explique el juego en dos frases, espere a que el visitante avise y no pregunte nada todavía.
 2. **Preguntas.** Cuando el visitante avisa, GPT-Live hace sus preguntas: una cada vez, solo de sí o no, **sin delegar** (una delegación por pregunta la haría lentísima). El orquestador cuenta las preguntas en la transcripción de Sonnia y pinta «PREGUNTA 7 DE 20», los puntos y la pregunta en curso. No cuenta ni la apertura ni lo que no es una pregunta del juego («¿verdad?», «¿listo?», «¿cómo dices?»).
 3. **Adivinar.** Cuando lo tiene claro (no antes de la quinta pregunta) delega `akinator_guess(respuesta)`: sale la tarjeta grande «¿Es… Kotlin?» y Sonnia se lo pregunta.
 4. **Veredicto.** Cuando el visitante dice si acertó, o qué era, GPT-Live delega `akinator_result(acierto, respuesta_real)`:
@@ -70,11 +70,11 @@ La tarjeta «Juegos» del panel enseña el `summary` del `snapshot()` del juego:
 
 Sus eventos están en `docs/protocolo.md` («Eventos de cada juego», `akinator`). Todos llevan el estado entero (fase, preguntas, pregunta en curso, respuesta, fallos), así que el último fijo repinta la pantalla si Unity se reconecta.
 
-La tarjeta de la franja alta es compacta, para que Sonnia siga grande debajo (acaba hacia donde la de la trivia): a la izquierda la bola de cristal (esfera con brillo, arcos de colores que giran, destellos que orbitan y un «?» que flota, sobre un soporte dorado); a la derecha la pregunta o lo que toque; debajo, un punto por pregunta en los colores de Google (el último late) y una línea de ayuda.
+La tarjeta de la franja alta es compacta, para que Sonnia siga grande debajo (acaba hacia donde la de la trivia): a la izquierda la bola de cristal (esfera con brillo, arcos de colores que giran, destellos que orbitan y un «?» que flota, sobre un soporte dorado); a la derecha la pregunta o lo que toque; debajo, un punto por pregunta en los colores de Google (el último late) y una línea de ayuda de 30 px, para que se lea a 2 o 3 m.
 
 | Fase | Se ve |
 |---|---|
-| `waiting` | «PIENSA EN ALGO… Y NO LO DIGAS», los temas del banco y «CUANDO LO TENGAS, AVÍSALE A SONNIA». |
+| `waiting` | «PIENSA EN ALGO… Y NO LO DIGAS», «20 PREGUNTAS DE SÍ O NO» en la cabecera, los puntos vacíos y «CUANDO LO TENGAS, AVÍSALE A SONNIA». |
 | `asking` | La pregunta en curso, «PREGUNTA 7 DE 20» en la cabecera, los puntos y «RESPONDE: SÍ · NO · NO SÉ · A VECES». |
 | `guessing` | «¿ES…» y la respuesta en grande, en dorado, con destellos y el halo de la bola en amarillo. |
 | `miss` | Rótulo rojo «¡NO ERA KOTLIN!» unos segundos y vuelve a la pregunta. |
@@ -89,7 +89,7 @@ Sonnia reacciona con los clips de la trivia (`QuickAction_vibe` al ganar, `emoti
 |---|---|---|---|
 | `akinator_temas` («Temas del Akinator dev») | `assets/games/akinator/temas.md` | 8 temas | 3 |
 
-Formato (explicado al principio del archivo): `## Nombre del tema` y debajo, en una o varias líneas, ejemplos separados por comas (opcionales; a Sonnia solo se le pasan los primeros de cada tema, así que van primero los más conocidos). El nombre sale en la pantalla (menos de 30 letras) y Sonnia lo dice al explicar el juego. Como mucho 15 000 caracteres en la nube; un tema mal formado (sin nombre, repetido, con un nombre de más de 60 caracteres) se salta con un aviso en el registro y en el panel.
+Formato (explicado al principio del archivo): `## Nombre del tema` y debajo, en una o varias líneas, ejemplos separados por comas (opcionales; a Sonnia solo se le pasan los primeros de cada tema, así que van primero los más conocidos). El nombre lo dice Sonnia al explicar el juego (corto: menos de 30 letras); la tarjeta no los pinta. Como mucho 15 000 caracteres en la nube; un tema mal formado (sin nombre, repetido, con un nombre de más de 60 caracteres) se salta con un aviso en el registro y en el panel.
 
 **Borrador pendiente de revisión de Jean.** Los temas y los ejemplos los escribió el agente del juego.
 

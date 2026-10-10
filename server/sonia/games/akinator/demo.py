@@ -8,8 +8,8 @@ Pasa por cada estado de la pantalla y pide una captura 9:16 en cada uno (``docs/
    segunda respuesta (con un nombre largo) y el acierto con confeti.
 2. Una partida que Sonia pierde: las 20 preguntas, «me rindo» y «¡me ganaste!».
 3. Una partida con otro máximo de preguntas, para comprobar que los puntos se reparten bien.
-4. Una partida con pocos temas y una respuesta larguísima (arriesgada, fallada y acertada),
-   para comprobar que los textos largos no se salen de la tarjeta.
+4. Una partida con una respuesta larguísima (arriesgada, fallada y acertada), para comprobar que
+   los textos largos no se salen de la tarjeta ni del rótulo de fallo.
 
 Los datos de cada evento salen de :func:`~sonia.games.akinator.game.screen_state`, la misma
 función que usa el juego de verdad, así que la pantalla recibe exactamente lo mismo.
@@ -184,13 +184,13 @@ def steps() -> list[Step]:
         Capture("akinator-15-maximo-12", settle_s=2.0),
         GameMsg("end", {"result": "cancel"}),
         Capture("akinator-16-cancelado", settle_s=2.0),
-        # -- 4. Textos largos y pocos temas ----------------------------------------------
+        # -- 4. Textos largos --------------------------------------------------------------
         GameMsg(
             "start",
             {"title": TITLE, "max": 20, "themes": ["Lenguajes", "Empresas", "Cosas dominicanas"]},
         ),
         GameMsg("waiting", _state("waiting", 0)),
-        Capture("akinator-17-pocos-temas", settle_s=1.8),
+        Capture("akinator-17-inicio-otra-vez", settle_s=1.8),
         GameMsg("question", _state("asking", 1, question="¿Es algo que se pueda tocar?")),
         GameMsg(
             "guess",

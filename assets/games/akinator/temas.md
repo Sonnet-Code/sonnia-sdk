@@ -7,8 +7,8 @@
   juegos»); cada partida lo relee al empezar.
 
   FORMATO
-  - Cada tema empieza con una línea «## Nombre del tema». Corto: sale en la pantalla (menos de
-    30 letras) y Sonia lo dice al explicar el juego.
+  - Cada tema empieza con una línea «## Nombre del tema». Corto (menos de 30 letras): Sonia lo
+    dice al explicar el juego. La pantalla no los pinta.
   - Debajo, en una o varias líneas, unos ejemplos separados por comas (de 3 a 12). Son
     opcionales. Sirven para que Sonia sepa qué nivel de cosas vale; solo se le pasan los 3
     primeros de cada tema, así que pon primero los más conocidos.

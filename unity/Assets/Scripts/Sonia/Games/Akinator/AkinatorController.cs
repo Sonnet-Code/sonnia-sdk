@@ -11,7 +11,8 @@
 //    pregunta o lo que toque a la derecha, los puntos de progreso (uno por pregunta) y
 //    una línea de ayuda debajo. Es compacta: acaba hacia donde la de la trivia, para que
 //    Sonnia siga grande debajo.
-//  - waiting: «Piensa en algo… y no lo digas» y los temas del banco (los puntos salen con la primera pregunta).
+//  - waiting: «Piensa en algo… y no lo digas» y los 20 puntos vacíos. Los temas del banco no se
+//    pintan (a 2 o 3 m no se leían y Sonnia ya los dice).
 //  - asking: la pregunta en curso y «PREGUNTA 7 DE 20» en la cabecera.
 //  - guessing: la tarjeta grande «¿Es… Kotlin?» con destellos.
 //  - miss: «¡No era Kotlin!» y vuelve a preguntar.
@@ -54,7 +55,7 @@ namespace Sonia.Games.Akinator
         private const string PhaseRevealed = "revealed";
 
         // Diseño de la tarjeta (píxeles de la referencia 1080x1920; el contenido mide 872 de ancho).
-        private const float ContentHeight = 372f;
+        private const float ContentHeight = 380f;
         private const float BallBox = 230f;
         private const float BallDiameter = 196f;
         private const float TextLeft = 264f;
@@ -62,7 +63,7 @@ namespace Sonia.Games.Akinator
         private const float DotsTop = 248f;
         private const float DotsHeight = 76f;
         private const float HintTop = 338f;
-        private const float HintHeight = 34f;
+        private const float HintHeight = 40f;
         private static readonly Vector2 BallCenter = new Vector2(0f, 10f);
         private const int SparkleCount = 6;
         private const int ArcCount = 3;
@@ -100,7 +101,6 @@ namespace Sonia.Games.Akinator
         private sealed class StartData
         {
             [JsonProperty("max")] public int Max = 20;
-            [JsonProperty("themes")] public string[] Themes = new string[0];
         }
 
         [Serializable]
@@ -152,7 +152,6 @@ namespace Sonia.Games.Akinator
         private RectTransform _dotsRow;
         private Image[] _dots = new Image[0];
         private float _dotSize;
-        private TextMeshProUGUI _themesText;
         private TextMeshProUGUI _hint;
         private Texture2D _sphereTexture;
         private Sprite _sphereSprite;
@@ -160,7 +159,6 @@ namespace Sonia.Games.Akinator
         private Sprite _glowSprite;
 
         // Estado de la partida.
-        private string[] _themes = new string[0];
         private string _phase = PhaseWaiting;
         private int _max = 20;
         private int _asked;
@@ -197,7 +195,6 @@ namespace Sonia.Games.Akinator
             }
 
             StartData start = ParseData<StartData>(dataJson);
-            _themes = start.Themes ?? new string[0];
             _max = Mathf.Clamp(start.Max, MinQuestions, MaxQuestions);
             _asked = 0;
             _question = string.Empty;
@@ -434,11 +431,9 @@ namespace Sonia.Games.Akinator
             _mainText.gameObject.SetActive(true);
             _answerBox.gameObject.SetActive(false);
             _mark.text = "?";
-            _themesText.text = ThemesLine();
-            _themesText.gameObject.SetActive(true);
-            _dotsRow.gameObject.SetActive(false);
+            _dotsRow.gameObject.SetActive(true);
             _hint.text = "CUANDO LO TENGAS, AVÍSALE A SONNIA";
-            Hud.SetCaption(string.Empty);
+            Hud.SetCaption(_max + " PREGUNTAS DE SÍ O NO");
             SetGlow(GameColors.Blue, 1f);
             PaintDots(0);
         }
@@ -449,7 +444,6 @@ namespace Sonia.Games.Akinator
             _mainText.gameObject.SetActive(true);
             _answerBox.gameObject.SetActive(false);
             _mark.text = "?";
-            _themesText.gameObject.SetActive(false);
             _dotsRow.gameObject.SetActive(true);
             _hint.text = "RESPONDE: SÍ · NO · NO SÉ · A VECES";
             Hud.SetCaption("PREGUNTA " + _asked + " DE " + _max);
@@ -464,7 +458,6 @@ namespace Sonia.Games.Akinator
             _mainText.gameObject.SetActive(false);
             _answerBox.gameObject.SetActive(true);
             _mark.text = "!";
-            _themesText.gameObject.SetActive(false);
             _dotsRow.gameObject.SetActive(true);
             _hint.text = "¿ACERTÉ? DILE A SONNIA SÍ O NO";
             Hud.SetCaption("PREGUNTA " + _asked + " DE " + _max);
@@ -478,27 +471,10 @@ namespace Sonia.Games.Akinator
             _mainText.gameObject.SetActive(true);
             _answerBox.gameObject.SetActive(false);
             _mark.text = "?";
-            _themesText.gameObject.SetActive(false);
             _dotsRow.gameObject.SetActive(true);
             _hint.text = "DILE A SONNIA QUÉ ERA";
             Hud.SetCaption("PREGUNTA " + _asked + " DE " + _max);
             SetGlow(GameColors.Muted, 0.55f);
-        }
-
-        private string ThemesLine()
-        {
-            if (_themes == null || _themes.Length == 0)
-            {
-                return string.Empty;
-            }
-
-            string[] parts = new string[_themes.Length];
-            for (int i = 0; i < _themes.Length; i++)
-            {
-                parts[i] = GameUi.Plain(_themes[i] ?? string.Empty).ToUpperInvariant();
-            }
-
-            return string.Join("  ·  ", parts);
         }
 
         private static string LastOf(string[] values)
@@ -736,12 +712,12 @@ namespace Sonia.Games.Akinator
             BuildBall();
             BuildTexts();
             BuildDotsRow();
-            _hint = Hud.NewText("Ayuda", _root, string.Empty, 24f, GameColors.Muted, TextAlignmentOptions.Center, Hud.MonoFont);
-            _hint.characterSpacing = 3f;
+            _hint = Hud.NewText("Ayuda", _root, string.Empty, 30f, GameColors.Muted, TextAlignmentOptions.Center, Hud.MonoFont);
+            _hint.characterSpacing = 2f;
             _hint.textWrappingMode = TextWrappingModes.NoWrap;
             _hint.enableAutoSizing = true;
-            _hint.fontSizeMin = 14f;
-            _hint.fontSizeMax = 24f;
+            _hint.fontSizeMin = 18f;
+            _hint.fontSizeMax = 30f;
             Place(_hint.rectTransform, 0f, HintTop, Hud.ContentWidth, HintHeight);
             _built = true;
         }
@@ -880,14 +856,6 @@ namespace Sonia.Games.Akinator
             _answer.lineSpacing = -10f;
             Place(_answer.rectTransform, 0f, 56f, width, TextHeight - 56f);
             _answerBox.gameObject.SetActive(false);
-
-            _themesText = Hud.NewText("Temas", _root, string.Empty, 22f, GameColors.Muted, TextAlignmentOptions.Center, Hud.MonoFont);
-            _themesText.characterSpacing = 2f;
-            _themesText.enableAutoSizing = true;
-            _themesText.fontSizeMin = 13f;
-            _themesText.fontSizeMax = 22f;
-            _themesText.lineSpacing = 6f;
-            Place(_themesText.rectTransform, 0f, DotsTop, Hud.ContentWidth, DotsHeight);
         }
 
         private void BuildDotsRow()

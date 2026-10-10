@@ -29,7 +29,8 @@ __all__ = [
 
 #: Con menos temas, el banco ni se guarda desde el panel ni se juega.
 MIN_THEMES = 3
-#: Largo máximo del nombre de un tema (sale en la pantalla vertical) y de cada ejemplo.
+#: Largo máximo del nombre de un tema (Sonia lo dice en voz alta; la pantalla no lo pinta) y de
+#: cada ejemplo.
 MAX_NAME_CHARS = 60
 MAX_EXAMPLE_CHARS = 40
 #: Ejemplos que se guardan de cada tema.

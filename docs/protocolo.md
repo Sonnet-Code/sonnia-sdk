@@ -378,8 +378,8 @@ El orquestador manda el **estado entero** en cada evento (menos `start` y `end`)
 
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
-| `start` | orquestador → Unity | `title`, `max` (preguntas de sí o no como mucho), `themes` (nombres de los temas del banco) | sí | Monta la tarjeta: la bola de cristal, la pregunta, un punto por pregunta y la línea de ayuda. |
-| `waiting` | orquestador → Unity | el estado (abajo) | sí | «Piensa en algo… y no lo digas», con los temas (los puntos salen con la primera pregunta), hasta que el visitante avisa. |
+| `start` | orquestador → Unity | `title`, `max` (preguntas de sí o no como mucho), `themes` (nombres de los temas del banco; la pantalla no los pinta, Sonnia los dice) | sí | Monta la tarjeta: la bola de cristal, la pregunta, un punto por pregunta y la línea de ayuda. |
+| `waiting` | orquestador → Unity | el estado (abajo) | sí | «Piensa en algo… y no lo digas» con los puntos vacíos, hasta que el visitante avisa. |
 | `question` | orquestador → Unity | el estado | sí | Subió el contador o cambió la pregunta en curso: «PREGUNTA 7 DE 20», los puntos y la pregunta. |
 | `guess` | orquestador → Unity | el estado, con `guess` | sí | Sonnia arriesga una respuesta: la tarjeta grande «¿Es… Kotlin?» con destellos. |
 | `miss` | orquestador → Unity | el estado, con `missed` (el último es el que acaba de fallar) | sí | Falló y sigue preguntando: rótulo «¡No era Kotlin!» y vuelve a la pregunta. |
