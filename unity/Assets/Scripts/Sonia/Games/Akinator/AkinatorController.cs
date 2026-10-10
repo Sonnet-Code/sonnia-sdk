@@ -11,7 +11,7 @@
 //    pregunta o lo que toque a la derecha, los puntos de progreso (uno por pregunta) y
 //    una línea de ayuda debajo. Es compacta: acaba hacia donde la de la trivia, para que
 //    Sonnia siga grande debajo.
-//  - waiting: «Piensa en algo… y no lo digas», los temas del banco y los puntos vacíos.
+//  - waiting: «Piensa en algo… y no lo digas» y los temas del banco (los puntos salen con la primera pregunta).
 //  - asking: la pregunta en curso y «PREGUNTA 7 DE 20» en la cabecera.
 //  - guessing: la tarjeta grande «¿Es… Kotlin?» con destellos.
 //  - miss: «¡No era Kotlin!» y vuelve a preguntar.
