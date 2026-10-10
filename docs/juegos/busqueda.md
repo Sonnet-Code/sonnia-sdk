@@ -125,6 +125,8 @@ Con tiempo exacto, por `say_fixed` (de `cache/voice` si están grabadas; si no, 
     scripts/juegos_capturas.sh --juego busqueda --puerto 8797 --salida <carpeta>
   ```
 
+  **Revisadas el 10 de octubre de 2026** (13 capturas, con una foto pública de Wikimedia Commons como vista en vivo): la ronda lista, el contador, la cámara mirando (barrido, esquinas y «MIRANDO…»), ¡encontrado! con confeti y después, una ronda sin color (cuadro neutro), ¡tiempo!, un nombre largo en dos líneas, ¡encontrado! con un objeto largo, el final con 2 de 3 (¡BUEN OJO!), el tiempo con la cámara sin contestar («NO PUDE MIRAR BIEN»), el final con 0 de 3 (¡CASI!) y la pantalla repintada tras reconectar solo con el `start` y un `go` de la ronda 2 (los puntos de las rondas anteriores se reconstruyen). En todas, la franja alta acaba en 1108 px y la coronilla de Sonnia queda hacia 1200 px: no le tapa la cara. Con el resultado final, la vista en vivo se aparta y la tarjeta sube. No se guardaron las imágenes (`capturas.txt` de cada pasada, en el scratchpad de la sesión).
+
 ## Pendiente
 
 - Probarla con la API real: que GPT-Live delegue `start_game` a la primera, que anuncie el objeto antes de la salida, que delegue `busqueda_check` con el barullo y que no se invente que lo ve. Y medir el coste de las fotos y lo que tarda cada mirada con el modelo de verdad.
