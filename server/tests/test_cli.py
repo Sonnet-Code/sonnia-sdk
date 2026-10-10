@@ -21,6 +21,7 @@ from sonia.config import (
     GEMINI_OPENAI_URL,
     AudioSettings,
     FaceSettings,
+    GamesSettings,
     GestureSettings,
     LiveSettings,
     LLMSettings,
@@ -52,6 +53,9 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
         "ws": WSSettings(host="127.0.0.1", port=0),
         # Nunca la caché real del repo; los tests de caras lo encienden.
         "faces": FaceSettings(enabled=False, dir=str(tmp_path / "faces")),
+        # Sin juegos: las acciones de estos tests no dependen de cuáles estén encendidos
+        # en games/registry.py (los juegos tienen sus propios tests en tests/games).
+        "games": GamesSettings(enabled=False),
         "assets_dir": str(tmp_path),
         "log_level": "WARNING",
     }
@@ -501,6 +505,23 @@ async def test_build_components_con_camara_de_unity(tmp_path: Path) -> None:
         assert components.hub.sample_rate == 16_000
         assert components.registry.names() == ["look", "show_image", "hide_image", "play_animation"]
         assert components.narrator is not None
+    finally:
+        await components.close()
+
+
+async def test_build_components_con_juegos_anade_empezar_y_terminar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sonia.games import registry
+    from sonia.games.wordle.game import WordleGame
+
+    monkeypatch.setattr(registry, "enabled_games", lambda settings: [WordleGame])
+    settings = make_settings(tmp_path, games=GamesSettings(enabled=True))
+    components = cli.build_components(settings, with_camera=False)
+    try:
+        names = components.registry.names()
+        assert "start_game" in names and "stop_game" in names
+        assert names[:3] == ["show_image", "hide_image", "play_animation"]
     finally:
         await components.close()
 
