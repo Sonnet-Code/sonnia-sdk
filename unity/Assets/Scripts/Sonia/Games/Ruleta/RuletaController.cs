@@ -28,8 +28,8 @@ namespace Sonia.Games.Ruleta
 
         [Header("Ruleta")]
         [SerializeField]
-        [Tooltip("Diámetro de la ruleta en la tarjeta (px de la referencia 1080x1920).")]
-        private float wheelDiameter = 480f;
+        [Tooltip("Diámetro de la ruleta en la tarjeta (px de la referencia 1080x1920): grande, para leer las casillas a 2-3 m.")]
+        private float wheelDiameter = 680f;
 
         [SerializeField]
         [Range(0f, 3f)]
@@ -106,6 +106,14 @@ namespace Sonia.Games.Ruleta
         private bool _timerRunning;
         private bool _timeUp;
         private float _bannerUntil = -1f;
+        private float _contentHeight = -1f;
+
+        /// <summary>Hueco arriba de la ruleta para la lengüeta (sin pisar el título) y margen de abajo.</summary>
+        private const float WheelTopMargin = 40f;
+        private const float WheelBottomMargin = 12f;
+
+        /// <summary>Lo que crece o encoge por segundo el contenido al pasar de la ruleta al reto.</summary>
+        private const float HeightSpeed = 2000f;
 
         public override string Id
         {
@@ -138,8 +146,8 @@ namespace Sonia.Games.Ruleta
             RuletaStartData start = ParseData<RuletaStartData>(dataJson);
             _segments = start.Segments ?? new List<SegmentInfo>();
             _wheel.SetSegments(Hud, _icons, _segments);
-            Hud.SetContentHeight(Id, RuletaCard.Height);
             ResetScreen();
+            SetContentHeight(WheelHeight);
             if (_winsBadge != null)
             {
                 _winsBadge.gameObject.SetActive(true);
@@ -177,6 +185,7 @@ namespace Sonia.Games.Ruleta
         protected override void OnClosed()
         {
             ResetScreen();
+            _contentHeight = -1f;
             _spin = 0;
             _stoppedSpin = 0;
             if (_winsBadge != null)
@@ -214,7 +223,7 @@ namespace Sonia.Games.Ruleta
 
             _icons.Build();
             _wheelGroup = Hud.NewGroup("VistaRuleta", content);
-            _wheel.Build(Hud, _icons, (RectTransform)_wheelGroup.transform, new Vector2(0f, -((wheelDiameter * 0.5f) + 36f)), wheelDiameter);
+            _wheel.Build(Hud, _icons, (RectTransform)_wheelGroup.transform, new Vector2(0f, -((wheelDiameter * 0.5f) + WheelTopMargin)), wheelDiameter);
             _wheel.Stopped += OnWheelStopped;
             _card.Build(Hud, _icons, content);
 
@@ -321,7 +330,6 @@ namespace Sonia.Games.Ruleta
 
             _holdUntil = _clock + landHoldSeconds;
             ShowEmotion(FacialExpressionController.Emotion.Surprise, 1.4f);
-            Hud.SparklesAt(_wheel.Root, 12);
             Log("la ruleta paró en la casilla " + segment);
         }
 
@@ -418,8 +426,8 @@ namespace Sonia.Games.Ruleta
             bool hint = !string.IsNullOrEmpty(data.Hint);
             if (hint && !_lastHint && string.IsNullOrEmpty(data.Outcome))
             {
+                // Sin destellos encima: la pista hay que leerla.
                 GameAnim.Pop(_card.HintBox, 0.45f);
-                Hud.SparklesAt(_card.HintBox, 8);
             }
 
             _lastMisses = data.Misses;
@@ -499,7 +507,6 @@ namespace Sonia.Games.Ruleta
                     else if (score >= 4)
                     {
                         Hud.ShowBanner(line, GameColors.Blue);
-                        Hud.SparklesAt(_card.StarsRect, 10);
                         PlayReaction(okClip, null);
                         ShowEmotion(FacialExpressionController.Emotion.Joy, 2f);
                     }
@@ -519,7 +526,6 @@ namespace Sonia.Games.Ruleta
                     }
 
                     Hud.ShowBanner("¡Lo veremos!", GameColors.Blue);
-                    Hud.SparklesAt(_card.BarRect, 12);
                     PlayReaction(okClip, null);
                     ShowEmotion(FacialExpressionController.Emotion.Surprise, 2f);
                     break;
@@ -615,6 +621,39 @@ namespace Sonia.Games.Ruleta
             }
         }
 
+        /// <summary>Alto del contenido con la ruleta (la tarjeta crece mientras gira).</summary>
+        private float WheelHeight
+        {
+            get { return wheelDiameter + WheelTopMargin + WheelBottomMargin; }
+        }
+
+        private void SetContentHeight(float height)
+        {
+            _contentHeight = height;
+            Hud.SetContentHeight(Id, height);
+        }
+
+        /// <summary>
+        /// El alto del contenido sigue a lo que se ve: crece en cuanto vuelve la ruleta y
+        /// encoge al de la tarjeta del reto cuando la ruleta ya se fundió (si no, asomaría
+        /// por debajo de la tarjeta). La cámara lo sigue sola (plano de panel automático).
+        /// </summary>
+        private void UpdateContentHeight(float dt)
+        {
+            if (!IsActive || _contentHeight < 0f)
+            {
+                return;
+            }
+
+            float target = _showingCard ? (_wheelGroup.alpha <= 0.02f ? RuletaCard.Height : _contentHeight) : WheelHeight;
+            if (Mathf.Abs(target - _contentHeight) < 0.5f)
+            {
+                return;
+            }
+
+            SetContentHeight(Mathf.MoveTowards(_contentHeight, target, dt * HeightSpeed));
+        }
+
         private void PlaceCountdownInCorner()
         {
             if (Hud != null && Hud.Card != null)
@@ -644,6 +683,8 @@ namespace Sonia.Games.Ruleta
             {
                 _wheelGroup.gameObject.SetActive(wheelVisible);
             }
+
+            UpdateContentHeight(dt);
 
             if (_bannerUntil > 0f && _clock >= _bannerUntil)
             {

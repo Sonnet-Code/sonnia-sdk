@@ -35,17 +35,20 @@ def _round(spin: int, kind_index: int, **fields: object) -> Round:
     return Round(spin, kind_index, SEGMENTS[kind_index].kind, **fields)  # type: ignore[arg-type]
 
 
-def _spin_steps(round_: Round, wins: int, capture: str = "") -> list[Step]:
+def _spin_steps(round_: Round, wins: int, capture: str = "", landed: str = "") -> list[Step]:
     """Gira hasta la casilla del reto y espera a que Unity diga que paró.
 
     Con ``capture``, varias capturas seguidas del giro (el impulso, la velocidad, la
-    frenada y los últimos clics) para validar la animación por fotogramas.
+    frenada y los últimos clics) para validar la animación por fotogramas. Con
+    ``landed``, una captura de la ruleta ya parada (con su casilla brillando).
     """
     steps: list[Step] = [GameMsg("spin", spin_data(round_, wins))]
     if capture:
         for i, wait in enumerate((0.15, 0.5, 0.9, 1.1)):
             steps += [Wait(wait), Capture(f"{capture}-{i + 1}", settle_s=0.0)]
     steps.append(WaitEvent("wheel_stopped", timeout=SPIN_SECONDS + 6.0))
+    if landed:
+        steps.append(Capture(landed, settle_s=0.3))
     return steps
 
 
@@ -115,7 +118,7 @@ def steps() -> list[Step]:
 
     # 3. Explica en 20 segundos: la tecnología, el contador en marcha, «¡Tiempo!» y la nota.
     explain = _round(3, 2, prompt="Kubernetes", timer_s=20.0)
-    seq += _spin_steps(explain, 1)
+    seq += _spin_steps(explain, 1, landed="ruleta-09b-parada-explica")
     seq += [
         Wait(LANDED_S),
         _challenge(explain, 1),
@@ -132,7 +135,7 @@ def steps() -> list[Step]:
 
     # 4. Predice el futuro de la IA: la tarjeta y la predicción con su barra.
     future = _round(4, 3, prompt=FUTURE_PROMPT)
-    seq += _spin_steps(future, 2)
+    seq += _spin_steps(future, 2, landed="ruleta-13b-parada-futuro")
     seq += [
         Wait(LANDED_S),
         _challenge(future, 2),
