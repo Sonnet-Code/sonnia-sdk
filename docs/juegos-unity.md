@@ -162,7 +162,7 @@ SONIA_UNITY_LOCKS=$SP/unity-locks \
 Lo mismo que hace el script:
 
 1. **Turno.** Como mucho dos Unity en batch a la vez en la máquina: `mkdir $SP/unity-locks/1` (o `.../2` si el 1 existe; si existen los dos, espera con `until mkdir ...; do sleep 30; done`). Bórralo al terminar, también si falla.
-2. **Clon.** `cp -cR <copia principal>/unity <clon>/unity` (APFS: instantáneo y sin ocupar disco), `rm -rf <clon>/unity/Temp <clon>/unity/Logs`.
+2. **Clon.** Usa el compartido. Solo si no hay ninguno y sobra disco: `cp -cR <copia principal>/unity <clon>/unity` (APFS: instantáneo, pero Unity reescribe gigas de `Library` al compilar), `rm -rf <clon>/unity/Temp <clon>/unity/Logs`. Nunca dos Unity a la vez sobre el mismo clon.
 3. **`rm -f <clon>/unity/Library/ilpp.pid`.** Si no, el Unity del clon mata el compilador (IL Post Processing) del editor de verdad y este se cierra.
 4. **Tus scripts:** `rsync -a --delete --exclude '*.meta' <worktree>/unity/Assets/Scripts/ <clon>/unity/Assets/Scripts/`. Los `.cs` nuevos van sin `.meta`: Unity los genera en el clon. Antes, `$SP/compila_sonia.sh <worktree>` tiene que acabar en «Todo compila».
 5. **Orquestador falso**, desde `server/`: `uv run --no-sync python ../scripts/juegos_demo.py --juego wordle --puerto 8791 &` (apunta su PID).
