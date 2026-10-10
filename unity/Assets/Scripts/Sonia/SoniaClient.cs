@@ -244,6 +244,13 @@ namespace Sonia
             get { return _isConnected; }
         }
 
+        /// <summary>
+        /// Solo para herramientas de pruebas (capturas en batch): mientras es cierto,
+        /// Update no despacha mensajes; se quedan en la cola, en orden, hasta que vuelva
+        /// a ser falso. Así una captura pedida con dev_capture no ve lo que llega detrás.
+        /// </summary>
+        public bool PauseDispatch { get; set; }
+
         /// <summary>URL a la que se conecta este cliente (la de -sonia-ws si se arrancó con ella).</summary>
         public string ServerUrl
         {
@@ -335,7 +342,7 @@ namespace Sonia
 
             object message;
             int processed = 0;
-            while (_inbox.TryDequeue(out message))
+            while (!PauseDispatch && _inbox.TryDequeue(out message))
             {
                 Dispatch(message);
                 processed++;
@@ -348,7 +355,7 @@ namespace Sonia
 
             // Después de la cola: un camera_preview que llegó antes que sus frames
             // ya está aplicado. Uno por fotograma como mucho.
-            PreviewFrame preview = Interlocked.Exchange(ref _pendingPreview, null);
+            PreviewFrame preview = PauseDispatch ? null : Interlocked.Exchange(ref _pendingPreview, null);
             if (preview != null)
             {
                 Raise(OnCameraPreviewFrame, preview);
