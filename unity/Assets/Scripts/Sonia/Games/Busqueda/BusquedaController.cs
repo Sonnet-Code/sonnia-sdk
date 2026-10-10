@@ -290,6 +290,13 @@ namespace Sonia.Games.Busqueda
         /// <summary>round (lista, el contador quieto con el tiempo entero) y go (corriendo).</summary>
         private void ShowRound(RoundData data, bool running)
         {
+            // Un round o un go que llega tarde, con la ronda ya resuelta, no la reabre.
+            if ((_mode == Mode.Found || _mode == Mode.Timeout) && data.Index == _index)
+            {
+                Log("ronda " + _index + ": ignoro un " + (running ? "go" : "round") + " con el resultado ya puesto");
+                return;
+            }
+
             Apply(data);
             ClearOutcome();
             _mode = running ? Mode.Running : Mode.Ready;
