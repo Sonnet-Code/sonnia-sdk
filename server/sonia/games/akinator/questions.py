@@ -23,7 +23,8 @@ curso (cada trozo que llega) y, al cerrarse la frase, una vez más con la frase 
   reconoce porque su texto no continúa el anterior.
 - **Aguanta que el «?» llegue tarde.** El texto de la transcripción y el audio que corta el
   motor en frases no van pegados: si la frase se cierra con una pregunta empezada («¿Es un
-  lenguaje de programación») y la siguiente empieza por su «?», se juntan.
+  lenguaje de programación») y la siguiente empieza por su «?», o la termina sin su «¿» y
+  en minúscula («¿Corre» y luego «principalmente en el navegador?»), se juntan.
 """
 
 from __future__ import annotations
@@ -178,15 +179,34 @@ class QuestionCounter:
 
         Devuelve qué cambió, o ``None`` si no hay ninguna pregunta nueva.
         """
-        if self._carry and text.lstrip().startswith("?"):
-            # El «?» de la pregunta de la frase anterior llegó tarde, en esta.
-            text = self._carry + text.lstrip()
+        text = self._join_carry(text)
         try:
             return self._feed(text)
         finally:
             self._tail = open_question(text)
             if final:
                 self.end_sentence()
+
+    def _join_carry(self, text: str) -> str:
+        """Junta ``text`` con la pregunta que la frase anterior dejó abierta, si la termina.
+
+        El motor corta las frases por el silencio del audio, así que una pregunta puede
+        quedar partida: «¿Corre» y luego «principalmente en el navegador?» (con GPT-Live
+        real salía cortada en la pantalla). Se junta si esta frase es solo el «?» tardío o
+        si llega a su «?» sin ningún «¿» y empieza en minúscula (una continuación: una
+        frase nueva empieza en mayúscula). Nada se cuenta dos veces: la de antes no estaba
+        cerrada y la junta se cuenta por su texto entero.
+        """
+        carry = self._carry
+        if not carry:
+            return text
+        head = text.lstrip()
+        if head.startswith("?"):
+            return carry + head
+        mark = head.find("?")
+        if mark < 0 or _OPEN in head[:mark] or not head[:1].islower():
+            return text
+        return f"{carry} {head}"
 
     def end_sentence(self) -> None:
         """La frase en curso se cerró: la siguiente empieza de cero (aunque no se contara nada)."""

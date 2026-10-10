@@ -248,6 +248,32 @@ def test_el_signo_que_llega_en_la_frase_siguiente_cierra_la_pregunta() -> None:
     assert counter.count == 2
 
 
+def test_una_pregunta_partida_entre_dos_frases_se_junta_entera() -> None:
+    # El motor cortó la frase a mitad de la pregunta y la siguiente la termina sin su «¿»
+    # (con GPT-Live real salía «principalmente en el navegador?» en la pantalla).
+    counter = QuestionCounter()
+    first = sentence("Mmm", ". ", "¿", "Corre")
+    second = sentence("principalmente", " en", " el", " navegador", "?", " Dime", ".")
+    changes = run(counter, first, second)
+    assert [c.count for c in changes] == [1]
+    assert counter.text == "¿Corre principalmente en el navegador?"
+    # La que viene después sigue contando con normalidad.
+    run(counter, sentence("¿", "Lo", " creó", " Google", "?"))
+    assert counter.count == 2
+
+
+def test_una_frase_nueva_no_se_junta_con_la_pregunta_abierta_de_antes() -> None:
+    # Empieza en mayúscula (o lleva su propio «¿»): no es la continuación.
+    counter = QuestionCounter()
+    run(counter, sentence("¿", "Es"))
+    run(counter, sentence("Perdona", ", ", "¿", "es", " de", " pago", "?"))
+    assert counter.count == 1 and counter.text == "¿es de pago?"
+    counter = QuestionCounter()
+    run(counter, sentence("¿", "Es"))
+    run(counter, sentence("Entonces", " es", " de", " pago", "?"))
+    assert counter.count == 1 and counter.text == "Entonces es de pago?"
+
+
 def test_el_signo_tardio_solo_cierra_la_pregunta_de_la_frase_anterior() -> None:
     counter = QuestionCounter()
     run(counter, sentence("¿", "Es", " de", " Google", "?"))
