@@ -13,7 +13,7 @@ La trivia es el modelo (`docs/trivia.md`): todo lo que aquí se repite sale de l
 | `server/sonia/games/manager.py` | `GameManager`: registro, exclusividad (también con la trivia), ciclo de vida, pausas, abandono, reconexión de Unity, bancos y estado para el panel. |
 | `server/sonia/games/host.py` | `ManagedGameHost`: el `GameHost` de cada juego sobre el manager y el motor. |
 | `server/sonia/games/registry.py` | La lista de juegos, una línea por juego, con `on=False` hasta que su agente lo termine. |
-| `server/sonia/games/demo.py` | Los pasos de las secuencias del orquestador falso (`scripts/juegos_demo.py`). |
+| `server/sonia/games/demo.py` | El orquestador falso de las pantallas (`serve_demo`) y los pasos de sus secuencias; `scripts/juegos_demo.py` lo lanza. |
 | `server/sonia/games/<paquete>/` | Un paquete por juego: `ruleta`, `poses`, `akinator`, `ppt` (id `piedra_papel_tijera`), `wordle` y `busqueda`. |
 | `server/sonia/actions/games.py` | `start_game`, `stop_game` y `game_action` (las jugadas de cada juego). |
 | `server/sonia/vision/contracts.py` | Los contratos de visión (`CameraStream`, `PreviewStreamer`, `PoseDetector`, `HandDetector`, `VisionJudge`, `GameVision`), que implementa el agente de visión. |
@@ -21,6 +21,7 @@ La trivia es el modelo (`docs/trivia.md`): todo lo que aquí se repite sale de l
 | `server/tests/games/fakes.py` | `FakeGameHost`, `FakeVision`, `FakeEngine`, `FakeScreen`, `make_game` y `make_manager`. |
 | `server/tests/games/test_ejemplo.py` | La plantilla de los tests de un juego. |
 | `server/tests/games/test_contratos.py` | Lo que tiene que cumplir todo juego del registro (se aplica solo al tuyo). |
+| `server/tests/games/test_manager.py`, `test_motor.py`, `test_juegos_demo.py`, `test_trivia_juegos.py` | Los tests de los cimientos: el manager, el motor con un GPT-Live falso, el orquestador falso y lo que la trivia añade. |
 
 ## Reglas comunes
 
@@ -211,7 +212,7 @@ Antes de cada commit: `uv run --no-sync ruff check sonia tests && uv run --no-sy
 
 `server/tests/games/fakes.py`:
 
-- `make_game(MiJuego, **opciones) -> (juego, host)`: el juego suelto con un `FakeGameHost`. El host apunta `spoken`, `instructions`, `fixed` (`(frase, grabada)`), `sent` (`events(evento)`, `last(evento)`), `animations`, `finished` y `touches`; tiene `clock` (`advance`), `rng` con semilla (`seed=`), `quiet`, `connected`, `cloud_banks` (bancos «de la nube») y `recorded` (frases grabadas). Los bancos de la app se leen de `assets/games/<id>/`.
+- `make_game(MiJuego, **opciones) -> (juego, host)`: el juego suelto con un `FakeGameHost`. El host apunta `spoken`, `instructions`, `fixed` (`(frase, grabada)`), `sent` (`events(evento)`, `last(evento)`), `animations`, `finished` y `touches`; tiene `clock` (`advance`), `rng` con semilla (`seed=`), `quiet`, `connected`, `cloud_banks` (bancos «de la nube») `recorded` (frases grabadas) y `trivia_questions` (lo que dará `draw_trivia`). Los bancos de la app se leen de `assets/games/<id>/`.
 - `FakeVision`: `FakeStream`, `FakePreview` (apunta `starts`/`stops` y pinta el overlay con `draw()`), `FakePoses` (frames guionizados con `person({L_WRIST: (x, y), ...})` y `pose_frame(...)`), `FakeHands` (lecturas guionizadas) y `FakeJudge` (respuestas guionizadas; apunta las preguntas). Cada uno con `available`.
 - `make_manager([MiJuego], ...) -> (manager, engine, screen, clock)`: el `GameManager` con `FakeEngine`, `FakeScreen`, visión y reloj falsos, y una Unity que ya anunció tus juegos. `screen.game_msgs(evento)` y `screen.replay()` (lo que recibiría una Unity al reconectarse). Las acciones se prueban con `build_default_registry(games=[MiJuego])` y un `ActionContext` con `extra={"games": manager}`. `settle()` deja correr las tareas en segundo plano (el final).
 - Todo texto para GPT-Live pasa por `check_for_live`: falla con más de 1200 caracteres en `instruct` o si nombra el stack.
