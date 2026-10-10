@@ -47,6 +47,10 @@ Nada de lo que oye el visitante se interpreta. Si alguien grita «¡aquí!», GP
 
 `busqueda_check` nunca falla: fuera de turno devuelve un guion que reconduce. Si hay una mirada del reloj en el aire, espera a que acabe (hasta 4 s); si esa mirada ve el objeto, la delegación ya no repite nada.
 
+## Estado para el panel
+
+`snapshot()` lleva `summary` (una línea para la tarjeta «Juegos»: «Ronda 2 de 3: algo azul · 1 encontrada»; vacía sin partida), `phase` (`ready`, `running`, `between`, `done`), `round`, `rounds`, `object`, `objects` (los de la partida), `found`, `results` (`found`, `timeout` o `silent` por ronda), `seconds_left`, `checks` (fotos de la ronda) y `photos` (de la partida).
+
 ## Pantalla
 
 Sus eventos están en `docs/protocolo.md` («Eventos de cada juego», `busqueda`). Unity (`Games/Busqueda/BusquedaController.cs`, sobre `GameHud`):
