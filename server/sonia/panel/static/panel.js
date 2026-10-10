@@ -178,8 +178,14 @@
   }
 
   /** "oficinas-sonnet" -> "Oficinas sonnet". */
+  /** Con lo que empiezan los ids de las imágenes subidas desde el panel (las que tienen «×»).
+   * Igual que `UPLOAD_PREFIX` de `server/sonia/actions/gallery.py`. */
+  const UPLOAD_PREFIX = "subida-";
+
   function prettyImageName(id) {
-    return capitalize(String(id).replace(/[-_]+/g, " ").trim());
+    let name = String(id);
+    if (name.startsWith(UPLOAD_PREFIX) && name.length > UPLOAD_PREFIX.length) name = name.slice(UPLOAD_PREFIX.length);
+    return capitalize(name.replace(/[-_]+/g, " ").trim());
   }
 
   function isNumber(value) {
@@ -1912,11 +1918,7 @@
         // Cloudflare. Sin url (imagen que no está en Cloudflare) sale sin miniatura.
         gallery = images
           .filter((image) => image && typeof image.id === "string" && image.id)
-          .map((image) => ({
-            id: image.id,
-            url: typeof image.url === "string" && image.url ? image.url : "",
-            upload: image.upload === true,
-          }));
+          .map((image) => ({ id: image.id, url: typeof image.url === "string" && image.url ? image.url : "" }));
         state = "ready";
       }
     } catch {
@@ -1992,23 +1994,22 @@
   }
 
   /**
-   * Las imágenes que se enseñan: los ids y las subidas de `status.gallery` (al día, también
-   * en la nube) o, si esta Sonnia no lo manda, la lista de `/api/gallery`. La miniatura es
-   * la vista previa local de lo subido desde aquí o la url del servidor; en la nube, una
-   * subida no tiene archivo y sale como ficha con su nombre.
+   * Las imágenes que se enseñan: los ids de `status.gallery` (al día, también en la nube,
+   * que de `/api/gallery` solo sabe los del `hello`) o, si esta Sonnia no lo manda, la
+   * lista de `/api/gallery`. Las subidas desde el panel se reconocen por el id
+   * (`subida-...`) y llevan «×». La miniatura es la vista previa local de lo subido desde
+   * aquí o la url del servidor; en la nube, una subida no tiene archivo y sale como ficha.
    */
   function galleryItems() {
     const info = app.status && app.status.gallery;
     const fetched = new Map(app.gallery.map((image) => [image.id, image]));
     let ids = app.gallery.map((image) => image.id);
-    let uploads = new Set(app.gallery.filter((image) => image.upload).map((image) => image.id));
     if (info && typeof info === "object" && Array.isArray(info.ids)) {
       ids = info.ids.filter((id) => typeof id === "string" && id);
-      uploads = new Set(Array.isArray(info.uploads) ? info.uploads : []);
     }
     return ids.map((id) => {
       const known = fetched.get(id);
-      return { id, url: app.galleryPreviews.get(id) || (known && known.url) || "", upload: uploads.has(id) };
+      return { id, url: app.galleryPreviews.get(id) || (known && known.url) || "", upload: id.startsWith(UPLOAD_PREFIX) };
     });
   }
 
@@ -2016,7 +2017,7 @@
   function syncGallery(status) {
     const info = status.gallery;
     if (!info || typeof info !== "object" || !Array.isArray(info.ids)) return;
-    const sig = JSON.stringify([info.ids, Array.isArray(info.uploads) ? info.uploads : []]);
+    const sig = JSON.stringify(info.ids);
     if (sig === app.gallerySig) return;
     app.gallerySig = sig;
     if (app.galleryState !== "ready") return;
@@ -2179,7 +2180,7 @@
       setUploadState(result.message, "error");
       return;
     }
-    // «Imagen añadida: logo-gdg-0731»: el id que verá Sonnia.
+    // «Imagen añadida: subida-logo-gdg-0731»: el id que verá Sonnia.
     const match = /:\s*(\S+)\s*$/.exec(result.message);
     const id = match ? match[1] : "";
     if (pending === app.pendingUpload) {

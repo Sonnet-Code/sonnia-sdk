@@ -21,6 +21,7 @@ import pytest
 from sonia.actions.builtin import show_image
 from sonia.actions.gallery import (
     UPLOAD_MAX_BYTES,
+    UPLOAD_PREFIX,
     Gallery,
     GalleryError,
     image_info,
@@ -133,16 +134,25 @@ def test_el_nombre_se_sanea(nombre: str, slug: str) -> None:
 
 def test_sube_con_id_legible_y_sin_colisiones(tmp_path: Path) -> None:
     app, uploads, gallery = galleries(tmp_path)
-    (app / "logo-gdg-0731-2.png").write_bytes(png())
+    (app / "subida-logo-gdg-0731-2.png").write_bytes(png())
 
-    assert gallery.add_upload("Logo GDG.png", png(), now=LAS_0731) == "logo-gdg-0731"
-    assert (uploads / "logo-gdg-0731.png").read_bytes() == png()
+    # El id empieza por «subida-»: así el panel sabe, también en la nube, que se puede quitar.
+    assert UPLOAD_PREFIX == "subida-"
+    assert gallery.add_upload("Logo GDG.png", png(), now=LAS_0731) == "subida-logo-gdg-0731"
+    assert (uploads / "subida-logo-gdg-0731.png").read_bytes() == png()
     # El mismo nombre en el mismo minuto no pisa la anterior; tampoco la de la app.
-    assert gallery.add_upload("logo gdg", jpeg(), now=LAS_0731) == "logo-gdg-0731-3"
-    assert (uploads / "logo-gdg-0731-3.jpg").read_bytes() == jpeg()
-    assert gallery.uploads() == ["logo-gdg-0731", "logo-gdg-0731-3"]
+    assert gallery.add_upload("logo gdg", jpeg(), now=LAS_0731) == "subida-logo-gdg-0731-3"
+    assert (uploads / "subida-logo-gdg-0731-3.jpg").read_bytes() == jpeg()
     # Sin temporales a medias en la carpeta.
-    assert sorted(p.name for p in uploads.iterdir()) == ["logo-gdg-0731-3.jpg", "logo-gdg-0731.png"]
+    assert sorted(p.name for p in uploads.iterdir()) == [
+        "subida-logo-gdg-0731-3.jpg",
+        "subida-logo-gdg-0731.png",
+    ]
+    assert gallery.ids() == [
+        "subida-logo-gdg-0731",
+        "subida-logo-gdg-0731-2",
+        "subida-logo-gdg-0731-3",
+    ]
 
 
 @pytest.mark.parametrize("nombre", ["../", "", "!!!"])
@@ -165,13 +175,12 @@ def test_ve_las_dos_carpetas_y_con_el_mismo_id_gana_la_app(tmp_path: Path) -> No
     uploads.mkdir()
     (app / "oficinas.png").write_bytes(b"de-la-app")
     (uploads / "oficinas.jpg").write_bytes(b"subida-tapada")
-    (uploads / "stand-0731.jpg").write_bytes(b"subida")
-    (uploads / ".stand-0731-ab12.part").write_bytes(b"a-medias")
+    (uploads / "subida-stand-0731.jpg").write_bytes(b"subida")
+    (uploads / ".subida-stand-0731-ab12.part").write_bytes(b"a-medias")
 
-    assert gallery.ids() == ["oficinas", "stand-0731"]
-    assert gallery.uploads() == ["stand-0731"]
+    assert gallery.ids() == ["oficinas", "subida-stand-0731"]
     assert gallery.load("oficinas") == (b"de-la-app", "image/png")
-    assert gallery.load("stand-0731") == (b"subida", "image/jpeg")
+    assert gallery.load("subida-stand-0731") == (b"subida", "image/jpeg")
     assert gallery.resolve("../app/oficinas") is None
     # La de la app sola, como antes.
     assert Gallery(app).ids() == ["oficinas"]
@@ -180,15 +189,22 @@ def test_ve_las_dos_carpetas_y_con_el_mismo_id_gana_la_app(tmp_path: Path) -> No
 def test_solo_se_quitan_las_subidas(tmp_path: Path) -> None:
     app, uploads, gallery = galleries(tmp_path)
     (app / "oficinas.png").write_bytes(png())
+    # Con el prefijo pero de la app: no se toca.
+    (app / "subida-de-la-app.png").write_bytes(png())
     image_id = gallery.add_upload("stand", png(), now=LAS_0731)
+    # En la carpeta de subidas pero sin el prefijo (dejada a mano): tampoco.
+    (uploads / "a-mano.png").write_bytes(png())
 
     assert gallery.remove_upload("oficinas") is False
-    assert (app / "oficinas.png").exists()
-    assert gallery.remove_upload("no-existe") is False
+    assert gallery.remove_upload("subida-de-la-app") is False
+    assert gallery.remove_upload("a-mano") is False
+    assert gallery.remove_upload("subida-no-existe") is False
+    assert gallery.remove_upload("subida-../app/oficinas") is False
     assert gallery.remove_upload("../app/oficinas") is False
+    assert (app / "oficinas.png").exists() and (app / "subida-de-la-app.png").exists()
     assert gallery.remove_upload(image_id) is True
-    assert gallery.ids() == ["oficinas"]
-    assert list(uploads.iterdir()) == []
+    assert gallery.ids() == ["a-mano", "oficinas", "subida-de-la-app"]
+    assert [p.name for p in uploads.iterdir()] == ["a-mano.png"]
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +259,7 @@ async def test_el_panel_sube_lista_y_quita_imagenes(tmp_path: Path) -> None:
         control = rig.control
         assert "gallery_upload" in control.capabilities
         await control._refresh_gallery()
-        assert control.status()["gallery"] == {"ids": ["oficinas"], "uploads": []}
+        assert control.status()["gallery"] == {"ids": ["oficinas"]}
 
         data = base64.b64encode(jpeg()).decode()
         ok, message = await control.act(
@@ -251,10 +267,10 @@ async def test_el_panel_sube_lista_y_quita_imagenes(tmp_path: Path) -> None:
         )
         assert ok, message
         image_id = message.removeprefix("Imagen añadida: ")
-        assert image_id.startswith("logo-gdg-") and len(image_id) == len("logo-gdg-0000")
-        # El estado ya la trae, marcada como subida (sin esperar al siguiente repaso).
-        listing = control.status()["gallery"]
-        assert listing == {"ids": sorted(["oficinas", image_id]), "uploads": [image_id]}
+        assert image_id.startswith("subida-logo-gdg-")
+        assert len(image_id) == len("subida-logo-gdg-0000")
+        # El estado ya la trae (sin esperar al siguiente repaso): así la ve también la nube.
+        assert control.status()["gallery"] == {"ids": sorted(["oficinas", image_id])}
 
         # Con prefijo data: también vale (es lo que da un lector del navegador).
         ok, _ = await control.act(
@@ -301,7 +317,8 @@ async def test_el_panel_local_acepta_la_subida_y_la_sirve(tmp_path: Path) -> Non
             assert response.status_code == 200, response.text
             image_id = response.json()["message"].removeprefix("Imagen añadida: ")
             gallery = (await http.get("/api/gallery")).json()["images"]
-            assert {"id": image_id, "url": f"/api/gallery/{image_id}", "upload": True} in gallery
+            assert image_id.startswith(UPLOAD_PREFIX)
+            assert {"id": image_id, "url": f"/api/gallery/{image_id}"} in gallery
             served = await http.get(f"/api/gallery/{image_id}")
             assert served.status_code == 200 and served.content == big
             assert served.headers["content-type"] == "image/png"
@@ -322,7 +339,10 @@ def test_los_controles_de_subir_se_apagan_en_las_apps_que_no_lo_anuncian() -> No
         assert re.search(rf'id="{element}"[^>]*data-cap="gallery_upload"', page), element
     assert 'data-cap-note="gallery_upload"' in page
     assert re.search(r'id="gallery-file"[^>]*accept="image/\*"', page)
-    # La «×» solo en las subidas, con su capacidad, y las acciones con sus parámetros.
+    # La «×» solo en las subidas, por el prefijo de su id (el mismo que el orquestador), con
+    # su capacidad, y las acciones con sus parámetros.
+    assert f'const UPLOAD_PREFIX = "{UPLOAD_PREFIX}";' in script
+    assert "upload: id.startsWith(UPLOAD_PREFIX)" in script
     assert '"data-cap": "gallery_upload"' in script
     assert 'sendAction("remove_gallery_image", { id }' in script
     assert '"add_gallery_image",\n      { name, data_base64: data }' in script

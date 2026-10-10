@@ -109,7 +109,7 @@ CAPABILITIES = [
     #: El registro lleva ``logger`` y ``tags`` (filtros del registro de «Developer»).
     "log_tags",
     #: Subir imágenes a la galería y quitar las subidas (``add_gallery_image``,
-    #: ``remove_gallery_image``); el estado lleva ``gallery``.
+    #: ``remove_gallery_image``); el estado lleva ``gallery`` con los ids al día.
     "gallery_upload",
 ]
 
@@ -452,8 +452,8 @@ class StandControl:
         #: motor baja un instante hasta que suma la sesión cerrada.
         self._trial_peak = self._trial_base
         self._trial_ended = False
-        #: Ids de la galería y cuáles son subidas, para el estado. Se leen en un hilo
-        #: (``_refresh_gallery``): ``status()`` no toca el disco.
+        #: Ids de la galería para el estado (las subidas empiezan por ``subida-``). Se
+        #: leen en un hilo (``_refresh_gallery``): ``status()`` no toca el disco.
         self._gallery_listing: dict[str, list[str]] | None = None
         self._gallery_checked_at = 0.0
         #: Las subidas se escriben de una en una (el id libre se elige antes de escribir).
@@ -1645,8 +1645,9 @@ class StandControl:
                 "cost_usd": round(usage_s / 60.0 * settings.panel.live_price_per_minute, 2),
             },
             "image": self._image,
-            # Ids de la galería y cuáles se subieron desde el panel (las que tienen «×»);
-            # ``None`` hasta la primera lectura.
+            # Ids de la galería al día, también para la nube, que solo aprende los del
+            # ``hello``. Las subidas (con «×») empiezan por ``subida-``. ``None`` hasta la
+            # primera lectura.
             "gallery": self._gallery_listing,
             "animations": self._animations,
             "current_animation": self._current_animation if self._hub.client_count else None,
@@ -1836,11 +1837,11 @@ class StandControl:
         self._gallery_checked_at = time.monotonic()
         gallery = self.gallery()
         try:
-            ids, uploads = await asyncio.to_thread(lambda: (gallery.ids(), gallery.uploads()))
+            ids = await asyncio.to_thread(gallery.ids)
         except Exception:  # noqa: BLE001 - sin la lista nueva se queda la anterior
             logger.exception("No se pudo leer la galería")
             return
-        self._gallery_listing = {"ids": ids, "uploads": uploads}
+        self._gallery_listing = {"ids": ids}
 
 
 class _BadRequest(Exception):

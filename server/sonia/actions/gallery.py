@@ -5,7 +5,9 @@ Son dos directorios planos con archivos png/jpg/jpeg: el de la app
 (``GALLERY_UPLOAD_DIR``, por defecto ``cache/gallery``), que es escribible: en la
 ``.app`` de macOS ``assets`` va dentro del paquete y escribir ahí rompe la firma.
 El id de una imagen es su nombre sin extensión; si un id está en las dos, gana la
-de la app. La carga está protegida contra path traversal: el modelo escribe estos
+de la app. Las subidas se reconocen por el id, que empieza por ``subida-``
+(:data:`UPLOAD_PREFIX`): así el panel sabe cuáles se pueden quitar, también en la
+nube, con solo la lista de ids. La carga está protegida contra path traversal: el modelo escribe estos
 ids y no queremos que un nombre creativo lea archivos de fuera de los directorios.
 
 Nada de WebP: Unity decodifica el panel con ``ImageConversion.LoadImage``, que
@@ -42,6 +44,10 @@ UPLOAD_MIN_SIDE = 16
 UPLOAD_MAX_SIDE = 4096
 #: Largo máximo del nombre saneado, sin la hora.
 UPLOAD_SLUG_MAX = 40
+#: Con lo que empieza el id de una imagen subida desde el panel (``subida-logo-gdg-0731``).
+#: El panel pone la «×» por este prefijo: tiene que coincidir con ``UPLOAD_PREFIX`` de
+#: ``panel/static/panel.js``.
+UPLOAD_PREFIX = "subida-"
 
 #: Extensiones que se quitan del nombre que manda el panel (el de la foto).
 _NAME_SUFFIXES = frozenset(
@@ -228,14 +234,6 @@ class Gallery:
             if self._safe_path(path, uploaded) is not None
         )
 
-    def uploads(self) -> list[str]:
-        """Los ids que vienen de la carpeta de subidas (los que el panel puede quitar)."""
-        return sorted(
-            image_id
-            for image_id, (path, uploaded) in self._entries().items()
-            if uploaded and self._safe_path(path, uploaded) is not None
-        )
-
     def resolve(self, image_id: str) -> Path | None:
         """Devuelve la ruta del archivo de ``image_id``, o ``None`` si no es válido."""
         if not _is_safe_id(image_id):
@@ -260,10 +258,10 @@ class Gallery:
         return data, mime
 
     def add_upload(self, name: str, data: bytes, *, now: datetime) -> str:
-        """Guarda una imagen subida desde el panel y devuelve su id (``logo-gdg-0731``).
+        """Guarda una imagen subida desde el panel y devuelve su id (``subida-logo-gdg-0731``).
 
-        El id es el nombre saneado más la hora (``HHMM``), sin chocar con ninguno de
-        las dos carpetas. Se escribe en un temporal y se renombra: el vigilante de la
+        El id es :data:`UPLOAD_PREFIX`, el nombre saneado y la hora (``HHMM``), sin
+        chocar con ninguno de las dos carpetas. Se escribe en un temporal y se renombra: el vigilante de la
         galería nunca ve una imagen a medias. Quien llama no lanza dos a la vez.
         """
         if self.upload_dir is None:
@@ -276,7 +274,7 @@ class Gallery:
         taken = set(self._entries()) | {
             entry.stem for entry in self.upload_dir.iterdir() if entry.is_file()
         }
-        base = f"{slug}-{now:%H%M}"
+        base = f"{UPLOAD_PREFIX}{slug}-{now:%H%M}"
         image_id = next(
             (
                 candidate
@@ -301,8 +299,13 @@ class Gallery:
         return image_id
 
     def remove_upload(self, image_id: str) -> bool:
-        """Borra una imagen subida. ``False`` si no existe o es de la app (esas no se tocan)."""
-        if self.upload_dir is None or not _is_safe_id(image_id):
+        """Borra una imagen subida. ``False`` si no existe, no empieza por ``subida-`` o
+        no está en la carpeta de subidas (las de la app no se tocan)."""
+        if (
+            self.upload_dir is None
+            or not image_id.startswith(UPLOAD_PREFIX)
+            or not _is_safe_id(image_id)
+        ):
             return False
         entry = self._entries().get(image_id)
         if entry is None or not entry[1]:
