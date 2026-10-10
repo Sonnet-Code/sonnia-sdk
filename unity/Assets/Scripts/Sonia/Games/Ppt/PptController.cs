@@ -52,6 +52,9 @@ namespace Sonia.Games.Ppt
         // Si «go» llega y la mano no se ha abierto en este tiempo, se abre.
         private const float GoSafety = 0.4f;
 
+        // Si el audio de la frase no avanza en este tiempo, se cuenta con el reloj.
+        private const float AudioStall = 0.3f;
+
         // El final espera a que el resultado de la última ronda se vea este tiempo.
         private const float FinalDelay = 1.5f;
 
@@ -163,6 +166,8 @@ namespace Sonia.Games.Ppt
         private bool _audioLocked;
         private float _lastHeard;
         private float _lastHeardAt;
+        private float _heardRaw = -1f;
+        private float _heardRawAt;
         private int _clockMode = -1;
         private float _clockOffset;
         private float _lastClock;
@@ -348,6 +353,8 @@ namespace Sonia.Games.Ppt
             _goAt = -1f;
             _phraseUtterance = -1;
             _audioLocked = false;
+            _heardRaw = -1f;
+            _heardRawAt = Time.time;
             _clockMode = -1;
             _clockOffset = 0f;
             _lastClock = 0f;
@@ -698,6 +705,18 @@ namespace Sonia.Games.Ppt
             }
 
             if (id != _phraseUtterance)
+            {
+                return false;
+            }
+
+            // Si el audio no avanza (sin salida de sonido no corre su hilo), no sirve de reloj:
+            // se sigue con el de la pared desde lo último que se oyó.
+            if (!Mathf.Approximately(seconds, _heardRaw))
+            {
+                _heardRaw = seconds;
+                _heardRawAt = Time.time;
+            }
+            else if (Time.time - _heardRawAt > AudioStall)
             {
                 return false;
             }
