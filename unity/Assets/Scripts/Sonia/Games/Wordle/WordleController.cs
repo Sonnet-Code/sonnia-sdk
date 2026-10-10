@@ -374,6 +374,10 @@ namespace Sonia.Games.Wordle
             {
                 ShowHint(guess.Hint);
             }
+            else if (!_hintShown)
+            {
+                CountDownHint(attempts);
+            }
 
             int greens = CountMarks(guess.Marks, 'g');
             if (greens >= 3)
@@ -528,6 +532,34 @@ namespace Sonia.Games.Wordle
             GameAnim.Pop(_hintRoot, 0.5f);
             Vector2 center = Hud.EffectsPoint(_info) + new Vector2(_info.sizeDelta.x * 0.5f, -_info.sizeDelta.y * 0.5f);
             Hud.Sparkles(center, 6);
+        }
+
+        /// <summary>El rótulo de la pista candada: cuántos intentos faltan para que salga.</summary>
+        private string LockedLabel(int attempts)
+        {
+            bool hasHint = _hintAfter >= 1 && _hintAfter < _rows;
+            if (!hasHint)
+            {
+                return "SIN PISTA";
+            }
+
+            int left = _hintAfter - attempts;
+            if (left <= 0 || attempts <= 0)
+            {
+                return "SALE TRAS " + _hintAfter + " INTENTOS";
+            }
+
+            return left == 1 ? "LA PISTA SALE TRAS EL PRÓXIMO INTENTO" : "FALTAN " + left + " INTENTOS PARA LA PISTA";
+        }
+
+        private void CountDownHint(int attempts)
+        {
+            string label = LockedLabel(attempts);
+            if (_lockedText.text != label)
+            {
+                _lockedText.text = label;
+                GameAnim.Pulse(_lockedText.rectTransform, 0.08f, 0.3f);
+            }
         }
 
         /// <summary>Al terminar: la palabra en fichas con su pista (en verde si la acertaron).</summary>
@@ -764,6 +796,7 @@ namespace Sonia.Games.Wordle
 
             _infoLabel.text = "PISTA";
             _infoLabel.color = GameColors.Muted;
+            _lockedText.text = LockedLabel(0);
             _hintBody.text = string.Empty;
             _revealHint.text = string.Empty;
             _hintRoot.localScale = Vector3.one;
@@ -844,8 +877,7 @@ namespace Sonia.Games.Wordle
             _lockedText = Hud.NewText("Cuando", _lockedRoot, string.Empty, 24f, GameColors.Muted, TextAlignmentOptions.Center, Hud.BodyFont);
             _lockedText.characterSpacing = 3f;
             Place(_lockedText.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(inner, 64f));
-            bool hasHint = _hintAfter >= 1 && _hintAfter < _rows;
-            _lockedText.text = hasHint ? "SALE TRAS " + _hintAfter + " INTENTOS" : "SIN PISTA";
+            _lockedText.text = LockedLabel(0);
 
             // La pista.
             _hintRoot = Hud.NewRect("Texto", _info);
