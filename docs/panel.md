@@ -58,6 +58,25 @@ Con `TRIAL_LIMIT_MINUTES` (las builds de prueba llevan 300), la Sonia tiene ese 
 - La cámara es la misma de la visión de Sonia: con `VISION_SOURCE=opencv`, el mismo `OpenCVCamera` (un solo dispositivo abierto; las capturas se turnan y leen y codifican en un hilo, fuera del bucle). Con la visión apagada, la sala abre la cámara por su cuenta y la suelta al cerrarse; con `VISION_SOURCE=unity`, usa la de Unity.
 - Mientras alguien mira, la cabecera del panel muestra «Cámara en directo: N mirando» (en el móvil, el icono de la cámara y N) y la fila de la cámara de «¿Funciona todo?» lo repite.
 
+## Añadir imágenes a la galería
+
+La tarjeta «Mostrar una imagen» tiene el botón «Añadir imagen» (capacidad `gallery_upload`), para que el equipo llene la galería en pleno evento sin tocar el equipo del stand:
+
+1. Se elige una foto (en el móvil, de la galería o de la cámara). El navegador la decodifica en un canvas, la reduce a 1280 px de lado largo y la pasa a JPEG sobre blanco, bajando la calidad hasta que ocupe 220 KB como mucho. Un PNG que ya cabe se queda en PNG (los logos conservan la transparencia). Si el navegador no sabe abrirla (una HEIC en Chrome, por ejemplo), lo dice: «Usa una foto JPG o PNG».
+2. Se revisa el nombre (sale el de la foto, sin extensión): es lo que verá GPT-Live, así que mejor «logo del GDG» que «IMG_4521».
+3. «Subir a la galería» manda la acción `add_gallery_image` y la línea de estado dice «Subiendo…» y luego «Añadida como «logo-del-gdg-0731»» o el error.
+
+El orquestador la vuelve a comprobar por su contenido (los bytes mágicos de JPEG o PNG, no la extensión), como mucho 400 KB y de 16 a 4096 px por lado (leídos de la cabecera), y la guarda en un hilo, en un temporal que luego renombra, en `GALLERY_UPLOAD_DIR` (por defecto `cache/gallery`, en la misma carpeta escribible que `cache/voice`: `SONIA_HOME` o, en la app, la de datos del usuario). **Nunca en `assets/gallery`**: en la `.app` de macOS va dentro del paquete y escribir ahí rompe la firma. El id es el nombre saneado (sin tildes, en minúsculas, letras, números y guiones, 40 caracteres como mucho) más la hora del stand en `HHMM` (`logo-del-gdg-0731`), con `-2`, `-3`... si ya existe. Un nombre que no deja nada (`../`, vacío, solo símbolos) se rechaza.
+
+Sonia ve las dos carpetas a la vez (`Gallery` en `server/sonia/actions/gallery.py`): si un id está en las dos, gana la de la app. El vigilante de la galería (`GALLERY_WATCH_SECONDS`) mira también la de subidas, así que la imagen nueva le llega a GPT-Live en la nota silenciosa `[Galería]`, igual que las que se dejan a mano en `assets/gallery`, y `show_image` ya la encuentra.
+
+Las subidas llevan una «×» en su miniatura (acción `remove_gallery_image`, con confirmación). Las imágenes de la app no se pueden quitar desde el panel.
+
+- El estado trae `gallery`, con los ids y cuáles son subidas: la tarjeta se repinta sola cuando cambia la galería, también en la nube, donde `GET /api/gallery` solo sabe los ids del `hello`.
+- En la nube, una imagen subida no tiene archivo en los estáticos del Worker: sale como ficha con su nombre («Sin vista previa»), salvo en el navegador que la subió, que enseña su vista previa local.
+- Las Sonnias anteriores no anuncian `gallery_upload`: el botón sale desactivado con el aviso de que hay que actualizar la app.
+- La imagen va dentro del JSON de la acción en base64 (~300 KB con 220 KB de imagen): cabe en los 320 KB de una acción del Worker sin tocarlo. El panel local no pone tope al cuerpo.
+
 ## Mensajes nuevos del protocolo con Unity
 
 Se suman a `docs/protocolo.md` (versión 1, sin romper nada: Unity ignora tipos desconocidos).
@@ -155,6 +174,7 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
   "session": {"id": "sess_123", "uptime_s": 312.0, "expires_in_s": 3100.0, "context_ratio": 0.21},
   "usage": {"live_seconds": 1840.0, "cost_usd": 1.53},
   "image": null,
+  "gallery": {"ids": ["logo-del-gdg-0731", "oficinas"], "uploads": ["logo-del-gdg-0731"]},
   "animations": [{"clip": "Greeting", "group": "greeting"}, {"clip": "Dance_HipHop", "group": "dance"}],
   "current_animation": "Dance_HipHop",
   "disabled_animations": ["Dance_Gangnam"],
@@ -190,8 +210,9 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
 ```
 
 - `health.*.ok` es `true`, `false` o `null` (no aplica, por ejemplo la cámara desactivada o GPT-Live en modo saludos). `label` es una frase corta para el operador y `hint`, si no está bien, qué hacer.
-- `capabilities` dice qué controles funcionan; la página desactiva los que no estén en la lista y muestra una nota junto a ellos. Con juegos se suman `games`, `game:<id>` (los que anuncia la pantalla conectada), `game_banks` y `game_pose_model`.
+- `capabilities` dice qué controles funcionan; la página desactiva los que no estén en la lista y muestra una nota junto a ellos. Con juegos se suman `games`, `game:<id>` (los que anuncia la pantalla conectada), `game_banks` y `game_pose_model`. `gallery_upload`: se pueden subir y quitar imágenes de la galería (ver «Añadir imágenes a la galería»).
 - `image` es `null` o `{"id": "oficinas", "caption": "..."}`; `last_error` es `null` o un texto.
+- `gallery`: `ids`, todas las imágenes que Sonia puede enseñar (las de la app y las subidas), y `uploads`, las subidas desde el panel (las que se pueden quitar). El orquestador la vuelve a leer en un hilo cada 5 s y al subir o quitar una; es `null` hasta la primera lectura, y las Sonnias anteriores no la mandan.
 - `animations` es la lista que mandó Unity al conectar (vacía si la app de Unity es anterior a este mensaje o aún no se ha conectado). `current_animation` es el clip que suena según `animation_playing` (`null` si ninguno o sin pantalla) y `disabled_animations`, los que Sonia no usa por su cuenta.
 - `health.mic.level` es el nivel RMS del micrófono (0 a 1, con decaimiento rápido), la misma escala que `mic_gate`. Llega con el estado cada medio segundo.
 - `mic_presence` es la parte de la cámara de la puerta del micro (`null` si esta Sonnia no tiene cámara USB; entonces tampoco está la capacidad `mic_presence`). Arranca con `enabled` según `LIVE_PRESENCE_GATE` (apagada por defecto) o lo último que se eligió en el panel. `status`: `alguien` (una cara cerca en los últimos 10 s: la raya del ruido baja a `near_gate_scale`), `hace poco` (sin nadie desde hace `idle_s`, pero menos de `hold_s`), `nadie` (GPT-Live no oye el micro hasta que llega alguien), `sin caras aún` (la cámara no ha visto ninguna cara desde que arrancó: no cuenta), `sin imagen` (con `watching` en `false`, porque no hay sesión; si no, la cámara no da imagen: no cuenta) o `apagada`. `ready` es `false` mientras falta el modelo YuNet. Con `nadie`, `health.mic.label` lo dice.
@@ -222,10 +243,10 @@ Instantánea completa. La misma forma llega por el WebSocket cada medio segundo.
 ### `GET /api/gallery`
 
 ```json
-{"images": [{"id": "oficinas", "url": "/api/gallery/oficinas"}]}
+{"images": [{"id": "logo-del-gdg-0731", "url": "/api/gallery/logo-del-gdg-0731", "upload": true}, {"id": "oficinas", "url": "/api/gallery/oficinas"}]}
 ```
 
-`GET /api/gallery/{id}` devuelve la imagen (para las miniaturas).
+`upload: true` marca las subidas desde el panel. `GET /api/gallery/{id}` devuelve la imagen (para las miniaturas), sea de la app o subida.
 
 ### `POST /api/action`
 
@@ -242,6 +263,8 @@ Cabeceras obligatorias: `Content-Type: application/json` y `X-Sonia-Panel: 1` (s
 | `restart` | | Empezar una conversación nueva (nueva sesión, olvida lo hablado). |
 | `show_image` | `image_id`, `caption` opcional | Muestra una imagen de la galería. |
 | `hide_image` | | Retira la imagen. |
+| `add_gallery_image` | `name`, `data_base64` (JPEG o PNG, 400 KB como mucho) | Guarda una imagen en la carpeta de subidas (`GALLERY_UPLOAD_DIR`); responde «Imagen añadida: <id>». Necesita la capacidad `gallery_upload`. |
+| `remove_gallery_image` | `id` | Quita una imagen subida desde el panel; las de la app no se quitan. |
 | `gesture` | `category`: `greeting`, `dance`, `fourth_wall`, `soft` | Gesto en el avatar. |
 | `animation` | `clip`: un nombre de `animations` | Reproduce ese clip una vez, en cualquier estado (no estando "Fuera"). |
 | `set_animation_enabled` | `clip`, `enabled`: bool | Que Sonia use o no ese clip por su cuenta. |
@@ -344,8 +367,8 @@ Es la misma API del panel local con un parámetro `instance` (el `id` de la Soni
 
 - `GET /api/instances` → `{"instances": [...], "conflicts": {"connected": ["id1", "id2"], "conversing": ["id1", "id2"]}}`. Cada instancia: `id`, `name`, `host`, `connected`, `last_seen` (ms desde 1970), `mode`, `state`, `engine`, `healthy` (bool), `issues` (frases de lo que falla), `cost_usd`. Incluye las desconectadas vistas en las últimas 2 horas.
 - `GET /api/status?instance=<id>` → la instantánea de esa Sonia más `"instance": {...}`. 404 si no se conoce.
-- `GET /api/gallery?instance=<id>` → `{"images": [{"id", "url"}]}`: ids que mandó esa Sonia; las imágenes se sirven desde los estáticos del Worker (`/gallery/<archivo>`, copiadas de `assets/gallery` al desplegar). Un id sin archivo en Cloudflare sale sin miniatura.
-- `POST /api/action` con `{"instance": "<id>", "action": ..., ...}` y la cabecera `X-Sonia-Panel: 1` → `{"ok", "message"}`. Cuerpo de hasta 320 KB (cabe el banco de la trivia; los de los juegos, de 15 000 caracteres, de sobra). 503 si esa Sonia no está conectada, 504 si no contesta en 15 s.
+- `GET /api/gallery?instance=<id>` → `{"images": [{"id", "url"}]}`: ids que mandó esa Sonia; las imágenes se sirven desde los estáticos del Worker (`/gallery/<archivo>`, copiadas de `assets/gallery` al desplegar). Un id sin archivo en Cloudflare sale sin miniatura (así salen las subidas desde el panel; los ids al día y cuáles son subidas van en `status.gallery`).
+- `POST /api/action` con `{"instance": "<id>", "action": ..., ...}` y la cabecera `X-Sonia-Panel: 1` → `{"ok", "message"}`. Cuerpo de hasta 320 KB (cabe el banco de la trivia; los de los juegos, de 15 000 caracteres, de sobra, y una imagen de la galería reducida por el panel). 503 si esa Sonia no está conectada, 504 si no contesta en 15 s.
 - `WS /api/events?instance=<id>` → igual que el local (`history`, `status`, `message`, `log` de esa Sonia) más `{"type": "instances", ...}` (misma forma que `GET /api/instances`) al conectar y cada vez que cambia la lista o el modo de alguna. El navegador puede mandar `{"type": "select", "instance": "<id>"}` para cambiar de Sonia sin reconectar.
 - `WS /api/guest?instance=<id>` → sala de vídeo de esa Sonia (Durable Object `GuestRoom`, uno por Sonia), para el Modo Jean y para «Ver cámara». Recibe:
   - la cámara del stand en JPEG;
