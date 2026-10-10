@@ -93,11 +93,22 @@ namespace Sonia
         private int _imageWidth;
         private int _imageHeight;
         private int _framesShown;
+        private bool _suppressed;
 
         /// <summary>Cierto mientras la vista se ve (también mientras se funde al salir).</summary>
         public bool IsVisible
         {
-            get { return _showing || _alpha > 0.001f; }
+            get { return (_showing && !_suppressed) || _alpha > 0.001f; }
+        }
+
+        /// <summary>
+        /// Apartada (sin dejar de recibir frames) mientras otra cosa ocupa su sitio: la
+        /// tarjeta del resultado final de GameHud.
+        /// </summary>
+        public bool Suppressed
+        {
+            get { return _suppressed; }
+            set { _suppressed = value; }
         }
 
         /// <summary>Cierto si el orquestador la tiene encendida (camera_preview on).</summary>
@@ -281,7 +292,8 @@ namespace Sonia
             }
 
             float dt = Time.unscaledDeltaTime;
-            _alpha = Mathf.MoveTowards(_alpha, _showing ? 1f : 0f, dt / (_showing ? 0.25f : 0.35f));
+            bool show = _showing && !_suppressed;
+            _alpha = Mathf.MoveTowards(_alpha, show ? 1f : 0f, dt / (show ? 0.25f : 0.35f));
             _group.alpha = _alpha;
             if (!_showing && _alpha <= 0.001f)
             {
@@ -292,6 +304,11 @@ namespace Sonia
                     Raise(false);
                 }
 
+                return;
+            }
+
+            if (_suppressed && _alpha <= 0.001f)
+            {
                 return;
             }
 
