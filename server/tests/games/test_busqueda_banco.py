@@ -109,7 +109,9 @@ def test_lo_bien_formado_entra_y_lo_mal_formado_se_salta_con_aviso() -> None:
     by_name = {e.name: e for e in parsed.entries}
     assert by_name["algo azul"].color == COLORS["azul"]
     assert by_name["algo azul"].question == DEFAULT_QUESTION.format(name="algo azul")
-    assert by_name["la credencial del DevFest"].question.startswith("En la foto, ¿se ve una credencial")
+    assert by_name["la credencial del DevFest"].question.startswith(
+        "En la foto, ¿se ve una credencial"
+    )
     # Una pregunta que no es cerrada o habla de personas no tira el objeto: va la genérica.
     assert by_name["unas llaves"].question == DEFAULT_QUESTION.format(name="unas llaves")
     assert by_name["un bolígrafo o un lápiz"].question == DEFAULT_QUESTION.format(
@@ -208,7 +210,7 @@ def test_un_objeto_corto_pasa(what: str) -> None:
         "x" * 60,
         "botella <b>azul</b>",
         "botella azul con tapa y una etiqueta grande",
-        "llavero: {\"visto\": true}",
+        'llavero: {"visto": true}',
     ],
 )
 def test_lo_que_habla_de_la_persona_o_no_es_un_objeto_se_cambia_por_lo_pedido(what: str) -> None:
@@ -258,9 +260,7 @@ def test_announced_busca_las_palabras_clave_del_objeto() -> None:
 
 def _all_texts() -> dict[str, str]:
     return {
-        name: value
-        for name, value in vars(t).items()
-        if name.isupper() and isinstance(value, str)
+        name: value for name, value in vars(t).items() if name.isupper() and isinstance(value, str)
     }
 
 
