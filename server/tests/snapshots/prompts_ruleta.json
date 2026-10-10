@@ -1,0 +1,320 @@
+{
+ "adivinanza": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: adivinanza geek.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Sin mí no hay commit, ¿quién soy?». La respuesta es «Git»: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Adivinanza número 6 de Sonia». La respuesta es «respuesta 6»: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Adivinanza número 7 de Sonia». La respuesta es «respuesta 7»; también valen: otra 7, una más 7: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Adivinanza número 2 de Sonia». La respuesta es «respuesta 2»: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Tengo teclas y no soy piano, ¿quién soy?». La respuesta es «el teclado»; también valen: teclado, keyboard: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Adivinanza número 4 de Sonia». La respuesta es «respuesta 4»: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega.",
+   "seguir: Ya estáis jugando a la ruleta de Sonia: el reto en pantalla es adivinanza geek. Sigue con él; si quieren otro, delega «ruleta: girar».",
+   "empujón: RULETA: si el visitante te dio su respuesta al reto, delégala ya, sin decir si acierta. Solo si te pidió otra vuelta, delega girar; si pidió parar o se despidió, delega terminar el juego. Nunca digas que gira o que terminas sin delegarlo.",
+   "error: En la adivinanza delega «acierto» o «fallo» según lo que contestó (lo juzgas tú con la respuesta que tienes), o «se rinden».",
+   "guion: Fallo registrado: no es eso. Anímale a intentarlo otra vez, sin decir ni insinuar la respuesta. Le quedan 2 intentos. Dale la pista, que ya sale en la pantalla: «Lo inventó Linus.».",
+   "guion: Fallo registrado: no es eso. Anímale a intentarlo otra vez, sin decir ni insinuar la respuesta. Le queda un intento.",
+   "guion: Fallo: se acabaron los intentos. La respuesta era «Git». Díselo con cariño y con humor. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: ¡ACIERTO! Era «respuesta 6». Celébralo en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Se rinden: la respuesta era «respuesta 7». Díselo con humor, en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Se rinden: la respuesta era «respuesta 2». Díselo con humor, en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Se rinden: la respuesta era «el teclado». Díselo con humor, en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Se rinden: la respuesta era «respuesta 4». Díselo con humor, en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego."
+  ],
+  "spoken": [
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Sin mí no hay commit, ¿quién soy?». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Adivinanza número 6 de Sonia». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ya salió la pista de la adivinanza en tu pantalla. Dila tal cual, en una frase y sin decir la respuesta: «la pista 6.».",
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Adivinanza número 7 de Sonia». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Adivinanza número 2 de Sonia». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Tengo teclas y no soy piano, ¿quién soy?». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Adivinanza número 4 de Sonia». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala."
+  ]
+ },
+ "arranque": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: trivia relámpago, adivinanza geek, explica una tecnología en 20 segundos, predice el futuro de la IA y reto sorpresa de Sonnet Code.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega.",
+   "seguir: Ya estáis jugando a la ruleta de Sonia y está girando: espera a que pare, enseguida te digo el reto.",
+   "empujón: RULETA: si el visitante pidió parar o se despidió, delega terminar el juego.",
+   "error: La ruleta aún está girando: espera a que pare, enseguida te digo el reto. No adivines cuál será.",
+   "error: La ruleta aún está girando: espera a que pare, enseguida te digo el reto. No adivines cuál será.",
+   "error: La ruleta ya está girando: espera a que pare."
+  ],
+  "spoken": []
+ },
+ "arranque_sin_contacto": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: trivia relámpago y adivinanza geek.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con el equipo del stand.",
+   "RETO DE LA RULETA (el anterior ya terminó): TRIVIA RELÁMPAGO. Pregunta: «¿Quién organiza el DevFest Santo Domingo?». Opciones en tu pantalla, para que sepas qué letra elige (no las leas): A: Google, directamente; B: GDG Santo Domingo; C: La Biblioteca Nacional. No sabes cuál es la buena. Cuando el visitante diga su opción, la diga como la diga, pásala a su letra y delega enseguida «ruleta: responde» con A, B o C; si no lo sabe, «ruleta: responde se rinden». Nunca digas si acierta sin delegarlo. Tiene 20 segundos en el contador."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega."
+  ],
+  "spoken": [
+   "RULETA: ha caído en TRIVIA RELÁMPAGO. Anúncialo con emoción en pocas palabras y lee solo la pregunta, tal cual: «¿Quién organiza el DevFest Santo Domingo?». No leas las opciones: ya están en la pantalla. Luego espera su respuesta: no digas si acierta, delégala."
+  ]
+ },
+ "explica": {
+  "fixed": [
+   "¡Tiempo!"
+  ],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: explica una tecnología en 20 segundos.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel.",
+   "RETO DE LA RULETA (el anterior ya terminó): EXPLICA TECNOLOGÍA 9 EN 20 SEGUNDOS. El visitante tiene que explicarte qué es Tecnología 9 (para ti: De qué va la 9.). El contador de la pantalla arranca cuando empiece a hablar. Mientras explica, escúchale sin interrumpir ni comentar. Cuando suene «¡Tiempo!» o te diga que ha terminado, ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor y cariño. Si no quiere explicarlo, delega «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): EXPLICA TECNOLOGÍA 1 EN 20 SEGUNDOS. El visitante tiene que explicarte qué es Tecnología 1 (para ti: De qué va la 1.). El contador de la pantalla arranca cuando empiece a hablar. Mientras explica, escúchale sin interrumpir ni comentar. Cuando suene «¡Tiempo!» o te diga que ha terminado, ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor y cariño. Si no quiere explicarlo, delega «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): EXPLICA TECNOLOGÍA 5 EN 20 SEGUNDOS. El visitante tiene que explicarte qué es Tecnología 5 (para ti: De qué va la 5.). El contador de la pantalla arranca cuando empiece a hablar. Mientras explica, escúchale sin interrumpir ni comentar. Cuando suene «¡Tiempo!» o te diga que ha terminado, ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor y cariño. Si no quiere explicarlo, delega «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): EXPLICA TECNOLOGÍA 4 EN 20 SEGUNDOS. El visitante tiene que explicarte qué es Tecnología 4. El contador de la pantalla arranca cuando empiece a hablar. Mientras explica, escúchale sin interrumpir ni comentar. Cuando suene «¡Tiempo!» o te diga que ha terminado, ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor y cariño. Si no quiere explicarlo, delega «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): EXPLICA KUBERNETES EN 20 SEGUNDOS. El visitante tiene que explicarte qué es Kubernetes (para ti: Orquesta contenedores.). El contador de la pantalla arranca cuando empiece a hablar. Mientras explica, escúchale sin interrumpir ni comentar. Cuando suene «¡Tiempo!» o te diga que ha terminado, ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor y cariño. Si no quiere explicarlo, delega «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): EXPLICA TECNOLOGÍA 7 EN 20 SEGUNDOS. El visitante tiene que explicarte qué es Tecnología 7 (para ti: De qué va la 7.). El contador de la pantalla arranca cuando empiece a hablar. Mientras explica, escúchale sin interrumpir ni comentar. Cuando suene «¡Tiempo!» o te diga que ha terminado, ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor y cariño. Si no quiere explicarlo, delega «ruleta: responde se rinden»."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega.",
+   "error: En este reto se pone nota: cuando termine de explicar, delega «ruleta: nota» con una nota del 1 al 10, o «ruleta: responde se rinden» si no quiere explicarlo.",
+   "error: En este reto se pone nota: cuando termine de explicar, delega «ruleta: nota» con una nota del 1 al 10, o «ruleta: responde se rinden» si no quiere explicarlo.",
+   "empujón: RULETA: si el visitante te dio su respuesta al reto, delégala ya, sin decir si acierta. Solo si te pidió otra vuelta, delega girar; si pidió parar o se despidió, delega terminar el juego. Nunca digas que gira o que terminas sin delegarlo.",
+   "guion: Nota 8 de 10 en la pantalla. Coméntala con humor y cariño en una frase corta. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Nota 10 de 10 en la pantalla. Coméntala con humor y cariño en una frase corta. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Nota 1 de 10 en la pantalla. Coméntala con humor y cariño en una frase corta. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: No quiere explicarlo, y no pasa nada: dilo con humor en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: No quiere explicarlo, y no pasa nada: dilo con humor en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: No quiere explicarlo, y no pasa nada: dilo con humor en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego."
+  ],
+  "spoken": [
+   "RULETA: ha caído en EXPLICA EN 20 SEGUNDOS. Anúncialo con emoción en pocas palabras: el visitante tiene que explicarte qué es Tecnología 9 en 20 segundos, y el tiempo arranca cuando empiece a hablar. Luego calla y escucha.",
+   "RULETA: se acabó el tiempo de la explicación. Ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor.",
+   "RULETA: ha caído en EXPLICA EN 20 SEGUNDOS. Anúncialo con emoción en pocas palabras: el visitante tiene que explicarte qué es Tecnología 1 en 20 segundos, y el tiempo arranca cuando empiece a hablar. Luego calla y escucha.",
+   "RULETA: ha caído en EXPLICA EN 20 SEGUNDOS. Anúncialo con emoción en pocas palabras: el visitante tiene que explicarte qué es Tecnología 5 en 20 segundos, y el tiempo arranca cuando empiece a hablar. Luego calla y escucha.",
+   "RULETA: ha caído en EXPLICA EN 20 SEGUNDOS. Anúncialo con emoción en pocas palabras: el visitante tiene que explicarte qué es Tecnología 4 en 20 segundos, y el tiempo arranca cuando empiece a hablar. Luego calla y escucha.",
+   "RULETA: ha caído en EXPLICA EN 20 SEGUNDOS. Anúncialo con emoción en pocas palabras: el visitante tiene que explicarte qué es Kubernetes en 20 segundos, y el tiempo arranca cuando empiece a hablar. Luego calla y escucha.",
+   "RULETA: ha caído en EXPLICA EN 20 SEGUNDOS. Anúncialo con emoción en pocas palabras: el visitante tiene que explicarte qué es Tecnología 7 en 20 segundos, y el tiempo arranca cuando empiece a hablar. Luego calla y escucha."
+  ]
+ },
+ "explica_sin_grabar": {
+  "fixed": [
+   "¡Tiempo!"
+  ],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: explica una tecnología en 12,5 segundos.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel.",
+   "RETO DE LA RULETA (el anterior ya terminó): EXPLICA TECNOLOGÍA 9 EN 12,5 SEGUNDOS. El visitante tiene que explicarte qué es Tecnología 9 (para ti: De qué va la 9.). El contador de la pantalla arranca cuando empiece a hablar. Mientras explica, escúchale sin interrumpir ni comentar. Cuando suene «¡Tiempo!» o te diga que ha terminado, ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor y cariño. Si no quiere explicarlo, delega «ruleta: responde se rinden»."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega."
+  ],
+  "spoken": [
+   "RULETA: ha caído en EXPLICA EN 12,5 SEGUNDOS. Anúncialo con emoción en pocas palabras: el visitante tiene que explicarte qué es Tecnología 9 en 12,5 segundos, y el tiempo arranca cuando empiece a hablar. Luego calla y escucha.",
+   "RULETA: se acabó el tiempo de la explicación. Di «¡Tiempo!» y ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor."
+  ]
+ },
+ "futuro": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: predice el futuro de la IA.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel.",
+   "RETO DE LA RULETA (el anterior ya terminó): PREDICE EL FUTURO DE LA IA. Pídele al visitante su predicción sobre la inteligencia artificial: qué cree que pasará. Cuando te la diga, resúmela en una frase corta en español (120 caracteres como mucho, sin nombres de personas) y ponle una probabilidad de 0 a 100, con gracia: delega «ruleta: predicción» con las dos y después coméntala con humor. Si no quiere predecir nada, delega «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): PREDICE EL FUTURO DE LA IA. Pídele al visitante su predicción sobre la inteligencia artificial: qué cree que pasará. Cuando te la diga, resúmela en una frase corta en español (120 caracteres como mucho, sin nombres de personas) y ponle una probabilidad de 0 a 100, con gracia: delega «ruleta: predicción» con las dos y después coméntala con humor. Si no quiere predecir nada, delega «ruleta: responde se rinden»."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega.",
+   "error: En este reto delega «ruleta: predicción» con su predicción resumida y una probabilidad de 0 a 100, o «ruleta: responde se rinden» si no quiere predecir.",
+   "error: En este reto delega «ruleta: predicción» con su predicción resumida y una probabilidad de 0 a 100, o «ruleta: responde se rinden» si no quiere predecir.",
+   "error: Aún no hay predicción: pídele al visitante que te diga qué cree que pasará con la IA y luego delega su predicción resumida con una probabilidad.",
+   "guion: En la pantalla: «Sonia tendrá cuerpo de robot», con un 100 % de probabilidad. Coméntalo con humor en una frase corta. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: No quiere predecir nada, y no pasa nada: dilo con humor en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego."
+  ],
+  "spoken": [
+   "RULETA: ha caído en PREDICE EL FUTURO DE LA IA. Anúncialo con emoción en pocas palabras y pídele al visitante su predicción: qué pasará con la inteligencia artificial en los próximos años.",
+   "RULETA: ha caído en PREDICE EL FUTURO DE LA IA. Anúncialo con emoción en pocas palabras y pídele al visitante su predicción: qué pasará con la inteligencia artificial en los próximos años."
+  ]
+ },
+ "panel": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: explica una tecnología en 20 segundos y predice el futuro de la IA.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel.",
+   "RETO DE LA RULETA (el anterior ya terminó): EXPLICA TECNOLOGÍA 9 EN 20 SEGUNDOS. El visitante tiene que explicarte qué es Tecnología 9 (para ti: De qué va la 9.). El contador de la pantalla arranca cuando empiece a hablar. Mientras explica, escúchale sin interrumpir ni comentar. Cuando suene «¡Tiempo!» o te diga que ha terminado, ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor y cariño. Si no quiere explicarlo, delega «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): PREDICE EL FUTURO DE LA IA. Pídele al visitante su predicción sobre la inteligencia artificial: qué cree que pasará. Cuando te la diga, resúmela en una frase corta en español (120 caracteres como mucho, sin nombres de personas) y ponle una probabilidad de 0 a 100, con gracia: delega «ruleta: predicción» con las dos y después coméntala con humor. Si no quiere predecir nada, delega «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): EXPLICA TECNOLOGÍA 4 EN 20 SEGUNDOS. El visitante tiene que explicarte qué es Tecnología 4. El contador de la pantalla arranca cuando empiece a hablar. Mientras explica, escúchale sin interrumpir ni comentar. Cuando suene «¡Tiempo!» o te diga que ha terminado, ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor y cariño. Si no quiere explicarlo, delega «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): PREDICE EL FUTURO DE LA IA. Pídele al visitante su predicción sobre la inteligencia artificial: qué cree que pasará. Cuando te la diga, resúmela en una frase corta en español (120 caracteres como mucho, sin nombres de personas) y ponle una probabilidad de 0 a 100, con gracia: delega «ruleta: predicción» con las dos y después coméntala con humor. Si no quiere predecir nada, delega «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): EXPLICA KUBERNETES EN 20 SEGUNDOS. El visitante tiene que explicarte qué es Kubernetes (para ti: Orquesta contenedores.). El contador de la pantalla arranca cuando empiece a hablar. Mientras explica, escúchale sin interrumpir ni comentar. Cuando suene «¡Tiempo!» o te diga que ha terminado, ponle una nota del 1 al 10 según lo bien que lo explicó: primero delega «ruleta: nota» con la nota y luego coméntala con humor y cariño. Si no quiere explicarlo, delega «ruleta: responde se rinden»."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega.",
+   "guion: Nota 8 de 10 en la pantalla. Coméntala con humor y cariño en una frase corta. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: En la pantalla: «La IA escribirá todo el código», con un 46 % de probabilidad. Coméntalo con humor en una frase corta. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Nota 8 de 10 en la pantalla. Coméntala con humor y cariño en una frase corta. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: En la pantalla: «La IA escribirá todo el código», con un 54 % de probabilidad. Coméntalo con humor en una frase corta. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega."
+  ],
+  "spoken": [
+   "RULETA: ha caído en EXPLICA EN 20 SEGUNDOS. Anúncialo con emoción en pocas palabras: el visitante tiene que explicarte qué es Tecnología 9 en 20 segundos, y el tiempo arranca cuando empiece a hablar. Luego calla y escucha.",
+   "RULETA: ha caído en PREDICE EL FUTURO DE LA IA. Anúncialo con emoción en pocas palabras y pídele al visitante su predicción: qué pasará con la inteligencia artificial en los próximos años.",
+   "RULETA: ha caído en EXPLICA EN 20 SEGUNDOS. Anúncialo con emoción en pocas palabras: el visitante tiene que explicarte qué es Tecnología 4 en 20 segundos, y el tiempo arranca cuando empiece a hablar. Luego calla y escucha.",
+   "RULETA: ha caído en PREDICE EL FUTURO DE LA IA. Anúncialo con emoción en pocas palabras y pídele al visitante su predicción: qué pasará con la inteligencia artificial en los próximos años.",
+   "RULETA: ha caído en EXPLICA EN 20 SEGUNDOS. Anúncialo con emoción en pocas palabras: el visitante tiene que explicarte qué es Kubernetes en 20 segundos, y el tiempo arranca cuando empiece a hablar. Luego calla y escucha."
+  ]
+ },
+ "saltar": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: trivia relámpago y adivinanza geek.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel.",
+   "RETO DE LA RULETA (el anterior ya terminó): TRIVIA RELÁMPAGO. Pregunta: «¿Quién organiza el DevFest Santo Domingo?». Opciones en tu pantalla, para que sepas qué letra elige (no las leas): A: Google, directamente; B: GDG Santo Domingo; C: La Biblioteca Nacional. No sabes cuál es la buena. Cuando el visitante diga su opción, la diga como la diga, pásala a su letra y delega enseguida «ruleta: responde» con A, B o C; si no lo sabe, «ruleta: responde se rinden». Nunca digas si acierta sin delegarlo. Tiene 20 segundos en el contador."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega.",
+   "guion: Cambian de reto: el que había se queda sin jugar y la ruleta gira otra vez. Dilo en una frase corta, sin adivinar el siguiente: cuando pare te diré cuál es.",
+   "empujón: RULETA: si el visitante pidió parar o se despidió, delega terminar el juego.",
+   "seguir: Ya estáis jugando a la ruleta de Sonia y está girando: espera a que pare, enseguida te digo el reto."
+  ],
+  "spoken": [
+   "RULETA: ha caído en TRIVIA RELÁMPAGO. Anúncialo con emoción en pocas palabras y lee solo la pregunta, tal cual: «¿Quién organiza el DevFest Santo Domingo?». No leas las opciones: ya están en la pantalla. Luego espera su respuesta: no digas si acierta, delégala."
+  ]
+ },
+ "sonnet_preguntas": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: reto sorpresa de Sonnet Code.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel.",
+   "RETO DE LA RULETA (el anterior ya terminó): RETO SORPRESA DE SONNET CODE, una pregunta: «¿Pregunta 0 sobre Sonnet Code?». La respuesta es «respuesta 0»: es SOLO PARA TI, para juzgar lo que conteste; no la digas antes del resultado. Si contesta eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tiene 2 intentos); si se rinde, «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): RETO SORPRESA DE SONNET CODE, una pregunta: «¿Pregunta 4 sobre Sonnet Code?». La respuesta es «respuesta 4»: es SOLO PARA TI, para juzgar lo que conteste; no la digas antes del resultado. Si contesta eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tiene 2 intentos); si se rinde, «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): RETO SORPRESA DE SONNET CODE, una pregunta: «¿Pregunta 2 sobre Sonnet Code?». La respuesta es «respuesta 2»: es SOLO PARA TI, para juzgar lo que conteste; no la digas antes del resultado. Si contesta eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tiene 2 intentos); si se rinde, «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): RETO SORPRESA DE SONNET CODE, una pregunta: «¿Pregunta 1 sobre Sonnet Code?». La respuesta es «respuesta 1»; también valen: otra 1: es SOLO PARA TI, para juzgar lo que conteste; no la digas antes del resultado. Si contesta eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tiene 2 intentos); si se rinde, «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): RETO SORPRESA DE SONNET CODE, una pregunta: «¿Pregunta 3 sobre Sonnet Code?». La respuesta es «respuesta 3»; también valen: otra 3: es SOLO PARA TI, para juzgar lo que conteste; no la digas antes del resultado. Si contesta eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tiene 2 intentos); si se rinde, «ruleta: responde se rinden»."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega.",
+   "guion: Fallo registrado: no es eso. Anímale a intentarlo otra vez, sin decir la respuesta. Le queda un intento.",
+   "guion: Fallo: la respuesta era «respuesta 0». Díselo con cariño, en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: ¡ACIERTO! Era «respuesta 4». Celébralo en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Se rinde: la respuesta era «respuesta 2». Díselo con humor, en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Fallo registrado: no es eso. Anímale a intentarlo otra vez, sin decir la respuesta. Le queda un intento.",
+   "guion: Cambian de reto: el que había se queda sin jugar y la ruleta gira otra vez. Dilo en una frase corta, sin adivinar el siguiente: cuando pare te diré cuál es.",
+   "guion: ¡ACIERTO! Era «respuesta 3». Celébralo en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego."
+  ],
+  "spoken": [
+   "RULETA: ha caído en el RETO SORPRESA DE SONNET CODE. Anúncialo con emoción en pocas palabras y haz la pregunta tal cual: «¿Pregunta 0 sobre Sonnet Code?». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en el RETO SORPRESA DE SONNET CODE. Anúncialo con emoción en pocas palabras y haz la pregunta tal cual: «¿Pregunta 4 sobre Sonnet Code?». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en el RETO SORPRESA DE SONNET CODE. Anúncialo con emoción en pocas palabras y haz la pregunta tal cual: «¿Pregunta 2 sobre Sonnet Code?». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en el RETO SORPRESA DE SONNET CODE. Anúncialo con emoción en pocas palabras y haz la pregunta tal cual: «¿Pregunta 1 sobre Sonnet Code?». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en el RETO SORPRESA DE SONNET CODE. Anúncialo con emoción en pocas palabras y haz la pregunta tal cual: «¿Pregunta 3 sobre Sonnet Code?». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala."
+  ]
+ },
+ "sonnet_retos": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: reto sorpresa de Sonnet Code.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel.",
+   "RETO DE LA RULETA (el anterior ya terminó): RETO SORPRESA DE SONNET CODE: «Reto de stand número 0: choca los cinco con Brian o Mariel y con Sonia.». No lo puedes comprobar: créele. Cuando te diga que lo ha hecho, delega «ruleta: responde acierto»; si no quiere o no puede, «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): RETO SORPRESA DE SONNET CODE: «Reto de stand número 4: choca los cinco con Brian o Mariel y con Sonia.». No lo puedes comprobar: créele. Cuando te diga que lo ha hecho, delega «ruleta: responde acierto»; si no quiere o no puede, «ruleta: responde se rinden».",
+   "RETO DE LA RULETA (el anterior ya terminó): RETO SORPRESA DE SONNET CODE: «Reto de stand número 2: choca los cinco con Brian o Mariel y con Sonia.». No lo puedes comprobar: créele. Cuando te diga que lo ha hecho, delega «ruleta: responde acierto»; si no quiere o no puede, «ruleta: responde se rinden»."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega.",
+   "error: En el reto de Sonnet Code delega «acierto» si lo contestó bien o lo hizo, «fallo» si no, o «se rinden».",
+   "guion: ¡RETO CUMPLIDO! Celébralo en una frase y dale las gracias. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: No le salió el reto. Anímale con cariño, en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: No quiere hacer el reto, y no pasa nada: dilo con humor en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego."
+  ],
+  "spoken": [
+   "RULETA: ha caído en el RETO SORPRESA DE SONNET CODE. Anúncialo con emoción en pocas palabras y cuéntale el reto: «Reto de stand número 0: choca los cinco con Brian o Mariel y con Sonia.».",
+   "RULETA: ha caído en el RETO SORPRESA DE SONNET CODE. Anúncialo con emoción en pocas palabras y cuéntale el reto: «Reto de stand número 4: choca los cinco con Brian o Mariel y con Sonia.».",
+   "RULETA: ha caído en el RETO SORPRESA DE SONNET CODE. Anúncialo con emoción en pocas palabras y cuéntale el reto: «Reto de stand número 2: choca los cinco con Brian o Mariel y con Sonia.»."
+  ]
+ },
+ "tres_superados": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: adivinanza geek.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Sin mí no hay commit, ¿quién soy?». La respuesta es «Git»: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Adivinanza número 6 de Sonia». La respuesta es «respuesta 6»: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Adivinanza número 7 de Sonia». La respuesta es «respuesta 7»; también valen: otra 7, una más 7: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Adivinanza número 2 de Sonia». La respuesta es «respuesta 2»: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos.",
+   "RETO DE LA RULETA (el anterior ya terminó): ADIVINANZA GEEK. La adivinanza: «Tengo teclas y no soy piano, ¿quién soy?». La respuesta es «el teclado»; también valen: teclado, keyboard: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: responde acierto»; si no, «ruleta: responde fallo» (tienen 3 intentos); si se rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la pantalla a los 30 segundos."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega.",
+   "guion: ¡ACIERTO! Era «Git». Celébralo en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: ¡ACIERTO! Era «respuesta 6». Celébralo en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: ¡ACIERTO! Era «respuesta 7». Celébralo en una frase. Ya lleva 3 retos superados: dile que pase a saludar a Brian o Mariel aquí en el stand. No sabes qué premios hay: no prometas ninguno. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: ¡ACIERTO! Era «respuesta 2». Celébralo en una frase. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega."
+  ],
+  "spoken": [
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Sin mí no hay commit, ¿quién soy?». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Adivinanza número 6 de Sonia». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Adivinanza número 7 de Sonia». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Adivinanza número 2 de Sonia». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala.",
+   "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la adivinanza tal cual: «Tengo teclas y no soy piano, ¿quién soy?». No digas la respuesta. Luego espera la suya: no digas si acierta, delégala."
+  ]
+ },
+ "trivia": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: trivia relámpago.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel.",
+   "RETO DE LA RULETA (el anterior ya terminó): TRIVIA RELÁMPAGO. Pregunta: «¿Quién organiza el DevFest Santo Domingo?». Opciones en tu pantalla, para que sepas qué letra elige (no las leas): A: Google, directamente; B: GDG Santo Domingo; C: La Biblioteca Nacional. No sabes cuál es la buena. Cuando el visitante diga su opción, la diga como la diga, pásala a su letra y delega enseguida «ruleta: responde» con A, B o C; si no lo sabe, «ruleta: responde se rinden». Nunca digas si acierta sin delegarlo. Tiene 20 segundos en el contador.",
+   "RETO DE LA RULETA (el anterior ya terminó): TRIVIA RELÁMPAGO. Pregunta: «¿Qué lenguaje se ejecuta en el navegador?». Opciones en tu pantalla, para que sepas qué letra elige (no las leas): A: JavaScript; B: COBOL; C: Fortran. No sabes cuál es la buena. Cuando el visitante diga su opción, la diga como la diga, pásala a su letra y delega enseguida «ruleta: responde» con A, B o C; si no lo sabe, «ruleta: responde se rinden». Nunca digas si acierta sin delegarlo. Tiene 20 segundos en el contador.",
+   "RETO DE LA RULETA (el anterior ya terminó): TRIVIA RELÁMPAGO. Pregunta: «¿Quién creó a Sonia?». Opciones en tu pantalla, para que sepas qué letra elige (no las leas): A: Un mago; B: Sonnet Code; C: Nadie. No sabes cuál es la buena. Cuando el visitante diga su opción, la diga como la diga, pásala a su letra y delega enseguida «ruleta: responde» con A, B o C; si no lo sabe, «ruleta: responde se rinden». Nunca digas si acierta sin delegarlo. Tiene 20 segundos en el contador.",
+   "RETO DE LA RULETA (el anterior ya terminó): TRIVIA RELÁMPAGO. Pregunta: «¿Quién organiza el DevFest Santo Domingo?». Opciones en tu pantalla, para que sepas qué letra elige (no las leas): A: Google, directamente; B: GDG Santo Domingo; C: La Biblioteca Nacional. No sabes cuál es la buena. Cuando el visitante diga su opción, la diga como la diga, pásala a su letra y delega enseguida «ruleta: responde» con A, B o C; si no lo sabe, «ruleta: responde se rinden». Nunca digas si acierta sin delegarlo. Tiene 20 segundos en el contador."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega.",
+   "error: Aún no ha contestado: espera su respuesta o pregúntale. No digas la respuesta ni si acierta.",
+   "error: En la trivia relámpago delega la letra que eligió (A, B o C), o «se rinden» si no lo sabe: tú no sabes cuál es la buena.",
+   "error: En la trivia relámpago delega la letra que eligió (A, B o C), o «se rinden» si no lo sabe: tú no sabes cuál es la buena.",
+   "seguir: Ya estáis jugando a la ruleta de Sonia: el reto en pantalla es trivia relámpago. Sigue con él; si quieren otro, delega «ruleta: girar».",
+   "empujón: RULETA: si el visitante te dio su respuesta al reto, delégala ya, sin decir si acierta. Solo si te pidió otra vuelta, delega girar; si pidió parar o se despidió, delega terminar el juego. Nunca digas que gira o que terminas sin delegarlo.",
+   "guion: Ha elegido la B, «GDG Santo Domingo»: es CORRECTA. Celébralo en una frase corta. Si cabe, en media frase: Lo organiza la comunidad, con voluntarios. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "empujón: RULETA: solo si el visitante te pidió otra vuelta, delega girar; si no quiere seguir o se despidió, delega terminar el juego. Nunca digas que gira o que terminas sin delegarlo.",
+   "seguir: Ya estáis jugando a la ruleta de Sonia y el último reto ya terminó. Pregunta si quieren otra vuelta: si sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "error: Este reto ya terminó y su resultado está en la pantalla. Si quieren otra vuelta, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Ha elegido la B, «COBOL»: NO es correcta; la buena era la A, «JavaScript». Díselo con cariño en una frase corta. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: No lo sabe: la buena era la B, «Sonnet Code». Díselo con cariño en una frase corta. Si cabe, en media frase: La hizo el equipo de Sonnet Code. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego.",
+   "guion: La ruleta gira otra vez en tu pantalla. Di algo corto y con emoción mientras gira, sin adivinar el reto: cuando pare te diré cuál es y cómo se juega.",
+   "guion: Ha elegido la A, «Google, directamente»: NO es correcta; la buena era la B, «GDG Santo Domingo». Díselo con cariño en una frase corta. Si cabe, en media frase: Lo organiza la comunidad, con voluntarios. Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego."
+  ],
+  "spoken": [
+   "RULETA: ha caído en TRIVIA RELÁMPAGO. Anúncialo con emoción en pocas palabras y lee solo la pregunta, tal cual: «¿Quién organiza el DevFest Santo Domingo?». No leas las opciones: ya están en la pantalla. Luego espera su respuesta: no digas si acierta, delégala.",
+   "RULETA: se acabó el tiempo de la trivia relámpago y no hay respuesta registrada. Si ya te dijo su opción, delega ahora «ruleta: responde» con su letra, sin decir si acierta. Si no, pídele en pocas palabras que elija ya, sin leer las opciones.",
+   "RULETA: ha caído en TRIVIA RELÁMPAGO. Anúncialo con emoción en pocas palabras y lee solo la pregunta, tal cual: «¿Qué lenguaje se ejecuta en el navegador?». No leas las opciones: ya están en la pantalla. Luego espera su respuesta: no digas si acierta, delégala.",
+   "RULETA: ha caído en TRIVIA RELÁMPAGO. Anúncialo con emoción en pocas palabras y lee solo la pregunta, tal cual: «¿Quién creó a Sonia?». No leas las opciones: ya están en la pantalla. Luego espera su respuesta: no digas si acierta, delégala.",
+   "RULETA: ha caído en TRIVIA RELÁMPAGO. Anúncialo con emoción en pocas palabras y lee solo la pregunta, tal cual: «¿Quién organiza el DevFest Santo Domingo?». No leas las opciones: ya están en la pantalla. Luego espera su respuesta: no digas si acierta, delégala."
+  ]
+ },
+ "una_casilla": {
+  "fixed": [],
+  "instructions": [
+   "JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco retos: predice el futuro de la IA.\n- La ruleta la gira la pantalla: tú no eliges el reto ni lo adivinas. Cuando pare te llegarán el reto y sus reglas.\n- Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota, que la ruleta gira, que terminas o «ya está» sin haberlo delegado.\n- Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.\n- Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».\n- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.\n- No hay premios: si preguntan, no sabes de ninguno; que hablen con Brian o Mariel."
+  ],
+  "scripts": [
+   "empezar: La ruleta de Sonia está en tu pantalla y ya está girando. Di en una frase y con emoción que la ruleta elige el reto, sin adivinar cuál: cuando pare te diré el reto y cómo se juega."
+  ],
+  "spoken": []
+ }
+}
