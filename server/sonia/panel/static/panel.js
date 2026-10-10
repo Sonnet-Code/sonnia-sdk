@@ -2117,6 +2117,8 @@
         help: typeof item.help === "string" ? item.help.trim() : "",
         source: item.source === "nube" ? "nube" : "app",
         ignored: item.ignored === true,
+        literal: item.literal === true,
+        maxLen: Number.isInteger(item.max_len) && item.max_len > 0 ? item.max_len : PROMPT_MAX_CHARS,
       }));
   }
 
@@ -2214,8 +2216,11 @@
   /** Lo mismo que comprueba el orquestador al guardar (PromptBook.validate), para verlo antes. */
   function promptProblems(entry, text) {
     if (!entry || !text.trim()) return [];
-    const marks = promptMarks(text);
     const problems = [];
+    const maxLen = entry.maxLen || PROMPT_MAX_CHARS;
+    if (text.length > maxLen) problems.push(`Es demasiado largo: el tope es ${maxLen.toLocaleString(LOCALE)} caracteres.`);
+    // Las piezas literales (conocimiento, persona) no llevan marcadores: sus llaves no cuentan.
+    const marks = entry.literal ? new Set() : promptMarks(text);
     const extra = [...marks].filter((name) => !entry.fields.includes(name));
     if (extra.length) problems.push(`El código no rellena ${extra.map((name) => `{${name}}`).join(", ")}.`);
     const missing = entry.required.filter((name) => !marks.has(name));
@@ -2241,6 +2246,8 @@
       help: entry ? entry.help : "",
       source: data.source,
       ignored: Boolean(entry && entry.ignored) && data.source !== "nube",
+      literal: Boolean(entry && entry.literal),
+      maxLen: entry ? entry.maxLen : PROMPT_MAX_CHARS,
     };
   }
 
@@ -2290,7 +2297,9 @@
     const problems = promptProblems(prompt, text);
     setText(ui.promptCheck, problems.length ? `Así no se guarda: ${problems.join(" ")}` : "");
     setHidden(ui.promptCheck, !problems.length);
-    setText(ui.promptCount, `${text.length.toLocaleString(LOCALE)} de ${PROMPT_MAX_CHARS.toLocaleString(LOCALE)} caracteres`);
+    const maxLen = prompt.maxLen || PROMPT_MAX_CHARS;
+    ui.promptInput.maxLength = maxLen;
+    setText(ui.promptCount, `${text.length.toLocaleString(LOCALE)} de ${maxLen.toLocaleString(LOCALE)} caracteres`);
     setText(ui.promptDefaultBtn, viewingPromptDefault() ? "Ver el que está en uso" : "Ver el de la app");
     renderPromptState();
   }

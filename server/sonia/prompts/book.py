@@ -94,6 +94,7 @@ class PromptBook:
         #: Registra todas las piezas la primera vez que se pide una (``load_specs``).
         self._loader: Callable[[], None] | None = None
         self._loaded = False
+        self._loading = False
         self._warned: set[str] = set()
 
     def set_loader(self, loader: Callable[[], None]) -> None:
@@ -104,14 +105,19 @@ class PromptBook:
     def _ensure_loaded(self) -> None:
         if self._loaded or self._loader is None:
             return
+        # Los demás hilos esperan aquí a que acabe la primera carga. El mismo hilo, si la
+        # carga pide una pieza mientras importa, sigue sin esperar (``_loading``).
         with self._lock:
-            if self._loaded:
+            if self._loaded or self._loading:
                 return
-            self._loaded = True
+            self._loading = True
             try:
                 self._loader()
             except Exception:  # noqa: BLE001 - sin catálogo, cada módulo usa su texto de la app
                 logger.exception("No se pudieron registrar los prompts editables")
+            finally:
+                self._loading = False
+                self._loaded = True
 
     # -- registro ----------------------------------------------------------------------
 
@@ -281,6 +287,7 @@ class PromptBook:
                     "applies_text": APPLIES_TEXT[spec.applies],
                     "help": spec.help,
                     "literal": spec.literal,
+                    "max_len": spec.max_len,
                     "source": self.source(spec.id),
                     "ignored": spec.id in self._raw and spec.id not in self._valid,
                 }

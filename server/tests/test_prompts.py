@@ -186,3 +186,35 @@ def test_una_pieza_literal_admite_llaves_y_no_las_toca() -> None:
                 literal=True,
             )
         )
+
+
+def test_el_catalogo_lleva_el_tope_de_cada_pieza() -> None:
+    book = PromptBook()
+    book.register(
+        PromptSpec(id="prueba/corta", group="g", title="t", default=lambda: "x", max_len=1200)
+    )
+    (entry,) = book.catalog()
+    assert entry["max_len"] == 1200
+
+
+def test_la_primera_carga_no_deja_piezas_a_medias_a_otro_hilo() -> None:
+    import threading
+    import time
+
+    book = PromptBook()
+    started = threading.Event()
+
+    def slow_loader() -> None:
+        started.set()
+        time.sleep(0.2)
+        book.register(spec())
+
+    book.set_loader(slow_loader)
+    result: list[str] = []
+    loader_thread = threading.Thread(target=lambda: book.catalog())
+    loader_thread.start()
+    started.wait(1)
+    # Pide la pieza mientras el otro hilo aún carga: tiene que esperar y encontrarla.
+    result.append(book.text("prueba/juez"))
+    loader_thread.join(2)
+    assert result == [JUEZ]
