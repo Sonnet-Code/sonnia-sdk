@@ -37,19 +37,20 @@ RULES_MARGIN = 20
 
 RULES_TEXT = """\
 AKINATOR EN MARCHA: el visitante piensa en algo del mundo tech y tú lo adivinas con preguntas de sí o no ({max} como mucho).
-- Una pregunta corta cada vez, solo de sí o no, y espera. Reacciona en pocas palabras. Las preguntas son tuyas, sin delegar: así vais rápido.
+- Una pregunta corta cada vez, solo de sí o no, y espera. Reacciona en pocas palabras. Las haces tú, sin delegar.
 - Acepta «sí», «no», «no sé», «a veces» y «probablemente». No repitas preguntas. Lo que hablan entre ellos no es una respuesta.
 - Empieza por lo general (¿persona?, ¿lenguaje?, ¿de Google?) y afina.
 - Puede ser: {themes}.
-- No arriesgues antes de la pregunta {min}. Si lo tienes claro, delega «akinator: adivina X» y pregunta «¿es X?». Cuando diga si acertaste, o qué era, delega «akinator: resultado».
+- No arriesgues antes de la pregunta {min}. Si lo tienes claro, delega «akinator: adivina X» y pregunta «¿es X?». Cuando diga si acertaste o qué era, delega «akinator: resultado: sí o no, era Y».
 - Si llegas a la {max} sin saberlo, arriesga o ríndete y pídele qué era.
 - La pantalla solo cambia si delegas: nunca digas que acertaste o fallaste sin delegarlo."""
 
 START_SCRIPT = (
     "Arranca el Akinator dev con energía. En dos frases cortas: que vas a adivinar lo que piense, "
-    "y que piense en algo del mundo tech ({themes}) sin decírtelo. Pídele que te avise cuando lo "
-    "tenga y espera: todavía no hagas ninguna pregunta. Cuando te diga que ya, empieza con tu "
-    "primera pregunta de sí o no, una sola."
+    "y que piense en algo del mundo tech ({themes}) sin decírtelo. Si no sabe en qué pensar, dale "
+    "una idea (un lenguaje, una empresa o alguien famoso de la informática). Pídele que te avise "
+    "cuando lo tenga y espera: todavía no hagas ninguna pregunta. Cuando te diga que ya, empieza "
+    "con tu primera pregunta de sí o no, una sola."
 )
 
 #: Cuántos temas nombra Sonia al abrir el juego (más se hace largo de decir).

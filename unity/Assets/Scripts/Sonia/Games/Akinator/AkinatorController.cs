@@ -189,6 +189,11 @@ namespace Sonia.Games.Akinator
         protected override void OnStart(string dataJson)
         {
             EnsureBuilt();
+            if (!_built)
+            {
+                return;
+            }
+
             StartData start = ParseData<StartData>(dataJson);
             _themes = start.Themes ?? new string[0];
             _max = Mathf.Clamp(start.Max, MinQuestions, MaxQuestions);
@@ -894,13 +899,13 @@ namespace Sonia.Games.Akinator
                     float z = Mathf.Sqrt(Mathf.Max(0f, 1f - r2));
                     Vector3 normal = new Vector3(u, v, z);
                     float diffuse = Mathf.Clamp01(Vector3.Dot(normal, light));
-                    float specular = Mathf.Pow(Mathf.Clamp01(Vector3.Dot(normal, half)), 56f);
+                    float specular = Mathf.Pow(Mathf.Clamp01(Vector3.Dot(normal, half)), 90f);
                     float rim = Mathf.Pow(1f - z, 2.4f);
                     Color color = Color.Lerp(deep, mid, Mathf.Pow(z, 0.7f));
                     color = Color.Lerp(color, core, Mathf.Pow(z, 5f) * 0.55f);
                     color *= 0.62f + (0.6f * diffuse);
                     color += rimColor * (rim * 0.6f);
-                    color += Color.white * (specular * 0.9f);
+                    color += Color.white * (specular * 0.75f);
                     float alpha = Mathf.Lerp(0.9f, 0.97f, z) * edge;
                     pixels[(y * size) + x] = new Color32(
                         (byte)(Mathf.Clamp01(color.r) * 255f),
