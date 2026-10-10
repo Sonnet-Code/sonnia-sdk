@@ -17,6 +17,13 @@ Resumen del trabajo de la noche del 9 al 10 de octubre (sesión principal «soni
 2. Builds finales desde `~/Documents/git/sonia-build` con el commit de `main` (receta probada: ver el informe del agente de builds).
 3. Desplegar el panel de la nube (`cd cloud/panel && npm run deploy`, desde un worktree limpio de `main`). Probado en local con una Sonnia 1.0.199 y una nueva.
 
+## Defectos conocidos (no bloquean)
+
+- **Piedra, papel o tijera:** la pastilla de subtítulos del visitante («TÚ …») tapa a veces la mano de Sonnia en el resultado; el marcador ya dice qué sacó cada uno.
+- **Akinator:** una pregunta partida sin «¿» en su primera mitad puede salir cortada en pantalla (el contador cuenta bien).
+- **Unity** se anuncia como «unity 0.1.0» en `client_hello` (cosmético).
+- **Ruleta:** cada vuelta añade sus reglas a la sesión (~1 KB); en el stand serán pocas vueltas.
+
 ## Para revisar (Jean)
 
 - **Bancos en borrador:** `assets/games/ruleta/` (adivinanzas, tecnologías, retos de Sonnet Code), `assets/games/wordle/palabras.md`, `assets/games/akinator/temas.md`, `assets/games/busqueda/objetos.md`, `assets/games/poses/poses.md`. Se pueden cambiar desde el panel sin reinstalar.
