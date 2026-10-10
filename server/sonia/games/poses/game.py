@@ -242,6 +242,7 @@ class PosesGame(Game):
         self._results: list[RoundResult] = []
         self._empty_rounds = 0
         self._last_frame: object | None = None
+        self._last_pose: str | None = None
         self._last_count: FrameCount | None = None
         self._touched_at = float("-inf")
         self._asked_close_at = float("-inf")
@@ -426,10 +427,10 @@ class PosesGame(Game):
         result = RoundResult(entry.id, simon, count, total)
         self._results.append(result)
         await self._show("result")
-        await host.speak(self._result_text(result, last=index == len(self._plan) - 1))
         self._empty_rounds = self._empty_rounds + 1 if total == 0 else 0
         if self._empty_rounds >= EMPTY_ROUNDS_TO_STOP:
             return False
+        await host.speak(self._result_text(result, last=index == len(self._plan) - 1))
         await self._pause(RESULT_HOLD_S)
         await self._wait_reply()
         return True
@@ -573,12 +574,14 @@ class PosesGame(Game):
             self._last_count = None
             self._skeletons.clear()
             return None
-        if frame is self._last_frame and self._last_count is not None:
+        pose = self._live_pose()
+        if frame is self._last_frame and pose == self._last_pose and self._last_count is not None:
             return self._last_count
-        counted = count_frame(frame, self._live_pose(), float(self._cfg().min_person))
+        counted = count_frame(frame, pose, float(self._cfg().min_person))
         trap = not self._simon
         self._skeletons.show(Skeleton(person, _tint(mark, trap)) for person, mark in counted.marks)
         self._last_frame = frame
+        self._last_pose = pose
         self._last_count = counted
         self._placement = counted.placement
         now = self.host.now()

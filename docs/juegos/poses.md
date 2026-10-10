@@ -57,10 +57,10 @@ Sus eventos están en `docs/protocolo.md` («Eventos de cada juego», `poses`). 
 
   | id | Orden | Pose | Cómo se detecta |
   |---|---|---|---|
-  | `brazos_arriba` | «¡Pasaron todos los tests!» | Los dos brazos arriba. | Cada muñeca al menos 0,45 S por encima de la nariz con el codo por encima del hombro (sin muñeca, el codo por encima de la nariz). Vale en V. |
+  | `brazos_arriba` | «¡Pasaron todos los tests!» | Los dos brazos arriba. | Cada muñeca al menos 0,45 S por encima de la nariz con el codo al menos 0,25 S por encima del hombro (sin muñeca, el codo por encima de la nariz). Vale en V y con los puños en alto y los codos doblados. |
   | `un_brazo` | «Subiendo a producción» | Un brazo arriba. | Un brazo arriba (como el de arriba) y el otro no. |
   | `pose_t` | «Pose T, la del avatar sin animar» | Brazos en cruz. | Cada brazo hacia fuera, a menos de 35° de la horizontal, estirado (la muñeca a más de 0,85 S del hombro y el codo a más de 130°). |
-  | `manos_cabeza` | «Deploy un viernes» | Manos a la cabeza. | Cada muñeca a menos de 0,85 S del centro de la cabeza y no por debajo de la barbilla (sin muñeca, el codo levantado por encima del hombro sin llegar a lo de brazos arriba). |
+  | `manos_cabeza` | «Deploy un viernes» | Manos a la cabeza. | Cada muñeca a menos de 0,85 S del centro de la cabeza, ni por debajo de la barbilla ni a más de 0,6 S por encima de la nariz (los brazos estirados hacia arriba no cuentan); sin muñeca, el codo levantado por encima del hombro sin llegar a lo de brazos arriba. |
   | `biceps` | «Compiló a la primera» | Sacar bíceps. | Cada codo a la altura del hombro (±0,45 S) y abierto hacia fuera, con la muñeca por encima del codo y el antebrazo más vertical que horizontal. |
   | `barbilla` | «Revisando el PR» | Mano en la barbilla. | Una muñeca por debajo de la nariz, como mucho 0,2 S bajo la línea de los hombros, cerca del centro de la cara y con el codo por debajo. |
 
