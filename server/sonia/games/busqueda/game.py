@@ -250,6 +250,7 @@ class BusquedaGame(Game):
         if self._phase == "running":
             left = max(0.0, self._deadline - self.host.now())
         return {
+            "summary": self._summary(),
             "phase": self._phase,
             "round": self._round,
             "rounds": self._total,
@@ -260,6 +261,17 @@ class BusquedaGame(Game):
             "checks": self._checks,
             "photos": self._photos,
         }
+
+    def _summary(self) -> str:
+        """Una línea para la tarjeta «Juegos» del panel: «Ronda 2 de 3: algo azul · 1 encontrada»."""
+        entry = self._current
+        if self._phase == "off" or entry is None:
+            return ""
+        plural = "encontrada" if self._found == 1 else "encontradas"
+        found = f"{self._found} {plural}"
+        if self._phase == "done":
+            return f"Terminada: {found} de {self._total}"
+        return f"Ronda {self._round} de {self._total}: {entry.name} · {found}"
 
     # -- el reloj -----------------------------------------------------------------------
 

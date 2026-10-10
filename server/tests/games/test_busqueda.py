@@ -852,6 +852,27 @@ async def test_el_estado_del_panel_va_en_tipos_json() -> None:
     assert len(snapshot["objects"]) == 3 and snapshot["object"] in snapshot["objects"]
 
 
+async def test_el_resumen_del_panel_cuenta_la_ronda_en_una_linea() -> None:
+    game, host, _ = new_game(SEEN)
+    assert game.snapshot()["summary"] == ""
+    await game.start("voice", {})
+    name = current(game)
+    assert game.snapshot()["summary"] == f"Ronda 1 de 3: {name} · 0 encontradas"
+    await go(game, host)
+    await pump(game, host, 2.7)  # la ve
+    assert game.snapshot()["summary"] == f"Ronda 1 de 3: {name} · 1 encontrada"
+    await game.stop("panel")
+    assert game.snapshot()["summary"] == ""
+
+
+async def test_el_resumen_del_panel_al_terminar() -> None:
+    game, host, _ = game_where(True, True, False)
+    await game.start("voice", {})
+    await play_game(game, host, [True, True, False])
+    assert phase(game) == "done"
+    assert game.snapshot()["summary"] == "Terminada: 2 encontradas de 3"
+
+
 async def test_volver_a_pedirlo_con_la_partida_en_marcha_da_la_ronda_de_ahora() -> None:
     game, host, _ = new_game()
     await game.start("voice", {})
