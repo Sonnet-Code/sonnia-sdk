@@ -12,6 +12,9 @@ Es la costura entre los cimientos de los juegos (``sonia.games``, que llaman a
   (``sonia.vision.referee``). Con ``GAMES_JUDGE=gemini`` y ``GEMINI_API_KEY`` es Gemini, el
   modelo de los gestos, y la búsqueda también pregunta a Gemini; con ``local`` o sin clave,
   todo como antes: deciden las detecciones locales y la búsqueda va al modelo de visión.
+- ``judge_switch``: con clave, Gemini se monta siempre y ``GAMES_JUDGE`` es solo el modo de
+  arranque; el panel lo cambia en caliente (``games_judge``) y ``referee`` y ``judge``
+  (:class:`SwitchedReferee`, :class:`SwitchedJudge`) miran el modo en cada llamada.
 
 Sin cámara USB (``VISION_SOURCE`` distinto de ``opencv``) todo dice que no está disponible y
 los juegos de cámara no se ofrecen. Cada pieza se apaga sola si le falta lo suyo (los modelos,
@@ -32,11 +35,14 @@ from sonia.vision.contracts import (
     GameReferee,
     GameVision,
     HandReading,
+    HandVerdict,
     JudgeAnswer,
+    JudgeSwitch,
     NoReferee,
     Overlay,
     Person,
     PoseFrame,
+    PoseVerdict,
     VisionJudge,
 )
 
@@ -45,7 +51,14 @@ if TYPE_CHECKING:
     from sonia.llm import LLMClient
     from sonia.types import CameraSource
 
-__all__ = ["SendBytes", "SendJson", "build_game_vision", "unavailable_game_vision"]
+__all__ = [
+    "SendBytes",
+    "SendJson",
+    "SwitchedJudge",
+    "SwitchedReferee",
+    "build_game_vision",
+    "unavailable_game_vision",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +146,72 @@ class NoJudge:
 
     async def ask(self, question: str) -> JudgeAnswer | None:
         return None
+
+
+class SwitchedReferee:
+    """El juez de las rondas según el modo de ``switch``: Gemini o ``local`` (sin juez).
+
+    Mira el modo en cada llamada: los juegos preguntan ``available`` en cada ronda, así que
+    un cambio desde el panel vale desde la ronda siguiente, también a media partida.
+    """
+
+    def __init__(
+        self, switch: JudgeSwitch, gemini: GameReferee, local: GameReferee | None = None
+    ) -> None:
+        self._switch = switch
+        self._gemini = gemini
+        self._local: GameReferee = local or NoReferee()
+
+    @property
+    def current(self) -> GameReferee:
+        return self._gemini if self._switch.mode == "gemini" else self._local
+
+    @property
+    def available(self) -> bool:
+        return self.current.available
+
+    async def poses(self, frame_bgr: np.ndarray) -> PoseVerdict | None:
+        return await self.current.poses(frame_bgr)
+
+    async def hands(self, frame_bgr: np.ndarray) -> HandVerdict | None:
+        return await self.current.hands(frame_bgr)
+
+
+class SwitchedJudge:
+    """El juez de la búsqueda relámpago según el modo de ``switch``.
+
+    ``gemini``: Gemini (y, si falla, el modelo de visión, ``FallbackJudge``); ``local``: el
+    modelo de visión de siempre o :class:`NoJudge`. ``start_round`` va a los dos, para que
+    el tope de fotos de la ronda cuadre si el modo cambia a media ronda.
+    """
+
+    def __init__(self, switch: JudgeSwitch, gemini: VisionJudge, local: VisionJudge) -> None:
+        self._switch = switch
+        self._gemini = gemini
+        self._local = local
+
+    @property
+    def current(self) -> VisionJudge:
+        return self._gemini if self._switch.mode == "gemini" else self._local
+
+    @property
+    def available(self) -> bool:
+        return self.current.available
+
+    @property
+    def remaining(self) -> int | None:
+        """Fotos que quedan en la ronda del juez en uso (``None``: sin tope o sin cuenta)."""
+        remaining = getattr(self.current, "remaining", None)
+        return remaining if isinstance(remaining, int) else None
+
+    def start_round(self, max_calls: int | None) -> None:
+        for judge in (self._gemini, self._local):
+            start = getattr(judge, "start_round", None)
+            if callable(start):
+                start(max_calls)
+
+    async def ask(self, question: str) -> JudgeAnswer | None:
+        return await self.current.ask(question)
 
 
 def unavailable_game_vision() -> GameVision:
@@ -228,38 +307,46 @@ def _build(
         if vision_llm is not None and settings.llm.supports_vision
         else NoJudge()
     )
-    # El juez de las rondas (GAMES_JUDGE). Con Gemini, un solo cliente para las rondas y la
-    # búsqueda (la conexión se reutiliza); su tope de petición es el más largo de los dos
-    # plazos, que cada uno corta con el suyo. Sin Gemini, todo como antes.
+    # El juez de las rondas. Con clave de Gemini se monta siempre, aunque GAMES_JUDGE diga
+    # ``local``: GAMES_JUDGE es solo el modo de arranque y el panel lo cambia en caliente
+    # (``games_judge``). Un solo cliente para las rondas y la búsqueda (la conexión se
+    # reutiliza); su tope de petición es el más largo de los dos plazos, que cada uno corta
+    # con el suyo. Sin Gemini, todo como antes y el modo es siempre ``local``.
     referee: GameReferee = NoReferee()
     gemini: LLMClient | None = None
-    referee_name = "local"
-    if settings.games.judge == "gemini":
-        timeout_s = max(0.5, float(settings.games.judge_timeout_seconds))
-        gemini_settings = gemini_llm_settings(settings, max(timeout_s, JUDGE_TIMEOUT_S))
-        if gemini_settings is None:
+    gemini_name = ""
+    timeout_s = max(0.5, float(settings.games.judge_timeout_seconds))
+    gemini_settings = gemini_llm_settings(settings, max(timeout_s, JUDGE_TIMEOUT_S))
+    if gemini_settings is None:
+        if settings.games.judge == "gemini":
             logger.warning(
                 "GAMES_JUDGE=gemini sin Gemini (falta GEMINI_API_KEY o los gestos van por otro "
                 "servidor): los juegos de cámara deciden en local"
             )
-        else:
-            from sonia.llm import LLMClient
+    else:
+        from sonia.llm import LLMClient
 
-            gemini = LLMClient(gemini_settings)
-            referee = GeminiReferee(gemini, timeout_s=timeout_s)
-            # La búsqueda: Gemini con el plazo del juez y, si falla (un 429 de la clave, el
-            # plazo), la misma pregunta al modelo de visión con lo que queda de los 8 s que
-            # espera el juego (``JUDGE_TIMEOUT_S``).
-            gemini_judge = ModelJudge(gemini, camera, timeout_s=timeout_s)
-            judge = (
+        gemini = LLMClient(gemini_settings)
+        gemini_name = f"Gemini ({gemini_settings.model}, plazo {timeout_s:g} s)"
+    switch = JudgeSwitch(settings.games.judge, gemini=gemini is not None)
+    if gemini is not None:
+        # La búsqueda: Gemini con el plazo del juez y, si falla (un 429 de la clave, el
+        # plazo), la misma pregunta al modelo de visión con lo que queda de los 8 s que
+        # espera el juego (``JUDGE_TIMEOUT_S``). En ``local``, el modelo de visión de siempre.
+        gemini_judge = ModelJudge(gemini, camera, timeout_s=timeout_s)
+        referee = SwitchedReferee(switch, GeminiReferee(gemini, timeout_s=timeout_s))
+        judge = SwitchedJudge(
+            switch,
+            (
                 FallbackJudge(
                     gemini_judge,
                     ModelJudge(vision_llm, camera, timeout_s=max(2.0, JUDGE_TIMEOUT_S - timeout_s)),
                 )
                 if vision_llm is not None and settings.llm.supports_vision
                 else gemini_judge
-            )
-            referee_name = f"Gemini ({gemini_settings.model}, plazo {timeout_s:g} s)"
+            ),
+            judge,
+        )
     # Al arrancar solo se exigen el de poses de GAME_POSES_MODEL y los de manos: el otro de
     # poses (la app lleva los dos) se baja la primera vez que se pide desde el panel.
     missing = tuple(model for model in game_models(variant) if not model_present(folder, model))
@@ -292,20 +379,23 @@ def _build(
             except Exception:  # noqa: BLE001 - cerrar nunca tumba nada
                 logger.debug("No se pudo cerrar el cliente del juez de Gemini", exc_info=True)
 
+    searching = vision_llm is not None and settings.llm.supports_vision
     logger.info(
         "Visión de los juegos: poses %s (%s), manos %s, juez de rondas %s, búsqueda %s",
         "lista" if poses.available else "sin modelo",
         variant,
         "listas" if hands.available else "sin modelo",
-        referee_name,
+        f"{switch.mode} al arrancar, {gemini_name} si se elige (el panel lo cambia en caliente)"
+        if gemini is not None
+        else "local (sin Gemini)",
         (
             "con Gemini y, si falla, el modelo de visión"
-            if isinstance(judge, FallbackJudge)
-            else "con Gemini"
-            if gemini is not None
-            else "con el modelo de visión"
+            if searching
+            else "con Gemini (en local, sin modelo de visión)"
         )
-        if judge.available
+        if gemini is not None
+        else "con el modelo de visión"
+        if searching
         else "sin modelo de visión",
     )
     return GameVision(
@@ -316,6 +406,7 @@ def _build(
         judge=judge,
         close=close,
         referee=referee,
+        judge_switch=switch,
     )
 
 

@@ -21,7 +21,7 @@ from sonia.llm import Completion, LLMClient
 from sonia.vision import models as models_module
 from sonia.vision.camera import OpenCVCamera
 from sonia.vision.contracts import HandShape, HandVerdict, NoReferee, PoseVerdict
-from sonia.vision.games import NoJudge, build_game_vision
+from sonia.vision.games import NoJudge, SwitchedJudge, SwitchedReferee, build_game_vision
 from sonia.vision.judge import FallbackJudge, ModelJudge
 from sonia.vision.referee import (
     HANDS_PROMPT,
@@ -298,20 +298,27 @@ async def test_con_gemini_y_clave_juzga_gemini_y_la_busqueda_tambien(
     monkeypatch.setattr(LLMClient, "aclose", aclose)
     luna = object()
     vision = build(gemini_settings(key="clave-de-prueba"), vision_llm=luna)
-    assert isinstance(vision.referee, GeminiReferee)
+    assert vision.judge_switch is not None and vision.judge_switch.mode == "gemini"
+    assert isinstance(vision.referee, SwitchedReferee)
+    referee = vision.referee.current
+    assert isinstance(referee, GeminiReferee)
     assert vision.referee.available
     # La búsqueda pregunta primero a Gemini (el mismo cliente que las rondas) y, si falla,
     # al modelo de visión.
-    assert isinstance(vision.judge, FallbackJudge)
-    client = vision.referee._llm
+    assert isinstance(vision.judge, SwitchedJudge)
+    judge = vision.judge.current
+    assert isinstance(judge, FallbackJudge)
+    client = referee._llm
     assert isinstance(client, LLMClient)
-    assert vision.judge._primary._llm is client
-    assert vision.judge._secondary._llm is luna
+    assert judge._primary._llm is client
+    assert judge._secondary._llm is luna
     await vision.close()
     assert closed == [client]
     # Sin modelo de visión, solo Gemini.
     vision = build(gemini_settings(key="clave-de-prueba"))
-    assert isinstance(vision.judge, ModelJudge) and vision.judge._llm is vision.referee._llm
+    assert isinstance(vision.judge, SwitchedJudge) and isinstance(vision.referee, SwitchedReferee)
+    judge = vision.judge.current
+    assert isinstance(judge, ModelJudge) and judge._llm is vision.referee.current._llm
     await vision.close()
 
 
@@ -320,6 +327,12 @@ async def test_con_gemini_sin_clave_todo_como_antes() -> None:
     vision = build(gemini_settings(), vision_llm=luna)
     assert isinstance(vision.referee, NoReferee)
     assert isinstance(vision.judge, ModelJudge) and vision.judge._llm is luna
+    # El panel no puede elegir Gemini: el modo es local y el estado lo dice.
+    switch = vision.judge_switch
+    assert switch is not None
+    assert switch.state() == {"mode": "local", "app": "gemini", "requested": None, "gemini": False}
+    assert switch.set_mode("gemini") == "local"
+    assert switch.state()["requested"] == "gemini" and switch.mode == "local"
     vision = build(gemini_settings())
     assert isinstance(vision.referee, NoReferee)
     assert isinstance(vision.judge, NoJudge)
@@ -329,8 +342,21 @@ async def test_con_gemini_sin_clave_todo_como_antes() -> None:
 async def test_con_local_no_se_usa_gemini_aunque_haya_clave() -> None:
     luna = object()
     vision = build(gemini_settings(key="clave-de-prueba", judge="local"), vision_llm=luna)
-    assert isinstance(vision.referee, NoReferee)
-    assert isinstance(vision.judge, ModelJudge) and vision.judge._llm is luna
+    # Gemini se monta igual, para poder pasar a él desde el panel, pero no juzga.
+    switch = vision.judge_switch
+    assert switch is not None
+    assert switch.state() == {"mode": "local", "app": "local", "requested": None, "gemini": True}
+    assert isinstance(vision.referee, SwitchedReferee) and isinstance(vision.judge, SwitchedJudge)
+    assert not vision.referee.available
+    assert isinstance(vision.referee.current, NoReferee)
+    judge = vision.judge.current
+    assert isinstance(judge, ModelJudge) and judge._llm is luna
+    # Desde el panel, a Gemini y de vuelta al de la app.
+    assert switch.set_mode("gemini") == "gemini"
+    assert vision.referee.available and isinstance(vision.referee.current, GeminiReferee)
+    assert isinstance(vision.judge.current, FallbackJudge)
+    assert switch.set_mode(None) == "local"
+    assert not vision.referee.available and vision.judge.current is judge
     await vision.close()
 
 

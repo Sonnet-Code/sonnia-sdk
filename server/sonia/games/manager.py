@@ -19,8 +19,9 @@ Lleva un juego a la vez y todo lo común, para que cada juego solo haga lo suyo:
 - **Reconexión de Unity.** El ``start`` de la partida y su último estado son mensajes
   fijos del hub: se repiten tras ``hello``.
 - **Estado y órdenes del panel**: :meth:`snapshot`, :meth:`capabilities`, ``games_off``,
-  los bancos editables (``game_banks``) y el modelo de poses (``games_pose_model``,
-  :meth:`set_pose_model`).
+  los bancos editables (``game_banks``), el modelo de poses (``games_pose_model``,
+  :meth:`set_pose_model`) y el juez de las rondas de cámara (``games_judge``,
+  :meth:`set_judge`).
 
 Nada de lo que pase aquí tumba el motor: los fallos de un juego van al registro.
 """
@@ -47,7 +48,7 @@ from sonia.games.base import (
     StopReason,
 )
 from sonia.types import ActionResult
-from sonia.vision.contracts import GameVision
+from sonia.vision.contracts import GameVision, JudgeMode, judge_mode
 from sonia.vision.models import DEFAULT_POSE_VARIANT, POSE_VARIANTS, pose_variant
 from sonia.ws import protocol as p
 
@@ -64,6 +65,7 @@ __all__ = [
     "Phase",
     "VoiceClips",
     "normalize_game_banks",
+    "normalize_games_judge",
     "normalize_games_off",
     "normalize_pose_model",
 ]
@@ -271,6 +273,9 @@ class GameManager:
         #: Modelo de poses pedido desde el panel (ajuste compartido ``games_pose_model``);
         #: ``None``: el de ``GAME_POSES_MODEL``. Se guarda por si la visión llega después.
         self._pose_model_request: str | None = None
+        #: Juez de las rondas de cámara pedido desde el panel (ajuste compartido
+        #: ``games_judge``); ``None``: el de ``GAMES_JUDGE``. Igual: por si la visión llega después.
+        self._judge_request: JudgeMode | None = None
         #: Apagados desde el panel (ajuste compartido ``games_off``).
         self._off: frozenset[str] = frozenset()
         #: Bancos guardados en la nube desde el panel (``game_banks``): ``{banco: texto}``.
@@ -300,6 +305,8 @@ class GameManager:
         self._vision = vision
         if self._pose_model_request is not None:
             self._apply_pose_model()
+        if self._judge_request is not None:
+            self._apply_judge()
 
     @property
     def vision(self) -> GameVision:
@@ -444,6 +451,7 @@ class GameManager:
             "unity_games": sorted(self._unity_games) if self._unity_games is not None else None,
             "preview": self.preview_supported(),
             "pose_model": self._pose_model_state(),
+            "judge": self._judge_state(),
         }
 
     def _controls(self, game: Game | None) -> list[dict[str, Any]]:
@@ -509,6 +517,8 @@ class GameManager:
             caps.append("game_banks")
         if self._pose_model_setter() is not None:
             caps.append("game_pose_model")
+        if self._vision.judge_switch is not None:
+            caps.append("game_judge")
         # Controles a mano de la partida en marcha (``snapshot()["controls"]``, acción
         # ``game_control``): las apps anteriores no los tienen.
         caps.append("game_controls")
@@ -559,6 +569,49 @@ class GameManager:
             "default": default,
             "options": list(POSE_VARIANTS),
         }
+
+    # -- panel: juez de las rondas de cámara -----------------------------------
+
+    def set_judge(self, mode: str | None) -> None:
+        """El juez de las rondas de cámara que pide el panel (ajuste compartido ``games_judge``).
+
+        ``gemini`` o ``local``; ``None`` (o algo que no es ninguno) vuelve al de
+        ``GAMES_JUDGE``. Vale al momento, también con una partida en marcha: los juegos miran
+        el juez en cada ronda. Sin Gemini se queda en ``local``, y sin visión de juegos que lo
+        admita (``GameVision.judge_switch``), no hace nada.
+        """
+        self._judge_request = normalize_games_judge(mode)
+        self._apply_judge()
+
+    def _apply_judge(self) -> None:
+        switch = self._vision.judge_switch
+        if switch is None:
+            return
+        before = switch.mode
+        try:
+            now = switch.set_mode(self._judge_request)
+        except Exception:  # noqa: BLE001 - el panel no tumba el motor
+            logger.exception("No se pudo cambiar el juez de las rondas a %s", self._judge_request)
+            return
+        if now != before:
+            logger.info(
+                "Juez de las rondas de cámara: %s (%s)",
+                now,
+                "pedido desde el panel" if self._judge_request else "el de la app, GAMES_JUDGE",
+            )
+        if self._judge_request == "gemini" and now != "gemini":
+            logger.warning("El panel pide el juez de Gemini, pero esta Sonnia no lo tiene: local")
+
+    def _judge_state(self) -> dict[str, Any] | None:
+        """``{"mode", "app", "requested", "gemini"}`` para el panel, o ``None`` si no se puede cambiar."""
+        switch = self._vision.judge_switch
+        if switch is None:
+            return None
+        try:
+            return switch.state()
+        except Exception:  # noqa: BLE001
+            logger.exception("Falló el estado del juez de las rondas")
+            return None
 
     # -- panel: interruptores -------------------------------------------------
 
@@ -1392,6 +1445,11 @@ def normalize_games_off(value: Any) -> list[str]:
 def normalize_pose_model(value: Any) -> str | None:
     """``games_pose_model`` tal como llega de la nube: ``n``, ``s`` o ``None`` (el de los ajustes)."""
     return pose_variant(value)
+
+
+def normalize_games_judge(value: Any) -> JudgeMode | None:
+    """``games_judge`` tal como llega de la nube: ``gemini``, ``local`` o ``None`` (el de la app)."""
+    return judge_mode(value)
 
 
 def normalize_game_banks(value: Any) -> dict[str, str] | None:

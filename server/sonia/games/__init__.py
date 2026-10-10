@@ -30,7 +30,7 @@ from sonia.games.base import (
     GameResult,
     StopReason,
 )
-from sonia.games.manager import normalize_games_off, normalize_pose_model
+from sonia.games.manager import normalize_games_judge, normalize_games_off, normalize_pose_model
 
 __all__ = [
     "BANK_MAX_CHARS",
@@ -46,6 +46,7 @@ __all__ = [
     "GameHost",
     "GameResult",
     "StopReason",
+    "normalize_games_judge",
     "normalize_games_off",
     "normalize_pose_model",
 ]
