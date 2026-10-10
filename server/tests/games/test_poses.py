@@ -415,6 +415,40 @@ async def test_resume_dice_por_donde_va() -> None:
     assert "ronda 1 de 6" in text
 
 
+async def test_con_barullo_la_ronda_no_espera_de_mas() -> None:
+    game, host, _ = crowd_game()
+    await game.start("voice", {})
+    host.tasks[0].cancel()
+    # Sonia callada pero la sesión nunca en calma (el grupo charla): basta con esperar un poco.
+    host.idle = False
+    began = host.now()
+    assert await game._wait_calm()
+    assert host.now() - began == pytest.approx(poses_game.CALM_IDLE_MAX_S, abs=0.25)
+    # En calma, enseguida.
+    host.idle = True
+    began = host.now()
+    assert await game._wait_calm()
+    assert host.now() - began < 0.2
+
+
+async def test_la_ventana_se_abre_cuando_termina_la_orden() -> None:
+    game, host, _ = crowd_game()
+    await game.start("voice", {})
+    host.tasks[0].cancel()
+    t0 = host.now()
+
+    def quiet_for() -> float:
+        # La orden empieza a sonar a los 0,5 s y dura 2,5 s.
+        now = host.now() - t0
+        if now < 0.5:
+            return 10.0
+        return 0.0 if now < 3.0 else now - 3.0
+
+    host.quiet_for = quiet_for  # type: ignore[method-assign]
+    await game._wait_phrase()
+    assert 3.1 <= host.now() - t0 <= 3.3
+
+
 def test_ningun_texto_para_sonia_nombra_el_stack_ni_se_pasa() -> None:
     check_for_live(poses_game.RULES_TEXT.format(rounds=12), limit=1200)
     texts = [

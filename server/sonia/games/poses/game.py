@@ -79,6 +79,9 @@ CLOSE_ASK_COOLDOWN_S = 12.0
 CALM_MAX_S = 12.0
 #: ...con Sonia callada al menos esto.
 CALM_QUIET_S = 0.6
+#: Con Sonia ya callada, se espera además a que nadie hable como mucho esto: en un stand con
+#: barullo (el grupo ríe tras cada ronda) la sesión casi nunca queda del todo en calma.
+CALM_IDLE_MAX_S = 4.0
 #: De que Sonnia empieza a demostrar la pose (evento ``round``) a la orden.
 DEMO_LEAD_S = 1.4
 #: La orden tiene que empezar a sonar en esto (si no, se sigue igual)...
@@ -475,13 +478,23 @@ class PosesGame(Game):
             await self.host.sleep(POLL_S)
 
     async def _wait_calm(self) -> bool:
-        """Nadie habla y Sonia lleva un poco callada (como mucho :data:`CALM_MAX_S`)."""
+        """Sonia callada y, si se puede, nadie hablando (como mucho :data:`CALM_MAX_S`).
+
+        Pasados :data:`CALM_IDLE_MAX_S` con Sonia callada, basta con eso: la ronda no se
+        queda esperando a que el grupo deje de reír o de comentar.
+        """
         host = self.host
-        end = host.now() + CALM_MAX_S
-        while host.now() < end:
+        began = host.now()
+        quiet_since: float | None = None
+        while host.now() - began < CALM_MAX_S:
             self._poll()
-            if host.quiet_for() >= CALM_QUIET_S and await host.wait_idle(0.0):
-                return True
+            now = host.now()
+            if host.quiet_for() < CALM_QUIET_S:
+                quiet_since = None
+            else:
+                quiet_since = now if quiet_since is None else quiet_since
+                if now - quiet_since >= CALM_IDLE_MAX_S or await host.wait_idle(0.0):
+                    return True
             await host.sleep(POLL_S)
         return False
 
@@ -521,15 +534,10 @@ class PosesGame(Game):
         while host.now() - began < REPLY_MAX_S:
             self._poll()
             quiet = host.quiet_for()
-            if quiet <= 0.05:
-                talked = True
-            elif (
-                talked
-                and quiet >= CALM_QUIET_S
-                and await host.wait_idle(0.0)
-                or not talked
-                and host.now() - began >= REPLY_START_MAX_S
-            ):
+            talked = talked or quiet <= 0.05
+            if talked and quiet >= CALM_QUIET_S:
+                return
+            if not talked and host.now() - began >= REPLY_START_MAX_S:
                 return
             await host.sleep(POLL_S)
 
