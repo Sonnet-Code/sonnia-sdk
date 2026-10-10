@@ -50,7 +50,7 @@ GAMES: tuple[GameEntry, ...] = (
     GameEntry(RuletaGame, on=False),
     #
     # A3: Simón dice con poses (docs/juegos/poses.md).
-    GameEntry(PosesGame, on=False),
+    GameEntry(PosesGame, on=True),
     #
     # A4: Akinator dev (docs/juegos/akinator.md).
     GameEntry(AkinatorGame, on=False),
