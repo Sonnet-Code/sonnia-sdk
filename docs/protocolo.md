@@ -302,6 +302,14 @@ En los dos casos Unity quita el gorro y el tema al acabar.
 {"type": "trivia_end", "score": 4, "total": 5, "won": true, "reason": "finished"}
 ```
 
+### `camera_preview`
+
+Enciende o apaga la vista en vivo de la cámara en la franja alta, encima de Sonia, durante los juegos que la usan (`docs/plan-juegos.md`): poses, piedra, papel o tijera y búsqueda relámpago. Es la única excepción a que las imágenes de la cámara no salgan en pantalla. Solo se muestra en directo y nunca se guarda. La imagen llega en frames binarios `SNCV` (abajo). Con `on: false`, o si pasan 2 s sin frames, Unity la retira. Solo se manda a una Unity que anuncia `camera_preview` en `client_hello.features`.
+
+```json
+{"type": "camera_preview", "on": true, "mirror": true}
+```
+
 ### `error`
 
 ```json
@@ -322,6 +330,21 @@ Cabecera de 12 bytes, little endian, seguida del PCM s16le mono (la voz de GPT-L
 Los chunks son de unos 100 ms y llegan a ritmo real. Unity los encola en un buffer circular y los reproduce sin esperar a que llegue la frase completa. El último chunk de una frase (bit 0 de `flags`) puede ir vacío.
 
 La voz del invitado del Modo Jean usa la misma cabecera con el magic `SNGU`, a la `sample_rate` de `guest_mode`. Llega en rachas: una racha es una frase, que se corta tras 500 ms de silencio y lleva unos 150 ms de colchón al empezar. Los bloques son de 60 ms. Unity la manda al reproductor del invitado, no al de Sonia. Las versiones que no la conocen la ignoran porque la marca no coincide.
+
+## Frames binarios de la vista en vivo (`SNCV`)
+
+Cabecera de 16 bytes, little endian, seguida de un JPEG entero. Llegan unos 10 por segundo, a 640x360, mientras `camera_preview` está encendida.
+
+| Offset | Tamaño | Campo | Valor |
+|---|---|---|---|
+| 0 | 4 | magic | `SNCV` (bytes ASCII) |
+| 4 | 4 | seq | uint32, sube en cada frame |
+| 8 | 2 | ancho | uint16, píxeles del JPEG |
+| 10 | 2 | alto | uint16 |
+| 12 | 4 | flags | uint32. Bit 0: la imagen ya va en espejo. |
+| 16 | n | jpeg | la imagen, con los esqueletos y las marcas del juego ya dibujados encima |
+
+Unity muestra siempre el último frame y descarta los que lleguen con un `seq` menor. Las versiones que no lo conocen lo ignoran porque la marca no coincide.
 
 ## De Unity al orquestador
 

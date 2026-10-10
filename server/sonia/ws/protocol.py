@@ -37,6 +37,19 @@ FLAG_LAST = 1
 #: cabecera que ``MAGIC``; los Unity antiguos los ignoran).
 GUEST_MAGIC = b"SNGU"
 
+#: Marca de los frames binarios de la vista en vivo de la cámara en los juegos
+#: (``docs/plan-juegos.md``). Solo se mandan a una Unity que anuncia ``camera_preview``
+#: en ``client_hello.features``.
+PREVIEW_MAGIC = b"SNCV"
+
+#: Cabecera de la vista en vivo: magic (4 bytes) + seq (uint32) + ancho (uint16) +
+#: alto (uint16) + flags (uint32). Detrás va el JPEG entero.
+PREVIEW_HEADER_FORMAT = "<4sIHHI"
+PREVIEW_HEADER_SIZE = struct.calcsize(PREVIEW_HEADER_FORMAT)  # 16
+
+#: Bit 0 de los flags de la vista en vivo: la imagen ya va en espejo.
+PREVIEW_FLAG_MIRRORED = 1
+
 #: Fases del Modo Jean que Unity puede contar en ``guest_state``.
 GUEST_PHASES = ("entering", "live", "leaving", "off")
 
@@ -83,6 +96,7 @@ MSG_TRIVIA_QUESTION = "trivia_question"
 MSG_TRIVIA_ANSWER = "trivia_answer"
 MSG_TRIVIA_END = "trivia_end"
 MSG_ACTIVITY = "activity"
+MSG_CAMERA_PREVIEW = "camera_preview"
 
 # Mensajes de Unity hacia el orquestador.
 MSG_CLIENT_HELLO = "client_hello"
@@ -148,6 +162,42 @@ def decode_audio_frame(data: bytes, *, magic: bytes = MAGIC) -> tuple[int, bool,
     if found != magic:
         raise ValueError(f"marca de frame inválida: {found!r}")
     return utterance_id, bool(flags & FLAG_LAST), data[HEADER_SIZE:]
+
+
+# ---------------------------------------------------------------------------
+# Frames binarios de la vista en vivo de la cámara (juegos)
+# ---------------------------------------------------------------------------
+
+
+def encode_preview_frame(
+    seq: int, width: int, height: int, jpeg: bytes, *, mirrored: bool
+) -> bytes:
+    """Empaqueta un JPEG de la vista en vivo con la cabecera ``SNCV``."""
+    flags = PREVIEW_FLAG_MIRRORED if mirrored else 0
+    header = struct.pack(
+        PREVIEW_HEADER_FORMAT,
+        PREVIEW_MAGIC,
+        seq & 0xFFFFFFFF,
+        max(0, min(width, 0xFFFF)),
+        max(0, min(height, 0xFFFF)),
+        flags,
+    )
+    return header + jpeg
+
+
+def decode_preview_frame(data: bytes) -> tuple[int, int, int, bool, bytes]:
+    """Deshace ``encode_preview_frame``: ``(seq, ancho, alto, en_espejo, jpeg)``.
+
+    Lanza ``ValueError`` si el frame es demasiado corto o la marca no es ``SNCV``.
+    """
+    if len(data) < PREVIEW_HEADER_SIZE:
+        raise ValueError(f"frame de vista en vivo demasiado corto: {len(data)} bytes")
+    found, seq, width, height, flags = struct.unpack(
+        PREVIEW_HEADER_FORMAT, data[:PREVIEW_HEADER_SIZE]
+    )
+    if found != PREVIEW_MAGIC:
+        raise ValueError(f"marca de frame inválida: {found!r}")
+    return seq, width, height, bool(flags & PREVIEW_FLAG_MIRRORED), data[PREVIEW_HEADER_SIZE:]
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +311,11 @@ def msg_show_image(
 def msg_hide_image() -> dict[str, Any]:
     """Retira el panel de imágenes."""
     return {"type": MSG_HIDE_IMAGE}
+
+
+def msg_camera_preview(on: bool, *, mirror: bool = True) -> dict[str, Any]:
+    """Enciende o apaga la vista en vivo de la cámara (frames ``SNCV``) encima de Sonia."""
+    return {"type": MSG_CAMERA_PREVIEW, "on": bool(on), "mirror": bool(mirror)}
 
 
 def msg_error(message: str) -> dict[str, Any]:
