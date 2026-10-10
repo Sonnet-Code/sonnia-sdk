@@ -29,6 +29,7 @@ apertura no cuenta como la primera.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from collections.abc import Sequence
 from typing import Any, ClassVar, Literal
@@ -64,6 +65,8 @@ from sonia.games.base import NOT_SAID, NOT_SAID_VALUES, Game, GameError, GameHos
 from sonia.types import ActionSpec
 
 __all__ = ["AkinatorGame", "Phase", "clean_answer", "screen_state", "screen_text"]
+
+logger = logging.getLogger(__name__)
 
 #: En qué va la partida (ver el módulo).
 Phase = Literal["waiting", "asking", "guessing", "giving_up", "revealed"]
@@ -319,6 +322,8 @@ class AkinatorGame(Game):
             return
         async with self._lock:
             if not self._counting():
+                if final:
+                    self._counter.end_sentence()
                 return
             questions = extract_questions(text)
             if questions and is_giving_up(questions[-1]):
@@ -326,6 +331,7 @@ class AkinatorGame(Game):
                 if final:
                     self._counter.end_sentence()
                 self._phase = "giving_up"
+                logger.info("Akinator: Sonia se rinde y pregunta qué era")
                 await self._emit("giveup")
                 return
             update = self._counter.feed(text, final=final)
@@ -334,6 +340,7 @@ class AkinatorGame(Game):
             self._phase = "asking"
             await self._emit("question")
             if update.is_new:
+                logger.info("Akinator: pregunta %d de %d: %s", self._asked, self._max, update.text)
                 self._remind(update.count)
 
     def _counting(self) -> bool:
@@ -384,11 +391,15 @@ class AkinatorGame(Game):
             key = normalize(answer)
             if any(normalize(missed) == key for missed in self._misses):
                 raise GameError(REPEATED_GUESS_SCRIPT.format(answer=answer))
+            if self._phase == "guessing" and normalize(self._guess) == key:
+                # La misma otra vez (GPT-Live la delegó dos veces): ya está en la pantalla.
+                return GUESS_SCRIPT.format(answer=self._guess)
             if self._phase == "guessing" and self._guess:
                 # Arriesga otra sin resolver la anterior: la anterior no era.
                 self._misses.append(self._guess)
             self._guess = answer
             self._phase = "guessing"
+            logger.info("Akinator: arriesga «%s» tras %d preguntas", answer, self._asked)
             await self._emit("guess")
         return GUESS_SCRIPT.format(answer=answer)
 
@@ -435,6 +446,12 @@ class AkinatorGame(Game):
                 return GIVEUP_SCRIPT.format(reason="")
             return NO_GUESS_SCRIPT
         left = self._max - self._asked
+        logger.info(
+            "Akinator: «%s» no era (fallos: %d, preguntas que quedan: %d)",
+            pending,
+            len(self._misses),
+            left,
+        )
         if left > 0 and len(self._misses) < MAX_GUESSES:
             self._phase = "asking"
             await self._emit("miss")
@@ -453,6 +470,13 @@ class AkinatorGame(Game):
         await self._emit("reveal")
         asked = self._asked
         tries = len(self._misses) + (1 if won else 0)
+        logger.info(
+            "Akinator: %s (era «%s», %d preguntas, %d intentos)",
+            "acierta" if won else "pierde",
+            answer,
+            asked,
+            tries,
+        )
         await self.host.finish(
             result,
             {"outcome": self._outcome, "answer": answer, "asked": asked, "tries": tries},

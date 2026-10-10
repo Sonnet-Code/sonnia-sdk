@@ -98,6 +98,7 @@ def steps() -> list[Step]:
         Send(p.msg_state("thinking")),
         Wait(2.5),
         Capture("akinator-04-pensando", settle_s=1.0),
+        Capture("akinator-04b-pensando", settle_s=1.5),
         Send(p.msg_state("idle")),
         GameMsg("question", _state("asking", 18, question="¿Lo creó una empresa dominicana?")),
         Capture("akinator-05-pregunta-18", settle_s=1.2),
@@ -105,6 +106,7 @@ def steps() -> list[Step]:
             "guess",
             _state("guessing", 18, question="¿Lo creó una empresa dominicana?", guess="Java"),
         ),
+        Capture("akinator-06a-adivinanza-entrando", settle_s=0.3),
         Capture("akinator-06-adivinanza", settle_s=1.2),
         GameMsg(
             "miss",

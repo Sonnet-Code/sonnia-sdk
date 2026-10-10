@@ -488,6 +488,17 @@ async def test_no_repite_una_respuesta_que_ya_fallo() -> None:
         await game.guess({"respuesta": "kotlin"})
 
 
+async def test_delegar_dos_veces_la_misma_respuesta_no_la_cuenta_como_fallo() -> None:
+    game, host = await start_game()
+    visitor_speaks(game, host)
+    await ask(game, *questions(6))
+    first = await game.guess({"respuesta": "Kotlin"})
+    sent = len(host.sent)
+    again = await game.guess({"respuesta": " kotlin "})
+    assert again == first and len(host.sent) == sent
+    assert last_state(host)["missed"] == [] and last_state(host)["guess"] == "Kotlin"
+
+
 async def test_arriesgar_otra_sin_resolver_la_anterior_cuenta_la_anterior_como_fallo() -> None:
     game, host = await start_game()
     visitor_speaks(game, host)
