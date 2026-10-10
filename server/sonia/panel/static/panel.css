@@ -684,40 +684,16 @@ summary:focus-visible,
   font-weight: 600;
 }
 
-.trivia-bank {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+/* Los editores de los bancos están en Developer: aquí queda solo el enlace */
+.bank-moved {
+  margin: 14px 0 0;
+  color: var(--ink-2);
+  font-size: 15px;
 }
 
-.trivia-bank > summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.trivia-bank > summary::-webkit-details-marker {
-  display: none;
-}
-
-.trivia-bank > summary::before {
-  content: "▸";
+.bank-moved a {
   color: var(--blue-strong);
-}
-
-.trivia-bank[open] > summary::before {
-  content: "▾";
-}
-
-.trivia-bank-title {
   font-weight: 700;
-}
-
-.trivia-bank[open] > summary {
-  margin-bottom: 10px;
 }
 
 .trivia-bank-input {
@@ -1700,6 +1676,144 @@ input[type="range"]:disabled {
   color: var(--warn);
 }
 
+/* Bancos de la trivia y de los juegos: con el editor abierto, el bloque ocupa todo el ancho */
+.dev-bank:has(> .bank-editor:not([hidden])) {
+  grid-column: 1 / -1;
+}
+
+.bank-info {
+  margin: -4px 0 8px;
+}
+
+.bank-info:empty {
+  display: none;
+}
+
+/* Prompts de Sonnia */
+.prompt-pick {
+  display: grid;
+  gap: 0 12px;
+}
+
+.prompt-editor {
+  margin-top: 16px;
+}
+
+.prompt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.prompt-title {
+  font-size: 18px;
+}
+
+.prompt-badge {
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--na-bg);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+.prompt-badge[data-source="nube"] {
+  background: #e1ecfd;
+  color: var(--blue-strong);
+}
+
+.prompt-badge--ignored {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.prompt-id {
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+/* 16 px en el móvil: con menos, el navegador acerca la vista al escribir */
+.prompt-input {
+  min-height: 340px;
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 1.45;
+  tab-size: 2;
+}
+
+.prompt-count {
+  margin: -4px 0 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  text-align: right;
+}
+
+.prompt-check {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.prompt-facts {
+  font-size: 15px;
+}
+
+.prompt-mark {
+  display: inline-block;
+  margin: 0 6px 4px 0;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.prompt-mark[data-state="ok"] {
+  border-color: var(--ok);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.prompt-mark[data-state="missing"] {
+  border-color: var(--warn-strong);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.prompt-mark-note {
+  display: block;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.prompt-help {
+  margin: 0;
+  font-size: 15px;
+  white-space: pre-line;
+}
+
+.prompt-state {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.prompt-state[data-state="ok"] { color: var(--ok); }
+.prompt-state[data-state="error"] { color: var(--bad); }
+.prompt-state[data-state="dirty"] { color: var(--warn); }
+
 /* Animaciones: un grupo por familia, botones que se reparten el ancho */
 .anim-groups {
   display: grid;
@@ -2264,6 +2378,15 @@ progress {
 
   .adv-wide {
     grid-column: 1 / -1;
+  }
+
+  .prompt-pick {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+
+  .prompt-input {
+    min-height: 460px;
+    font-size: 14px;
   }
 
   .chat {

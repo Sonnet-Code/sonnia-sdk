@@ -215,7 +215,7 @@ Como el banco de la trivia en la nube (`docs/panel.md`):
   ```
 
 - **El analizador** devuelve `BankParse(entries, warnings)`: las entradas válidas y un aviso legible por cada una que se salta. `markdown_sections(text)` te da `[(encabezado, líneas), ...]` de un Markdown con `## ` sin los comentarios.
-- **En el panel**: el equipo carga el banco en uso, lo edita y lo guarda en la nube (ajuste compartido `game_banks`, `{banco: texto}`, orden `set_game_bank`). Antes de guardarlo, el orquestador lo valida (`GameManager.validate_bank`): como mucho 15 000 caracteres (`BANK_MAX_CHARS`) y al menos `min_entries` válidas. «Volver al de la app» lo borra.
+- **En el panel** («Bancos de los juegos», en «Developer»): el equipo carga el banco en uso, lo edita y lo guarda en la nube (ajuste compartido `game_banks`, `{banco: texto}`, orden `set_game_bank`). Antes de guardarlo, el orquestador lo valida (`GameManager.validate_bank`): como mucho 15 000 caracteres (`BANK_MAX_CHARS`) y al menos `min_entries` válidas. «Volver al de la app» lo borra.
 - **Al jugar**: `await host.load_bank(BANCO)` en cada `start`. Manda el de la nube si llega a `min_entries`; si no, el de la app. Lo mal formado se salta con un aviso en el registro.
 - Escribe los primeros textos tú, marcados como borrador «pendiente de revisión de Jean».
 
