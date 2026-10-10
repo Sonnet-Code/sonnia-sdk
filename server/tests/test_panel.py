@@ -11,7 +11,7 @@ import contextlib
 import json
 import time
 import wave
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,6 +21,7 @@ import pytest
 
 from sonia.actions import build_default_registry
 from sonia.config import PanelSettings, Settings
+from sonia.games.base import Game
 from sonia.live.engine import LiveEngine
 from sonia.live.voicecache import VoiceCache
 from sonia.panel.control import (
@@ -103,8 +104,11 @@ async def make_panel_rig(
     material: _Material | None = None,
     trial_minutes: float = 0.0,
     presence: PresenceWatch | None = None,
+    games: Sequence[type[Game]] | None = None,
     **overrides: Any,
 ) -> AsyncIterator[PanelRig]:
+    """Panel, motor y hub de verdad contra el GPT-Live falso, con un cliente que hace de
+    Unity. ``games``: los juegos del motor (por defecto, los encendidos del registro)."""
     from websockets.asyncio.client import connect
 
     settings = panel_settings(tmp_path, **overrides)
@@ -126,6 +130,7 @@ async def make_panel_rig(
             knowledge_dir=tmp_path,
             voice_cache=cache,
             presence=presence,
+            games=games,
             tick_s=0.02,
         )
         control = StandControl(

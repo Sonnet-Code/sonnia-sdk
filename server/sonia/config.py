@@ -491,8 +491,9 @@ class PosesSettings(BaseSettings):
     min_person: float = 0.25
     #: Detecciones por segundo.
     fps: float = 8.0
-    #: Variante del modelo de poses: ``s`` o ``n`` (más ligero).
-    model: str = "s"
+    #: Variante del modelo de poses: ``n`` (ligero, la mitad de CPU con Unity en marcha) o
+    #: ``s`` (algo más preciso con gente tapada). Por defecto ``n`` (10 de octubre de 2026).
+    model: str = "n"
     #: 0: ``GAMES_ABANDON_SECONDS``.
     abandon_seconds: float = 0.0
 

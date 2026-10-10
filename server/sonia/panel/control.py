@@ -34,11 +34,14 @@ from typing import TYPE_CHECKING, Any, Literal, TypeGuard
 from sonia.actions.gallery import Gallery
 from sonia.actions.registry import ActionRegistry
 from sonia.config import Settings
+from sonia.games.banks import is_bank_id
+from sonia.games.manager import normalize_game_banks, normalize_games_off
 from sonia.showcase import ATTENTION_DANCE, ATTENTION_FOURTH_WALL, load_lines
 from sonia.types import ActionContext
 from sonia.ws import protocol as p
 
 if TYPE_CHECKING:  # pragma: no cover - solo para tipado
+    from sonia.games.manager import GameManager
     from sonia.guest.mode import GuestMode
     from sonia.guest.room import RoomSupervisor
     from sonia.live.engine import LiveEngine
@@ -104,7 +107,9 @@ CAPABILITIES = [
 ]
 
 #: Ajustes que se guardan en la nube y comparten todas las Sonnias. El modo, el
-#: modo debug y el gasto no están: son de cada equipo.
+#: modo debug y el gasto no están: son de cada equipo. Las Sonnias anteriores
+#: ignoran los que no conocen (``games_off``, ``game_banks`` y ``games_pose_model``
+#: llegaron con los juegos).
 SHARED_SETTINGS: tuple[str, ...] = (
     "away_message",
     "notes",
@@ -118,7 +123,17 @@ SHARED_SETTINGS: tuple[str, ...] = (
     "avatar",
     "guest_avatar",
     "trivia_bank",
+    "games_off",
+    "game_banks",
+    "games_pose_model",
 )
+
+#: Variantes del modelo de poses que se pueden elegir en el panel, si la visión de los
+#: juegos no dice otras (``GameManager.snapshot()["pose_model"]["options"]``).
+POSE_MODEL_VARIANTS: tuple[str, ...] = ("n", "s")
+
+#: Cómo se llama cada modelo de poses en los mensajes del panel.
+POSE_MODEL_NAMES = {"n": "ligero (n)", "s": "preciso (s, más CPU)"}
 
 #: Ajustes de «Developer»: grupo -> valor -> (mínimo, máximo, por defecto). La
 #: boca y el movimiento en reposo van en multiplicadores de lo que trae la escena
@@ -154,6 +169,15 @@ AWAY_MESSAGE_MAX_LEN = 140
 #: Tope del banco de preguntas de la trivia guardado en la nube (unas 450 preguntas):
 #: la nube guarda todos los ajustes compartidos en un documento de 256 KB.
 TRIVIA_BANK_MAX_LEN = 100_000
+
+#: Tope de todos los ajustes compartidos juntos, en JSON. La nube los guarda en un solo
+#: documento de 256 KB (``MAX_SETTINGS_BYTES`` en ``cloud/panel``) y, si no caben, descarta
+#: el cambio sin avisar: lo guardado volvería atrás al confirmarlo. Se deja margen.
+SHARED_SETTINGS_MAX_CHARS = 250_000
+
+#: Lo que se carga en el editor si un banco de los juegos no tiene texto (ni en la nube
+#: ni en la app): un comentario, que los analizadores ignoran.
+EMPTY_GAME_BANK = "<!-- Banco vacío: escribe las entradas con el formato de este juego. -->\n"
 
 #: Primer saludo al entrar en el modo saludos.
 GREETER_FIRST_DELAY_S = 4.0
@@ -236,6 +260,14 @@ class PanelState:
     #: Banco de preguntas de la trivia guardado desde el panel (formato de
     #: ``assets/trivia/preguntas.md``); ``None``: el que trae la app.
     trivia_bank: str | None = None
+    #: Juegos apagados desde el panel (``docs/juegos.md``): ni se ofrecen ni se pueden empezar.
+    games_off: list[str] = field(default_factory=list)
+    #: Bancos de los juegos guardados desde el panel (``{banco: texto}``); ``None``: todos
+    #: los que trae la app.
+    game_banks: dict[str, str] | None = None
+    #: Modelo de poses elegido en el panel (``n`` ligero o ``s`` preciso); ``None``: el de
+    #: la app (``GAME_POSES_MODEL``). Brian y Mariel no pueden tocar el ``.env`` del stand.
+    games_pose_model: str | None = None
     #: Modo debug: Sonnia quieta (sin GPT-Live ni nada automático) para pruebas visuales.
     debug: bool = False
     #: Gasto del día: segundos de sesión de GPT-Live acumulados en ``usage_date``
@@ -273,6 +305,14 @@ class PanelState:
             state.guest_avatar = _normalize_shared("guest_avatar", raw.get("guest_avatar"))
         with contextlib.suppress(ValueError):
             state.trivia_bank = _normalize_shared("trivia_bank", raw.get("trivia_bank"))
+        with contextlib.suppress(ValueError):
+            state.games_off = _normalize_shared("games_off", raw.get("games_off"))
+        with contextlib.suppress(ValueError):
+            state.game_banks = _normalize_shared("game_banks", raw.get("game_banks"))
+        with contextlib.suppress(ValueError):
+            state.games_pose_model = _normalize_shared(
+                "games_pose_model", raw.get("games_pose_model")
+            )
         for name in ("volume", "mic_gate", "usage_seconds", "trial_seconds"):
             value = raw.get(name)
             if _is_number(value):
@@ -383,6 +423,10 @@ class StandControl:
         self._guest: GuestMode | None = None
         #: Sala de vídeo de Cloudflare, para «Ver cámara» (la engancha ``attach_room``).
         self._room: RoomSupervisor | None = None
+        #: Frases fijas de los juegos (``GameManager.fixed_phrases``), para grabarlas con las
+        #: demás. Leerlas puede tocar disco (los bancos): se refrescan en un hilo al arrancar,
+        #: al cambiar los bancos y al preparar las voces.
+        self._game_phrases: list[str] = []
         #: Segundos de sesión de arranques anteriores del mismo día.
         self._usage_base = 0.0
         self._last_usage_save = time.monotonic()
@@ -414,7 +458,20 @@ class StandControl:
             caps.extend(("trivia", "trivia_bank"))
         if self._engine.presence_available:
             caps.append("mic_presence")
+        games = self._games
+        if games is not None:
+            # ``games``, ``game:<id>`` (los que pinta la pantalla conectada) y ``game_banks``.
+            caps.extend(games.capabilities())
         return caps
+
+    @property
+    def _games(self) -> GameManager | None:
+        """Los juegos del stand (``engine.games``), o ``None`` si esta Sonnia no tiene
+        ninguno encendido."""
+        games = self._engine.games
+        if games is None or not games.enabled:
+            return None
+        return games
 
     def attach_guest(self, guest: GuestMode) -> None:
         """Engancha el Modo Jean (lo crea la CLI cuando hay nube)."""
@@ -453,6 +510,12 @@ class StandControl:
             await engine.set_notes(state.notes)
         if state.trivia_bank and engine.trivia is not None:
             engine.trivia.use_cloud_bank(state.trivia_bank)
+        games = self._games
+        if games is not None:
+            await games.set_games_off(state.games_off)
+            games.use_cloud_banks(state.game_banks)
+            self._apply_pose_model(state.games_pose_model)
+            self._spawn(self._refresh_game_phrases(), "game-phrases")
         await self._hub.set_sticky("volume", p.msg_set_volume(state.volume))
         await self._hub.set_sticky("subtitles", p.msg_set_subtitles(state.subtitles))
         await self._hub.set_sticky(
@@ -622,11 +685,31 @@ class StandControl:
             return 0
         if delay:
             await asyncio.sleep(delay)
-        return await self._voice_cache.prepare(self._material.all_texts())
+        await self._refresh_game_phrases()
+        return await self._voice_cache.prepare(self._voice_texts())
+
+    def _voice_texts(self) -> list[str]:
+        """Las frases fijas que se graban: las del stand (saludos, frases, cantos y Modo
+        Jean) y las de los juegos (``say_fixed``)."""
+        return [*self._material.all_texts(), *self._game_phrases]
+
+    async def _refresh_game_phrases(self) -> list[str]:
+        """Vuelve a leer las frases fijas de los juegos (en un hilo: pueden leer bancos)."""
+        games = self._games
+        if games is None:
+            self._game_phrases = []
+            return []
+        try:
+            phrases = await asyncio.to_thread(games.fixed_phrases)
+        except Exception:  # noqa: BLE001 - sin las frases de los juegos se graban las demás
+            logger.exception("No se pudieron leer las frases fijas de los juegos")
+            return self._game_phrases
+        self._game_phrases = [t for t in phrases if isinstance(t, str) and t.strip()]
+        return self._game_phrases
 
     def _voice_cache_status(self) -> dict[str, Any]:
         cache = self._voice_cache
-        texts = self._material.all_texts()
+        texts = self._voice_texts()
         if cache is None:
             return {"ready": 0, "total": len(texts), "busy": False, "error": ""}
         return {
@@ -653,7 +736,7 @@ class StandControl:
         # Las renovaciones periódicas (el visor de «Ver cámara») no llenan el registro.
         level = logging.DEBUG if params.get("keepalive") is True else logging.INFO
         message = result[1]
-        if action == "trivia_bank" and result[0]:
+        if action in ("trivia_bank", "game_bank") and result[0]:
             message = f"banco de {len(message)} caracteres"  # el banco entero no va al registro
         logger.log(level, "Panel: %s %s -> %s", action, _summary(params), message)
         return result
@@ -966,6 +1049,7 @@ class StandControl:
                 f"Solo hay {len(bank)} preguntas válidas y una partida necesita {needed}: "
                 "revisa el formato (## pregunta y tres opciones, una con [x])."
             )
+        self._check_settings_room("trivia_bank", text)
         await self._set_shared("trivia_bank", text)
         levels = bank.levels()
         message = (
@@ -987,6 +1071,152 @@ class StandControl:
                 " más cercano."
             )
         return True, message
+
+    # -- juegos del stand (docs/juegos.md) -------------------------------------
+
+    def _need_games(self) -> GameManager:
+        games = self._games
+        if games is None:
+            raise _BadRequest(
+                "Esta Sonnia no tiene juegos: hay que instalarle una versión más nueva de la app "
+                "(o están apagados en su configuración, GAMES_ENABLED)."
+            )
+        return games
+
+    def _game_title(self, games: GameManager, params: dict[str, Any]) -> tuple[str, str]:
+        """``(id, título)`` del juego de ``params["game"]``; solo los de esta Sonnia."""
+        game_id = params.get("game")
+        game = games.game(game_id) if isinstance(game_id, str) else None
+        if game is None:
+            raise _BadRequest("Ese juego no está en esta Sonnia.")
+        return game.id, game.title
+
+    async def _act_game_start(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """Un botón de «Juegos»: la misma partida que pide un visitante por voz."""
+        games = self._need_games()
+        game_id, title = self._game_title(games, params)
+        if games.phase == "playing" and games.is_active(game_id):
+            return True, f"{title} ya está en marcha."
+        self._need_sonia_on_stage()
+        if self.state.mode != "conversation":
+            raise _BadRequest("Los juegos necesitan a Sonnia conversando: pásala a «Conversando».")
+        if self.state.debug:
+            raise _BadRequest("En modo debug Sonnia no conversa: desactívalo antes.")
+        if self._avatar_editor_open:
+            raise _BadRequest("Cierra antes el editor de personaje.")
+        if self._hub.client_count == 0:
+            raise _BadRequest("La pantalla de Sonnia no está conectada.")
+        # El manager mira lo demás: otro juego o la trivia en marcha, apagado desde el panel,
+        # la pantalla que no lo sabe pintar, la cámara y la sesión de voz.
+        ok, message = await games.start(game_id, "panel")
+        if not ok:
+            raise _BadRequest(message)
+        return True, message
+
+    async def _act_game_stop(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Terminar juego»: Sonnia lo cuenta en una frase y vuelve a conversar."""
+        games = self._games
+        if games is None or not games.active:
+            return True, "No hay ningún juego en marcha."
+        _, message = await games.stop("panel")
+        return True, message
+
+    async def _act_set_game_enabled(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """Interruptor de cada juego (``games_off``, en todas las Sonnias). Apagado, ni se
+        ofrece a GPT-Live ni se puede empezar; si se estaba jugando, se termina."""
+        games = self._need_games()
+        game_id, title = self._game_title(games, params)
+        enabled = _flag(params, "enabled")
+        was_playing = games.phase == "playing" and games.is_active(game_id)
+        off = set(self.state.games_off)
+        if enabled:
+            off.discard(game_id)
+        else:
+            off.add(game_id)
+        await self._set_shared("games_off", sorted(off))
+        if enabled:
+            return True, f"{title} encendido: Sonnia puede jugarlo (en todas las Sonnias)."
+        message = f"{title} apagado en todas las Sonnias: no se ofrece ni se puede empezar."
+        if was_playing:
+            message += " La partida que había se ha terminado."
+        return True, message
+
+    async def _act_set_game_pose_model(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Modelo de poses» (``games_pose_model``, en todas las Sonnias): ``n`` (ligero),
+        ``s`` (preciso, más CPU) o vacío para volver al de la app (``GAME_POSES_MODEL``)."""
+        self._need_games()
+        raw = params.get("model")
+        if raw in (None, "", "app"):
+            if self.state.games_pose_model is None:
+                return True, "Las poses ya usan el modelo que trae la app."
+            await self._set_shared("games_pose_model", None)
+            return True, "Las poses vuelven al modelo que trae la app, en todas las Sonnias."
+        model = _normalize_pose_model(raw)
+        if model is None:
+            raise _BadRequest("Modelo de poses no válido: ligero (n) o preciso (s).")
+        await self._set_shared("games_pose_model", model)
+        return True, f"Modelo de poses: {POSE_MODEL_NAMES.get(model, model)}, en todas las Sonnias."
+
+    def _apply_pose_model(self, model: str | None) -> None:
+        """El modelo de poses a la visión de los juegos (``None``: el de ``GAME_POSES_MODEL``)."""
+        games = self._games
+        # ``set_pose_model`` llega con la visión de los juegos (A1): sin él, no se aplica.
+        setter = getattr(games, "set_pose_model", None) if games is not None else None
+        if setter is None:
+            return
+        try:
+            setter(model)
+        except Exception:  # noqa: BLE001 - un modelo que no carga no tumba el panel
+            logger.exception("No se pudo cambiar el modelo de poses a %s", model)
+
+    async def _act_game_bank(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """Un banco de los juegos en uso (el de la nube o el de la app), entero en el mensaje."""
+        games = self._need_games()
+        bank_id = params.get("bank")
+        if not is_bank_id(bank_id):
+            raise _BadRequest("¿Qué banco? Elige uno de la lista.")
+        try:
+            text = await asyncio.to_thread(games.bank_text, str(bank_id))
+        except KeyError:
+            raise _BadRequest(f"No hay ningún banco «{bank_id}» en esta Sonnia.") from None
+        return True, text if text.strip() else EMPTY_GAME_BANK
+
+    async def _act_set_game_bank(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Guardar en la nube» de un banco de los juegos (``game_banks``). Antes lo valida
+        el analizador del juego: lo mal formado o con pocas entradas no se guarda. Vacío
+        vuelve al de la app."""
+        games = self._need_games()
+        bank_id = params.get("bank")
+        if not is_bank_id(bank_id):
+            raise _BadRequest("¿Qué banco? Elige uno de la lista.")
+        bank = str(bank_id)
+        text = params.get("text")
+        if text is None:
+            text = ""
+        if not isinstance(text, str):
+            raise _BadRequest("«text» tiene que ser texto.")
+        text = text.strip()
+        ok, message = await asyncio.to_thread(games.validate_bank, bank, text)
+        if not ok:
+            raise _BadRequest(message)
+        banks = dict(self.state.game_banks or {})
+        if text:
+            banks[bank] = text
+        elif bank not in banks:
+            return True, message
+        else:
+            del banks[bank]
+        value = banks or None
+        if text:
+            # Quitar un banco solo achica los ajustes: siempre cabe.
+            self._check_settings_room("game_banks", value)
+        await self._set_shared("game_banks", value)
+        if not text:
+            return True, f"{message} Desde la próxima partida, en todas las Sonnias actualizadas."
+        return True, (
+            f"Guardado en la nube. {message} Sale desde la próxima partida en todas las "
+            "Sonnias actualizadas."
+        )
 
     async def _act_greet(self, params: dict[str, Any]) -> tuple[bool, str]:
         self._need_sonia_on_stage()
@@ -1096,7 +1326,8 @@ class StandControl:
             raise _BadRequest("Falta la clave de GPT-Live para grabar las frases.")
         if self._voice_cache.busy:
             return True, "Ya se están grabando."
-        missing = self._voice_cache.missing(self._material.all_texts())
+        await self._refresh_game_phrases()
+        missing = self._voice_cache.missing(self._voice_texts())
         if not missing:
             return True, "Todas las frases ya están grabadas."
         self._spawn(self._prepare_voices(), "voice-prepare")
@@ -1167,6 +1398,22 @@ class StandControl:
             state.trivia_bank = value
             if engine.trivia is not None:
                 engine.trivia.use_cloud_bank(value)
+        elif key == "games_off":
+            state.games_off = value
+            games = self._games
+            if games is not None:
+                # Si el que está en marcha se apaga, el manager lo termina.
+                await games.set_games_off(value)
+        elif key == "game_banks":
+            state.game_banks = value
+            games = self._games
+            if games is not None:
+                games.use_cloud_banks(value)
+                # Las frases fijas de un juego pueden salir de sus bancos.
+                self._spawn(self._refresh_game_phrases(), "game-phrases")
+        elif key == "games_pose_model":
+            state.games_pose_model = value
+            self._apply_pose_model(value)
         else:  # pragma: no cover - SHARED_SETTINGS y esto van juntos
             raise ValueError(f"Ajuste desconocido: {key}")
 
@@ -1177,6 +1424,19 @@ class StandControl:
     def shared_settings(self) -> dict[str, Any]:
         """Todos los ajustes compartidos, en tipos JSON (para la nube)."""
         return {key: _copy(getattr(self.state, key)) for key in SHARED_SETTINGS}
+
+    def _check_settings_room(self, key: str, value: Any) -> None:
+        """Que todos los ajustes compartidos, con ``key`` cambiado a ``value``, quepan en el
+        documento de la nube; si no, la nube descartaría el cambio sin avisar."""
+        values = self.shared_settings()
+        values[key] = value
+        size = len(json.dumps(values, ensure_ascii=False, separators=(",", ":")))
+        if size > SHARED_SETTINGS_MAX_CHARS:
+            raise _BadRequest(
+                f"No cabe en la nube: todos los ajustes juntos ocuparían {size} caracteres y el "
+                f"tope es {SHARED_SETTINGS_MAX_CHARS}. Acorta este banco u otro (el de la trivia "
+                "es el más grande)."
+            )
 
     def pending_settings(self) -> tuple[dict[str, Any], int]:
         """Lo cambiado aquí que la nube aún no confirmó y el número del último cambio."""
@@ -1337,6 +1597,10 @@ class StandControl:
                 else {"available": False, "active": False, "live": False, "viewers": 0}
             ),
             "trivia": snap.get("trivia") or {"available": False, "active": False},
+            # ``GameManager.snapshot()`` (forma en ``docs/juegos.md``, «El panel»).
+            "games": snap.get("games") or {"enabled": False},
+            # El modelo de poses guardado en el panel (``None``: el de la app).
+            "games_pose_model": self.state.games_pose_model,
             "gesture_director": snap.get("gestures"),
             "settings_sync": self._settings_sync(),
             "last_error": snap.get("last_error") or None,
@@ -1585,7 +1849,46 @@ def _normalize_shared(key: str, value: Any) -> Any:
         if not isinstance(value, str) or len(value) > TRIVIA_BANK_MAX_LEN:
             raise ValueError(key)
         return value.strip() or None
+    if key == "games_off":
+        # Se guardan también los ids que esta Sonnia no conoce: son de otras más nuevas.
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise ValueError(key)
+        return normalize_games_off(value)
+    if key == "game_banks":
+        # Igual: los bancos de juegos que esta Sonnia no tiene viajan sin tocarlos.
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ValueError(key)
+        return normalize_game_banks(value)
+    if key == "games_pose_model":
+        if value is None:
+            return None
+        model = _normalize_pose_model(value)
+        if model is None:
+            raise ValueError(key)
+        return model
     raise ValueError(key)
+
+
+def _normalize_pose_model(value: Any) -> str | None:
+    """Una variante válida del modelo de poses (``n`` o ``s``), o ``None``.
+
+    Usa ``normalize_pose_model`` de la visión de los juegos (``sonia.games``) cuando está;
+    si no, acepta las de :data:`POSE_MODEL_VARIANTS`.
+    """
+    import sonia.games as games_package
+
+    normalize = getattr(games_package, "normalize_pose_model", None)
+    if normalize is not None:
+        result = normalize(value)
+        return result if isinstance(result, str) and result else None
+    if not isinstance(value, str):
+        return None
+    variant = value.strip().lower()
+    return variant if variant in POSE_MODEL_VARIANTS else None
 
 
 def _summary(params: dict[str, Any]) -> str:

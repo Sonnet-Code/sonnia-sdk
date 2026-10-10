@@ -198,31 +198,40 @@ def _build(
 
     from sonia.vision.hands import MediaPipeHandDetector
     from sonia.vision.judge import ModelJudge
-    from sonia.vision.models import download_game_models, game_models, games_models_dir
+    from sonia.vision.models import (
+        DEFAULT_POSE_VARIANT,
+        download_game_models,
+        game_models,
+        games_models_dir,
+        model_present,
+        pose_variant,
+    )
     from sonia.vision.poses import YoloPoseDetector
     from sonia.vision.stream import LivePreview, OpenCVCameraStream
 
     folder = games_models_dir(settings)
-    variant = str(_setting(settings, ("games", "poses", "model"), "s") or "s").strip().lower()
+    configured = _setting(settings, ("games", "poses", "model"), DEFAULT_POSE_VARIANT)
+    variant = pose_variant(configured) or DEFAULT_POSE_VARIANT
     stream = OpenCVCameraStream(camera)
     preview = LivePreview(stream, send_json, send_bytes, preview_supported)
-    poses = YoloPoseDetector(stream, folder, variant=variant)
+    poses = YoloPoseDetector(stream, folder, variant=variant, download=download_models)
     hands = MediaPipeHandDetector(folder)
     judge: VisionJudge = (
         ModelJudge(vision_llm, camera)
         if vision_llm is not None and settings.llm.supports_vision
         else NoJudge()
     )
-    missing = not (poses.available and hands.available)
+    # Al arrancar solo se exigen el de poses de GAME_POSES_MODEL y los de manos: el otro de
+    # poses (la app lleva los dos) se baja la primera vez que se pide desde el panel.
+    missing = tuple(model for model in game_models(variant) if not model_present(folder, model))
     if download_models or not missing:
-        models = game_models(variant)
 
         def prepare() -> None:
             # Si faltan, se bajan; después se cargan y se calientan, para que la primera
             # ronda no pague la carga. Todo en este hilo, fuera del bucle de audio.
             if missing:
                 try:
-                    fetched = download_game_models(folder, models)
+                    fetched = download_game_models(folder, missing)
                 except Exception as exc:  # noqa: BLE001 - sin red: al volver a arrancar
                     logger.warning("No se pudieron bajar los modelos de los juegos: %s", exc)
                     return

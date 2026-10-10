@@ -172,6 +172,11 @@
     return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
   }
 
+  /** "Preciso (s, más CPU)" -> "preciso (s, más CPU)": para meterlo en una frase. */
+  function uncapitalize(text) {
+    return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
+  }
+
   /** "oficinas-sonnet" -> "Oficinas sonnet". */
   function prettyImageName(id) {
     return capitalize(String(id).replace(/[-_]+/g, " ").trim());
@@ -269,6 +274,8 @@
     galleryAttemptAt: 0,
     notesBase: null, // último texto de avisos que vino del servidor y está en la caja
     triviaBankBase: null, // banco de preguntas cargado en la caja (null: sin cargar)
+    gameBankId: null, // banco de los juegos cargado en su caja (null: ninguno)
+    gameBankBase: null, // su texto tal como llegó (para saber si hay cambios sin guardar)
     lastPresence: null,
   };
 
@@ -298,6 +305,9 @@
       "trivia-start-btn", "trivia-restart-btn", "trivia-stop-btn", "trivia-note", "trivia-next-btn", "trivia-level",
       "trivia-bank-info", "trivia-bank-load-btn", "trivia-bank-editor", "trivia-bank-input", "trivia-bank-save-btn",
       "trivia-bank-reset-btn", "trivia-bank-state",
+      "game-state", "game-list", "game-stop-btn", "game-note", "game-bank-info", "game-bank-select",
+      "game-bank-load-btn", "game-bank-detail", "game-bank-editor", "game-bank-input", "game-bank-save-btn",
+      "game-bank-reset-btn", "game-bank-state", "game-pose", "game-pose-select", "game-pose-help",
     ];
     for (const id of ids) {
       // "topbar-status" -> ui.topbarStatus
@@ -752,6 +762,7 @@
     renderHero(status);
     renderQuickActions(status);
     renderTrivia(status);
+    renderGames(status);
     renderImageState(status);
     renderSound(status);
     renderHealth(status);
@@ -779,10 +790,19 @@
     guest_avatar_custom: () => Boolean(guestAvatarInfo().custom) && !avatarInfo().editor_open,
     // Con el Modo Jean, Sonnia ha dejado su sitio al invitado: ni habla ni hace gestos.
     sonia_here: () => !guestActive(),
-    trivia_idle: () => triviaInfo().available !== false && !triviaInfo().active && !guestActive(),
+    trivia_idle: () =>
+      triviaInfo().available !== false && !triviaInfo().active && !guestActive() && !gameActive(),
     trivia_active: () => Boolean(triviaInfo().active),
     trivia_asking: () => triviaInfo().phase === "asking",
     trivia_revealing: () => triviaInfo().phase === "revealing",
+    // Juegos: el botón de cada uno (data-game) solo con él disponible y nada más en pantalla.
+    game_ready: (node) => {
+      const game = gameEntry(node.dataset.game);
+      return Boolean(game && game.available) && !gameActive() && !triviaInfo().active && !guestActive();
+    },
+    game_active: () => gameActive(),
+    game_bank_chosen: () => Boolean(ui.gameBankSelect.value),
+    game_bank_loaded: () => app.gameBankId !== null,
   };
 
   /** Partida de trivia en curso (`trivia` del estado). */
@@ -820,7 +840,7 @@
       const offModes = node.dataset.offModes ? node.dataset.offModes.split(" ") : [];
       const modeOk = !mode || !offModes.includes(mode);
       const rule = node.dataset.extra && EXTRA_RULES[node.dataset.extra];
-      const extraOk = !rule || rule();
+      const extraOk = !rule || rule(node);
       const busy = node.classList.contains("is-busy");
       const disabled = !reachable || !capOk || !modeOk || !extraOk || busy;
       if (node.disabled !== disabled) node.disabled = disabled;
@@ -950,6 +970,7 @@
     app.notesBase = null;
     app.lastPresence = null;
     closeTriviaBank();
+    clearGames();
     resetChat();
     ui.log.replaceChildren();
     clearDevLog();
@@ -1452,6 +1473,406 @@
     const result = await sendAction("set_trivia_bank", { text: "" }, { button: ui.triviaBankResetBtn });
     if (result.ok) await loadTriviaBank();
     else renderTriviaBankState();
+  }
+
+  // ------------------------------------------------------------ juegos del stand
+
+  /** Lo que necesita cámara (para la etiqueta «Cámara» de cada juego). */
+  const CAMERA_NEEDS = new Set(["camera", "preview", "poses", "hands", "vision_llm"]);
+
+  /** Tope de cada banco de los juegos (BANK_MAX_CHARS en server/sonia/games/banks.py). */
+  const GAME_BANK_MAX_CHARS = 15000;
+
+  /** Juegos del stand (`games` del estado): `{}` en una Sonnia anterior a los juegos. */
+  function gamesInfo() {
+    const games = app.status && app.status.games;
+    return games && typeof games === "object" ? games : {};
+  }
+
+  function gameList() {
+    const list = gamesInfo().games;
+    return Array.isArray(list) ? list.filter((game) => game && typeof game.id === "string") : [];
+  }
+
+  function gameEntry(id) {
+    return gameList().find((game) => game.id === id) || null;
+  }
+
+  /** ¿Hay un juego en pantalla (jugando o enseñando el resultado)? */
+  function gameActive() {
+    return typeof gamesInfo().active === "string";
+  }
+
+  /** 75 -> "1:15". */
+  function formatClock(seconds) {
+    if (!isNumber(seconds) || seconds < 0) return "0:00";
+    const whole = Math.floor(seconds);
+    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+  }
+
+  /**
+   * En qué va la partida, a partir del `state` del juego: su `summary` si lo trae
+   * (un texto para el panel) o, si no, sus datos sencillos ("ronda: 2 · puntos: 1").
+   */
+  function gameSummary(state) {
+    if (!state || typeof state !== "object") return "";
+    if (typeof state.summary === "string") return state.summary.trim();
+    const parts = [];
+    for (const [key, value] of Object.entries(state)) {
+      if (parts.length >= 5) break;
+      let text = null;
+      if (typeof value === "boolean") text = value ? "sí" : "no";
+      else if (isNumber(value)) text = String(value);
+      else if (typeof value === "string" && value.trim()) text = value.trim();
+      if (text === null) continue;
+      if (text.length > 40) text = `${text.slice(0, 39)}…`;
+      parts.push(`${key.replace(/_+/g, " ")}: ${text}`);
+    }
+    return parts.join(" · ");
+  }
+
+  /** Fichas pintadas: id → {item, button, toggle, reason}, para actualizarlas sin rehacerlas. */
+  const gameTiles = new Map();
+  let gamesKey = "";
+  let gameBanksKey = "";
+
+  function renderGames(status) {
+    const games = gamesInfo();
+    const list = gameList();
+    const key = JSON.stringify(list.map((game) => [game.id, game.title, game.needs]));
+    if (key !== gamesKey) {
+      gamesKey = key;
+      buildGameTiles(list);
+    }
+    updateGameTiles(list, games);
+
+    const active = gameActive() ? games.active : null;
+    let text = "No hay ningún juego en marcha.";
+    if (active) {
+      const title = games.title || active;
+      text = games.phase === "finishing"
+        ? `${title}: el resultado está en pantalla; se quita solo.`
+        : `Jugando a ${title} · ${formatClock(games.elapsed_s)}`;
+      const summary = gameSummary(games.state);
+      if (summary) text += ` · ${summary}`;
+    } else if (games.enabled === false) {
+      text = "Esta Sonnia no tiene juegos encendidos.";
+    }
+    setText(ui.gameState, text);
+    ui.gameState.classList.toggle("is-playing", Boolean(active));
+    setHidden(ui.gameNote, status.mode === "conversation" || Boolean(active) || list.length === 0);
+    renderGameBanks(games);
+    renderGameBankState();
+    renderPoseModel(status, list);
+  }
+
+  function buildGameTiles(list) {
+    gameTiles.clear();
+    ui.gameList.replaceChildren(...list.map(gameTile));
+  }
+
+  /** Un juego: su botón de empezar y su interruptor (encendido en todas las Sonnias). */
+  function gameTile(game) {
+    const title = typeof game.title === "string" && game.title ? game.title : game.id;
+    const needs = Array.isArray(game.needs) ? game.needs : [];
+    const camera = needs.some((need) => CAMERA_NEEDS.has(need));
+    const button = el(
+      "button",
+      {
+        type: "button",
+        class: "btn btn-small game-play",
+        "data-cap": `game:${game.id}`,
+        "data-off-modes": "away greeter",
+        "data-extra": "game_ready",
+        "data-game": game.id,
+      },
+      el("span", { class: "game-title", text: title }),
+      camera ? el("span", { class: "game-badge", text: "Cámara" }) : null,
+    );
+    button.addEventListener("click", () => sendAction("game_start", { game: game.id }, { button }));
+    const toggle = el("input", { type: "checkbox", role: "switch", "data-cap": "games", "aria-label": `${title}: encendido` });
+    toggle.addEventListener("change", () => onGameToggle(game.id, title, toggle));
+    const sw = el(
+      "label",
+      { class: "switch game-switch" },
+      toggle,
+      el("span", { class: "switch-track", "aria-hidden": "true" }),
+      el("span", { class: "switch-text", text: "Encendido" }),
+    );
+    const reason = el("p", { class: "game-reason", hidden: true });
+    const item = el("div", { class: "game-item" }, el("div", { class: "game-row" }, button, sw), reason);
+    gameTiles.set(game.id, { item, button, toggle, reason });
+    return item;
+  }
+
+  function updateGameTiles(list, games) {
+    const active = gameActive() ? games.active : null;
+    for (const game of list) {
+      const tile = gameTiles.get(game.id);
+      if (!tile) continue;
+      const off = game.off === true;
+      const playing = game.id === active;
+      if (tile.item.classList.contains("is-off") !== off) tile.item.classList.toggle("is-off", off);
+      if (tile.item.classList.contains("is-playing") !== playing) tile.item.classList.toggle("is-playing", playing);
+      if (!isLocked(tile.toggle) && tile.toggle.checked === off) tile.toggle.checked = !off;
+      // Por qué no se puede: la pantalla vieja, sin cámara... (apagado ya lo dice el interruptor).
+      const reason = !playing && !off && game.available === false && typeof game.reason === "string" ? game.reason : "";
+      setText(tile.reason, reason);
+      setHidden(tile.reason, !reason);
+    }
+  }
+
+  async function onGameToggle(id, title, input) {
+    const enabled = input.checked;
+    lockControl(input);
+    if (!enabled && gamesInfo().active === id && gamesInfo().phase === "playing") {
+      const ok = await confirmAction({
+        title: `¿Apagar ${title}?`,
+        text: "Se está jugando ahora: la partida se termina. Además deja de ofrecerse en todas las Sonnias.",
+        confirmLabel: "Apagar",
+        danger: true,
+      });
+      if (!ok) {
+        input.checked = true;
+        return;
+      }
+    }
+    const tile = gameTiles.get(id);
+    if (tile) tile.item.classList.toggle("is-off", !enabled);
+    const result = await sendAction("set_game_enabled", { game: id, enabled }, { button: input });
+    if (!result.ok) {
+      input.checked = !enabled;
+      if (tile) tile.item.classList.toggle("is-off", enabled);
+    }
+    lockControl(input);
+  }
+
+  /** Borra lo de los juegos de la Sonnia anterior (al cambiar de Sonnia). */
+  function clearGames() {
+    closeGameBank();
+    gamesKey = "";
+    gameBanksKey = "";
+    gameTiles.clear();
+    ui.gameList.replaceChildren();
+    ui.gameBankSelect.replaceChildren();
+    setText(ui.gameBankInfo, "");
+    setHidden(ui.gameBankDetail, true);
+    setText(ui.gameState, "No hay ningún juego en marcha.");
+    ui.gameState.classList.remove("is-playing");
+    poseKey = "";
+    ui.gamePoseSelect.replaceChildren();
+    setHidden(ui.gamePose, true);
+  }
+
+  // ------------------------------------------------------------ modelo de poses
+
+  /** Cómo se llama cada variante del modelo de poses (GAME_POSES_MODEL). */
+  const POSE_MODEL_LABELS = { n: "Ligero (n)", s: "Preciso (s, más CPU)" };
+  let poseKey = "";
+
+  function poseModelLabel(id, label) {
+    if (typeof label === "string" && label.trim()) return label.trim();
+    return POSE_MODEL_LABELS[id] || id;
+  }
+
+  /** `pose_model` de los juegos: `{current, default, options}` (o null si no lo manda). */
+  function poseModelInfo() {
+    const info = gamesInfo().pose_model;
+    return info && typeof info === "object" ? info : null;
+  }
+
+  /** Las variantes que se pueden elegir: `[{id, label}]`, de textos o de objetos. */
+  function poseOptions(info) {
+    const raw = info && Array.isArray(info.options) ? info.options : Object.keys(POSE_MODEL_LABELS);
+    const out = [];
+    for (const item of raw) {
+      if (typeof item === "string" && item) {
+        out.push({ id: item, label: poseModelLabel(item) });
+      } else if (item && typeof item === "object") {
+        const id = [item.id, item.value, item.variant].find((value) => typeof value === "string" && value);
+        if (id) out.push({ id, label: poseModelLabel(id, item.label || item.title) });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * «Modelo de poses»: solo si esta Sonnia tiene algún juego que mira el cuerpo. La
+   * primera opción es el de la app (sin ajuste en la nube); elegirla lo borra.
+   */
+  function renderPoseModel(status, list) {
+    const usesPoses = list.some((game) => Array.isArray(game.needs) && game.needs.includes("poses"));
+    setHidden(ui.gamePose, !usesPoses);
+    if (!usesPoses) return;
+    const info = poseModelInfo();
+    const options = poseOptions(info);
+    const fallback = info && typeof info.default === "string" ? info.default : "";
+    const key = JSON.stringify([fallback, options]);
+    if (key !== poseKey) {
+      poseKey = key;
+      const appLabel = fallback ? `El de la app: ${uncapitalize(poseModelLabel(fallback))}` : "El de la app";
+      ui.gamePoseSelect.replaceChildren(
+        el("option", { value: "", text: appLabel }),
+        ...options.map((option) => el("option", { value: option.id, text: option.label })),
+      );
+    }
+    const saved = typeof status.games_pose_model === "string" ? status.games_pose_model : "";
+    if (!isLocked(ui.gamePoseSelect) && ui.gamePoseSelect.value !== saved) ui.gamePoseSelect.value = saved;
+    const current = info && typeof info.current === "string" ? info.current : "";
+    let help = "Para los juegos que miran el cuerpo (Simón dice con poses y piedra, papel o tijera). " +
+      "El ligero gasta la mitad de CPU con la pantalla en marcha; el preciso acierta algo más con gente tapada. " +
+      "Vale para todas las Sonnias.";
+    if (current) help += ` En uso ahora: ${uncapitalize(poseModelLabel(current))}.`;
+    setText(ui.gamePoseHelp, help);
+  }
+
+  async function onPoseModelChange() {
+    const select = ui.gamePoseSelect;
+    const model = select.value;
+    const saved = app.status && typeof app.status.games_pose_model === "string" ? app.status.games_pose_model : "";
+    lockControl(select);
+    const result = await sendAction("set_game_pose_model", { model }, { button: select });
+    if (!result.ok) select.value = saved;
+    lockControl(select);
+  }
+
+  // ------------------------------------------------------------ bancos de los juegos
+
+  function gameBanks(games) {
+    const banks = games && Array.isArray(games.banks) ? games.banks : [];
+    return banks.filter((bank) => bank && typeof bank.id === "string");
+  }
+
+  /** La lista de bancos (la de esta Sonnia) y lo que se sabe del elegido. */
+  function renderGameBanks(games) {
+    const banks = gameBanks(games);
+    const key = JSON.stringify(banks.map((bank) => [bank.id, bank.title, bank.source]));
+    if (key !== gameBanksKey) {
+      gameBanksKey = key;
+      const keep = ui.gameBankSelect.value || app.gameBankId || "";
+      ui.gameBankSelect.replaceChildren(
+        el("option", { value: "", text: banks.length ? "Elige un banco…" : "Sin bancos" }),
+        ...banks.map((bank) =>
+          el("option", { value: bank.id, text: bank.source === "cloud" ? `${bank.title} · de la nube` : bank.title }),
+        ),
+      );
+      if (keep && banks.some((bank) => bank.id === keep)) ui.gameBankSelect.value = keep;
+    }
+    const cloud = banks.filter((bank) => bank.source === "cloud").length;
+    let info = "";
+    if (cloud) info = `${cloud} de ${banks.length} guardado${cloud === 1 ? "" : "s"} en la nube`;
+    else if (banks.length) info = banks.length === 1 ? "1 banco, el de la app" : `${banks.length} bancos, los de la app`;
+    setText(ui.gameBankInfo, info);
+    const bank = banks.find((item) => item.id === ui.gameBankSelect.value);
+    let detail = "";
+    if (bank) {
+      const where = bank.source === "cloud" ? "En uso: el guardado en la nube" : "En uso: el de la app";
+      const file = bank.source !== "cloud" && typeof bank.file === "string" ? ` (${bank.file})` : "";
+      const min = isNumber(bank.min_entries) ? ` Necesita al menos ${bank.min_entries} entradas válidas.` : "";
+      detail = `${where}${file}.${min}`;
+    }
+    setText(ui.gameBankDetail, detail);
+    setHidden(ui.gameBankDetail, !detail);
+  }
+
+  function gameBankDirty() {
+    return app.gameBankBase !== null && ui.gameBankInput.value.trim() !== app.gameBankBase;
+  }
+
+  function renderGameBankState() {
+    const node = ui.gameBankState;
+    const length = ui.gameBankInput.value.length;
+    const count = `${length.toLocaleString(LOCALE)} de ${GAME_BANK_MAX_CHARS.toLocaleString(LOCALE)} caracteres`;
+    if (ui.gameBankSaveBtn.classList.contains("is-busy") || ui.gameBankResetBtn.classList.contains("is-busy")) {
+      node.dataset.state = "saving";
+      setText(node, "Guardando…");
+    } else if (gameBankDirty()) {
+      node.dataset.state = "dirty";
+      setText(node, `Cambios sin guardar · ${count}`);
+    } else {
+      node.dataset.state = "saved";
+      setText(node, app.gameBankId !== null ? count : "");
+    }
+  }
+
+  function closeGameBank() {
+    app.gameBankId = null;
+    app.gameBankBase = null;
+    ui.gameBankInput.value = "";
+    setHidden(ui.gameBankEditor, true);
+    renderGameBankState();
+    refreshControls();
+  }
+
+  /** Trae el banco elegido de la Sonnia elegida: viene entero en el mensaje de la acción. */
+  async function loadGameBank(bank) {
+    const result = await sendAction("game_bank", { bank }, { button: ui.gameBankLoadBtn, silent: true });
+    if (!result.ok) {
+      showToast(result.message, "error");
+      return;
+    }
+    app.gameBankId = bank;
+    ui.gameBankInput.value = result.message;
+    app.gameBankBase = result.message.trim();
+    setHidden(ui.gameBankEditor, false);
+    renderGameBankState();
+    refreshControls();
+  }
+
+  async function confirmDropGameBank() {
+    if (!gameBankDirty()) return true;
+    return confirmAction({
+      title: "¿Dejar este banco sin guardar?",
+      text: "Se pierden los cambios que no has guardado en la nube.",
+      confirmLabel: "Sí, dejarlo",
+      danger: true,
+    });
+  }
+
+  async function onGameBankSelect() {
+    const chosen = ui.gameBankSelect.value;
+    if (app.gameBankId !== null && chosen !== app.gameBankId) {
+      if (!(await confirmDropGameBank())) {
+        ui.gameBankSelect.value = app.gameBankId;
+        return;
+      }
+      closeGameBank();
+    }
+    renderGameBanks(gamesInfo());
+    refreshControls();
+  }
+
+  async function onGameBankLoad() {
+    const bank = ui.gameBankSelect.value;
+    if (!bank) return;
+    if (!(await confirmDropGameBank())) return;
+    await loadGameBank(bank);
+  }
+
+  async function onGameBankSave() {
+    const bank = app.gameBankId;
+    if (bank === null) return;
+    const text = ui.gameBankInput.value.trim();
+    const promise = sendAction("set_game_bank", { bank, text }, { button: ui.gameBankSaveBtn });
+    renderGameBankState();
+    const result = await promise;
+    if (result.ok && app.gameBankId === bank) app.gameBankBase = text;
+    renderGameBankState();
+  }
+
+  async function onGameBankReset() {
+    const bank = app.gameBankId;
+    if (bank === null) return;
+    const ok = await confirmAction({
+      title: "¿Volver al banco de la app?",
+      text: "Se borra de la nube este banco y todas las Sonnias vuelven al que trae su app.",
+      confirmLabel: "Volver al de la app",
+      danger: true,
+    });
+    if (!ok) return;
+    const result = await sendAction("set_game_bank", { bank, text: "" }, { button: ui.gameBankResetBtn });
+    if (result.ok) await loadGameBank(bank);
+    else renderGameBankState();
   }
 
   function onMuteClick() {
@@ -2631,6 +3052,14 @@
     ui.triviaBankSaveBtn.addEventListener("click", onTriviaBankSave);
     ui.triviaBankResetBtn.addEventListener("click", onTriviaBankReset);
     ui.triviaBankInput.addEventListener("input", renderTriviaBankState);
+
+    ui.gameStopBtn.addEventListener("click", () => sendAction("game_stop", {}, { button: ui.gameStopBtn }));
+    ui.gameBankSelect.addEventListener("change", onGameBankSelect);
+    ui.gameBankLoadBtn.addEventListener("click", onGameBankLoad);
+    ui.gameBankSaveBtn.addEventListener("click", onGameBankSave);
+    ui.gameBankResetBtn.addEventListener("click", onGameBankReset);
+    ui.gameBankInput.addEventListener("input", renderGameBankState);
+    ui.gamePoseSelect.addEventListener("change", onPoseModelChange);
 
     trackDragging(ui.volumeInput);
     ui.volumeInput.addEventListener("input", () => {
