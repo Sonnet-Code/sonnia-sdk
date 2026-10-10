@@ -52,8 +52,9 @@ BUILD_ENV_FILE = "build.env"
 
 #: Lo que la app congelada trae hecho para cada equipo nuevo (ver ``seed_home``): las
 #: frases grabadas y, para reconocer caras sin descargar nada, los modelos y las huellas
-#: (docs/caras.md). Las fotos locales del equipo (``cache/faces/fotos``) no viajan.
-SEEDED = ("cache/voice", "cache/faces/modelos", "cache/faces/huellas")
+#: (docs/caras.md). Las fotos locales del equipo (``cache/faces/fotos``) no viajan. También
+#: los modelos de poses y manos de los juegos (docs/plan-juegos.md, sección 6).
+SEEDED = ("cache/voice", "cache/faces/modelos", "cache/faces/huellas", "cache/games/modelos")
 
 
 def frozen() -> bool:

@@ -1,14 +1,24 @@
 """Monta la visión en vivo de los juegos (``docs/plan-juegos.md``, sección 6).
 
 Es la costura entre los cimientos de los juegos (``sonia.games``, que llaman a
-:func:`build_game_vision` al arrancar el motor) y la visión de verdad (``stream``, ``poses``,
-``hands`` y ``judge``, del agente de visión, que rellena este archivo). Sin cámara USB
-(``VISION_SOURCE`` distinto de ``opencv``) o mientras no haya visión de verdad, todo dice que no
-está disponible y los juegos de cámara no se ofrecen.
+:func:`build_game_vision` al arrancar el motor) y la visión de verdad:
+
+- ``stream``: la lectura continua de la cámara USB (``sonia.vision.stream``);
+- ``preview``: la vista en vivo hacia Unity, en frames ``SNCV`` (``sonia.vision.stream``);
+- ``poses``: YOLOv8-pose con ``cv2.dnn`` (``sonia.vision.poses``);
+- ``hands``: las manos de MediaPipe para piedra, papel o tijera (``sonia.vision.hands``);
+- ``judge``: la pregunta cerrada al modelo de visión (``sonia.vision.judge``).
+
+Sin cámara USB (``VISION_SOURCE`` distinto de ``opencv``) todo dice que no está disponible y
+los juegos de cámara no se ofrecen. Cada pieza se apaga sola si le falta lo suyo (los modelos,
+la Unity que sabe pintar la vista, el modelo de visión).
 """
 
 from __future__ import annotations
 
+import importlib.util
+import logging
+import threading
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +31,7 @@ from sonia.vision.contracts import (
     Overlay,
     Person,
     PoseFrame,
+    VisionJudge,
 )
 
 if TYPE_CHECKING:
@@ -29,6 +40,8 @@ if TYPE_CHECKING:
     from sonia.types import CameraSource
 
 __all__ = ["SendBytes", "SendJson", "build_game_vision", "unavailable_game_vision"]
+
+logger = logging.getLogger(__name__)
 
 #: Manda un mensaje JSON a Unity (``Hub.broadcast_json``).
 SendJson = Callable[[dict[str, Any]], Awaitable[None]]
@@ -135,6 +148,7 @@ def build_game_vision(
     send_bytes: SendBytes,
     preview_supported: Callable[[], bool],
     vision_llm: LLMClient | None,
+    download_models: bool = True,
 ) -> GameVision:
     """Monta la visión de los juegos sobre la cámara del motor.
 
@@ -144,8 +158,100 @@ def build_game_vision(
     - ``preview_supported``: ``True`` si la Unity conectada anuncia ``camera_preview`` en
       ``client_hello.features``; si no, la vista en vivo no se enciende.
     - ``vision_llm``: el cliente del modelo de visión, para :class:`VisionJudge`, o ``None``.
+    - ``download_models``: si faltan los modelos de poses y manos, bajarlos en segundo plano
+      (en un hilo); hasta que lleguen, esos juegos no se ofrecen. Los tests lo apagan.
 
     Nunca lanza: si algo falla, lo que falle queda como no disponible.
     """
-    del settings, camera, send_json, send_bytes, preview_supported, vision_llm
-    return unavailable_game_vision()
+    try:
+        return _build(
+            settings=settings,
+            camera=camera,
+            send_json=send_json,
+            send_bytes=send_bytes,
+            preview_supported=preview_supported,
+            vision_llm=vision_llm,
+            download_models=download_models,
+        )
+    except Exception:  # noqa: BLE001 - sin visión de juegos, Sonia sigue
+        logger.exception("No se pudo montar la visión de los juegos: sin juegos de cámara")
+        return unavailable_game_vision()
+
+
+def _build(
+    *,
+    settings: Settings,
+    camera: CameraSource | None,
+    send_json: SendJson,
+    send_bytes: SendBytes,
+    preview_supported: Callable[[], bool],
+    vision_llm: LLMClient | None,
+    download_models: bool,
+) -> GameVision:
+    from sonia.vision.camera import OpenCVCamera
+
+    if settings.vision.source != "opencv" or not isinstance(camera, OpenCVCamera):
+        return unavailable_game_vision()
+    if importlib.util.find_spec("cv2") is None:
+        logger.warning("Sin OpenCV (uv sync --extra camera): no hay juegos de cámara")
+        return unavailable_game_vision()
+
+    from sonia.vision.hands import MediaPipeHandDetector
+    from sonia.vision.judge import ModelJudge
+    from sonia.vision.models import download_game_models, game_models, games_models_dir
+    from sonia.vision.poses import YoloPoseDetector
+    from sonia.vision.stream import LivePreview, OpenCVCameraStream
+
+    folder = games_models_dir(settings)
+    variant = str(_setting(settings, ("games", "poses", "model"), "s") or "s").strip().lower()
+    stream = OpenCVCameraStream(camera)
+    preview = LivePreview(stream, send_json, send_bytes, preview_supported)
+    poses = YoloPoseDetector(stream, folder, variant=variant)
+    hands = MediaPipeHandDetector(folder)
+    judge: VisionJudge = (
+        ModelJudge(vision_llm, camera)
+        if vision_llm is not None and settings.llm.supports_vision
+        else NoJudge()
+    )
+    downloader: threading.Thread | None = None
+    if download_models and not (poses.available and hands.available):
+        models = game_models(variant)
+
+        def download() -> None:
+            try:
+                fetched = download_game_models(folder, models)
+            except Exception as exc:  # noqa: BLE001 - sin red: se reintenta al volver a arrancar
+                logger.warning("No se pudieron bajar los modelos de los juegos: %s", exc)
+                return
+            if fetched:
+                logger.info("Modelos de los juegos listos en %s: %s", folder, ", ".join(fetched))
+
+        downloader = threading.Thread(target=download, name="sonia-modelos-juegos", daemon=True)
+        downloader.start()
+
+    async def close() -> None:
+        await preview.close()
+        await poses.close()
+        for owner in list(stream.owners):
+            await stream.release(owner)
+
+    logger.info(
+        "Visión de los juegos: poses %s (%s), manos %s, juez %s",
+        "lista" if poses.available else "sin modelo",
+        variant,
+        "listas" if hands.available else "sin modelo",
+        "listo" if judge.available else "sin modelo de visión",
+    )
+    return GameVision(
+        stream=stream, preview=preview, poses=poses, hands=hands, judge=judge, close=close
+    )
+
+
+def _setting(settings: Any, path: tuple[str, ...], default: Any) -> Any:
+    """Un ajuste de los cimientos por su ruta (``settings.games.poses.model``), o ``default``."""
+    value: Any = settings
+    for name in path:
+        value = getattr(value, name, None)
+        if value is None:
+            return default
+    return value
