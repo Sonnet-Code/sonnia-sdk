@@ -1,0 +1,69 @@
+{
+ "acierto.guion": "¡Acertaste! Era «Swift», en 7 preguntas. Celébralo presumiendo con humor en una o dos frases cortas (el genio dev nunca falla) y pregúntale si quiere jugar otra vez.",
+ "acierto.textos": {
+  "instructions": [
+   "AKINATOR EN MARCHA: el visitante piensa en algo del mundo tech y tú lo adivinas con preguntas de sí o no (20 como mucho).\n- Una pregunta corta cada vez, solo de sí o no, y espera. Reacciona en pocas palabras. Las haces tú, sin delegar.\n- Acepta «sí», «no», «no sé», «a veces» y «probablemente». No repitas preguntas. Lo que hablan entre ellos no es una respuesta.\n- Empieza por lo general (¿persona?, ¿lenguaje?, ¿de Google?) y afina.\n- Puede ser: Lenguajes de programación; Herramientas y frameworks; Empresas tecnológicas; Productos de Google; Inteligencia artificial; Apps y redes sociales; Dispositivos y videojuegos; Personajes de la informática.\n- No arriesgues antes de la pregunta 5. Si lo tienes claro, delega «akinator: adivina X» y pregunta «¿es X?».\n- En cuanto diga si acertaste o qué era, delega «akinator: resultado» (acierto sí o no y lo que era) antes de celebrar o lamentarte; nunca «adivina» con lo que te diga.\n- Si llegas a la 20 sin saberlo, arriesga o ríndete y pídele qué era.\n- Si quieren dejarlo, delega terminar el juego: decir «paramos» no lo para.\n- La pantalla solo cambia si delegas: nunca digas que acertaste o fallaste sin delegarlo."
+  ],
+  "spoken": [
+   "AKINATOR: tu respuesta sigue en la pantalla sin resultado. Si ya te dijo si acertaste o qué era, delega ahora «akinator: resultado», sin celebrar antes; si no, pregúntale si acertaste."
+  ]
+ },
+ "acierto.ya_termino": "La partida ya terminó. Si quieren otra, delega empezarla de nuevo.",
+ "adivina.empujon": "AKINATOR: si el visitante dijo si acertaste o qué era, delega ya «akinator: resultado», antes de celebrar; si pidió parar o se despidió, delega terminar el juego.",
+ "adivina.guion": "Tu respuesta «Kotlin» ya sale en la pantalla. Pregúntaselo con emoción, en una frase corta («¿Es… Kotlin?»), y espera lo que conteste. Cuando diga si acertaste, o qué era, delega «akinator: resultado».",
+ "adivina.no_quedo_claro": "No quedó claro si acertaste. Pregúntaselo claro («¿acerté?») y, cuando conteste, delega «akinator: resultado».",
+ "adivina.otra_vez": "Tu respuesta «Kotlin» ya sale en la pantalla. Pregúntaselo con emoción, en una frase corta («¿Es… Kotlin?»), y espera lo que conteste. Cuando diga si acertaste, o qué era, delega «akinator: resultado».",
+ "adivina.reanudar": "Ya estáis jugando al Akinator dev: no hace falta empezarlo otra vez. Llevas 7 de 20 preguntas. Tu respuesta «Kotlin» está en la pantalla esperando que diga si acertaste. Sigue donde ibas.",
+ "arranque.acierto_sin_nada": "No sé qué respuesta es esa. Pásame en respuesta_real lo que era; si no te lo dijo, pregúntaselo.",
+ "arranque.adivina_pronto": "Todavía es pronto para arriesgar: llevas 0 preguntas y no puedes adivinar antes de la 5. Sigue con tus preguntas de sí o no y arriesga cuando lo tengas claro.",
+ "arranque.adivina_sin_respuesta": "No me dijiste qué quieres adivinar. Pásame tu respuesta, por ejemplo «Kotlin».",
+ "arranque.empujon_esperando": null,
+ "arranque.empujon_sin_preguntar": "AKINATOR: si el visitante ya tiene algo en mente y no has hecho tu primera pregunta, hazla: una corta de sí o no.",
+ "arranque.guion": "Arranca el Akinator dev con energía. En dos frases cortas: que vas a adivinar lo que piense, y que piense en algo del mundo tech (lenguajes de programación, herramientas y frameworks, empresas tecnológicas, productos de google, inteligencia artificial) sin decírtelo. Si no sabe en qué pensar, dale una idea (un lenguaje, una empresa o alguien famoso de la informática). Pídele que te avise cuando lo tenga y espera: todavía no hagas ninguna pregunta. Cuando te diga que ya, empieza con tu primera pregunta de sí o no, una sola.",
+ "arranque.reanudar": "Ya estáis jugando al Akinator dev: no hace falta empezarlo otra vez. Llevas 0 de 20 preguntas. Sigue donde ibas.",
+ "arranque.resultado_sin_respuesta": "No hay ninguna respuesta tuya en la pantalla: las preguntas de sí o no no se delegan. Sigue preguntando y, cuando lo tengas claro, delega «akinator: adivina X».",
+ "fallo.guion": "«Kotlin» no era. Díselo con humor en media frase y sigue con otra pregunta de sí o no, usando lo que ya sabes. Te quedan 13 preguntas.",
+ "fallo.repetida": "Ya probaste con «kotlin» y no era. Arriesga otra cosa o sigue con tus preguntas.",
+ "panel.acierto": "¡Acertaste! Era «Java», en 6 preguntas. Celébralo presumiendo con humor en una o dos frases cortas (el genio dev nunca falla) y pregúntale si quiere jugar otra vez.",
+ "panel.dice_que_era": "Te ganó: era «Rust». Reconócelo con humor («¡me ganaste!») en una o dos frases cortas y felicítale. Dile que pase a hablar con Brian o Mariel aquí en el stand. No sabes qué premios hay: no prometas ninguno. Luego pregúntale si quiere jugar otra vez.",
+ "panel.fallo": "«Kotlin» no era. Díselo con humor en media frase y sigue con otra pregunta de sí o no, usando lo que ya sabes. Te quedan 14 preguntas.",
+ "panel.respuestas": [
+  "El visitante contesta «sí» a tu última pregunta. Reacciona en pocas palabras y sigue con otra pregunta de sí o no; si ya lo tienes claro, delega «akinator: adivina X».",
+  "El visitante contesta «no» a tu última pregunta. Reacciona en pocas palabras y sigue con otra pregunta de sí o no; si ya lo tienes claro, delega «akinator: adivina X».",
+  "El visitante contesta «no sé» a tu última pregunta. Reacciona en pocas palabras y sigue con otra pregunta de sí o no; si ya lo tienes claro, delega «akinator: adivina X»."
+ ],
+ "panel.ya_lo_penso": "El visitante ya tiene algo pensado. Empieza con tu primera pregunta de sí o no, una sola, y espera lo que conteste.",
+ "pequeno.guion": "Arranca el Akinator dev con energía. En dos frases cortas: que vas a adivinar lo que piense, y que piense en algo del mundo tech (lenguajes, empresas, personajes) sin decírtelo. Si no sabe en qué pensar, dale una idea (un lenguaje, una empresa o alguien famoso de la informática). Pídele que te avise cuando lo tenga y espera: todavía no hagas ninguna pregunta. Cuando te diga que ya, empieza con tu primera pregunta de sí o no, una sola.",
+ "pequeno.textos": {
+  "instructions": [
+   "AKINATOR EN MARCHA: el visitante piensa en algo del mundo tech y tú lo adivinas con preguntas de sí o no (12 como mucho).\n- Una pregunta corta cada vez, solo de sí o no, y espera. Reacciona en pocas palabras. Las haces tú, sin delegar.\n- Acepta «sí», «no», «no sé», «a veces» y «probablemente». No repitas preguntas. Lo que hablan entre ellos no es una respuesta.\n- Empieza por lo general (¿persona?, ¿lenguaje?, ¿de Google?) y afina.\n- Puede ser: Lenguajes (Python, Kotlin, Rust); Empresas (Google, Meta); Personajes (Linus Torvalds).\n- No arriesgues antes de la pregunta 3. Si lo tienes claro, delega «akinator: adivina X» y pregunta «¿es X?».\n- En cuanto diga si acertaste o qué era, delega «akinator: resultado» (acierto sí o no y lo que era) antes de celebrar o lamentarte; nunca «adivina» con lo que te diga.\n- Si llegas a la 12 sin saberlo, arriesga o ríndete y pídele qué era.\n- Si quieren dejarlo, delega terminar el juego: decir «paramos» no lo para.\n- La pantalla solo cambia si delegas: nunca digas que acertaste o fallaste sin delegarlo.",
+   "AKINATOR: llevas 7 de 12 preguntas. Ve cerrando el círculo con lo que ya sabes.",
+   "AKINATOR: la pregunta que acabas de hacer es la 12, la última. Cuando conteste, arriesga tu mejor idea con «akinator: adivina X» o, si no tienes ninguna, ríndete y pídele que te diga qué era. No hagas más preguntas."
+  ],
+  "spoken": []
+ },
+ "pierde.con_contacto": "Te ganó: era «Rust». Reconócelo con humor («¡me ganaste!») en una o dos frases cortas y felicítale. Dile que pase a hablar con Brian o Mariel aquí en el stand. No sabes qué premios hay: no prometas ninguno. Luego pregúntale si quiere jugar otra vez.",
+ "pierde.sin_contacto": "Te ganó: era «Rust». Reconócelo con humor («¡me ganaste!») en una o dos frases cortas y felicítale. Luego pregúntale si quiere jugar otra vez.",
+ "preguntando.empujon_turno_largo": "AKINATOR: si el visitante pidió parar o se despidió, delega terminar el juego; si dijo qué era, delega «akinator: resultado».",
+ "preguntando.reanudar": "Ya estáis jugando al Akinator dev: no hace falta empezarlo otra vez. Llevas 7 de 20 preguntas. Sigue donde ibas.",
+ "reglas.muchos_temas": "AKINATOR EN MARCHA: el visitante piensa en algo del mundo tech y tú lo adivinas con preguntas de sí o no (20 como mucho).\n- Una pregunta corta cada vez, solo de sí o no, y espera. Reacciona en pocas palabras. Las haces tú, sin delegar.\n- Acepta «sí», «no», «no sé», «a veces» y «probablemente». No repitas preguntas. Lo que hablan entre ellos no es una respuesta.\n- Empieza por lo general (¿persona?, ¿lenguaje?, ¿de Google?) y afina.\n- Puede ser: Lenguajes de programación; Herramientas y frameworks; Empresas tecnológicas; Productos de Google; Inteligencia artificial; Apps y redes sociales; Dispositivos y videojuegos; Personajes de la informática.\n- No arriesgues antes de la pregunta 5. Si lo tienes claro, delega «akinator: adivina X» y pregunta «¿es X?».\n- En cuanto diga si acertaste o qué era, delega «akinator: resultado» (acierto sí o no y lo que era) antes de celebrar o lamentarte; nunca «adivina» con lo que te diga.\n- Si llegas a la 20 sin saberlo, arriesga o ríndete y pídele qué era.\n- Si quieren dejarlo, delega terminar el juego: decir «paramos» no lo para.\n- La pantalla solo cambia si delegas: nunca digas que acertaste o fallaste sin delegarlo.",
+ "rendido.empujon": "AKINATOR: si ya te dijo qué era, delega «akinator: resultado» con lo que era; si no, pregúntaselo.",
+ "tope.dice_que_era": "Te ganó: era «Haskell». Reconócelo con humor («¡me ganaste!») en una o dos frases cortas y felicítale. Dile que pase a hablar con Brian o Mariel aquí en el stand. No sabes qué premios hay: no prometas ninguno. Luego pregúntale si quiere jugar otra vez.",
+ "tope.empujon": "AKINATOR: ya hiciste tus 20 preguntas. Si te dijo qué era, delega «akinator: resultado»; si no, delega «akinator: adivina X» con tu mejor idea o pregúntale qué era.",
+ "tope.empujon_rendido": "AKINATOR: si ya te dijo qué era, delega «akinator: resultado» con lo que era; si no, pregúntaselo.",
+ "tope.se_rinde": "«Java» no era y ya no puedes arriesgar más. Reconócelo con humor en una frase y pregúntale qué era. Cuando te lo diga, delega «akinator: resultado» con lo que era.",
+ "tope.se_rinde_sin_respuesta": "Reconócelo con humor en una frase y pregúntale qué era. Cuando te lo diga, delega «akinator: resultado» con lo que era.",
+ "tope.textos": {
+  "instructions": [
+   "AKINATOR EN MARCHA: el visitante piensa en algo del mundo tech y tú lo adivinas con preguntas de sí o no (20 como mucho).\n- Una pregunta corta cada vez, solo de sí o no, y espera. Reacciona en pocas palabras. Las haces tú, sin delegar.\n- Acepta «sí», «no», «no sé», «a veces» y «probablemente». No repitas preguntas. Lo que hablan entre ellos no es una respuesta.\n- Empieza por lo general (¿persona?, ¿lenguaje?, ¿de Google?) y afina.\n- Puede ser: Lenguajes de programación; Herramientas y frameworks; Empresas tecnológicas; Productos de Google; Inteligencia artificial; Apps y redes sociales; Dispositivos y videojuegos; Personajes de la informática.\n- No arriesgues antes de la pregunta 5. Si lo tienes claro, delega «akinator: adivina X» y pregunta «¿es X?».\n- En cuanto diga si acertaste o qué era, delega «akinator: resultado» (acierto sí o no y lo que era) antes de celebrar o lamentarte; nunca «adivina» con lo que te diga.\n- Si llegas a la 20 sin saberlo, arriesga o ríndete y pídele qué era.\n- Si quieren dejarlo, delega terminar el juego: decir «paramos» no lo para.\n- La pantalla solo cambia si delegas: nunca digas que acertaste o fallaste sin delegarlo.",
+   "AKINATOR: llevas 15 de 20 preguntas. Ve cerrando el círculo con lo que ya sabes.",
+   "AKINATOR: la pregunta que acabas de hacer es la 20, la última. Cuando conteste, arriesga tu mejor idea con «akinator: adivina X» o, si no tienes ninguna, ríndete y pídele que te diga qué era. No hagas más preguntas."
+  ],
+  "spoken": []
+ },
+ "tres_fallos": [
+  "«Java» no era. Díselo con humor en media frase y sigue con otra pregunta de sí o no, usando lo que ya sabes. Te quedan 14 preguntas.",
+  "«Swift» no era. Díselo con humor en media frase y sigue con otra pregunta de sí o no, usando lo que ya sabes. Te quedan 14 preguntas.",
+  "«Go» no era y ya no puedes arriesgar más. Reconócelo con humor en una frase y pregúntale qué era. Cuando te lo diga, delega «akinator: resultado» con lo que era."
+ ]
+}

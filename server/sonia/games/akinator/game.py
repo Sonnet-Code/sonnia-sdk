@@ -63,6 +63,7 @@ from sonia.games.akinator.prompts import (
     WIN_SCRIPT,
     build_rules,
     build_start_script,
+    live_text,
 )
 from sonia.games.akinator.questions import QuestionCounter, extract_questions, is_giving_up
 from sonia.games.banks import GameBank
@@ -292,7 +293,7 @@ class AkinatorGame(Game):
         guess = ""
         if self._phase == "guessing" and self._guess:
             guess = RESUME_GUESS.format(answer=self._guess)
-        return RESUME_SCRIPT.format(asked=self._asked, max=self._max, guess=guess)
+        return live_text("reanudar", RESUME_SCRIPT, asked=self._asked, max=self._max, guess=guess)
 
     # -- el estado ------------------------------------------------------------
 
@@ -380,11 +381,11 @@ class AkinatorGame(Game):
         """Avisos silenciosos a Sonia cuando se acaban las preguntas (no hablan: ``instruct``)."""
         if count >= self._max and not self._warned_last:
             self._warned_last = True
-            text = LAST_QUESTION_TEXT.format(max=self._max)
+            text = live_text("ultima_pregunta", LAST_QUESTION_TEXT, max=self._max)
             self.host.spawn(self._note_when_quiet(text), "ultima-pregunta")
         elif self._max >= 10 and count == self._max - 5 and not self._warned_few:
             self._warned_few = True
-            text = FEW_LEFT_TEXT.format(asked=count, max=self._max)
+            text = live_text("quedan_pocas", FEW_LEFT_TEXT, asked=count, max=self._max)
             self.host.spawn(self._note_when_quiet(text), "quedan-pocas")
 
     async def _note_when_quiet(self, text: str) -> None:
@@ -419,7 +420,8 @@ class AkinatorGame(Game):
         ):
             self._guess_reminded = True
             logger.info("Akinator: «%s» sigue sin resultado; se le recuerda", self._guess)
-            self.host.spawn(self.host.speak(GUESS_REMIND_TEXT), "recuerda-resultado")
+            remind = live_text("recuerda_resultado", GUESS_REMIND_TEXT)
+            self.host.spawn(self.host.speak(remind), "recuerda-resultado")
 
     def _evidence(self) -> int:
         """Cuántas preguntas van, por lo que se sabe seguro: las contadas en la transcripción
@@ -431,15 +433,15 @@ class AkinatorGame(Game):
     def nudge(self) -> str | None:
         if self._phase == "waiting" and self._ready and self._counter.count == 0:
             # El visitante ya habló y Sonia no ha empezado a preguntar.
-            return START_NUDGE
+            return live_text("empujon_arranque", START_NUDGE)
         if self._phase == "guessing":
-            return GUESS_NUDGE
+            return live_text("empujon_adivina", GUESS_NUDGE)
         if self._phase == "giving_up":
-            return GIVEUP_NUDGE
+            return live_text("empujon_rendida", GIVEUP_NUDGE)
         if self._phase in ("waiting", "asking") and self._counter.count >= self._max:
-            return LIMIT_NUDGE.format(max=self._max)
+            return live_text("empujon_tope", LIMIT_NUDGE, max=self._max)
         if self._phase == "asking" and self._long_turn:
-            return ASKING_NUDGE
+            return live_text("empujon_turno_largo", ASKING_NUDGE)
         return None
 
     # -- las jugadas ------------------------------------------------------------
@@ -459,13 +461,15 @@ class AkinatorGame(Game):
             if self._evidence() < self._min:
                 # Antes del mínimo no se adivina, aunque insista: que siga preguntando. Si el
                 # contador se quedó corto, las respuestas del visitante lo compensan.
-                raise GameError(EARLY_GUESS_SCRIPT.format(asked=self._asked, min=self._min))
+                raise GameError(
+                    live_text("pronto", EARLY_GUESS_SCRIPT, asked=self._asked, min=self._min)
+                )
             key = normalize(answer)
             if any(normalize(missed) == key for missed in self._misses):
-                raise GameError(REPEATED_GUESS_SCRIPT.format(answer=answer))
+                raise GameError(live_text("repetida", REPEATED_GUESS_SCRIPT, answer=answer))
             if self._phase == "guessing" and normalize(self._guess) == key:
                 # La misma otra vez (GPT-Live la delegó dos veces): ya está en la pantalla.
-                return GUESS_SCRIPT.format(answer=self._guess)
+                return live_text("adivina", GUESS_SCRIPT, answer=self._guess)
             if self._phase == "guessing" and self._guess:
                 # Arriesga otra sin resolver la anterior: la anterior no era.
                 self._misses.append(self._guess)
@@ -476,7 +480,7 @@ class AkinatorGame(Game):
             self._guess_reminded = False
             logger.info("Akinator: arriesga «%s» tras %d preguntas", answer, self._asked)
             await self._emit("guess")
-        return GUESS_SCRIPT.format(answer=answer)
+        return live_text("adivina", GUESS_SCRIPT, answer=answer)
 
     async def result(self, arguments: dict[str, Any]) -> str:
         """``akinator_result``: cómo acaba, según el visitante, y qué era."""
@@ -496,7 +500,7 @@ class AkinatorGame(Game):
         if verdict == "si":
             answer = pending or real
             if not answer:
-                raise GameError(NO_ANSWER_SCRIPT)
+                raise GameError(live_text("sin_respuesta", NO_ANSWER_SCRIPT))
             return await self._reveal("win", answer)
         if verdict == "no":
             return await self._miss(pending, real)
@@ -508,8 +512,8 @@ class AkinatorGame(Game):
         if real:
             return await self._miss(pending, real)
         if pending:
-            return NOT_CLEAR_SCRIPT
-        return NO_GUESS_SCRIPT
+            return live_text("no_claro", NOT_CLEAR_SCRIPT)
+        return live_text("sin_adivinar", NO_GUESS_SCRIPT)
 
     async def _miss(self, pending: str, real: str) -> str:
         """Sonia falló: si el visitante dijo qué era, ganó; si no, sigue o se rinde."""
@@ -520,8 +524,8 @@ class AkinatorGame(Game):
             return await self._reveal("lose", real)
         if not pending:
             if self._phase == "giving_up":
-                return GIVEUP_SCRIPT.format(reason="")
-            return NO_GUESS_SCRIPT
+                return live_text("se_rinde", GIVEUP_SCRIPT, reason="")
+            return live_text("sin_adivinar", NO_GUESS_SCRIPT)
         left = self._max - self._asked
         logger.info(
             "Akinator: «%s» no era (fallos: %d, preguntas que quedan: %d)",
@@ -532,10 +536,11 @@ class AkinatorGame(Game):
         if left > 0 and len(self._misses) < MAX_GUESSES:
             self._phase = "asking"
             await self._emit("miss")
-            return MISS_SCRIPT.format(answer=pending, left=left)
+            return live_text("fallo", MISS_SCRIPT, answer=pending, left=left)
         self._phase = "giving_up"
         await self._emit("giveup")
-        return GIVEUP_SCRIPT.format(reason=GIVEUP_REASON_MISS.format(answer=pending))
+        reason = GIVEUP_REASON_MISS.format(answer=pending)
+        return live_text("se_rinde", GIVEUP_SCRIPT, reason=reason)
 
     async def _reveal(self, result: Literal["win", "lose"], answer: str) -> str:
         """El resultado final: la pantalla lo enseña ya y ``finish`` cierra la partida después."""
@@ -559,10 +564,13 @@ class AkinatorGame(Game):
             {"outcome": self._outcome, "answer": answer, "asked": asked, "tries": tries},
         )
         if won:
-            return WIN_SCRIPT.format(answer=answer, asked=asked)
+            return live_text("acierto", WIN_SCRIPT, answer=answer, asked=asked)
         contact = self.host.settings.trivia.win_contact.strip()
-        return LOSE_SCRIPT.format(
-            answer=answer, contact=LOSE_CONTACT_TEXT.format(contact=contact) if contact else ""
+        return live_text(
+            "derrota",
+            LOSE_SCRIPT,
+            answer=answer,
+            contact=LOSE_CONTACT_TEXT.format(contact=contact) if contact else "",
         )
 
     # -- control a mano desde el panel (``docs/juegos.md``, «Control a mano») ------
@@ -605,7 +613,7 @@ class AkinatorGame(Game):
                 # y desde aquí cuentan las preguntas de Sonia.
                 self._ready = True
                 self._answers += 1
-            return PANEL_READY_SCRIPT
+            return live_text("panel_listo", PANEL_READY_SCRIPT)
         if control in answers:
             if self._phase != "asking":
                 raise GameError("«Sí», «No» y «No sé» valen cuando Sonnia hace una pregunta.")
@@ -613,7 +621,7 @@ class AkinatorGame(Game):
             self._ready = True
             self._answers += 1
             self._long_turn = False
-            return PANEL_ANSWER_SCRIPT.format(answer=answers[control])
+            return live_text("panel_respuesta", PANEL_ANSWER_SCRIPT, answer=answers[control])
         if control in (CONTROL_RIGHT, CONTROL_WRONG):
             async with self._lock:
                 if self._phase != "guessing" or not self._guess:

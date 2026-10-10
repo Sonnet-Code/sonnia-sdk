@@ -37,10 +37,11 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 import numpy as np
 
 from sonia.busy import TEXT_POSES
-from sonia.games.base import Game, GameError, GameHost, StopReason
+from sonia.games.base import INSTRUCT_MAX_CHARS, Game, GameError, GameHost, StopReason
 from sonia.games.poses.bank import POSES_BANK, PoseEntry
 from sonia.games.poses.overlay import Skeleton, Skeletons, Tint
 from sonia.games.poses.rules import FrameCount, Mark, Placement, count_frame
+from sonia.prompts import BOOK, PROMPT_MAX_LEN, PromptSpec
 
 if TYPE_CHECKING:
     import random
@@ -48,7 +49,7 @@ if TYPE_CHECKING:
     from sonia.config import PosesSettings
     from sonia.games.banks import GameBank
 
-__all__ = ["Phase", "PosesGame", "RoundResult", "plan_rounds"]
+__all__ = ["Phase", "PosesGame", "RoundResult", "plan_rounds", "prompt_specs"]
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,131 @@ FAILED_TEXT = (
 #: Una ronda ya contada que el equipo corrige desde el panel («Lo hicieron»...).
 CORRECTION_TEXT = "Corrige el resultado de la ronda {round}: {body}"
 
+#: Qué rellena cada marcador de las reacciones a una ronda.
+_ROUND_HELP = (
+    "Va detrás del encabezado de la ronda (JUEGO: ronda 2 de 6, «Brazos arriba»:) y antes de "
+    "«Luego calla…». "
+    "{count}: cuántos hicieron la pose (en una trampa, cuántos cayeron); {total}: cuántos juegan."
+)
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """Los textos de Simón dice editables desde el panel (``sonia.prompts``). Las órdenes son
+    frases grabadas del banco de poses; el encabezado de cada ronda, los trozos del final
+    sobre las trampas, la corrección del panel y el empujón siguen en el código."""
+
+    def piece(
+        name: str, title: str, default: str, *fields: str, help: str = "", instruct: bool = False
+    ) -> PromptSpec:
+        return PromptSpec(
+            id=f"juegos/poses/{name}",
+            group="Juego: Simón dice",
+            title=title,
+            default=lambda: default,
+            fields=fields,
+            applies="ronda",
+            help=help,
+            max_len=INSTRUCT_MAX_CHARS if instruct else PROMPT_MAX_LEN,
+        )
+
+    return [
+        piece(
+            "reglas",
+            "Reglas (las sabe sin decirlas, al empezar)",
+            RULES_TEXT,
+            "rounds",
+            help="{rounds}: cuántas rondas tiene la partida.",
+            instruct=True,
+        ),
+        piece(
+            "presentacion",
+            "Presentación: lo que dice al empezar",
+            START_TEXT,
+            "rounds",
+            help="{rounds}: cuántas rondas tiene la partida.",
+        ),
+        piece(
+            "reanudar",
+            "Si vuelven a pedir el juego a mitad de partida",
+            RESUME_TEXT,
+            "round",
+            "rounds",
+            help="{round}: la ronda en curso; {rounds}: cuántas tiene la partida.",
+        ),
+        piece("paso_atras", "Aviso: alguien está demasiado cerca", BACK_TEXT),
+        piece("nadie_delante", "Aviso: no se ve a nadie al empezar", NOBODY_TEXT),
+        piece(
+            "ronda_todos", "Ronda: la hicieron todos", ALL_TEXT, "count", "total", help=_ROUND_HELP
+        ),
+        piece(
+            "ronda_algunos",
+            "Ronda: la hicieron algunos",
+            SOME_TEXT,
+            "count",
+            "total",
+            help=_ROUND_HELP,
+        ),
+        piece(
+            "ronda_ninguno",
+            "Ronda: no la hizo nadie",
+            NONE_TEXT,
+            "count",
+            "total",
+            help=_ROUND_HELP,
+        ),
+        piece(
+            "trampa_cayeron",
+            "Trampa: cayó alguien",
+            TRAP_FELL_TEXT,
+            "count",
+            "total",
+            help=_ROUND_HELP,
+        ),
+        piece(
+            "trampa_nadie",
+            "Trampa: no cayó nadie",
+            TRAP_NONE_TEXT,
+            "count",
+            "total",
+            help=_ROUND_HELP,
+        ),
+        piece(
+            "ronda_vacia",
+            "Ronda: no se ve a nadie",
+            EMPTY_TEXT,
+            help="Va detrás del encabezado de la ronda (JUEGO: ronda 2 de 6, «Brazos arriba»:).",
+        ),
+        piece(
+            "siguiente",
+            "Tras cada reacción, salvo en la última ronda",
+            NEXT_TEXT.strip(),
+            help="Va pegado detrás de la reacción a la ronda.",
+        ),
+        piece(
+            "final",
+            "Final de la partida",
+            FINAL_TEXT,
+            "done",
+            "possible",
+            "trap",
+            help=(
+                "{done}: jugadas bien hechas entre todos; {possible}: jugadas posibles; {trap}: "
+                "«y en las trampas cayeron 2» o «y en las trampas no cayó nadie», con su espacio "
+                "delante (vacío si no hubo trampas)."
+            ),
+        ),
+        piece(
+            "premios",
+            "Final: a quién preguntar por premios",
+            WIN_CONTACT_TEXT.strip(),
+            "contact",
+            help="Va detrás del final si hay contacto. {contact}: quién del equipo (Brian o Mariel).",
+        ),
+        piece("sin_nadie", "Se acaba porque no se ve a nadie", EMPTY_FINAL_TEXT),
+        piece("fallo", "Se para por un fallo", FAILED_TEXT),
+    ]
+
+
 # -- control a mano desde el panel --------------------------------------------------------
 
 #: «Lo hicieron» / «No lo hicieron»: el veredicto de la ronda (manda sobre el juez y lo local).
@@ -312,12 +438,19 @@ class PosesGame(Game):
         self._plan = plan
         await self.host.send("start", {"rounds": len(plan)})
         await self._show("placement")
-        await self.host.instruct(RULES_TEXT.format(rounds=len(plan)))
+        await self.host.instruct(
+            BOOK.render("juegos/poses/reglas", fallback=RULES_TEXT, rounds=len(plan))
+        )
         self.host.spawn(self._run(), "rondas")
-        return START_TEXT.format(rounds=len(plan))
+        return BOOK.render("juegos/poses/presentacion", fallback=START_TEXT, rounds=len(plan))
 
     async def resume(self) -> str:
-        return RESUME_TEXT.format(round=max(1, self._index + 1), rounds=len(self._plan))
+        return BOOK.render(
+            "juegos/poses/reanudar",
+            fallback=RESUME_TEXT,
+            round=max(1, self._index + 1),
+            rounds=len(self._plan),
+        )
 
     async def stop(self, reason: StopReason) -> None:
         self._phase = "off"
@@ -395,7 +528,7 @@ class PosesGame(Game):
             await self._place(first=True)
             for index in range(len(self._plan)):
                 if not await self._play_round(index):
-                    await self.host.speak(EMPTY_FINAL_TEXT)
+                    await self.host.speak(BOOK.text("juegos/poses/sin_nadie", EMPTY_FINAL_TEXT))
                     await self.host.finish("cancel")
                     return
             await self._final()
@@ -403,7 +536,7 @@ class PosesGame(Game):
             raise
         except Exception:  # noqa: BLE001 - la demo nunca se cae por el juego
             logger.exception("Simón dice: falló la partida; se cancela")
-            await self.host.speak(FAILED_TEXT)
+            await self.host.speak(BOOK.text("juegos/poses/fallo", FAILED_TEXT))
             await self.host.finish("cancel")
 
     async def _place(self, *, first: bool) -> None:
@@ -440,7 +573,7 @@ class PosesGame(Game):
             if calm and place.close and now - self._asked_close_at >= CLOSE_ASK_COOLDOWN_S:
                 self._asked_close_at = asked_at = now
                 heard = calm = False
-                await host.speak(BACK_TEXT)
+                await host.speak(BOOK.text("juegos/poses/paso_atras", BACK_TEXT))
             elif (
                 calm
                 and first
@@ -451,7 +584,7 @@ class PosesGame(Game):
                 asked_nobody = True
                 asked_at = now
                 heard = calm = False
-                await host.speak(NOBODY_TEXT)
+                await host.speak(BOOK.text("juegos/poses/nadie_delante", NOBODY_TEXT))
             ready_since = (now if ready_since is None else ready_since) if place.ready else None
             if calm and ready_since is not None and now - ready_since >= READY_STABLE_S:
                 return
@@ -523,10 +656,13 @@ class PosesGame(Game):
         trap = ""
         if any(not r.simon for r in self._results):
             trap = FINAL_TRAP_TEXT.format(fell=fell) if fell else FINAL_NO_TRAP_TEXT
-        text = FINAL_TEXT.format(done=done, possible=possible, trap=trap)
+        text = BOOK.render(
+            "juegos/poses/final", fallback=FINAL_TEXT, done=done, possible=possible, trap=trap
+        )
         contact = self.host.settings.trivia.win_contact.strip()
         if contact:
-            text += WIN_CONTACT_TEXT.format(contact=contact)
+            prizes = BOOK.render("juegos/poses/premios", fallback=WIN_CONTACT_TEXT, contact=contact)
+            text += " " + prizes.strip()
         await self.host.speak(text)
         await self.host.finish("win", self._state("final"))
 
@@ -534,7 +670,8 @@ class PosesGame(Game):
         entry = self._entry
         label = entry.pose if entry is not None else result.pose
         head = ROUND_TEXT.format(round=self._index + 1, rounds=len(self._plan), label=label)
-        return head + _result_body(result) + ("" if last else NEXT_TEXT)
+        tail = "" if last else " " + BOOK.text("juegos/poses/siguiente", NEXT_TEXT).strip()
+        return head + _result_body(result) + tail
 
     def _skipped(self) -> bool:
         """La ronda en curso, saltada desde el panel: no cuenta y sigue la siguiente."""
@@ -853,14 +990,18 @@ def _result_body(result: RoundResult) -> str:
     """Lo que se le cuenta a Sonia de una ronda: cuántos la hicieron (o cayeron) de cuántos."""
     count, total = result.count, result.total
     if total == 0:
-        return EMPTY_TEXT
+        return BOOK.text("juegos/poses/ronda_vacia", EMPTY_TEXT)
     if not result.simon:
-        return (TRAP_FELL_TEXT if count else TRAP_NONE_TEXT).format(count=count, total=total)
-    if count >= total:
-        return ALL_TEXT.format(count=count, total=total)
-    if count:
-        return SOME_TEXT.format(count=count, total=total)
-    return NONE_TEXT.format(total=total)
+        name, text = (
+            ("trampa_cayeron", TRAP_FELL_TEXT) if count else ("trampa_nadie", TRAP_NONE_TEXT)
+        )
+    elif count >= total:
+        name, text = "ronda_todos", ALL_TEXT
+    elif count:
+        name, text = "ronda_algunos", SOME_TEXT
+    else:
+        name, text = "ronda_ninguno", NONE_TEXT
+    return BOOK.render(f"juegos/poses/{name}", fallback=text, count=count, total=total)
 
 
 def _manual_count(did: bool, total: int) -> tuple[int, int]:

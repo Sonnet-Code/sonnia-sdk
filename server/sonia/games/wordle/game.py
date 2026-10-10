@@ -27,18 +27,24 @@ palabra» la termina enseñándola, como «Terminar».
 Eventos de la pantalla (``docs/protocolo.md``): ``start`` (la rejilla vacía), ``guess`` (un
 intento, con el tablero entero y el estado de las letras, fijo) e ``invalid`` (una sacudida,
 suelto); el final lo manda el manager (``end``) tras :meth:`GameHost.finish`.
+
+Las reglas y los guiones se pueden cambiar desde el panel de la nube (``sonia.prompts``,
+:func:`prompt_specs`): el juego pide cada pieza con :func:`live_text` al usarla. Los trozos que
+se pegan a otra pieza con un espacio delante (``ALL_GRAY_TEXT``, ``HINT_TEXT``,
+``WIN_CONTACT_TEXT``, ``INVALID_TAIL``...) siguen en el código.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from sonia.actions.games import game_action
 from sonia.games.banks import GameBank
-from sonia.games.base import Game, GameError, GameHost, StopReason
+from sonia.games.base import INSTRUCT_MAX_CHARS, Game, GameError, GameHost, StopReason
 from sonia.games.wordle.bank import WORDS, pick_word
 from sonia.games.wordle.logic import (
     GRAY,
@@ -51,9 +57,10 @@ from sonia.games.wordle.logic import (
     score_guess,
     used_letters,
 )
+from sonia.prompts import BOOK, PROMPT_MAX_LEN, PromptSpec
 from sonia.types import ActionSpec
 
-__all__ = ["WordleGame"]
+__all__ = ["WordleGame", "live_text", "prompt_specs"]
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +177,184 @@ PANEL_INVALID_TEXT = {
 PANEL_REPEATED_TEXT = "«{word}» ya está en el tablero."
 PANEL_OVER_TEXT = "La partida de Wordle ya ha terminado."
 PANEL_UNKNOWN_TEXT = "Ese control no está disponible ahora."
+
+# -- prompts editables desde la nube (``sonia.prompts``) ---------------------------------
+
+#: Ids de las piezas: ``juegos/wordle/<pieza>``.
+PROMPT_PREFIX = "juegos/wordle/"
+PROMPT_GROUP = "Juego: Wordle"
+
+#: La pieza de cada motivo por el que no vale una palabra (``INVALID_TEXT``).
+INVALID_PIECES = {"empty": "invalida_vacia", "length": "invalida_largo", "chars": "invalida_letras"}
+
+
+def live_text(piece: str, app_text: str, **values: object) -> str:
+    """El texto en uso de la pieza (el de la nube si lo hay y vale; si no, ``app_text``, el
+    de la app), con sus marcadores rellenos con ``values``."""
+    return BOOK.render(PROMPT_PREFIX + piece, fallback=app_text, **values)
+
+
+def _piece(
+    piece: str,
+    title: str,
+    default: Callable[[], str],
+    *,
+    fields: tuple[str, ...] = (),
+    required: tuple[str, ...] = (),
+    help: str = "",
+    instruct: bool = False,
+) -> PromptSpec:
+    return PromptSpec(
+        id=PROMPT_PREFIX + piece,
+        group=PROMPT_GROUP,
+        title=title,
+        default=default,
+        fields=fields,
+        required=required,
+        applies="ronda",
+        help=help,
+        max_len=INSTRUCT_MAX_CHARS if instruct else PROMPT_MAX_LEN,
+    )
+
+
+_COLS = "{cols}: las letras de la palabra (5). "
+_ROWS = "{rows}: los intentos de la partida (GAME_WORDLE_ROWS). "
+_WORD = "{word}: la palabra secreta (GPT-Live no la sabe hasta aquí). "
+_HINT = "{hint}: la pista de la palabra en el banco, como frase. "
+_INVALID = (
+    "Guion si la palabra no vale (no gasta intento); el código añade detrás cuántos llevan. "
+    "{said}: lo que entendió, limpio. {count}: cuántas letras tiene («6 letras»). "
+)
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """Las piezas del Wordle editables desde el panel, en su orden."""
+    return [
+        _piece(
+            "reglas",
+            "Reglas del juego (al empezar, sin hablar)",
+            lambda: RULES_TEXT,
+            fields=("cols", "rows", "hint_rule"),
+            instruct=True,
+            help=_COLS
+            + _ROWS
+            + "{hint_rule}: la regla de la pista (las dos piezas siguientes, según haya pista o "
+            "no).",
+        ),
+        _piece(
+            "regla_pista",
+            "Regla de la pista, si la hay (va dentro de las reglas)",
+            lambda: HINT_RULE,
+            fields=("hint_after",),
+            instruct=True,
+            help="{hint_after}: tras cuántos intentos sale la pista (GAME_WORDLE_HINT_AFTER).",
+        ),
+        _piece(
+            "regla_sin_pista",
+            "Regla de la pista, si no la hay (va dentro de las reglas)",
+            lambda: NO_HINT_RULE,
+            instruct=True,
+        ),
+        _piece(
+            "arranque",
+            "Guion de arranque: presenta el juego y pide la primera palabra",
+            lambda: START_TEXT,
+            fields=("cols", "rows"),
+            help=_COLS + _ROWS,
+        ),
+        _piece(
+            "reanudar",
+            "Guion si vuelve a pedir el juego que ya está en marcha",
+            lambda: RESUME_TEXT,
+            fields=("used", "rows", "tried", "hint"),
+            help="{used}: intentos gastados. "
+            + _ROWS
+            + "{tried}: las palabras probadas entre paréntesis, con su espacio delante (o nada). "
+            "{hint}: la frase con la pista si ya salió, con su espacio delante (o nada).",
+        ),
+        _piece(
+            "intento",
+            "Guion tras cada intento: qué letras salieron",
+            lambda: GUESS_TEXT,
+            fields=("number", "rows", "word", "summary", "left", "extra"),
+            required=("summary",),
+            help="{number}: el número del intento. "
+            + _ROWS
+            + "{word}: la palabra probada. {summary}: qué letras están bien, en otro sitio y "
+            "cuáles no (sin él, Sonia no sabe el resultado). {left}: cuántos intentos quedan, "
+            "como frase. {extra}: lo que se añade (todo gris, muy cerca, la pista), con su "
+            "espacio delante, o nada.",
+        ),
+        _piece(
+            "ganan",
+            "Guion cuando lo adivinan",
+            lambda: WON_TEXT,
+            fields=("number", "rows", "word", "hint"),
+            required=("word",),
+            help="{number}: el intento en que acertaron. "
+            + _ROWS
+            + _WORD
+            + _HINT
+            + "El código añade detrás con quién hablar del equipo y que sigan conversando.",
+        ),
+        _piece(
+            "pierden",
+            "Guion cuando se acaban los intentos",
+            lambda: LOST_TEXT,
+            fields=("rows", "word", "hint"),
+            required=("word",),
+            help=_ROWS + _WORD + _HINT + "El código añade detrás que sigan conversando.",
+        ),
+        _piece(
+            "lo_dejan",
+            "Guion cuando lo terminan con la partida en marcha",
+            lambda: STOPPED_TEXT,
+            fields=("word", "hint"),
+            required=("word",),
+            help=_WORD + _HINT,
+        ),
+        _piece(
+            "invalida_vacia",
+            "Guion si no llega ninguna palabra",
+            lambda: INVALID_TEXT["empty"],
+            fields=("said", "count", "cols"),
+            help=_INVALID + _COLS,
+        ),
+        _piece(
+            "invalida_largo",
+            "Guion si la palabra no tiene las letras que tocan",
+            lambda: INVALID_TEXT["length"],
+            fields=("said", "count", "cols"),
+            help=_INVALID + _COLS,
+        ),
+        _piece(
+            "invalida_letras",
+            "Guion si la palabra lleva números o símbolos",
+            lambda: INVALID_TEXT["chars"],
+            fields=("said", "count", "cols"),
+            help=_INVALID + _COLS,
+        ),
+        _piece(
+            "repetida",
+            "Guion si la palabra ya la probaron",
+            lambda: REPEATED_TEXT,
+            fields=("word",),
+            help="{word}: la palabra repetida. El código añade detrás cuántos intentos llevan.",
+        ),
+        _piece(
+            "terminada",
+            "Guion si delega un intento con la partida ya terminada",
+            lambda: OVER_TEXT,
+        ),
+        _piece(
+            "empujon",
+            "Empujón: el grupo habló y no se delegó nada",
+            lambda: NUDGE_TEXT,
+            fields=("cols",),
+            help="Una orden corta, sin frases que pueda repetir (el código añade al final que "
+            "es una nota interna). " + _COLS,
+        ),
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,19 +485,32 @@ class WordleGame(Game):
             "start", {"rows": self._rows, "cols": WORD_LENGTH, "hint_after": self._hint_after}
         )
         await self.host.instruct(self._rules())
-        return START_TEXT.format(cols=WORD_LENGTH, rows=self._rows)
+        return live_text("arranque", START_TEXT, cols=WORD_LENGTH, rows=self._rows)
 
     def _rules(self) -> str:
         has_hint = 1 <= self._hint_after < self._rows
-        hint_rule = HINT_RULE.format(hint_after=self._hint_after) if has_hint else NO_HINT_RULE
-        return RULES_TEXT.format(cols=WORD_LENGTH, rows=self._rows, hint_rule=hint_rule)
+        hint_rule = (
+            live_text("regla_pista", HINT_RULE, hint_after=self._hint_after)
+            if has_hint
+            else live_text("regla_sin_pista", NO_HINT_RULE)
+        )
+        return live_text(
+            "reglas", RULES_TEXT, cols=WORD_LENGTH, rows=self._rows, hint_rule=hint_rule
+        )
 
     async def resume(self) -> str:
         tried = f" ({', '.join(g.letters for g in self._guesses)})" if self._guesses else ""
         hint = (
             f" La pista de la pantalla dice: «{_sentence(self._hint)}»" if self._hint_shown else ""
         )
-        return RESUME_TEXT.format(used=len(self._guesses), rows=self._rows, tried=tried, hint=hint)
+        return live_text(
+            "reanudar",
+            RESUME_TEXT,
+            used=len(self._guesses),
+            rows=self._rows,
+            tried=tried,
+            hint=hint,
+        )
 
     async def stop_requested(self, source: str) -> str | None:
         """Lo terminan con la partida en marcha: antes de cerrar se enseña la palabra con su
@@ -336,14 +534,14 @@ class WordleGame(Game):
             await self.host.finish(
                 "lose", {"word": self._word, "attempts": attempts, "stopped": True}
             )
-            return STOPPED_TEXT.format(word=self._word, hint=_sentence(self._hint))
+            return live_text("lo_dejan", STOPPED_TEXT, word=self._word, hint=_sentence(self._hint))
 
     async def stop(self, reason: StopReason) -> None:
         # Nada que soltar: sin cámara ni tareas. La palabra se queda hasta el próximo ``start``.
         self._over = True
 
     def nudge(self) -> str | None:
-        return NUDGE_TEXT.format(cols=WORD_LENGTH)
+        return live_text("empujon", NUDGE_TEXT, cols=WORD_LENGTH)
 
     def snapshot(self) -> dict[str, Any]:
         """En qué va la partida para el panel. Sin la palabra ni la pista: el panel se ve delante
@@ -420,7 +618,7 @@ class WordleGame(Game):
         """``wordle_guess``: pone la palabra del grupo en el tablero y cuenta qué salió."""
         async with self._lock:
             if self._over or not self._word:
-                return OVER_TEXT
+                return live_text("terminada", OVER_TEXT)
             raw = arguments.get("palabra")
             checked = check_word(raw)
             if not checked.ok:
@@ -431,14 +629,18 @@ class WordleGame(Game):
 
     async def _invalid(self, checked: WordCheck, raw: object) -> str:
         await self._shake(checked.shown, checked.reason)
-        text = INVALID_TEXT.get(checked.reason, INVALID_TEXT["chars"]).format(
-            said=_echo(raw), count=_letters(len(checked.word)), cols=WORD_LENGTH
+        text = live_text(
+            INVALID_PIECES.get(checked.reason, INVALID_PIECES["chars"]),
+            INVALID_TEXT.get(checked.reason, INVALID_TEXT["chars"]),
+            said=_echo(raw),
+            count=_letters(len(checked.word)),
+            cols=WORD_LENGTH,
         )
         return text + INVALID_TAIL.format(used=len(self._guesses), rows=self._rows)
 
     async def _repeated(self, word: str) -> str:
         await self._shake(word, "repeated")
-        text = REPEATED_TEXT.format(word=word)
+        text = live_text("repetida", REPEATED_TEXT, word=word)
         return text + INVALID_TAIL.format(used=len(self._guesses), rows=self._rows)
 
     async def _shake(self, letters: str, reason: str) -> None:
@@ -467,15 +669,24 @@ class WordleGame(Game):
         await self.host.send("guess", self._state(result))
         if won:
             await self.host.finish("win", {"word": self._word, "attempts": number})
-            text = WON_TEXT.format(
-                number=number, rows=self._rows, word=self._word, hint=_sentence(self._hint)
+            text = live_text(
+                "ganan",
+                WON_TEXT,
+                number=number,
+                rows=self._rows,
+                word=self._word,
+                hint=_sentence(self._hint),
             )
             return self._ending(text, win=True)
         if lost:
             await self.host.finish("lose", {"word": self._word, "attempts": number})
-            text = LOST_TEXT.format(rows=self._rows, word=self._word, hint=_sentence(self._hint))
+            text = live_text(
+                "pierden", LOST_TEXT, rows=self._rows, word=self._word, hint=_sentence(self._hint)
+            )
             return self._ending(text, win=False)
-        return GUESS_TEXT.format(
+        return live_text(
+            "intento",
+            GUESS_TEXT,
             number=number,
             rows=self._rows,
             word=word,
