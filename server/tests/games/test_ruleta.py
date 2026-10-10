@@ -664,8 +664,14 @@ async def test_snapshot_y_parar() -> None:
     snap = game.snapshot()
     assert snap["phase"] == "challenge" and snap["challenge"] == "adivinanza"
     assert snap["title"] == "ADIVINANZA GEEK" and snap["spins"] == 1
+    assert snap["summary"] == "Vuelta 1: Adivinanza geek"
+    await game.answer({"respuesta": "acierto"})
+    assert game.snapshot()["summary"] == "Vuelta 1: Adivinanza geek, superado · 1 superado"
+    await game.spin_again({})
+    assert game.snapshot()["summary"] == "Vuelta 2: girando · 1 superado"
     await game.stop("voice")
     assert game.snapshot()["phase"] == "idle"
+    assert game.snapshot()["summary"] == "Sin vuelta en marcha"
     # Tras parar, nada se mueve.
     sent = len(host.sent)
     await game.tick(host.now() + 500.0)

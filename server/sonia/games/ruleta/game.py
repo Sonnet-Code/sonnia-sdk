@@ -525,6 +525,7 @@ class RuletaGame(Game):
         round_ = self._round
         segment = self._segments[round_.segment] if round_ is not None else None
         return {
+            "summary": self._summary(),
             "phase": self._phase,
             "spins": self._spins,
             "wins": self._wins,
@@ -533,6 +534,31 @@ class RuletaGame(Game):
             "prompt": for_screen(round_.prompt) if round_ is not None else "",
             "outcome": (round_.outcome or "") if round_ is not None else "",
         }
+
+    def _summary(self) -> str:
+        """Una línea para la tarjeta «Juegos» del panel: «Vuelta 3: Adivinanza geek, superada»."""
+        round_ = self._round
+        if round_ is None or self._phase == "idle":
+            return "Sin vuelta en marcha"
+        head = f"Vuelta {round_.spin}"
+        label = self._segments[round_.segment].label
+        if self._phase == "spinning":
+            text = f"{head}: girando"
+        elif self._phase == "challenge":
+            text = f"{head}: {label}"
+        else:
+            if round_.kind == "explica" and round_.outcome == "done":
+                how = f"nota {round_.score}"
+            elif round_.kind == "futuro" and round_.outcome == "done":
+                how = f"{round_.probability} %"
+            else:
+                how = {"win": "superado", "lose": "fallado", "pass": "se rindieron"}.get(
+                    round_.outcome or "", "hecho"
+                )
+            text = f"{head}: {label}, {how}"
+        if self._wins:
+            text += f" · {self._wins} {'superado' if self._wins == 1 else 'superados'}"
+        return text
 
     # -- jugadas ----------------------------------------------------------------
 
