@@ -5,7 +5,7 @@
 
 ## Qué es
 
-Sonnia da órdenes con nombre de meme dev y la pose dicha en claro: «¡Simón dice: pasaron todos los tests, brazos arriba!». La cámara del stand cuenta cuántos hacen la pose y la imagen en vivo sale encima de Sonnia, en espejo, con los esqueletos de quienes juegan. Algunas rondas son trampa: la orden sale sin «Simón dice» y quien hace la pose cae. El resultado es del grupo («¡7 de 9!», «¡cayeron 4!»): nunca se elimina a nadie.
+Sonnia da órdenes con nombre de meme dev y la pose dicha en claro: «¡Simón dice: pasaron todos los tests, brazos arriba!». La cámara del stand cuenta cuántos hacen la pose (con `GAMES_JUDGE=gemini`, el de por defecto, el veredicto de cada ronda lo da Gemini con una foto) y la imagen en vivo sale encima de Sonnia, en espejo, con los esqueletos de quienes juegan. Algunas rondas son trampa: la orden sale sin «Simón dice» y quien hace la pose cae. El resultado es del grupo («¡7 de 9!», «¡cayeron 4!»): nunca se elimina a nadie.
 
 ## Cómo se juega
 
@@ -14,12 +14,13 @@ Sonnia da órdenes con nombre de meme dev y la pose dicha en claro: «¡Simón d
 3. **Rondas** (`GAME_POSES_ROUNDS`, 6). `GAME_POSES_TRICKS` (1) son trampa, nunca la primera. Las poses salen barajadas del banco y, si hay menos que rondas, se repiten sin salir la misma dos veces seguidas. En cada ronda:
    1. Espera a que Sonia calle (y, hasta 4 s más, a que nadie hable: en un stand con barullo la sesión casi nunca está en calma).
    2. **Orden** (eventos `round` y `command`): suena como frase grabada (`say_fixed`), exacta en el tiempo y en si dice «Simón dice». Si no está grabada, GPT-Live la dice tal cual por `commentary`. Si Sonia estaba hablando, se espera a que calle y se reintenta (tres veces). Hasta que suena, la pantalla no cambia: con la frase salen el pictograma de la pose, la demostración de Sonnia (que la sostiene hasta el resultado) y el rótulo de la orden; si no llega a sonar, salen igual y la ronda sigue. (Antes la demostración se adelantaba 1,4 s a la orden y, si Sonia alargaba la explicación, la orden salía en pantalla segundos antes de sonar.)
-   3. **Ventana** (evento `window`): cuando termina de sonar la orden se abre una ventana de `GAME_POSES_WINDOW_SECONDS` (1,8 s). De todos sus frames cuenta el mejor recuento: cuántos hacen la pose y cuántos juegan.
-   4. **Resultado** (evento `result`): «7 de 9» (o, en la trampa, «¡cayeron 4!»), y a GPT-Live le llegan los números por `speak` para que reaccione en una frase muy corta. Se espera a que termine de reaccionar.
+   3. **Ventana** (evento `window`): cuando termina de sonar la orden se abre una ventana de `GAME_POSES_WINDOW_SECONDS` (1,8 s). De todos sus frames cuenta el mejor recuento local: cuántos hacen la pose y cuántos juegan. Mientras cuenta, guarda en memoria la foto de la cámara de ese mejor recuento.
+   4. **Juez** (con `GAMES_JUDGE=gemini`, ver «Cámara»): al cerrarse la ventana, esa foto va a Gemini con «Mirando las poses…» en pantalla, mientras la vista en vivo sigue con los esqueletos. Tarda 1,25 s de mediana y como mucho `GAMES_JUDGE_TIMEOUT_SECONDS` (4 s). Si su veredicto trae la pose, el resultado es el suyo; si no, el recuento local.
+   5. **Resultado** (evento `result`): «7 de 9» (o, en la trampa, «¡cayeron 4!»), con el número final (el del juez o el local), y a GPT-Live le llegan esos números por `speak` para que reaccione en una frase muy corta. Se espera a que termine de reaccionar.
 4. **Final** (evento `final`): el total del grupo («hicieron bien 38 de 50 jugadas»: la pose con «Simón dice» y quedarse quieto en las trampas) y cuántos cayeron en las trampas. Sonia lo celebra y, si alguien pregunta por premios, le manda con `TRIVIA_WIN_CONTACT` (Brian o Mariel) sin prometer nada. La partida termina con `win` y el resultado se queda en pantalla hasta que Sonia termina de contarlo. Nunca termina en `lose`: el resultado es del grupo y siempre se celebra.
-5. **Sin nadie.** Dos rondas seguidas sin ver a nadie y el juego se acaba (`cancel`) con una frase. Si nadie habla ni hay nadie delante durante `GAMES_ABANDON_SECONDS` (60 s), el manager la da por abandonada; mientras la cámara vea gente jugando, el juego avisa de que sigue (`touch`) aunque nadie hable.
+5. **Sin nadie.** Dos rondas seguidas sin ver a nadie (con el número final: si el juez dice que no hay nadie, cuenta como ronda vacía) y el juego se acaba (`cancel`) con una frase. Si nadie habla ni hay nadie delante durante `GAMES_ABANDON_SECONDS` (60 s), el manager la da por abandonada; mientras la cámara vea gente jugando, el juego avisa de que sigue (`touch`) aunque nadie hable.
 
-Una partida de seis rondas dura unos 80 s.
+Una partida de seis rondas dura unos 80 s (unos 8 s más con el juez de Gemini).
 
 ## Quién hace qué
 
@@ -27,7 +28,8 @@ Una partida de seis rondas dura unos 80 s.
 |---|---|
 | GPT-Live | Delega `start_game(poses)` en cuanto el visitante quiere jugar. Explica el juego con el guion de arranque, reacciona en una frase a cada resultado que le llega, pide el paso atrás cuando se lo dicen y celebra el final. No dice las órdenes ni se inventa números. Si quieren dejar de jugar, delega `stop_game`. |
 | Backend Responses | Llama a `start_game` y `stop_game`. Este juego no tiene jugadas propias: todo lo demás lo lleva el orquestador con la cámara. |
-| Orquestador | Elige las rondas y las trampas, manda la pantalla, hace sonar las órdenes, cuenta con la cámara en cada ventana (`rules.py`), dibuja los esqueletos en la vista en vivo (`overlay.py`), le pasa los resultados a GPT-Live y lleva la colocación. Código en `server/sonia/games/poses/`. |
+| Orquestador | Elige las rondas y las trampas, manda la pantalla, hace sonar las órdenes, cuenta con la cámara en cada ventana (`rules.py`), pide el veredicto de cada ronda al juez de Gemini con una foto (`GAMES_JUDGE=gemini`), dibuja los esqueletos en la vista en vivo (`overlay.py`), le pasa los resultados a GPT-Live y lleva la colocación. Código en `server/sonia/games/poses/`. |
+| Gemini (juez) | Con `GAMES_JUDGE=gemini`, mira la foto de cada ronda y dice cuántas personas juegan y cuántas hacen cada pose (`docs/juegos-vision.md`, «Juez de Gemini»). No sabe nada del juego ni de nadie. |
 | Unity | Pinta la vista en vivo grande, el pictograma, la orden, el contador de la ventana, el resultado y el final, y hace que Sonnia demuestre cada pose (`unity/Assets/Scripts/Sonia/Games/Poses/`). |
 
 ## Acciones de GPT-Live
@@ -73,7 +75,12 @@ Todo lo monta `PosesController` (`unity/Assets/Scripts/Sonia/Games/Poses/`) por 
 
   En reposo no salta ninguna: brazos caídos, cruzados, en los bolsillos, en jarras o el móvil en la mano a la altura del pecho o de la cintura (hay tests). Sí pueden contar de más: con las manos en las mejillas cuenta como barbilla y como manos a la cabeza, y quien levanta el móvil a la cara para hacer una foto puede contar como barbilla. Es lo buscado: un juego de fiesta, colectivo y generoso.
 - **Vista en vivo.** Encima de la imagen (en espejo) van los esqueletos de quienes juegan, con los dibujos de `sonia/vision/overlay.py`: en gris mientras se demuestra la pose y suena la orden; en la ventana y el resultado, en verde con ✓ quien hace la pose y en gris quien no; en las trampas, en rojo con ✗ quien cae; en amarillo quien está demasiado cerca. Los dibuja el hilo de la vista en vivo; el juego solo cambia la lista entera de esqueletos.
-- **Nada se guarda** ni sale del equipo: ni imágenes, ni puntos, ni recuentos de nadie, y no se reconoce a nadie. La vista en vivo solo existe mientras dura la partida.
+- **Juez de Gemini** (`GAMES_JUDGE=gemini`, `docs/juegos-vision.md`). Una sola foto por ronda, también en las trampas: la del mejor recuento local de la ventana (entre las de mejor recuento, la más reciente; si lo local no vio a nadie haciéndola, eso deja la última de la ventana), cogida con `host.stream.latest()` mientras se cuenta y guardada solo en memoria. Mientras el juez mira, la vista en vivo sigue con los esqueletos y sale la pastilla «Mirando las poses…» (`busy`, tipo `judge`), que se apaga al llegar el veredicto.
+  - **Con veredicto que trae la pose:** cuántos la hacen es la cuenta del juez (sin pasar de `personas`) y cuántos juegan, `personas`. Gemini cuenta a toda persona visible de medio cuerpo o con los brazos a la vista, sin el filtro de altura local (`GAME_POSES_MIN_PERSON`): con gente de paso al fondo puede contar más jugadores que lo local.
+  - **Sin veredicto** (no contesta en `GAMES_JUDGE_TIMEOUT_SECONDS`, falla, el JSON no cuadra o no trae la pose): el recuento local de la ventana, como antes.
+  - **Sin juez** (`GAMES_JUDGE=local` o sin `GEMINI_API_KEY`): ni foto ni aviso; decide lo local.
+  - En el banco de pruebas Gemini acertó la pose de una persona en 22 de 22 fotos (lo local, 21 con `s` y 17 con `n`) y cuántos la hacen en un grupo (±1) en 10 de 11 (9 y 9). Su fallo conocido: contó a tres personas con los dos brazos arriba como `un_brazo`.
+- **Nada se guarda**: ni imágenes, ni puntos, ni recuentos de nadie, y no se reconoce a nadie. Lo único que sale del equipo, con `GAMES_JUDGE=gemini`, es la foto reducida de cada ronda hacia Gemini, que no se guarda. La vista en vivo solo existe mientras dura la partida.
 
 ## Bancos
 
@@ -125,7 +132,7 @@ Los tiempos internos (colocación, espera a que calle, demostración, reintentos
 
 ## Pendiente
 
-- Probarlo con la API real (gasta: lo decide Jean): que delegue `start_game` a la primera, que reaccione en una frase a cada resultado sin inventar números y que no diga las órdenes ella.
+- Probarlo con la API real (gasta: lo decide Jean): que delegue `start_game` a la primera, que reaccione en una frase a cada resultado sin inventar números y que no diga las órdenes ella. Y el juez de Gemini con la cámara del stand y gente de verdad (lo hace la sesión principal): cuánto tarda cada veredicto y si cuenta a la gente de paso del fondo.
 - Medir los umbrales con gente de verdad delante de la cámara del stand (se han probado con monigotes inventados y con fotos públicas, nunca con la cámara de nadie).
 - Pose T: en los primeros ~0,3 s de la entrada las manos de Sonnia rozan el borde de la pantalla mientras la cámara aún se aleja (ya sostenida, quedan dentro con margen), y durante esa ronda Sonnia sale algo más pequeña.
 - El banco, pendiente de revisión de Jean.
