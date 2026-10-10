@@ -312,6 +312,14 @@ namespace Sonia
                 // la pide el panel y la cierra al guardar o salir.
                 gameObject.AddComponent<AvatarEditorLauncher>();
             }
+
+            if (GetComponent<GameRouter>() == null)
+            {
+                // También por código: los juegos (docs/plan-juegos.md). El router
+                // añade su pantalla común, la vista en vivo y un controlador por
+                // juego, y los anuncia en client_hello antes de conectar.
+                gameObject.AddComponent<GameRouter>();
+            }
         }
 
         private void ApplyKioskSettings()
