@@ -45,7 +45,16 @@ SERVER = REPO / "server"
 DATA_DIRS = [
     *(
         (REPO / "assets" / name, Path("assets") / name)
-        for name in ("knowledge", "gallery", "showcase", "trivia", "agenda", "faces", "fonts")
+        for name in (
+            "knowledge",
+            "gallery",
+            "showcase",
+            "trivia",
+            "agenda",
+            "faces",
+            "fonts",
+            "games",
+        )
     ),
     (SERVER / "sonia" / "panel" / "static", Path("sonia") / "panel" / "static"),
     # Modelos de poses y manos de los juegos (python -m sonia.vision.models): si una build

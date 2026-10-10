@@ -58,6 +58,11 @@ uv run --no-sync python -m sonia.vision.models "$REPO/cache/games/modelos" \
 if [ -d "$REPO/cache/games/modelos" ]; then
   EXTRA+=(--add-data "$REPO/cache/games/modelos${SEP}cache/games/modelos")
 fi
+# Bancos de los juegos (assets/games/<juego>/*.md, docs/juegos.md): cada partida lee el suyo.
+# Sin ellos, en la app congelada ningún juego arranca («banco vacío»).
+if [ -d "$REPO/assets/games" ]; then
+  EXTRA+=(--add-data "$REPO/assets/games${SEP}assets/games")
+fi
 rm -rf "$OUT"
 uv run --no-sync pyinstaller --noconfirm --clean --log-level WARN \
   --name sonia-orquestador --onedir --console \
