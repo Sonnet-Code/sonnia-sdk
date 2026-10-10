@@ -247,11 +247,14 @@ def build_app(
         return JSONResponse(body, headers={"Cache-Control": "no-store"})
 
     async def gallery(request: Request) -> Response:
-        ids = control.gallery().ids()
-        return JSONResponse({"images": [{"id": i, "url": f"/api/gallery/{i}"} for i in ids]})
+        # El disco se lee en un hilo. Las subidas desde el panel empiezan por ``subida-``.
+        ids = await asyncio.to_thread(control.gallery().ids)
+        images = [{"id": i, "url": f"/api/gallery/{i}"} for i in ids]
+        return JSONResponse({"images": images}, headers={"Cache-Control": "no-store"})
 
     async def gallery_image(request: Request) -> Response:
-        loaded = control.gallery().load(str(request.path_params["image_id"]))
+        image_id = str(request.path_params["image_id"])
+        loaded = await asyncio.to_thread(control.gallery().load, image_id)
         if loaded is None:
             return JSONResponse({"ok": False, "message": "No existe esa imagen."}, status_code=404)
         data, mime = loaded
