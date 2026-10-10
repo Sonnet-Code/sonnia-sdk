@@ -166,7 +166,10 @@ class AkinatorGame(Game):
         self._counter = QuestionCounter()
         self._guess = ""
         self._misses: list[str] = []
-        self._early_refused = False
+        #: Turnos del visitante desde que avisó (el aviso incluido): cada uno es, casi
+        #: siempre, la respuesta a una pregunta. Es la segunda cuenta de las preguntas, por
+        #: si el contador de la transcripción se queda corto.
+        self._answers = 0
         self._warned_few = False
         self._warned_last = False
         self._outcome = ""
@@ -362,6 +365,17 @@ class AkinatorGame(Game):
         if not self._ready and now - self._started_at >= READY_GRACE_S:
             self._ready = True
 
+    def on_user_turn_end(self, now: float, started_at: float) -> None:
+        if self._ready and self._phase != "revealed":
+            self._answers += 1
+
+    def _evidence(self) -> int:
+        """Cuántas preguntas van, por lo que se sabe seguro: las contadas en la transcripción
+        o, si se quedaron cortas, las respuestas del visitante (sin su aviso de que ya tenía
+        algo). Vale para no dejar arriesgar antes del mínimo sin bloquear el juego si el
+        contador no vio alguna pregunta."""
+        return max(self._counter.count, self._answers - 1)
+
     def nudge(self) -> str | None:
         if self._phase == "waiting" and self._ready and self._counter.count == 0:
             # El visitante ya habló y Sonia no ha empezado a preguntar.
@@ -388,10 +402,10 @@ class AkinatorGame(Game):
                 raise GameError(
                     "La partida ya terminó. Si quieren otra, delega empezarla de nuevo."
                 )
-            if self._counter.count < self._min and not self._early_refused:
-                # Una sola vez: si insiste (o la cuenta se quedó corta), se deja pasar.
-                self._early_refused = True
-                raise GameError(EARLY_GUESS_SCRIPT.format(asked=self._counter.count, min=self._min))
+            if self._evidence() < self._min:
+                # Antes del mínimo no se adivina, aunque insista: que siga preguntando. Si el
+                # contador se quedó corto, las respuestas del visitante lo compensan.
+                raise GameError(EARLY_GUESS_SCRIPT.format(asked=self._asked, min=self._min))
             key = normalize(answer)
             if any(normalize(missed) == key for missed in self._misses):
                 raise GameError(REPEATED_GUESS_SCRIPT.format(answer=answer))
