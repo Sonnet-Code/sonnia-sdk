@@ -156,7 +156,7 @@ async def show_image(ctx: ActionContext, arguments: dict[str, Any]) -> ActionRes
     if busy:
         return ActionResult(text=busy)
 
-    gallery = Gallery(ctx.gallery_dir)
+    gallery = Gallery(ctx.gallery_dir, ctx.gallery_upload_dir)
     loaded = gallery.load(image_id)
     if loaded is None:
         disponibles = ", ".join(gallery.ids()) or "ninguna"

@@ -344,6 +344,7 @@ class Components:
             camera=self.camera,
             avatar=self.hub,
             gallery_dir=str(self.settings.gallery_dir),
+            gallery_upload_dir=self.settings.gallery_upload_dir,
         )
 
     async def close(self) -> None:
@@ -1180,7 +1181,7 @@ async def check_vision_features(settings: Settings) -> CheckResult:
 
 
 def check_gallery(settings: Settings) -> CheckResult:
-    gallery = Gallery(settings.gallery_dir)
+    gallery = Gallery(settings.gallery_dir, settings.gallery_upload_dir)
     if not gallery.path.is_dir():
         return CheckResult("Galería", False, f"no existe {gallery.path}", False)
     ids = gallery.ids()

@@ -18,3 +18,9 @@ def _agenda_sin_red(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 def _dispositivos_aparte(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """La elección de micrófono y cámara de un test no toca la del equipo."""
     monkeypatch.setenv("DEVICES_FILE", str(tmp_path / "devices.json"))
+
+
+@pytest.fixture(autouse=True)
+def _subidas_de_galeria_aparte(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Las imágenes que un test sube a la galería no van a ``cache/gallery`` del equipo."""
+    monkeypatch.setenv("GALLERY_UPLOAD_DIR", str(tmp_path / "gallery-uploads"))

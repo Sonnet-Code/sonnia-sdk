@@ -158,3 +158,5 @@ class ActionContext:
     gallery_dir: str
     last_frame: Frame | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+    #: Las imágenes subidas desde el panel (``GALLERY_UPLOAD_DIR``); vacío = ninguna.
+    gallery_upload_dir: str = ""

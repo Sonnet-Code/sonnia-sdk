@@ -774,7 +774,7 @@ class LiveEngine:
         client = LiveClient(self._live, connect=self._connect)
         clock_text = spoken_now(self._now(), self._place)
         agenda = self._agenda
-        gallery_ids = Gallery(self._settings.gallery_dir).ids()
+        gallery_ids = Gallery(self._settings.gallery_dir, self._settings.gallery_upload_dir).ids()
         config = build_session_config(
             self._settings,
             registry=self._registry,
@@ -1247,6 +1247,7 @@ class LiveEngine:
             camera=self._camera,
             avatar=self._hub,
             gallery_dir=str(self._settings.gallery_dir),
+            gallery_upload_dir=self._settings.gallery_upload_dir,
             last_frame=self._last_frame,
             extra={
                 "trivia": self._trivia,
@@ -1990,7 +1991,7 @@ class LiveEngine:
         Sonia las conoce sin reiniciar. El directorio se lee en un hilo para no
         frenar el bucle (el micrófono va a tiempo real).
         """
-        gallery = Gallery(self._settings.gallery_dir)
+        gallery = Gallery(self._settings.gallery_dir, self._settings.gallery_upload_dir)
         while True:
             await asyncio.sleep(interval)
             try:
