@@ -52,8 +52,8 @@ QUESTION_MIN = 20
 QUESTION_MAX = 320
 
 #: Tope de lo que se acepta del modelo como descripción del objeto (``JudgeAnswer.what``).
-WHAT_MAX_CHARS = 48
-WHAT_MAX_WORDS = 7
+WHAT_MAX_CHARS = 40
+WHAT_MAX_WORDS = 6
 
 #: Colores de la tarjeta por nombre: los de Google (los del DevFest) y algunos más.
 COLORS: dict[str, str] = {

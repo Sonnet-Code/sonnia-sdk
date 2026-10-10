@@ -254,6 +254,7 @@ class BusquedaGame(Game):
             "round": self._round,
             "rounds": self._total,
             "object": entry.name if entry is not None else "",
+            "objects": [e.name for e in self._objects],
             "found": self._found,
             "seconds_left": round(left, 1),
             "checks": self._checks,
@@ -350,6 +351,17 @@ class BusquedaGame(Game):
         self._ready_cap = READY_CAP_FIRST_S if first else READY_CAP_S
         self._heard = False
         self._speech_at = None
+        self._start_judge_round()
+
+    def _start_judge_round(self) -> None:
+        """El juez cuenta las fotos de la ronda con el mismo tope (``ModelJudge.start_round``)."""
+        start = getattr(self.host.judge, "start_round", None)
+        if not callable(start):
+            return
+        try:
+            start(int(self.host.settings.games.busqueda.max_checks))
+        except Exception:  # noqa: BLE001 - sin su cuenta, el juego sigue con la suya
+            logger.exception("Búsqueda: no se pudo empezar la cuenta de fotos del juez")
 
     def _next_round(self, now: float) -> None:
         self._open_round(now, first=False)

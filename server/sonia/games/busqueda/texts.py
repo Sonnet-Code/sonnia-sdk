@@ -67,7 +67,7 @@ ROUND_TEXT = (
 
 #: Se ve el objeto de la ronda (``what`` ya filtrado: nada de la persona).
 FOUND_TEXT = (
-    "BÚSQUEDA: ¡lo han encontrado! En la cámara se ve {what}. Ya ha sonado «¡Lo veo!» y ha "
+    "BÚSQUEDA: ¡lo han encontrado! En la cámara se ve «{what}». Ya ha sonado «¡Lo veo!» y ha "
     "salido el confeti: no lo repitas. Celébralo en una frase corta, hablando solo del objeto; "
     "nunca de la persona ni de su ropa, ni digas quién fue."
 )
