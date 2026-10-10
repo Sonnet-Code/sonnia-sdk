@@ -680,16 +680,20 @@ namespace Sonia.Games.Busqueda
                 return;
             }
 
-            Color color = GameColors.Brand;
+            // Sin color propio (una botella, unas llaves): un cuadro neutro, para que no parezca
+            // que el objeto es de un color.
+            Color color = GameUi.WithAlpha(Color.white, 0.16f);
+            bool hasColor = false;
             Color parsed;
             if (!string.IsNullOrEmpty(hexColor) && ColorUtility.TryParseHtmlString(hexColor, out parsed))
             {
                 color = parsed;
+                hasColor = true;
             }
 
             _swatchFill.color = color;
             float luminance = (0.2126f * color.r) + (0.7152f * color.g) + (0.0722f * color.b);
-            _glyph.color = luminance > 0.62f ? GameColors.Dark : Color.white;
+            _glyph.color = hasColor && luminance > 0.62f ? GameColors.Dark : Color.white;
             _glyph.text = glyph;
             _glyph.gameObject.SetActive(true);
             _badge.gameObject.SetActive(false);

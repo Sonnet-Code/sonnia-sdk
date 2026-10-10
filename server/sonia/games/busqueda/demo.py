@@ -89,4 +89,25 @@ def steps() -> list[Step]:
         # El final: dos de tres, gana.
         GameMsg("end", {"result": "win", "found": 2, "total": ROUNDS, "photos": 14}),
         Capture("busqueda-10-final", settle_s=2.5),
+        # Otra partida: la cámara no contesta a ninguna mirada y termina sin llegar a la mitad.
+        Wait(2.5),
+        GameMsg(
+            "start", {"title": TITLE, "rounds": ROUNDS, "round_seconds": SECONDS, "preview": True}
+        ),
+        GameMsg("round", _state(1, "unas llaves", "", "ready", 0)),
+        GameMsg("go", _state(1, "unas llaves", "", "running", 0)),
+        Wait(1.5),
+        GameMsg("timeout", _state(1, "unas llaves", "", "timeout", 0, silent=True)),
+        Capture("busqueda-11-sin-respuesta", settle_s=1.2),
+        GameMsg("end", {"result": "lose", "found": 0, "total": ROUNDS, "photos": 9}),
+        Capture("busqueda-12-final-casi", settle_s=2.5),
+        # Una Unity que se reconecta a mitad: solo le llegan el start y el último estado (un
+        # go de la ronda 2 con una encontrada), y con eso se repinta todo.
+        Wait(2.5),
+        GameMsg(
+            "start", {"title": TITLE, "rounds": ROUNDS, "round_seconds": SECONDS, "preview": True}
+        ),
+        GameMsg("go", _state(2, "un celular", "", "running", 1)),
+        Capture("busqueda-13-repintado-tras-reconectar", settle_s=1.5),
+        GameMsg("end", {"result": "cancel", "found": 1, "total": ROUNDS, "photos": 6}),
     ]
