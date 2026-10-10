@@ -364,7 +364,6 @@ El estado (`data` de todos los eventos menos `start` y `end`): `phase` (`waiting
 
 De Unity al orquestador, el Akinator no manda ningún `game_event`.
 
-
 ##### `piedra_papel_tijera` (Piedra, papel o tijera, `docs/juegos/piedra_papel_tijera.md`)
 
 | Evento | Sentido | `data` | Fijo | Qué hace |
