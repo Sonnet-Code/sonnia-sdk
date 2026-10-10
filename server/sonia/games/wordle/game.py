@@ -126,11 +126,12 @@ INVALID_TAIL = (
     " No cuenta como intento: llevan {used} de {rows}. Díselo con humor y pídeles otra palabra."
 )
 
-#: Lo que se lee en la pantalla cuando la fila se sacude.
+#: Lo que se lee en la pantalla cuando la fila se sacude (en un rótulo de una sola línea: de
+#: 25 caracteres como mucho).
 INVALID_MESSAGES = {
-    "empty": "No se entendió ninguna palabra",
+    "empty": "No se entendió la palabra",
     "length": "Tienen que ser {cols} letras",
-    "chars": "Solo letras, sin números ni símbolos",
+    "chars": "Solo letras, sin números",
     "repeated": "Esa ya la probaron",
 }
 

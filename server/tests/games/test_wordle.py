@@ -22,9 +22,11 @@ from typing import Any
 from sonia.actions import build_default_registry
 from sonia.config import Settings
 from sonia.games import INSTRUCT_MAX_CHARS, NOT_SAID, SCRIPT_PREFIX
+from sonia.games.demo import Capture, GameMsg, Step, capture_name, load_demo
 from sonia.games.manager import GameManager
 from sonia.games.registry import find_game
 from sonia.games.wordle import WordleGame
+from sonia.games.wordle import demo as wordle_demo
 from sonia.games.wordle.bank import WORDS, parse_words
 from sonia.games.wordle.logic import describe_marks, score_guess
 from sonia.types import ActionContext
@@ -47,14 +49,14 @@ SECRET = "KAFKA"
 HINT = "una pista de prueba"
 
 
-def bank_text(first: str = SECRET) -> str:
-    """Un banco de pruebas de diez palabras con ``first`` la primera."""
+def bank_text(first: str = SECRET, hint: str | None = None) -> str:
+    """Un banco de pruebas de diez palabras con ``first`` la primera (con la pista ``hint``)."""
     pool = [SECRET, *FILLERS]
     words = [first, *[w for w in pool if w != first]][:10]
-    entries = [
-        f"## {word}\n> {HINT if word == SECRET else f'Pista número {i}.'}"
-        for i, word in enumerate(words)
-    ]
+    entries = []
+    for i, word in enumerate(words):
+        own = hint if (hint and i == 0) else HINT if word == SECRET else f"Pista número {i}."
+        entries.append(f"## {word}\n> {own}")
     return "\n\n".join(entries) + "\n"
 
 
@@ -75,11 +77,15 @@ def wordle_settings(**wordle: Any) -> Settings:
 
 
 def make_wordle(
-    first: str = SECRET, *, settings: Settings | None = None, **kwargs: Any
+    first: str = SECRET,
+    *,
+    hint: str | None = None,
+    settings: Settings | None = None,
+    **kwargs: Any,
 ) -> tuple[WordleGame, FakeGameHost]:
     """Un Wordle suelto cuya palabra secreta es ``first``."""
     game, host = make_game(
-        WordleGame, cloud_banks={WORDS.id: bank_text(first)}, settings=settings, **kwargs
+        WordleGame, cloud_banks={WORDS.id: bank_text(first, hint)}, settings=settings, **kwargs
     )
     host.rng = FirstPick()
     return game, host
@@ -464,6 +470,72 @@ async def test_todo_lo_que_lee_gpt_live_cabe_y_no_nombra_el_stack() -> None:
         assert [result for result, _ in host.finished] == [outcome]
         # Terminada la partida, ya no entra ningún intento más.
         assert "ya ha terminado" in await play(game, "MODEM")
+
+
+# ---------------------------------------------------------------------------
+# La secuencia del orquestador falso
+# ---------------------------------------------------------------------------
+
+
+def demo_games(steps: list[Step]) -> list[list[GameMsg]]:
+    """Los mensajes de juego de la secuencia, partidas por separado (cada ``start`` abre una)."""
+    games: list[list[GameMsg]] = []
+    for step in steps:
+        if isinstance(step, GameMsg):
+            if step.event == "start":
+                games.append([])
+            games[-1].append(step)
+    return games
+
+
+async def test_la_secuencia_del_orquestador_falso_es_la_del_juego_real() -> None:
+    # Se juega con el juego de verdad lo mismo que dice la secuencia y se comparan los mensajes.
+    won, lost = demo_games(wordle_demo.steps())
+    for messages, (secret, hint), words in (
+        (won, wordle_demo.WON, wordle_demo.WON_GUESSES),
+        (lost, wordle_demo.LOST, wordle_demo.LOST_GUESSES),
+    ):
+        game, host = make_wordle(secret, hint=hint)
+        await game.start("voice", {})
+        start = messages[0].data
+        assert {k: v for k, v in start.items() if k != "title"} == host.last("start")
+        assert start["title"] == WordleGame.title
+        for word in words:
+            await play(game, word)
+        wanted = [m.data for m in messages if m.event == "guess"]
+        assert wanted == host.events("guess")
+        result, data = host.finished[0]
+        end = messages[-1]
+        assert end.event == "end" and end.data == {**(data or {}), "result": result}
+        # Los dos finales de la secuencia: una victoria y una derrota.
+    assert [m.data["result"] for m in (won[-1], lost[-1])] == ["win", "lose"]
+
+
+async def test_el_intento_invalido_de_la_secuencia_es_el_del_juego_real() -> None:
+    won, _ = demo_games(wordle_demo.steps())
+    invalid = next(m for m in won if m.event == "invalid")
+    game, host = make_wordle(wordle_demo.WON[0], hint=wordle_demo.WON[1])
+    await game.start("voice", {})
+    await play(game, invalid.data["letters"])
+    assert host.last("invalid") == invalid.data
+
+
+def test_la_secuencia_pasa_por_cada_estado_y_pide_su_captura() -> None:
+    steps = load_demo("wordle")
+    captures = [s.name for s in steps if isinstance(s, Capture)]
+    assert len(captures) == len(set(captures))
+    assert all(capture_name(name) == name for name in captures)
+    for state in ("empezar", "jugada", "invalida", "pista", "acierto", "derrota", "final"):
+        assert any(state in name for name in captures), state
+    # Cada captura va tras el mensaje que quiere ver: nunca la primera de la secuencia.
+    assert not isinstance(steps[0], Capture)
+
+
+def test_los_rotulos_de_la_pantalla_caben_en_una_linea() -> None:
+    from sonia.games.wordle.game import INVALID_MESSAGES
+
+    for message in INVALID_MESSAGES.values():
+        assert len(message.format(cols=5)) <= 25 and "Sonia" not in message
 
 
 # ---------------------------------------------------------------------------
