@@ -60,6 +60,17 @@ No hay jugadas delegadas: la jugada del visitante no se entiende por voz, la lee
 ronda no depende de que GPT-Live delegue a tiempo. Lo que tiene que decir le llega por `speak`
 (`commentary`): «sacaste tijera y el jugador piedra: gana el jugador; marcador...».
 
+## Control a mano (panel)
+
+Por si falla la voz o la cámara, el equipo lleva la partida desde el panel (`panel_controls`, `panel_control`; «Reiniciar» y «Terminar» los pone el manager para todos):
+
+| Control | Cuándo | Qué hace |
+|---|---|---|
+| «Piedra» / «Papel» / «Tijera» | Durante la tirada (`ready`, `countdown` y `reading`, también con el juez mirando) | La jugada del visitante en esa tirada: manda sobre la lectura local y sobre el juez, que ya no mira; la lectura se corta en cuanto se pulsa. |
+| «Otra ronda» | Entre tiradas (`intro`, `waiting` y `result`) | La tirada siguiente ya, sin esperar a que Sonia termine ni a que la cámara vea a alguien delante: con la cámara que no detecta a nadie, «Otra ronda» y la jugada del panel llevan la partida entera. |
+
+Fuera de esas fases, `GameError` con el motivo para el equipo. Ninguno tiene guion para Sonia: el resultado se lo cuenta el juego como siempre. Tests en `server/tests/games/test_controles_camara.py`.
+
 ## Pantalla
 
 Sus eventos están en `docs/protocolo.md` («Eventos de cada juego», `piedra_papel_tijera`). En

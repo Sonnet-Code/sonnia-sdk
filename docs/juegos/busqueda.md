@@ -52,6 +52,15 @@ Nada de lo que oye el visitante se interpreta. Si alguien grita «¡aquí!», GP
 
 `snapshot()` lleva `summary` (una línea para la tarjeta «Juegos»: «Ronda 2 de 3: algo azul · 1 encontrada»; vacía sin partida), `phase` (`ready`, `running`, `between`, `done`), `round`, `rounds`, `object`, `objects` (los de la partida), `found`, `results` (`found`, `timeout` o `silent` por ronda), `seconds_left`, `checks` (fotos de la ronda) y `photos` (de la partida).
 
+## Control a mano (panel)
+
+Por si falla la voz o la cámara, con la ronda en marcha el equipo tiene en el panel (`panel_controls`, `panel_control`; «Reiniciar» y «Terminar» los pone el manager para todos):
+
+- **«¡Lo encontró!»**: gana la ronda como un `busqueda_check` que lo ve (pantalla, «¡Lo veo!» y el guion de siempre para Sonia, que se le pasa en cuanto calla).
+- **«Saltar objeto»**: cierra la ronda sin encontrarlo («¡Tiempo!» y un guion propio, `SKIP_TEXT`), y nunca cuenta como ronda en la que la cámara no contestó.
+
+Antes de la salida o con la ronda ya contada no hay controles y dan `GameError`. Tests en `server/tests/games/test_controles_camara.py`.
+
 ## Pantalla
 
 Sus eventos están en `docs/protocolo.md` («Eventos de cada juego», `busqueda`). Unity (`Games/Busqueda/BusquedaController.cs`, sobre `GameHud`):

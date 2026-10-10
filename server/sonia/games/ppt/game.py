@@ -187,6 +187,17 @@ SAY_FAILED_TEXT = (
     "para otro momento."
 )
 
+# -- control a mano desde el panel --------------------------------------------
+
+#: La jugada del visitante, puesta a mano en la tirada en curso (manda sobre la lectura).
+MOVE_CONTROLS: dict[str, HandShape] = {
+    "piedra": HandShape.ROCK,
+    "papel": HandShape.PAPER,
+    "tijera": HandShape.SCISSORS,
+}
+#: «Otra ronda»: la siguiente tirada ya, sin esperar a nadie delante ni a que callen.
+CONTROL_AGAIN = "again"
+
 #: En qué anda la partida (para el panel).
 Phase = Literal["off", "intro", "waiting", "ready", "countdown", "reading", "result", "final"]
 
@@ -242,6 +253,9 @@ class PptGame(Game):
         self._player_seen_at = float("-inf")
         self._touched_at = float("-inf")
         self._overlay = OverlayState()
+        #: Control a mano del panel: la jugada del visitante y si la tirada va ya.
+        self._manual_move: HandShape | None = None
+        self._again = False
 
     @property
     def options(self) -> PptSettings:
@@ -383,6 +397,9 @@ class PptGame(Game):
             if not await self._wait_player():
                 return
             await self._wait_idle()
+            # Empieza una tirada: lo del panel de antes ya no vale.
+            self._again = False
+            self._manual_move = None
             self._move = host.rng.choice(MOVES)
             ya_at = await self._countdown(self._move)
             if ya_at is None:
@@ -458,7 +475,7 @@ class PptGame(Game):
         frames: list[np.ndarray | None] = []
         #: La muestra con la que se llegó a ``soft_end`` (el final de la lectura sin alargar).
         soft_index: int | None = None
-        while True:
+        while self._manual_move is None:
             began = host.now()
             sample, frame = await self._sample()
             samples.append(sample)
@@ -473,6 +490,8 @@ class PptGame(Game):
                     break
             # Una lectura tarda lo suyo (poses y manos, en hilos): se espera solo lo que falte.
             await host.sleep(max(0.01, READ_STEP_S - (now - began)))
+        if self._manual_move is not None:
+            return self._manual_sample(samples), ""
         shapes = [s.shape for s in samples]
         found = settle(shapes)
         last_frame = next((f for f in reversed(frames) if f is not None), None)
@@ -491,9 +510,48 @@ class PptGame(Game):
             local, photo = samples[index], frames[index]
         # Al juez, el frame de la lectura estable (la jugada ya quieta tras el «¡ya!») o el de
         # ``soft_end``; solo sin ningún frame de la cámara se queda lo local sin preguntar.
-        return await self._judged(
+        judged = await self._judged(
             local, reason, samples, photo if photo is not None else last_frame
         )
+        if self._manual_move is not None:  # puesta a mano mientras miraba el juez
+            return self._manual_sample(samples), ""
+        return judged
+
+    def _manual_sample(self, samples: list[Sample]) -> Sample:
+        """La jugada puesta a mano desde el panel, con la caja de la mano local si la hubo."""
+        move = self._manual_move
+        assert move is not None
+        logger.info("Piedra, papel o tijera: jugada puesta a mano desde el panel: %s", move.value)
+        box = next((s.box for s in reversed(samples) if s.box is not None), None)
+        return Sample(move, True, box)
+
+    # -- control a mano desde el panel ------------------------------------------------
+
+    def panel_controls(self) -> list[dict[str, Any]]:
+        """Durante la tirada, la jugada del visitante; entre tiradas, «Otra ronda»."""
+        if self._phase in ("ready", "countdown", "reading"):
+            return [
+                {"id": control, "label": move.value.capitalize()}
+                for control, move in MOVE_CONTROLS.items()
+            ]
+        if self._phase in ("intro", "waiting", "result"):
+            return [{"id": CONTROL_AGAIN, "label": "Otra ronda"}]
+        return []
+
+    async def panel_control(self, control: str, value: str) -> str:
+        """La jugada del visitante manda en la tirada en curso; «Otra ronda» la lanza ya."""
+        move = MOVE_CONTROLS.get(control)
+        if move is not None:
+            if self._phase not in ("ready", "countdown", "reading"):
+                raise GameError("La jugada del visitante solo se puede poner durante la tirada.")
+            self._manual_move = move
+            return ""
+        if control == CONTROL_AGAIN:
+            if self._phase not in ("intro", "waiting", "result"):
+                raise GameError("Ya hay una tirada en marcha.")
+            self._again = True
+            return ""
+        raise GameError("Ese control no es de piedra, papel o tijera.")
 
     async def _judged(
         self, local: Sample, reason: str, samples: list[Sample], photo: np.ndarray | None
@@ -720,7 +778,7 @@ class PptGame(Game):
         """Espera ``seconds`` mirando quién juega."""
         host = self.host
         deadline = host.now() + max(0.0, seconds)
-        while host.now() < deadline:
+        while host.now() < deadline and not self._again:
             self._track()
             await host.sleep(min(TRACK_STEP_S, max(0.0, deadline - host.now())))
 
@@ -735,7 +793,7 @@ class PptGame(Game):
         host = self.host
         begin = host.now()
         spoke = False
-        while (now := host.now()) - begin < limit_s:
+        while (now := host.now()) - begin < limit_s and not self._again:
             quiet = host.quiet_for()
             if quiet < 0.5:
                 spoke = True
@@ -749,7 +807,7 @@ class PptGame(Game):
         """Espera a que nadie hable (como mucho ``IDLE_WAIT_S``), mirando quién juega."""
         host = self.host
         deadline = host.now() + IDLE_WAIT_S
-        while host.now() < deadline:
+        while host.now() < deadline and not self._again:
             if await host.wait_idle(0.5):
                 return
             self._track()
@@ -761,7 +819,8 @@ class PptGame(Game):
         begin = host.now()
         hinted = False
         while True:
-            if self._track() is not None:
+            # «Otra ronda» desde el panel: la tirada va aunque la cámara no vea a nadie.
+            if self._track() is not None or self._again:
                 return True
             waited = host.now() - begin
             if waited >= NO_PLAYER_CANCEL_S:

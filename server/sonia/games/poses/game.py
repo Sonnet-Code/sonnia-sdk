@@ -181,6 +181,17 @@ FAILED_TEXT = (
     "conversando con normalidad."
 )
 
+#: Una ronda ya contada que el equipo corrige desde el panel («Lo hicieron»...).
+CORRECTION_TEXT = "Corrige el resultado de la ronda {round}: {body}"
+
+# -- control a mano desde el panel --------------------------------------------------------
+
+#: «Lo hicieron» / «No lo hicieron»: el veredicto de la ronda (manda sobre el juez y lo local).
+CONTROL_DID = "did"
+CONTROL_DIDNT = "didnt"
+#: «Siguiente orden»: salta la ronda en curso (o la espera a la siguiente).
+CONTROL_NEXT = "next"
+
 # -- textos de la pantalla («Sonnia») ---------------------------------------------------
 
 HINT_CLOSE = "Un paso atrás: a unos 2 m"
@@ -258,6 +269,9 @@ class PosesGame(Game):
         self._touched_at = float("-inf")
         self._asked_close_at = float("-inf")
         self._shown_players = -1
+        #: Control a mano del panel: el veredicto de la ronda en curso y si hay que saltarla.
+        self._manual: bool | None = None
+        self._skip = False
         self._skeletons.clear()
 
     # -- lo que declara el juego ----------------------------------------------
@@ -404,7 +418,7 @@ class PosesGame(Game):
         asked_nobody = False
         ready_since: float | None = None
         self._phase = "placement"
-        while True:
+        while not self._skip:
             counted = self._poll()
             place = counted.placement if counted is not None else Placement(0, 0)
             await self._show_placement(place)
@@ -440,14 +454,23 @@ class PosesGame(Game):
             if (calm and now - began >= limit) or now - began >= 2 * limit:
                 return
             await host.sleep(POLL_S)
+        return
 
     async def _play_round(self, index: int) -> bool:
-        """Una ronda entera. ``False`` si ya van demasiadas rondas sin ver a nadie."""
+        """Una ronda entera. ``False`` si ya van demasiadas rondas sin ver a nadie.
+
+        Desde el panel: «Siguiente orden» (``_skip``) la salta sin contarla y con el resultado
+        en pantalla adelanta la siguiente; «Lo hicieron» o «No lo hicieron» (``_manual``)
+        antes del resultado mandan sobre el juez y lo local.
+        """
         host = self.host
         await self._wait_calm()
-        if index > 0 and self._placement.close:
+        if index > 0 and self._placement.close and not self._skip:
             await self._place(first=False)
             await self._wait_calm()
+        # Un «Siguiente orden» de antes (colocación o resultado) ya ha adelantado esta ronda.
+        self._skip = False
+        self._manual = None
         self._index = index
         entry, simon = self._plan[index]
         self._order = entry.order(simon)
@@ -458,14 +481,26 @@ class PosesGame(Game):
         # la fase ya es la de la ronda para que los esqueletos sigan en gris.
         self._phase = "round"
         said = await self._say(self._order)
+        if self._skip:
+            return self._skipped()
         await self._show("round")
         await self._show("command")
         if said:
             await self._wait_phrase()
+        if self._skip:
+            return self._skipped()
         self._seconds = max(0.3, float(self._cfg().window_seconds))
         await self._show("window")
         count, total, photo = await self._count_window(self._seconds)
-        count, total = await self._judge(entry.id, count, total, photo)
+        if self._skip:
+            return self._skipped()
+        if self._manual is None:
+            count, total = await self._judge(entry.id, count, total, photo)
+        if self._skip:
+            return self._skipped()
+        if self._manual is not None:
+            count, total = _manual_count(self._manual, total)
+            logger.info("Simón dice: ronda %d contada a mano desde el panel", index + 1)
         self._count, self._total = count, total
         result = RoundResult(entry.id, simon, count, total)
         self._results.append(result)
@@ -495,18 +530,62 @@ class PosesGame(Game):
         entry = self._entry
         label = entry.pose if entry is not None else result.pose
         head = ROUND_TEXT.format(round=self._index + 1, rounds=len(self._plan), label=label)
-        count, total = result.count, result.total
-        if total == 0:
-            body = EMPTY_TEXT
-        elif not result.simon:
-            body = (TRAP_FELL_TEXT if count else TRAP_NONE_TEXT).format(count=count, total=total)
-        elif count >= total:
-            body = ALL_TEXT.format(count=count, total=total)
-        elif count:
-            body = SOME_TEXT.format(count=count, total=total)
-        else:
-            body = NONE_TEXT.format(total=total)
-        return head + body + ("" if last else NEXT_TEXT)
+        return head + _result_body(result) + ("" if last else NEXT_TEXT)
+
+    def _skipped(self) -> bool:
+        """La ronda en curso, saltada desde el panel: no cuenta y sigue la siguiente."""
+        self._skip = False
+        logger.info("Simón dice: ronda %d saltada desde el panel", self._index + 1)
+        return True
+
+    # -- control a mano desde el panel ------------------------------------------------------
+
+    def panel_controls(self) -> list[dict[str, Any]]:
+        """Con una ronda en curso o su resultado en pantalla: el veredicto y saltarla; en la
+        colocación, empezar ya."""
+        phase = self._phase
+        skip = {"id": CONTROL_NEXT, "label": "Siguiente orden"}
+        if phase in ("round", "command", "window", "result"):
+            return [
+                {"id": CONTROL_DID, "label": "Lo hicieron"},
+                {"id": CONTROL_DIDNT, "label": "No lo hicieron"},
+                skip,
+            ]
+        if phase == "placement":
+            return [skip]
+        return []
+
+    async def panel_control(self, control: str, value: str) -> str:
+        """«Lo hicieron» / «No lo hicieron» antes del resultado mandan en esa ronda; con el
+        resultado ya en pantalla, lo corrigen (y Sonia lo cuenta). «Siguiente orden» salta."""
+        phase = self._phase
+        if control == CONTROL_NEXT:
+            if phase not in ("placement", "round", "command", "window", "result"):
+                raise GameError("Ahora no hay ninguna orden que saltar.")
+            self._skip = True
+            return ""
+        if control not in (CONTROL_DID, CONTROL_DIDNT):
+            raise GameError("Ese control no es de Simón dice.")
+        did = control == CONTROL_DID
+        if phase in ("round", "command", "window"):
+            self._manual = did
+            return ""
+        if phase == "result" and self._results:
+            return await self._correct(did)
+        raise GameError("Ahora no hay ninguna ronda que contar.")
+
+    async def _correct(self, did: bool) -> str:
+        """Corrige la ronda ya contada: pantalla, totales y el guion para que Sonia lo cuente."""
+        last = self._results[-1]
+        count, total = _manual_count(did, last.total)
+        result = RoundResult(last.pose, last.simon, count, total)
+        self._results[-1] = result
+        self._count, self._total = count, total
+        if total:
+            self._empty_rounds = 0
+        logger.info("Simón dice: ronda %d corregida a mano desde el panel", self._index + 1)
+        await self._show("result")
+        return CORRECTION_TEXT.format(round=self._index + 1, body=_result_body(result))
 
     def _totals(self) -> tuple[int, int, int]:
         """``(bien hechas, posibles, caídos en trampas)`` de toda la partida."""
@@ -519,7 +598,7 @@ class PosesGame(Game):
 
     async def _pause(self, seconds: float) -> None:
         end = self.host.now() + max(0.0, seconds)
-        while self.host.now() < end:
+        while self.host.now() < end and not self._skip:
             self._poll()
             await self.host.sleep(POLL_S)
 
@@ -533,6 +612,8 @@ class PosesGame(Game):
         began = host.now()
         quiet_since: float | None = None
         while host.now() - began < CALM_MAX_S:
+            if self._skip:
+                return True
             self._poll()
             now = host.now()
             if host.quiet_for() < CALM_QUIET_S:
@@ -547,6 +628,8 @@ class PosesGame(Game):
     async def _say(self, order: str) -> bool:
         """La orden como frase grabada; si Sonia estaba hablando, se espera y se reintenta."""
         for _ in range(SAY_ATTEMPTS):
+            if self._skip:
+                return False
             if await self.host.say_fixed(order):
                 return True
             await self._wait_calm()
@@ -558,7 +641,7 @@ class PosesGame(Game):
         host = self.host
         began = host.now()
         sounding = False
-        while host.now() - began < PHRASE_MAX_S:
+        while host.now() - began < PHRASE_MAX_S and not self._skip:
             self._poll()
             quiet = host.quiet_for()
             sounding = sounding or quiet <= 0.05
@@ -573,7 +656,7 @@ class PosesGame(Game):
         host = self.host
         began = host.now()
         talked = False
-        while host.now() - began < REPLY_MAX_S:
+        while host.now() - began < REPLY_MAX_S and not self._skip:
             self._poll()
             quiet = host.quiet_for()
             talked = talked or quiet <= 0.05
@@ -605,7 +688,7 @@ class PosesGame(Game):
                     photo = frame if frame is not None else photo
                 best = max(best, counted.doing)
                 players = max(players, counted.players)
-            if host.now() >= end:
+            if host.now() >= end or self._skip:
                 break
             await host.sleep(WINDOW_POLL_S)
         if want_photo and photo is None:
@@ -629,7 +712,10 @@ class PosesGame(Game):
         task = asyncio.ensure_future(host.referee.poses(photo))
         try:
             limit = host.now() + float(host.settings.games.judge_timeout_seconds) + JUDGE_GRACE_S
-            while not task.done() and host.now() < limit:
+            # Un control a mano del panel (veredicto o saltar) deja de esperar al juez.
+            while not task.done() and host.now() < limit and not self._skip:
+                if self._manual is not None:
+                    break
                 self._poll()
                 await host.sleep(WINDOW_POLL_S)
             if task.done():
@@ -752,6 +838,26 @@ class PosesGame(Game):
         self._hint = hint
         self._shown_players = place.players
         await self._show("placement")
+
+
+def _result_body(result: RoundResult) -> str:
+    """Lo que se le cuenta a Sonia de una ronda: cuántos la hicieron (o cayeron) de cuántos."""
+    count, total = result.count, result.total
+    if total == 0:
+        return EMPTY_TEXT
+    if not result.simon:
+        return (TRAP_FELL_TEXT if count else TRAP_NONE_TEXT).format(count=count, total=total)
+    if count >= total:
+        return ALL_TEXT.format(count=count, total=total)
+    if count:
+        return SOME_TEXT.format(count=count, total=total)
+    return NONE_TEXT.format(total=total)
+
+
+def _manual_count(did: bool, total: int) -> tuple[int, int]:
+    """El veredicto a mano: todos o ninguno de los que juegan (al menos uno)."""
+    players = max(1, total)
+    return (players if did else 0), players
 
 
 def _hint(place: Placement) -> str:

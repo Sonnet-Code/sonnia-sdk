@@ -90,6 +90,12 @@ TIMEOUT_TEXT = (
 )
 
 #: Se acabó el tiempo y la cámara no contestó a ninguna mirada: algo falla, no que nadie lo trajera.
+#: El equipo del stand salta el objeto desde el panel («Saltar objeto»).
+SKIP_TEXT = (
+    "BÚSQUEDA: se salta {name} y esta ronda no cuenta como encontrada. Ya ha sonado «¡Tiempo!»: "
+    "no lo repitas. Dilo con humor en una frase corta, sin culpar a nadie."
+)
+
 SILENT_TEXT = (
     "BÚSQUEDA: se acabó el tiempo, pero en esta ronda la cámara no contestó a ninguna mirada: "
     "algo falla con ella. Ya ha sonado «¡Tiempo!»: no lo repitas. Dilo con humor en una frase "

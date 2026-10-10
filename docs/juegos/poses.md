@@ -41,6 +41,18 @@ Una partida de seis rondas dura unos 80 s (unos 8 s más con el juez de Gemini).
 
 No hay jugadas delegadas: nada de lo que dice el visitante cambia el juego, así que no hay nada que entender ni que delegar (menos herramientas para GPT-Live). Lo que tiene que saber va por `instruct` (las reglas, menos de 1200 caracteres) y lo que tiene que decir ya, por `speak` (la colocación, cada resultado y el final).
 
+## Control a mano (panel)
+
+Por si falla la voz o la cámara, el equipo lleva la partida desde el panel (`panel_controls`, `panel_control`; «Reiniciar» y «Terminar» los pone el manager para todos):
+
+| Control | Cuándo | Qué hace |
+|---|---|---|
+| «Lo hicieron» / «No lo hicieron» | Con una ronda en curso (orden, ventana o el juez mirando) | El veredicto de esa ronda: todos o ninguno de los que juegan (al menos uno). Manda sobre el juez y lo local; con él puesto, el juez ni mira. |
+| «Lo hicieron» / «No lo hicieron» | Con el resultado en pantalla | Corrige esa ronda: la pantalla, los totales y el guion para que Sonia lo cuente («Corrige el resultado de la ronda 2: …»). |
+| «Siguiente orden» | En la colocación, con una ronda en curso o con su resultado | Salta: la colocación empieza ya; la ronda en curso no cuenta; con el resultado, no se espera a que Sonia termine de reaccionar. Sin guion para Sonia: la siguiente orden suena sola. |
+
+Fuera de esas fases, `GameError` con el motivo para el equipo. Se saltan las esperas con una marca que miran los bucles, nunca cancelando la tarea: así una orden grabada que esté sonando termina entera (con su `speech_end`). Tests en `server/tests/games/test_controles_camara.py`.
+
 ## Pantalla
 
 Sus eventos están en `docs/protocolo.md` («Eventos de cada juego», `poses`). Todos son fijos y llevan el estado completo, así que una Unity que se reconecta lo pinta todo con el último.
