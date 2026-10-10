@@ -720,7 +720,7 @@ class PosesGame(Game):
                 await host.sleep(WINDOW_POLL_S)
             if task.done():
                 verdict = task.result()
-            else:
+            elif self._manual is None and not self._skip:
                 logger.info("Simón dice: el juez no contestó a tiempo; vale el recuento local")
         except asyncio.CancelledError:
             raise
