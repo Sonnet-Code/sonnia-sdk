@@ -150,6 +150,9 @@ namespace Sonia
         /// <summary>Sonia busca en internet o una tarea tarda (<see cref="ActivityMessage"/>).</summary>
         public event Action<ActivityMessage> OnActivity;
 
+        /// <summary>Aviso de espera en pantalla: la pastilla de <see cref="BusyIndicator"/> (<see cref="BusyMessage"/>).</summary>
+        public event Action<BusyMessage> OnBusy;
+
         /// <summary>Un trozo de la voz del invitado (frames "SNGU").</summary>
         public event Action<AudioFrame> OnGuestAudioFrame;
 
@@ -887,6 +890,8 @@ namespace Sonia
                     return Protocol.Deserialize<TriviaEndMessage>(payload);
                 case MessageTypes.Activity:
                     return Protocol.Deserialize<ActivityMessage>(payload);
+                case MessageTypes.Busy:
+                    return Protocol.Deserialize<BusyMessage>(payload);
                 case MessageTypes.OpenAvatarEditor:
                     return Protocol.Deserialize<OpenAvatarEditorMessage>(payload);
                 case MessageTypes.CloseAvatarEditor:
@@ -1158,6 +1163,13 @@ namespace Sonia
             if (activity != null)
             {
                 Raise(OnActivity, activity);
+                return;
+            }
+
+            BusyMessage busy = message as BusyMessage;
+            if (busy != null)
+            {
+                Raise(OnBusy, busy);
                 return;
             }
 

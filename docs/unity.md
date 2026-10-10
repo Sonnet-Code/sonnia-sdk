@@ -803,8 +803,9 @@ escena no cambia y en modo edición se sigue viendo el HUD antiguo:
 | Elemento | Dónde (px de la referencia 1080x1920) | Cuándo |
 |---|---|---|
 | Fondo azul royal, el del arte del DevFest 2026 (hasta el 7 de octubre, el navy de la marca: con la camiseta marino Sonnia se perdía en él): degradado, dos brillos, puntos, la S de marca de agua y el halo azul de detrás de Sonia | Toda la pantalla, en un Canvas propio que dibuja la cámara principal a 12 m (detrás de Sonia, fijo aunque la cámara se mueva); pasa por el posprocesado de la escena y por eso va precompensado | Siempre |
-| Logo de Sonnet Code todo en blanco (variación 14 de la marca; la S en degradado se perdía en el azul royal) con una sombra suave como la del recuadro del QR (`stage-logo-shadow`, negra al 55 %, 12 px más abajo) | Arriba a la izquierda, (56, 64), 250 de ancho | Siempre |
-| Tarjeta blanca con el QR a sonnetcode.com/es y «¡Conoce más!» en negrita (el logo ya dice Sonnet Code) | Arriba a la derecha, margen 56, 232 x 266 | Salvo con imagen o trivia (ocupan esa franja) |
+| Logo de Sonnet Code todo en blanco (variación 14 de la marca; la S en degradado se perdía en el azul royal) con una sombra suave como la del recuadro del QR (`stage-logo-shadow`, negra al 55 %, 12 px más abajo) | Arriba a la izquierda, (56, 64), 250 de ancho | Salvo con el aviso de espera |
+| Tarjeta blanca con el QR a sonnetcode.com/es y «¡Conoce más!» en negrita (el logo ya dice Sonnet Code) | Arriba a la derecha, margen 56, 232 x 266 | Salvo con imagen, trivia, juego o el aviso de espera (ocupan esa franja) |
+| Aviso de espera (`BusyIndicator`): pastilla azul royal con borde blanco, tres puntos que saltan, «SONNIA» (Geist Mono 22) y el texto de `busy` (Manrope ExtraBold 58, blanco) | Arriba, centrada, a 32 del borde, 136 de alto y hasta 1008 de ancho | Con `busy` encendido, y 0,6 s como mínimo |
 | Invitación: bocadillo blanco de Sonia, «SONIA» (Manrope ExtraBold 34, azul de marca) y «¡Acércate y pregúntame lo que quieras!» (Manrope ExtraBold 62, dos líneas), con la colita a la izquierda del centro inclinada hacia ella | Abajo, margen 72 a los lados y 96 abajo; la colita sale a 236 del borde izquierdo del bocadillo | Si Sonia puede conversar (`stage_mode` con `talk`), está en reposo, no hay subtítulos desde hace 7,5 s y no hay imagen, trivia ni modo Fuera |
 | Subtítulos de Sonia: Manrope ExtraBold 64, blancos, centrados, sin caja, con lo que acaba de decir atenuado | Abajo, a 96 del borde, 968 de ancho, como mucho unos 110 caracteres (de una frase larga se ve el final) | Mientras habla y 6 s después |
 | Lo que dijo el visitante: pastilla navy oscura «TÚ …» (sobre el jersey claro una translúcida no se leía) | Encima del texto de Sonia | Con los subtítulos |
@@ -854,6 +855,45 @@ Detalles que no son obvios:
   imagen Sonia sujeta un cartel con ella; hasta entonces se queda el panel de
   imágenes de la franja alta (sección "Panel de imágenes"), y mientras está
   puesto el QR se aparta.
+
+### Aviso de espera
+
+«La gente es bruta y se desespera» (Jean, 10 de octubre de 2026): mientras Sonia
+espera algo que el visitante no ve, `BusyIndicator` (lo añade `SoniaBootstrap`)
+enseña la pastilla del mensaje `busy` (`docs/protocolo.md`; los textos están en
+`server/sonia/busy.py`).
+
+- **Dónde.** En la franja de arriba del todo, la del logo y el QR, que
+  `StageScreen` aparta mientras se ve y vuelven mientras ella sale. Elegido con
+  capturas: la coronilla de Sonnia queda a unos 320-360 px de arriba en los
+  planos de conversación y de reposo, y en los juegos la tarjeta, la vista en
+  vivo y el panel de imágenes empiezan a 200 px o más, con Sonnia debajo. La
+  pastilla (de 32 a 168 px) no tapa la cara ni las manos en ninguno, tampoco con
+  los brazos arriba de Simón dice ni en el resultado de piedra, papel o tijera.
+  Va en un Canvas anidado en el del HUD con su orden 50 por encima: delante del
+  escenario, los juegos, la vista en vivo, el confeti y los subtítulos.
+- **Tiempos.** Entra en 0,14 s (fundido, escala con un pequeño rebote y una
+  caída corta), se queda al menos 0,6 s desde cada `on` aunque llegue antes el
+  `off`, cambia el texto en el sitio (un latido y el ancho que se acomoda) y sale
+  en 0,2 s. En las capturas sale entera entre 0,1 y 0,2 s después del `on` y,
+  con un `off` inmediato, se retira a los 0,9 s.
+- **Robustez.** Se retira sola si se cae el orquestador o llega otro `hello` (el
+  orquestador repite el aviso al reconectarse si sigue) y a los 90 s sin `off`.
+  Un fallo dentro se registra una vez y la apaga; sin el Canvas del HUD monta uno
+  propio. `Show(texto)` y `Hide()` sirven para probarla sin orquestador, y el
+  registro apunta cada aviso («Aviso de espera: «Pensando…»» y «Aviso de
+  espera retirado tras 0.94 s.»).
+- **Cómo probarla.** La secuencia `espera` del orquestador falso
+  (`server/sonia/games/espera_demo.py`) la pinta en reposo, conversando, en una
+  entrada y salida seguidas, con el texto que cambia y en Simón dice, piedra,
+  papel o tijera, la búsqueda y el Wordle (`docs/juegos-unity.md`, «Capturas en
+  batch»). `--tras-captura 0.05` deja las capturas a unos 0,15 s unas de otras:
+
+  ```bash
+  BUSQUEDA_DEMO_FOTO=<foto pública 16:9> SONIA_UNITY_LOCKS=$SP/unity-locks \
+    scripts/juegos_capturas.sh --puerto 8796 --clon $SP/f0unity/clon --salida <scratchpad>/capturas-espera \
+      --orquestador "uv run --no-sync python ../scripts/juegos_demo.py --juego espera --puerto 8796 --tras-captura 0.05"
+  ```
 
 ### Encuadre del stand
 
