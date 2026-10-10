@@ -4,9 +4,19 @@ Todo con «Sonia» (lo que oye y lee el modelo; en pantalla va «Sonnia») y sin
 stack. Las reglas (``RULES_TEXT``) entran por ``instruct`` y no pueden pasar de 1200
 caracteres; lo demás son guiones (``speak`` o el resultado de una acción, que sale con
 ``PARA SONIA:``).
+
+Las reglas y los guiones se pueden cambiar desde el panel de la nube (``sonia.prompts``,
+:func:`prompt_specs`): el juego pide cada pieza con :func:`live_text` al usarla. Las frases
+grabadas (``GO_PHRASE``...) y los trozos que se pegan detrás de otra pieza con un espacio
+delante (``NEXT_TEXT``, ``FINAL_TEXT``, ``WIN_CONTACT_TEXT``...) siguen en el código.
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
+
+from sonia.games.base import INSTRUCT_MAX_CHARS
+from sonia.prompts import BOOK, PROMPT_MAX_LEN, PromptSpec
 
 __all__ = [
     "ALL_FOUND_TEXT",
@@ -35,6 +45,8 @@ __all__ = [
     "TIMEOUT_TEXT",
     "WIN_CONTACT_TEXT",
     "WON_TEXT",
+    "live_text",
+    "prompt_specs",
 ]
 
 #: Empujones tras un turno del visitante sin delegación (``nudge``): órdenes cortas, y el
@@ -164,3 +176,174 @@ RESUME_TEXT = (
     "Ya estáis jugando a la búsqueda relámpago: ronda {number} de {total}, el objeto es "
     "{name}. No hace falta empezarla otra vez: sigue con la ronda."
 )
+
+
+# -- prompts editables desde la nube (``sonia.prompts``) ---------------------------------
+
+#: Ids de las piezas: ``juegos/busqueda/<pieza>``.
+PROMPT_PREFIX = "juegos/busqueda/"
+PROMPT_GROUP = "Juego: Búsqueda relámpago"
+
+
+def live_text(piece: str, app_text: str, **values: object) -> str:
+    """El texto en uso de la pieza (el de la nube si lo hay y vale; si no, ``app_text``, el
+    de la app), con sus marcadores rellenos con ``values``."""
+    return BOOK.render(PROMPT_PREFIX + piece, fallback=app_text, **values)
+
+
+def _piece(
+    piece: str,
+    title: str,
+    default: Callable[[], str],
+    *,
+    fields: tuple[str, ...] = (),
+    required: tuple[str, ...] = (),
+    help: str = "",
+    instruct: bool = False,
+) -> PromptSpec:
+    return PromptSpec(
+        id=PROMPT_PREFIX + piece,
+        group=PROMPT_GROUP,
+        title=title,
+        default=default,
+        fields=fields,
+        required=required,
+        applies="ronda",
+        help=help,
+        max_len=INSTRUCT_MAX_CHARS if instruct else PROMPT_MAX_LEN,
+    )
+
+
+_TOTAL = "{total}: las rondas de la partida (GAME_BUSQUEDA_ROUNDS). "
+_SECONDS = "{seconds}: los segundos de cada ronda (GAME_BUSQUEDA_ROUND_SECONDS). "
+_NUMBER = "{number}: el número de la ronda. "
+_NAME = "{name}: el objeto de la ronda, como se dice («algo azul»). "
+_ROUND_END = (
+    "El código añade detrás que calle hasta la siguiente ronda o, en la última, cómo ha "
+    "quedado la partida. "
+)
+_CHECK = "Resultado de «busqueda_check» (alguien dice que ya lo tiene). "
+_NUDGE = (
+    "Empujón tras un turno del visitante sin delegar: una orden corta, sin frases que pueda "
+    "repetir (el código añade al final que es una nota interna)."
+)
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """Las piezas de la búsqueda relámpago editables desde el panel, en su orden."""
+    return [
+        _piece(
+            "reglas",
+            "Reglas del juego (al empezar, sin hablar)",
+            lambda: RULES_TEXT,
+            fields=("total", "seconds"),
+            instruct=True,
+            help=_TOTAL
+            + _SECONDS
+            + "Que siga diciendo que delegue busqueda_check: si no, Sonia no lo comprueba.",
+        ),
+        _piece(
+            "arranque",
+            "Guion de arranque: explica el juego y anuncia la primera ronda",
+            lambda: START_TEXT,
+            fields=("total", "seconds", "name"),
+            required=("name",),
+            help=_TOTAL + _SECONDS + _NAME,
+        ),
+        _piece(
+            "reanudar",
+            "Guion si vuelve a pedir el juego que ya está en marcha",
+            lambda: RESUME_TEXT,
+            fields=("number", "total", "name"),
+            help=_NUMBER + _TOTAL + _NAME,
+        ),
+        _piece(
+            "ronda",
+            "Anuncio de cada ronda nueva (de la segunda en adelante)",
+            lambda: ROUND_TEXT,
+            fields=("number", "total", "name"),
+            required=("name",),
+            help=_NUMBER + _TOTAL + _NAME,
+        ),
+        _piece(
+            "encontrado",
+            "Guion cuando la cámara ve el objeto",
+            lambda: FOUND_TEXT,
+            fields=("what",),
+            help="{what}: lo que se ve, solo el objeto («botella azul»). " + _ROUND_END,
+        ),
+        _piece(
+            "tiempo",
+            "Guion cuando se acaba el tiempo sin verlo",
+            lambda: TIMEOUT_TEXT,
+            fields=("name",),
+            help=_NAME + _ROUND_END,
+        ),
+        _piece(
+            "saltado",
+            "Guion cuando el equipo salta el objeto desde el panel",
+            lambda: SKIP_TEXT,
+            fields=("name",),
+            help=_NAME + _ROUND_END,
+        ),
+        _piece(
+            "camara_muda",
+            "Guion cuando la cámara no contestó en toda la ronda",
+            lambda: SILENT_TEXT,
+            help=_ROUND_END,
+        ),
+        _piece(
+            "cancelado",
+            "Guion cuando la cámara no contesta en dos rondas y se cancela",
+            lambda: CANCEL_TEXT,
+        ),
+        _piece(
+            "sin_salida",
+            "Comprobar antes del «¡Ya!»",
+            lambda: NOT_STARTED_TEXT,
+            help=_CHECK,
+        ),
+        _piece(
+            "ya_contada",
+            "Comprobar con la ronda ya contada",
+            lambda: ALREADY_TEXT,
+            help=_CHECK,
+        ),
+        _piece(
+            "aun_no",
+            "Comprobar y no se ve el objeto",
+            lambda: NOT_YET_TEXT,
+            fields=("name", "left"),
+            help=_CHECK + _NAME + "{left}: los segundos que quedan.",
+        ),
+        _piece(
+            "sin_respuesta",
+            "Comprobar y la cámara no contesta",
+            lambda: NO_ANSWER_TEXT,
+            help=_CHECK,
+        ),
+        _piece(
+            "sin_miradas",
+            "Comprobar sin miradas en la ronda",
+            lambda: NO_MORE_TEXT,
+            help=_CHECK,
+        ),
+        _piece(
+            "mirando",
+            "Comprobar mientras otra mirada tarda",
+            lambda: STILL_LOOKING_TEXT,
+            help=_CHECK,
+        ),
+        _piece(
+            "empujon_ronda",
+            "Empujón en plena ronda",
+            lambda: NUDGE_RUNNING,
+            help=_NUDGE,
+        ),
+        _piece(
+            "empujon_parar",
+            "Empujón entre rondas",
+            lambda: NUDGE_STOP,
+            help=_NUDGE,
+        ),
+    ]
