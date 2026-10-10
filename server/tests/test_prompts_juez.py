@@ -7,16 +7,18 @@ sin cambiar).
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import numpy as np
 
 from sonia.gestures.prompt import Cooldowns, build_user_message
 from sonia.llm import Completion
+from sonia.prompts import BOOK
 from sonia.types import Message
-from sonia.vision.judge import ModelJudge
+from sonia.vision.judge import JUDGE_PROMPT, ModelJudge
 from sonia.vision.referee import GeminiReferee
-from tests.prompt_snapshots import assert_snapshot
+from tests.prompt_snapshots import assert_snapshot, cloud_prompts
 from tests.test_gestures import FakeGestureLLM, make_director
 from tests.test_vision_judge import FakeCamera
 
@@ -105,3 +107,87 @@ async def test_con_los_textos_de_la_app_no_cambia_nada() -> None:
             "gestos": await _gesture_messages(),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Versiones de la nube
+# ---------------------------------------------------------------------------
+
+JUEZ_NUBE = 'Juez nuevo. Contesta en JSON: {"visto": true o false, "objeto": "..."}.'
+POSES_NUBE = (
+    'Simón nuevo. Solo JSON: {"personas": N, "brazos_arriba": n, "un_brazo": n, "pose_t": n, '
+    '"manos_cabeza": n, "biceps": n, "barbilla": n}.'
+)
+MANOS_NUBE = 'Manos nuevas. Solo JSON: {"manos": ["piedra" | "papel" | "tijera"]}.'
+GESTOS_NUBE = 'Director nuevo de {character}. Contesta en JSON: {"gesto": "..."}.\n{gestures}'
+PETICION_NUBE = 'Haz esto: {request}. Contesta {"gesto": "..."}.'
+
+
+def test_las_piezas_del_juez_y_de_los_gestos_validan_con_su_texto_de_la_app() -> None:
+    ids = (
+        "juez/busqueda",
+        "juez/poses",
+        "juez/piedra_papel_tijera",
+        "gestos/sistema",
+        "gestos/peticion",
+    )
+    for prompt_id in ids:
+        assert prompt_id in BOOK
+        assert BOOK.validate(prompt_id, BOOK.default(prompt_id)) == [], prompt_id
+        assert BOOK.spec(prompt_id).applies == "peticion"
+    assert BOOK.spec("juez/busqueda").group == BOOK.spec("juez/poses").group == "Juez (Gemini)"
+    assert BOOK.spec("gestos/sistema").group == "Gestos"
+    # Lo que necesita el código para entender la respuesta no se puede quitar.
+    assert BOOK.validate("juez/busqueda", "Contesta en JSON si se ve.")
+    assert BOOK.validate("juez/poses", POSES_NUBE.replace('"barbilla": n', ""))
+    assert BOOK.validate("juez/piedra_papel_tijera", MANOS_NUBE.replace('"tijera"', "tijeras"))
+    assert BOOK.validate("gestos/sistema", GESTOS_NUBE.replace("{gestures}", ""))
+
+
+async def test_el_juez_usa_la_version_de_la_nube_y_no_la_de_la_app() -> None:
+    app = await _judge_messages()
+    with cloud_prompts(
+        {
+            "juez/busqueda": JUEZ_NUBE,
+            "juez/poses": POSES_NUBE,
+            "juez/piedra_papel_tijera": MANOS_NUBE,
+        }
+    ):
+        judge = await _judge_messages()
+        rounds = await _referee_messages()
+    assert judge[0]["content"] == JUEZ_NUBE
+    assert judge[1] == app[1]  # la pregunta del reto no cambia
+    assert rounds["poses"][0]["content"] == POSES_NUBE
+    assert rounds["manos"][0]["content"] == MANOS_NUBE
+    sent = json.dumps([judge, rounds], ensure_ascii=False)
+    assert "Eres el juez" not in sent
+    # Al quitarla, vuelve la de la app.
+    assert await _judge_messages() == app
+
+
+async def test_los_gestos_usan_la_version_de_la_nube_y_no_la_de_la_app() -> None:
+    llm = FakeGestureLLM('{"gesto": "wave"}')
+    director, _ = make_director(llm)
+    app_system = director.system_prompt
+    with cloud_prompts({"gestos/sistema": GESTOS_NUBE, "gestos/peticion": PETICION_NUBE}):
+        # Vale desde la siguiente petición, sin catálogo nuevo.
+        await director.choose_requested("tocarse un ojo")
+    system_sent, user_sent = (m["content"] for m in llm.requests[0])
+    assert isinstance(system_sent, str)
+    assert system_sent.startswith("Director nuevo de Sage. Contesta en JSON")
+    assert "\n- wave · Standard" in system_sent  # el catálogo entra por {gestures}
+    assert "Eres el director de gestos" not in system_sent
+    assert user_sent == 'Haz esto: «tocarse un ojo». Contesta {"gesto": "..."}.'
+    assert director.system_prompt == app_system
+
+
+def test_una_version_de_la_nube_que_no_vale_no_se_usa() -> None:
+    warnings = BOOK.set_overrides(
+        {"juez/busqueda": "Sin formato.", "gestos/sistema": "Sin catálogo, en JSON: gesto"}
+    )
+    try:
+        assert len(warnings) == 2
+        assert BOOK.source("juez/busqueda") == BOOK.source("gestos/sistema") == "app"
+        assert BOOK.text("juez/busqueda") == JUDGE_PROMPT
+    finally:
+        BOOK.set_overrides(None)

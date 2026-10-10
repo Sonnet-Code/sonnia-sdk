@@ -22,6 +22,7 @@ import time
 from typing import TYPE_CHECKING, Any, Protocol
 
 from sonia.llm.messages import system, user_with_image
+from sonia.prompts import BOOK, PromptSpec
 from sonia.vision.contracts import JudgeAnswer
 
 if TYPE_CHECKING:
@@ -36,6 +37,7 @@ __all__ = [
     "FallbackJudge",
     "ModelJudge",
     "parse_judge_answer",
+    "prompt_specs",
 ]
 
 logger = logging.getLogger(__name__)
@@ -56,6 +58,29 @@ Eres el juez de un juego de búsqueda en un stand de un evento de tecnología. T
 - "visto" es true solo si en la foto se ve con claridad un objeto que cumple la pregunta. En la duda, false.
 - "objeto" nombra solo el objeto que lo cumple, en español y en menos de seis palabras, por ejemplo "botella azul" o "llaves con llavero rojo". Si "visto" es false, "objeto" va vacío.
 - Nunca describas a las personas: ni la cara, el cuerpo, el pelo, la edad, la piel, el género ni la ropa que llevan puesta. Lo que alguien lleva puesto o colgado (la ropa, las gafas, el pelo, las gorras, el gafete o la credencial con su cordón) no cuenta mientras siga puesto o colgando; sí cuenta si lo sostiene con la mano y lo enseña a la cámara. Si solo cumple la pregunta algo puesto o colgando, "visto" es false."""
+
+#: Id del prompt en el panel (``sonia.prompts``): editable desde la nube.
+JUDGE_PROMPT_ID = "juez/busqueda"
+
+
+def prompt_specs() -> list[PromptSpec]:
+    """El prompt del juez de la búsqueda relámpago, editable desde el panel."""
+    return [
+        PromptSpec(
+            id=JUDGE_PROMPT_ID,
+            group="Juez (Gemini)",
+            title="Búsqueda relámpago: ¿enseñan el objeto a la cámara?",
+            default=lambda: JUDGE_PROMPT,
+            must_contain=("JSON", '"visto"', '"objeto"'),
+            applies="peticion",
+            help=(
+                "Mensaje de sistema del juez de la búsqueda relámpago (Gemini y, si falla, el "
+                "modelo de visión). Con cada foto le llega la pregunta del reto. Tiene que "
+                'seguir pidiendo el JSON con "visto" (true o false) y "objeto": sin eso, '
+                "el juego no entiende la respuesta y la ronda no cuenta. Sin marcadores."
+            ),
+        )
+    ]
 
 
 class _VisionLLM(Protocol):
@@ -157,7 +182,7 @@ class ModelJudge:
             self.calls += 1
             self.total_calls += 1
             messages: list[Message] = [
-                system(JUDGE_PROMPT),
+                system(BOOK.text(JUDGE_PROMPT_ID, JUDGE_PROMPT)),
                 user_with_image(question.strip(), frame),
             ]
             started = time.monotonic()
