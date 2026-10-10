@@ -342,8 +342,26 @@ Cada agente apunta los de su juego en su tabla (además de `start` y `end`). En 
 
 ##### `poses` (Simón dice con poses, `docs/juegos/poses.md`)
 
+`start` lleva además `rounds` (las rondas de la partida). Los eventos propios llevan todos el **estado completo** de la pantalla, el mismo objeto, y `phase` es el nombre del evento:
+
+```json
+{"phase": "result", "round": 2, "rounds": 6, "pose": "brazos_arriba", "label": "Brazos arriba", "meme": "Pasaron todos los tests", "demo": "", "order": "¡Simón dice: pasaron todos los tests, brazos arriba!", "simon": true, "seconds": 0.0, "count": 7, "total": 9, "players": 9, "hint": "", "done": 0, "possible": 0, "fell": 0}
+```
+
+- `pose`: `brazos_arriba`, `un_brazo`, `pose_t`, `manos_cabeza`, `biceps` o `barbilla` (vacío en `placement` y `final`). `label`: la instrucción para la pantalla; `meme`: la frase del meme; `demo`: cómo la demuestra Sonnia (vacío: la pose por código; el nombre de un clip del set, ese clip; `ninguna`, sin demostración). Un `pose` desconocido: pictograma genérico y sin demostración.
+- `order`: la orden tal cual sonó (vacío antes de `command`). `simon`: si dijo «Simón dice» (`false`: ronda trampa).
+- `count` y `total` solo en `result`; `seconds` solo en `window`; `hint` solo en `placement`; `done`, `possible` y `fell` solo en `final`.
+
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `placement` | → Unity | Estado; `players` (cuántos juegan) y `hint` («Un paso atrás: a unos 2 m», «Pónganse delante, a unos 2 m» o vacío). | sí | La gente se coloca (al empezar y si alguien se pega a mitad de partida): vista en vivo grande, cuántos juegan y el aviso. Sin pose de Sonnia. |
+| `round` | → Unity | Estado con `round`, `pose`, `label`, `meme` y `demo`; `order` vacío. | sí | Empieza la ronda: «RONDA 2 DE 6», el pictograma de la pose y Sonnia empieza a demostrarla y la sostiene hasta `result`. |
+| `command` | → Unity | Estado con `order` y `simon`. | sí | Suena la orden: sale su rótulo, tal cual se dijo (no revela si es trampa). |
+| `window` | → Unity | Estado con `seconds` (`GAME_POSES_WINDOW_SECONDS`). | sí | Terminó la orden y se abre la ventana en la que se cuenta: contador circular de `seconds`. |
+| `result` | → Unity | Estado con `count` de `total`. | sí | Resultado de la ronda: «7 de 9» o, si `simon` es `false`, «¡Cayeron 4!» («¡Nadie cayó!» con 0). Sonnia suelta la pose. |
+| `final` | → Unity | Estado con `done` de `possible` (jugadas bien hechas del grupo: la pose con «Simón dice» y quedarse quieto en las trampas) y `fell` (caídos en las trampas). | sí | El total del grupo y la celebración. Después llega `end` con `result: win` y el mismo `data`. |
+
+Unity no manda `game_event` en este juego.
 
 ##### `akinator` (Akinator dev, `docs/juegos/akinator.md`)
 
