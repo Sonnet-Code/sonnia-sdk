@@ -508,8 +508,21 @@ class PptGame(Game):
             index = max(i for i, s in enumerate(samples) if s.shape is found)
             reason = ""
             local, photo = samples[index], frames[index]
-        # Al juez, el frame de la lectura estable (la jugada ya quieta tras el «¡ya!») o el de
-        # ``soft_end``; solo sin ningún frame de la cámara se queda lo local sin preguntar.
+        # Al juez, el frame más reciente en el que lo local vio una mano (aunque no la
+        # entendiera): en el stand agitan el puño con la cuenta y sacan la mano tarde, así que
+        # el puño va al principio y la forma final se sostiene al final. Sin ninguna mano vista,
+        # el de la lectura estable o el de ``soft_end``; solo sin ningún frame de la cámara se
+        # queda lo local sin preguntar.
+        seen_frame = next(
+            (
+                f
+                for s, f in zip(reversed(samples), reversed(frames), strict=True)
+                if s.seen and f is not None
+            ),
+            None,
+        )
+        if seen_frame is not None:
+            photo = seen_frame
         judged = await self._judged(
             local, reason, samples, photo if photo is not None else last_frame
         )

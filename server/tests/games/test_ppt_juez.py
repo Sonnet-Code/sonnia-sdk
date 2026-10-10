@@ -231,6 +231,27 @@ async def read_with_soft_end(game: PptGame, host: FakeGameHost, stream: TimedStr
     return result, soft
 
 
+async def test_al_juez_va_el_frame_mas_reciente_con_mano_no_el_del_puno_de_la_cuenta() -> None:
+    """Puño estable al principio (la cuenta) y papel al final: al juez le llega el del papel."""
+    rock, late = HandShape.ROCK, 11  # la lectura 11 cae justo en soft_end (0,8 s a 0,08 s)
+
+    def fist_then_paper(game: PptGame) -> list[HandReading]:
+        if hands.reads < late:
+            return [hand(rock)]
+        return [hand(PAPER)] if hands.reads == late else []
+
+    for verdict, expected in ((HandVerdict((PAPER,)), PAPER), (None, rock)):
+        referee = PlanReferee(lambda game, verdict=verdict: verdict)  # type: ignore[misc]
+        stream = CountingStream()
+        game, host, hands = make_judged(fist_then_paper, referee, stream=stream)
+        assert await host.stream.acquire(PptGame.id)
+        sample, reason = await game._read(host.now())
+        # Lo local se queda con el puño estable; el juez ve el frame del papel y manda.
+        assert (sample.shape, reason) == (expected, "")
+        assert [int(frame[0, 0, 0]) for frame in referee.frames] == [late]
+        assert stream.count > late
+
+
 async def test_sin_jugada_estable_va_el_frame_de_soft_end() -> None:
     referee = PlanReferee(lambda game: HandVerdict((PAPER,)))
     stream = TimedStream()
