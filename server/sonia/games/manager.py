@@ -511,7 +511,8 @@ class GameManager:
         self._last_activity = now
         self._screen_started = False
         self._nudge_at = 0.0
-        self._delegated_at = float("-inf")
+        # ``_delegated_at`` no se olvida: el turno que pidió el juego delegó start_game y,
+        # si se olvidara, su final de turno daría un empujón de más (banco de pruebas).
         self._tick_failures = 0
         self._pending = None
         self._engine.touch()
