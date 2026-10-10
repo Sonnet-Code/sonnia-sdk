@@ -28,7 +28,7 @@ equipo son fotos reducidas, sin guardarlas, hacia un modelo de visión:
 | `GameReferee` | `referee.py` (`GeminiReferee`) | El juez de las rondas de Simón dice y de piedra, papel o tijera: una foto por ronda a Gemini, con respuesta en JSON (`PoseVerdict`, `HandVerdict`). Sin él, `NoReferee`. |
 | Dibujos | `overlay.py` | Esqueletos (verde o gris), manos, cajas, marcas ✓ y ✗ y etiquetas para la vista en vivo. |
 | Modelos | `models.py` | Descarga con revisión fijada y SHA-256, y carga con el motor clásico de `cv2.dnn`. |
-| Montaje | `games.py` (`build_game_vision`) | Monta todo con `VISION_SOURCE=opencv` y elige el juez (`GAMES_JUDGE`); si algo falta, esa pieza dice que no está disponible. |
+| Montaje | `games.py` (`build_game_vision`) | Monta todo con `VISION_SOURCE=opencv` y el juez (`GAMES_JUDGE` al arrancar, cambiable desde el panel con `games_judge`: `JudgeSwitch`, `SwitchedReferee`, `SwitchedJudge`); si algo falta, esa pieza dice que no está disponible. |
 
 Sin cámara USB (`VISION_SOURCE` distinto de `opencv`), sin los modelos o sin una Unity que anuncie
 `camera_preview`, la pieza correspondiente dice que no está disponible y los juegos de cámara no se
@@ -99,7 +99,7 @@ quién juega y el momento de la foto, y es la que decide si Gemini no contesta.
 
 | Ajuste | Por defecto | Qué hace |
 |---|---|---|
-| `GAMES_JUDGE` | `gemini` | `gemini`: las rondas de Simón dice y de piedra, papel o tijera y las miradas de la búsqueda las juzga Gemini. `local`: como antes, todo en el equipo y la búsqueda con el modelo de visión (`LLM_*`). |
+| `GAMES_JUDGE` | `gemini` | El juez con el que arranca la app. `gemini`: las rondas de Simón dice y de piedra, papel o tijera y las miradas de la búsqueda las juzga Gemini. `local`: como antes, todo en el equipo y la búsqueda con el modelo de visión (`LLM_*`). Se cambia desde el panel con `games_judge`, sin tocar archivos (abajo). |
 | `GAMES_JUDGE_TIMEOUT_SECONDS` | 4 | Plazo de Gemini en Simón dice, en piedra, papel o tijera y en cada mirada de la búsqueda; en la búsqueda, si Gemini no contesta, el modelo de visión tiene lo que queda de los 8 s que espera el juego (`JUDGE_TIMEOUT_S`). |
 
 **Qué decide en cada juego:**
@@ -137,12 +137,33 @@ quién juega y el momento de la foto, y es la que decide si Gemini no contesta.
   Nunca lanza. Lo que tarda cada foto va al registro.
 - **Al arrancar**, el registro dice qué juez se usa; al apagar, `close()` cierra su cliente HTTP.
 
+**Cambiarlo desde el panel, en caliente.** Encargo de Jean del 10 de octubre de 2026 («quiero poder
+modificar los juegos desde la nube»): se cambia desde el panel con `games_judge`, sin tocar archivos.
+El selector «Juez de las rondas de cámara» de la tarjeta Juegos (`set_game_judge`, `docs/panel.md`)
+guarda el ajuste compartido `games_judge` (`gemini`, `local` o `null` para el de la app), que manda
+sobre `GAMES_JUDGE` en todas las Sonnias, al momento y con una partida en marcha incluida. Si Gemini va
+lento o falla, se pone Local.
+- Con `GEMINI_API_KEY`, el cliente de Gemini se monta **siempre**, también con `GAMES_JUDGE=local`:
+  `GAMES_JUDGE` es solo el modo de arranque. Hasta que se elige Gemini no sale ninguna foto hacia él.
+- `GameVision.judge_switch` (`JudgeSwitch`, en `contracts.py`) dice quién juzga: el modo pedido desde
+  el panel o el de la app y, sin Gemini, siempre `local`. `referee` y `judge` son envoltorios
+  (`SwitchedReferee` y `SwitchedJudge`, en `games.py`) que miran el modo en cada llamada: con
+  `gemini`, `GeminiReferee` y la búsqueda de siempre (`FallbackJudge`, o Gemini solo si no hay
+  modelo de visión); con `local`, `NoReferee` y el `ModelJudge` del modelo de visión (o `NoJudge`).
+  `start_round` va a los dos jueces de la búsqueda, para que el tope de fotos cuadre si se cambia a
+  media ronda. Los juegos ya miran `available` en cada ronda: el cambio vale desde la siguiente.
+- Sin clave de Gemini no se puede elegir `gemini`: el modo efectivo es `local` y el estado lo dice.
+- `GameManager.set_judge` (`None` vuelve al de la app), `snapshot()["judge"]` (`{"mode": efectivo,
+  "app": GAMES_JUDGE, "requested": el del panel o null, "gemini": hay Gemini}`), la capacidad
+  `game_judge` y `normalize_games_judge` (en `sonia.games`).
+
 **Vueltas a lo local:**
 
 | Caso | Qué pasa |
 |---|---|
 | `GAMES_JUDGE=local` | `NoReferee`: Simón dice y piedra, papel o tijera deciden en el equipo, sin fotos ni aviso; la búsqueda, con el modelo de visión (`LLM_*`) o sin juez si no hay. |
-| Sin `GEMINI_API_KEY`, o los gestos apuntan a otro servidor | Lo mismo que `local`. |
+| Sin `GEMINI_API_KEY`, o los gestos apuntan a otro servidor | Lo mismo que `local`, aunque el panel pida Gemini (`games_judge`): el estado lo dice. |
+| `games_judge=local` desde el panel | Lo mismo que `GAMES_JUDGE=local`, al momento y en todas las Sonnias. |
 | Gemini no contesta en el plazo, falla o el JSON no cuadra | Esa ronda la decide la detección local, como antes. En la búsqueda, la misma pregunta va al modelo de visión (`LLM_*`) con una foto nueva (`FallbackJudge`): un 429 de la clave de Gemini, que también usan los gestos todo el día, no deja la búsqueda sin juez. Sin foto o con el tope de la ronda alcanzado no se repite, y el tope cuenta preguntas, no llamadas. |
 
 **Aviso de espera.** Mientras el juez mira, la pantalla enseña la pastilla de espera (`busy` con tipo

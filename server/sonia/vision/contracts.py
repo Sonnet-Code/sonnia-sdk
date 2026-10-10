@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 import numpy as np
 
@@ -50,7 +50,10 @@ __all__ = [
     "HandReading",
     "HandShape",
     "HandVerdict",
+    "JUDGE_MODES",
     "JudgeAnswer",
+    "JudgeMode",
+    "JudgeSwitch",
     "NoReferee",
     "Overlay",
     "Person",
@@ -61,6 +64,7 @@ __all__ = [
     "PreviewStreamer",
     "Side",
     "VisionJudge",
+    "judge_mode",
 ]
 
 #: Los 17 puntos del cuerpo, en el orden COCO que dan los modelos de pose.
@@ -349,3 +353,72 @@ class GameVision:
     close: Callable[[], Awaitable[None]] = field(default=_nothing_to_close)
     #: Juez de las rondas de Simón dice y de piedra, papel o tijera (``GAMES_JUDGE``).
     referee: GameReferee = field(default_factory=NoReferee)
+    #: Quién juzga ahora las rondas de cámara (``referee`` y ``judge`` lo miran en cada
+    #: llamada): lo cambia el panel (``games_judge``). ``None``: no se puede cambiar.
+    judge_switch: JudgeSwitch | None = None
+
+
+#: Quién juzga las rondas de cámara: Gemini, con una foto por ronda, o lo local.
+JudgeMode = Literal["gemini", "local"]
+
+JUDGE_MODES: tuple[JudgeMode, ...] = ("gemini", "local")
+
+
+def judge_mode(value: Any) -> JudgeMode | None:
+    """``gemini`` o ``local`` (sin mayúsculas ni espacios de más); ``None`` si no es ninguno."""
+    if not isinstance(value, str):
+        return None
+    mode = value.strip().lower()
+    if mode == "gemini":
+        return "gemini"
+    if mode == "local":
+        return "local"
+    return None
+
+
+class JudgeSwitch:
+    """El juez de las rondas de cámara que manda ahora (``docs/juegos-vision.md``).
+
+    ``app_mode`` es el de ``GAMES_JUDGE``; el panel pide otro con :meth:`set_mode` (ajuste
+    compartido ``games_judge``) y ``None`` vuelve al de la app. Sin Gemini (``gemini=False``:
+    falta ``GEMINI_API_KEY``) el modo efectivo es siempre ``local``. Lo miran los envoltorios
+    del juez en cada llamada (``sonia.vision.games``), así que el cambio vale al momento,
+    también con una partida en marcha: desde la siguiente foto.
+    """
+
+    def __init__(self, app_mode: Any = "gemini", *, gemini: bool) -> None:
+        self._app: JudgeMode = judge_mode(app_mode) or "gemini"
+        self._gemini = bool(gemini)
+        self._requested: JudgeMode | None = None
+
+    @property
+    def mode(self) -> JudgeMode:
+        """El que juzga ahora: el pedido desde el panel o el de la app, y sin Gemini, ``local``."""
+        wanted = self._requested or self._app
+        return wanted if self._gemini else "local"
+
+    @property
+    def app_mode(self) -> JudgeMode:
+        return self._app
+
+    @property
+    def requested(self) -> JudgeMode | None:
+        return self._requested
+
+    @property
+    def gemini_available(self) -> bool:
+        return self._gemini
+
+    def set_mode(self, mode: Any) -> JudgeMode:
+        """Pide ``gemini`` o ``local`` (``None`` u otra cosa: el de la app). Devuelve el efectivo."""
+        self._requested = judge_mode(mode)
+        return self.mode
+
+    def state(self) -> dict[str, Any]:
+        """Para el panel: ``{"mode", "app", "requested", "gemini"}`` (tipos JSON)."""
+        return {
+            "mode": self.mode,
+            "app": self._app,
+            "requested": self._requested,
+            "gemini": self._gemini,
+        }

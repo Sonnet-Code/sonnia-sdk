@@ -39,7 +39,7 @@ from sonia.actions.registry import ActionRegistry
 from sonia.clock import resolve_timezone
 from sonia.config import Settings
 from sonia.games.banks import is_bank_id
-from sonia.games.manager import normalize_game_banks, normalize_games_off
+from sonia.games.manager import normalize_game_banks, normalize_games_judge, normalize_games_off
 from sonia.showcase import ATTENTION_DANCE, ATTENTION_FOURTH_WALL, load_lines
 from sonia.types import ActionContext
 from sonia.ws import protocol as p
@@ -116,7 +116,7 @@ CAPABILITIES = [
 #: Ajustes que se guardan en la nube y comparten todas las Sonnias. El modo, el
 #: modo debug y el gasto no están: son de cada equipo. Las Sonnias anteriores
 #: ignoran los que no conocen (``games_off``, ``game_banks`` y ``games_pose_model``
-#: llegaron con los juegos).
+#: llegaron con los juegos, y ``games_judge`` con el juez de Gemini).
 SHARED_SETTINGS: tuple[str, ...] = (
     "away_message",
     "notes",
@@ -133,6 +133,7 @@ SHARED_SETTINGS: tuple[str, ...] = (
     "games_off",
     "game_banks",
     "games_pose_model",
+    "games_judge",
 )
 
 #: Variantes del modelo de poses que se pueden elegir en el panel, si la visión de los
@@ -141,6 +142,9 @@ POSE_MODEL_VARIANTS: tuple[str, ...] = ("n", "s")
 
 #: Cómo se llama cada modelo de poses en los mensajes del panel.
 POSE_MODEL_NAMES = {"n": "ligero (n)", "s": "preciso (s, más CPU)"}
+
+#: Cómo se llama cada juez de las rondas de cámara en los mensajes del panel.
+GAMES_JUDGE_NAMES = {"gemini": "Gemini", "local": "local (todo en el equipo)"}
 
 #: Ajustes de «Developer»: grupo -> valor -> (mínimo, máximo, por defecto). La
 #: boca y el movimiento en reposo van en multiplicadores de lo que trae la escena
@@ -285,6 +289,10 @@ class PanelState:
     #: Modelo de poses elegido en el panel (``n`` ligero o ``s`` preciso); ``None``: el de
     #: la app (``GAME_POSES_MODEL``). Brian y Mariel no pueden tocar el ``.env`` del stand.
     games_pose_model: str | None = None
+    #: Juez de las rondas de cámara elegido en el panel (``gemini`` o ``local``); ``None``:
+    #: el de la app (``GAMES_JUDGE``). Si Gemini va lento o falla, se pasa a local sin tocar
+    #: el ``.env``.
+    games_judge: str | None = None
     #: Modo debug: Sonnia quieta (sin GPT-Live ni nada automático) para pruebas visuales.
     debug: bool = False
     #: Gasto del día: segundos de sesión de GPT-Live acumulados en ``usage_date``
@@ -330,6 +338,8 @@ class PanelState:
             state.games_pose_model = _normalize_shared(
                 "games_pose_model", raw.get("games_pose_model")
             )
+        with contextlib.suppress(ValueError):
+            state.games_judge = _normalize_shared("games_judge", raw.get("games_judge"))
         for name in ("volume", "mic_gate", "usage_seconds", "trial_seconds"):
             value = raw.get(name)
             if _is_number(value):
@@ -539,6 +549,7 @@ class StandControl:
             await games.set_games_off(state.games_off)
             games.use_cloud_banks(state.game_banks)
             self._apply_pose_model(state.games_pose_model)
+            self._apply_games_judge(state.games_judge)
             self._spawn(self._refresh_game_phrases(), "game-phrases")
         await self._hub.set_sticky("volume", p.msg_set_volume(state.volume))
         await self._hub.set_sticky("subtitles", p.msg_set_subtitles(state.subtitles))
@@ -1284,6 +1295,40 @@ class StandControl:
         except Exception:  # noqa: BLE001 - un modelo que no carga no tumba el panel
             logger.exception("No se pudo cambiar el modelo de poses a %s", model)
 
+    async def _act_set_game_judge(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Juez de las rondas de cámara» (``games_judge``, en todas las Sonnias): ``gemini``,
+        ``local`` o vacío para volver al de la app (``GAMES_JUDGE``). Vale al momento, también
+        con una partida en marcha."""
+        games = self._need_games()
+        raw = params.get("judge")
+        if raw in (None, "", "app"):
+            if self.state.games_judge is None:
+                return True, "Las rondas de cámara ya usan el juez que trae la app."
+            await self._set_shared("games_judge", None)
+            return (
+                True,
+                "Las rondas de cámara vuelven al juez que trae la app, en todas las Sonnias.",
+            )
+        mode = normalize_games_judge(raw)
+        if mode is None:
+            raise _BadRequest("Juez no válido: Gemini o local.")
+        await self._set_shared("games_judge", mode)
+        message = f"Juez de las rondas de cámara: {GAMES_JUDGE_NAMES[mode]}, en todas las Sonnias."
+        judge = games.snapshot().get("judge")
+        if mode == "gemini" and isinstance(judge, dict) and judge.get("gemini") is False:
+            message += " Esta Sonnia no tiene Gemini (le falta la clave): aquí sigue en local."
+        return True, message
+
+    def _apply_games_judge(self, mode: str | None) -> None:
+        """El juez de las rondas a los juegos (``None``: el de ``GAMES_JUDGE``)."""
+        games = self._games
+        if games is None:
+            return
+        try:
+            games.set_judge(mode)
+        except Exception:  # noqa: BLE001 - el panel no tumba el motor
+            logger.exception("No se pudo cambiar el juez de las rondas a %s", mode)
+
     async def _act_game_bank(self, params: dict[str, Any]) -> tuple[bool, str]:
         """Un banco de los juegos en uso (el de la nube o el de la app), entero en el mensaje."""
         games = self._need_games()
@@ -1529,6 +1574,9 @@ class StandControl:
         elif key == "games_pose_model":
             state.games_pose_model = value
             self._apply_pose_model(value)
+        elif key == "games_judge":
+            state.games_judge = value
+            self._apply_games_judge(value)
         else:  # pragma: no cover - SHARED_SETTINGS y esto van juntos
             raise ValueError(f"Ajuste desconocido: {key}")
 
@@ -1720,6 +1768,9 @@ class StandControl:
             "games": snap.get("games") or {"enabled": False},
             # El modelo de poses guardado en el panel (``None``: el de la app).
             "games_pose_model": self.state.games_pose_model,
+            # El juez de las rondas de cámara guardado en el panel (``None``: el de la app);
+            # el que juzga ahora va en ``games.judge``.
+            "games_judge": self.state.games_judge,
             "gesture_director": snap.get("gestures"),
             "settings_sync": self._settings_sync(),
             "last_error": snap.get("last_error") or None,
@@ -2000,6 +2051,13 @@ def _normalize_shared(key: str, value: Any) -> Any:
         if model is None:
             raise ValueError(key)
         return model
+    if key == "games_judge":
+        if value is None:
+            return None
+        mode = normalize_games_judge(value)
+        if mode is None:
+            raise ValueError(key)
+        return mode
     raise ValueError(key)
 
 
