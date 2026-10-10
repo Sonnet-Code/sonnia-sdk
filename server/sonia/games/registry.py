@@ -99,7 +99,11 @@ def games_line_for(names: Sequence[str]) -> str:
     if not names:
         return ""
     listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" y {names[-1]}"
+    # Sin «nunca lo juegues por tu cuenta», con el Akinator GPT-Live jugaba solo al de
+    # personajes sin delegar nada (banco de pruebas con la API real, 10 de octubre de 2026);
+    # y con una despedida («ya está, gracias») no terminaba el juego.
     return (
-        f"- Juegos en tu pantalla: {listed}. Delega empezarlos y terminarlos; las reglas te "
-        "llegan al empezar."
+        f"- Juegos en tu pantalla: {listed}. Si quieren jugar a uno, delega empezarlo en ese "
+        "mismo turno y nunca lo juegues por tu cuenta: sin delegar no sale en tu pantalla ni hay "
+        "juego. Si lo dejan o se despiden, delega terminarlo. Las reglas te llegan al empezar."
     )

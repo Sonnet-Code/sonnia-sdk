@@ -921,10 +921,14 @@ async def test_volver_a_pedirlo_con_la_partida_en_marcha_da_la_ronda_de_ahora() 
     assert "No hace falta empezarla otra vez" in script
 
 
-async def test_no_pide_empujones_ni_entiende_al_visitante() -> None:
+async def test_empujones_para_comprobar_o_parar_sin_entender_al_visitante() -> None:
+    # Si hablan y no se delega nada: entre rondas, solo parar; en plena ronda, comprobar o
+    # parar (en las pruebas con la API real, «Bueno, paramos» no terminaba el juego).
     game, host, _ = new_game()
     await game.start("voice", {})
-    assert game.nudge() is None
+    assert game.nudge() == t.NUDGE_STOP
+    await go(game, host)
+    assert game.nudge() == t.NUDGE_RUNNING
     game.on_user_text(host.now())
     game.on_user_turn_end(host.now(), host.now() - 1)
     game.on_delegation(host.now())

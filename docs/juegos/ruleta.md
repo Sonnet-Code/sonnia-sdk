@@ -33,7 +33,7 @@ Cuenta como **reto superado** acertar (trivia, adivinanza, Sonnet Code) o sacar 
 
 Reglas para GPT-Live (al empezar): la ruleta la gira la pantalla y no adivina el reto; cada respuesta se delega y en la pantalla nada cambia sin delegar; lo que hablan entre ellos no es una respuesta; tras cada reto, otra vuelta o terminar; sin premios. Al terminar, el manager le dice que vuelva a conversar con normalidad.
 
-**Empujones** (`nudge`): si el visitante habla en pleno reto o tras el resultado y en `GAMES_NUDGE_SECONDS` no se delegó nada, se le recuerda que delegue (la respuesta, la nota, la predicción, otra vuelta o terminar), o que calle si solo charlaba. Mientras explica una tecnología, no.
+**Empujones** (`nudge`): si el visitante habla en pleno reto o tras el resultado y en `GAMES_NUDGE_SECONDS` no se delegó nada, se le recuerda con una orden corta que delegue (la respuesta sin decir si acierta, otra vuelta o terminar); mientras gira, solo terminar. Despedirse («ya está, gracias», «hasta luego») cuenta como terminar: en las pruebas con la API real Sonnia contestaba «¡De nada!» y el juego seguía. Mientras explica una tecnología, no. Los guiones tras cada jugada piden una frase corta, para que calle antes (interrumpirla mientras lee un resultado es donde más fallaba), y en las adivinanzas y preguntas con la respuesta en la mano se le repite que no diga si acierta sin delegarlo.
 
 ## Acciones de GPT-Live
 

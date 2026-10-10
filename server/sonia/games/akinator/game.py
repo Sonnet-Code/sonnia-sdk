@@ -37,12 +37,14 @@ from typing import Any, ClassVar, Literal
 from sonia.actions.games import game_action
 from sonia.games.akinator.bank import THEMES, Theme, normalize, theme_names
 from sonia.games.akinator.prompts import (
+    ASKING_NUDGE,
     EARLY_GUESS_SCRIPT,
     FEW_LEFT_TEXT,
     GIVEUP_NUDGE,
     GIVEUP_REASON_MISS,
     GIVEUP_SCRIPT,
     GUESS_NUDGE,
+    GUESS_REMIND_TEXT,
     GUESS_SCRIPT,
     LAST_QUESTION_TEXT,
     LIMIT_NUDGE,
@@ -81,6 +83,14 @@ MIN_MAX_QUESTIONS = 5
 #: Hasta que pasa esto desde el arranque, lo que se oye no es el aviso del visitante: puede
 #: ser la transcripción tardía de su petición («jugamos al Akinator»).
 READY_GRACE_S = 1.0
+
+#: Un turno del visitante más largo que esto (además del hueco con el que se cierra el turno)
+#: no es un «sí» o un «no»: puede que lo deje o diga qué era, y entonces hay empujón.
+LONG_TURN_S = 1.0
+
+#: Con la respuesta de Sonia en la pantalla, a los tantos segundos sin resultado y habiendo
+#: hablado el visitante, se le recuerda una vez que lo delegue.
+GUESS_REMIND_S = 20.0
 
 #: Largo máximo de lo que se enseña en la tarjeta.
 QUESTION_CHARS = 120
@@ -174,6 +184,12 @@ class AkinatorGame(Game):
         self._warned_last = False
         self._outcome = ""
         self._answer = ""
+        #: El último turno del visitante fue largo (no un «sí» o un «no»).
+        self._long_turn = False
+        #: Cuándo arriesgó, si el visitante habló después y si ya se le recordó el resultado.
+        self._guess_at = 0.0
+        self._heard_since_guess = False
+        self._guess_reminded = False
 
     # -- lo que declara el juego ----------------------------------------------
 
@@ -355,19 +371,45 @@ class AkinatorGame(Game):
         if count >= self._max and not self._warned_last:
             self._warned_last = True
             text = LAST_QUESTION_TEXT.format(max=self._max)
-            self.host.spawn(self.host.instruct(text), "ultima-pregunta")
+            self.host.spawn(self._note_when_quiet(text), "ultima-pregunta")
         elif self._max >= 10 and count == self._max - 5 and not self._warned_few:
             self._warned_few = True
             text = FEW_LEFT_TEXT.format(asked=count, max=self._max)
-            self.host.spawn(self.host.instruct(text), "quedan-pocas")
+            self.host.spawn(self._note_when_quiet(text), "quedan-pocas")
+
+    async def _note_when_quiet(self, text: str) -> None:
+        """Una nota silenciosa solo con Sonia callada y sin que hable el visitante: un
+        ``instructions.append`` justo cuando alguien habla estorba la decisión de delegar (lo
+        vio la revisión: estos avisos salían mientras hablaba Sonia, desde lo que va diciendo)."""
+        await self.host.wait_idle()
+        await self.host.instruct(text)
 
     def on_user_text(self, now: float) -> None:
         if not self._ready and now - self._started_at >= READY_GRACE_S:
             self._ready = True
+        if self._phase == "guessing":
+            self._heard_since_guess = True
 
     def on_user_turn_end(self, now: float, started_at: float) -> None:
         if self._ready and self._phase != "revealed":
             self._answers += 1
+        # La duración del turno, no lo que dijo (no se parsea al visitante): el turno se cierra
+        # tras ``LIVE_USER_TURN_GAP_MS`` sin transcripción.
+        gap = self.host.settings.live.user_turn_gap_ms / 1000.0
+        self._long_turn = now - started_at >= gap + LONG_TURN_S
+
+    async def tick(self, now: float) -> None:
+        """Con la respuesta en la pantalla y sin resultado, un recordatorio (una vez)."""
+        if (
+            self._phase == "guessing"
+            and not self._guess_reminded
+            and self._heard_since_guess
+            and now - self._guess_at >= GUESS_REMIND_S
+            and self.host.quiet_for() >= 1.0
+        ):
+            self._guess_reminded = True
+            logger.info("Akinator: «%s» sigue sin resultado; se le recuerda", self._guess)
+            self.host.spawn(self.host.speak(GUESS_REMIND_TEXT), "recuerda-resultado")
 
     def _evidence(self) -> int:
         """Cuántas preguntas van, por lo que se sabe seguro: las contadas en la transcripción
@@ -386,6 +428,8 @@ class AkinatorGame(Game):
             return GIVEUP_NUDGE
         if self._phase in ("waiting", "asking") and self._counter.count >= self._max:
             return LIMIT_NUDGE.format(max=self._max)
+        if self._phase == "asking" and self._long_turn:
+            return ASKING_NUDGE
         return None
 
     # -- las jugadas ------------------------------------------------------------
@@ -417,6 +461,9 @@ class AkinatorGame(Game):
                 self._misses.append(self._guess)
             self._guess = answer
             self._phase = "guessing"
+            self._guess_at = self.host.now()
+            self._heard_since_guess = False
+            self._guess_reminded = False
             logger.info("Akinator: arriesga «%s» tras %d preguntas", answer, self._asked)
             await self._emit("guess")
         return GUESS_SCRIPT.format(answer=answer)

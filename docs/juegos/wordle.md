@@ -108,7 +108,8 @@ Los comunes (`GAMES_*`): `GAMES_NUDGE_SECONDS` (3), `GAMES_RESULT_SECONDS` (4) y
 
 ## Robustez
 
-- **El empujón.** Si el grupo habla y en 3 s no se delega nada, con Sonnia callada, se le pasa por `commentary` que, si dijeron una palabra, la delegue ya (decirlo no basta: el tablero solo cambia si delegas); si solo charlaban, que no diga nada. Las reglas ya le avisan: «en la pantalla nada cambia si no lo delegas».
+- **El empujón.** Si el grupo habla y en 3 s no se delega nada, con Sonnia callada, se le pasa por `commentary` una orden corta: si dijeron una palabra, que delegue ya el intento; si pidieron parar o se despidieron, que termine el juego (el manager añade que, si no, siga sin decir nada y que es una nota interna: en las pruebas con Unity, el empujón largo lo leía en voz alta). Las reglas ya le avisan: «en la pantalla nada cambia si no lo delegas».
+- **La palabra que llega rara** (pruebas con la API real, 10 de octubre de 2026). Gritada mientras Sonnia habla llegaba deformada («Cafka», «Redi») y el backend ponía `no_lo_dijo` o la rechazaba él mismo por no tener cinco letras, sin sacudir la fila. Ahora las reglas le piden a Sonnia escribir las palabras tech como se escriben y, si no, tal como las oyó; y la descripción de `wordle_guess` le pide al backend pasarla siempre tal cual (`no_lo_dijo` solo si no hay ninguna): el juego la valida.
 - **Una jugada a la vez.** Dos `wordle_guess` que llegan juntos se hacen uno tras otro (probado con una pantalla lenta).
 - **Fuera de turno.** Sin partida, con el resultado ya en pantalla o tras ganar o perder, el guion lo dice: nunca hay excepción. Los argumentos raros (`None`, un número, sin `palabra`) se tratan como «no se entendió ninguna palabra».
 - **Abandono, sesión caída y Unity.** Como dice el contrato (`docs/juegos.md`): la partida se cancela, Unity retira la pantalla y GPT-Live vuelve a conversar. Una Unity que no anuncia el juego no lo ofrece.
