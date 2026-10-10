@@ -276,22 +276,46 @@ el invitado) pidiendo sesión a la vez, el segundo
 acababa en `NullReferenceException`. `GeniesSession` hace que todos (los
 cargadores y el editor de personaje) esperen al mismo intento.
 
-NAF guarda su caché de piezas en `cache/`, junto a `Sonnia.app` (la carpeta de
-trabajo de la app): la carpeta de la app tiene que poder escribirse. La primera
-vez descarga las piezas de Sonia, del invitado y de la gorra de referencia de la
-trivia (unos 90 MB con las texturas de alta resolución); después arranca sin
-descargar.
+**La caché de Genies.** NAF guarda su caché de piezas en `cache`, relativo a la
+carpeta de trabajo (`NafAssetResolverConfig.cachePath`). La primera vez descarga
+las piezas de Sonia, del invitado y de la gorra de referencia de la trivia (unos
+135 MB con las texturas de alta resolución); después arranca sin descargar.
+
+En la app, la carpeta de trabajo era la que contiene `Sonnia.app` (en Windows, la
+del `.exe`). Eso traía dos problemas:
+- cada versión descomprimida en otro sitio volvía a bajarlo todo;
+- si esa carpeta no se podía escribir, Genies no entregaba el avatar y salía el
+  doble.
+
+Lo segundo pasó en el stand el 10 de octubre de 2026. macOS abría la app
+«traslocada»: las apps descargadas (zip por internet o AirDrop) que se abren sin
+moverlas con el Finder se ejecutan desde una copia de solo lectura, y el
+`Player.log` empieza con `/private/var/folders/.../AppTranslocation/...`. Se
+reproduce montando la app en una imagen de disco de solo lectura.
+
+Desde entonces `GeniesCacheFolder` fija la carpeta de trabajo de la app (en el
+editor no) en una carpeta propia, antes de que nada use Genies:
+- macOS: `~/Library/Application Support/Sonia/genies`;
+- Windows: `%LOCALAPPDATA%\Sonia\genies`.
+
+La caché vale para todas las versiones, se abra la app desde donde se abra. La
+primera vez, si junto a la app había una caché de una versión anterior, la copia
+ahí. El registro dice dónde está («Caché de Genies en …») y avisa si macOS ejecuta
+la app traslocada.
+
+Las versiones anteriores a esta necesitan su carpeta escribible: hay que mover
+`Sonnia.app` con el Finder a una carpeta normal (mejor la de la versión anterior,
+que tiene su `cache`) y aceptar los permisos que pida.
 
 Esa primera carga puede pasar de los 90 s de cada paso del cargador. Mientras no
 hay ningún avatar del SDK puesto, `GeniesAvatarLoader` la espera hasta una hora
 sin abandonarla (no se sabe cómo será la red del DevFest) y deja en el registro
-cómo va cada 90 s; mientras tanto se ve el doble. Antes la abandonaba a los 90 s y
-pedía otra que competía con la primera: en el primer PC con Windows (7 de octubre
-de 2026) se quedó en el doble hasta que se reabrió la app, y entonces montó en
-segundos. Aun así, conviene:
-- abrir la app una vez en el equipo del stand antes del evento, con internet;
-- al cambiar de build, copiar la carpeta `cache/` de la anterior a la nueva, para
-  no descargar las piezas otra vez.
+cómo va cada 90 s. Mientras tanto se ve el doble.
+
+Antes la abandonaba a los 90 s y pedía otra que competía con la primera. En el
+primer PC con Windows (7 de octubre de 2026) se quedó en el doble hasta que se
+reabrió la app, y entonces montó en segundos. Aun así, conviene abrir la app una
+vez en el equipo del stand antes del evento, con internet.
 
 El post-procesado (Volume con ACES y bloom) se ve también en la app: en
 `UniversalRenderPipelineGlobalSettings` está desactivado «Strip Unused Post
