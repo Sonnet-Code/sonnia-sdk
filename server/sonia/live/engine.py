@@ -179,7 +179,7 @@ AGENDA_CHANGED_TEMPLATE = (
     "La agenda oficial del DevFest acaba de cambiar en su web (mandan estos cambios sobre la "
     "agenda que tienes): {changes}"
 )
-AGENDA_MORE_TEXT = " Hay más cambios: si te preguntan por otra charla, consulta la agenda."
+AGENDA_MORE_TEXT = "Hay más cambios: si te preguntan por otra charla, consulta la agenda."
 
 #: Nivel RMS (0..1) a partir del cual un trozo de la voz de GPT-Live es voz.
 #: GPT-Live manda audio sin parar, también cuando calla (silencio digital, 0):
@@ -689,7 +689,11 @@ class LiveEngine:
             return
         try:
             # ``instructions.append`` no la hace hablar; ``commentary`` sí.
-            await client.append_commentary(TEXT_INPUT_TEMPLATE.format(text=text))
+            await client.append_commentary(
+                BOOK.render(
+                    "conversacion/notas/texto_escrito", fallback=TEXT_INPUT_TEMPLATE, text=text
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             _log_stage_failure("No se pudo pasar el texto a GPT-Live: %s", exc)
             return
@@ -1366,7 +1370,9 @@ class LiveEngine:
         )
         if delegation is not None:
             self._finish_delegation(delegation)
-        await self.speak(DELEGATION_FAILED_TEXT)
+        await self.speak(
+            BOOK.text("conversacion/notas/delegacion_fallida", fallback=DELEGATION_FAILED_TEXT)
+        )
 
     def _finish_delegation(self, delegation: _Delegation) -> None:
         self._delegations.pop(delegation.id, None)
@@ -1431,7 +1437,9 @@ class LiveEngine:
         client = self._client
         if tell_model and was_audible and client is not None:
             with contextlib.suppress(Exception):
-                await client.append_instructions(INTERRUPT_TEXT)
+                await client.append_instructions(
+                    BOOK.text("conversacion/notas/interrupcion", fallback=INTERRUPT_TEXT)
+                )
         self._audible = False
         self._settle_after = 0.0
         self._expect_response_until = 0.0
@@ -1947,7 +1955,9 @@ class LiveEngine:
         text = text.strip()
         if client is None or not text:
             return False
-        await client.append_commentary(ANNOUNCE_TEMPLATE.format(text=text))
+        await client.append_commentary(
+            BOOK.render("conversacion/notas/aviso", fallback=ANNOUNCE_TEMPLATE, text=text)
+        )
         self._touch()
         self._expect_response_until = time.monotonic() + RESPONSE_WAIT_S
         logger.info("Aviso pedido desde el panel: %s", text)
@@ -2098,15 +2108,21 @@ class LiveEngine:
         """
         if self._client is None or not changes:
             return
-        budget = APPEND_MAX_CHARS - len(AGENDA_CHANGED_TEMPLATE) - len(AGENDA_MORE_TEXT)
+        template = BOOK.text("conversacion/notas/agenda_cambiada", AGENDA_CHANGED_TEMPLATE)
+        more = " " + BOOK.text("conversacion/notas/agenda_mas", AGENDA_MORE_TEXT)
+        budget = APPEND_MAX_CHARS - len(template) - len(more)
         shown: list[str] = []
         for change in changes:
             if sum(len(c) + 1 for c in shown) + len(change) > budget:
                 break
             shown.append(change)
-        text = AGENDA_CHANGED_TEMPLATE.format(changes=" ".join(shown))
+        text = BOOK.render(
+            "conversacion/notas/agenda_cambiada",
+            fallback=AGENDA_CHANGED_TEMPLATE,
+            changes=" ".join(shown),
+        )
         if len(shown) < len(changes):
-            text += AGENDA_MORE_TEXT
+            text += more
         # Si ya había otro pendiente, el nuevo lo incluye: la web solo va a más.
         self._pending_agenda_note = text
         logger.info(
@@ -2123,7 +2139,11 @@ class LiveEngine:
         self._notes = text
         client = self._client
         if client is not None:
-            content = NOTES_TEMPLATE.format(text=text) if text else NOTES_CLEARED_TEXT
+            content = (
+                BOOK.render("conversacion/notas/avisos_del_dia", fallback=NOTES_TEMPLATE, text=text)
+                if text
+                else BOOK.text("conversacion/notas/avisos_retirados", fallback=NOTES_CLEARED_TEXT)
+            )
             with contextlib.suppress(Exception):
                 await client.append_instructions(content)
         logger.info("Avisos del día actualizados (%d caracteres)", len(text))

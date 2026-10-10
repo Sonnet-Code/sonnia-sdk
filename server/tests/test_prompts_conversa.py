@@ -242,16 +242,33 @@ def request_prompts() -> dict[str, str]:
         "momento/camara": e.moment_prompt(e.moment_focus("cámara", ESCENA)),
         "momento/invitacion": e.moment_prompt(e.moment_focus("invitación")),
         "frase_stand": e.showcase_prompt("¡Acércate, que no muerdo!"),
-        "texto_escrito": e.TEXT_INPUT_TEMPLATE.format(text="¿Dónde está el baño?"),
-        "interrupcion": e.INTERRUPT_TEXT,
-        "aviso": e.ANNOUNCE_TEMPLATE.format(text="La charla de las 11 cambia a la sala 2."),
-        "avisos_del_dia": e.NOTES_TEMPLATE.format(text="Rifa a las cinco."),
-        "avisos_retirados": e.NOTES_CLEARED_TEXT,
-        "delegacion_fallida": e.DELEGATION_FAILED_TEXT,
-        "agenda_cambiada": e.AGENDA_CHANGED_TEMPLATE.format(
-            changes="La charla de Kotlin pasa a las 12:00."
+        "texto_escrito": BOOK.render(
+            "conversacion/notas/texto_escrito",
+            fallback=e.TEXT_INPUT_TEMPLATE,
+            text="¿Dónde está el baño?",
+        ),
+        "interrupcion": BOOK.text("conversacion/notas/interrupcion", fallback=e.INTERRUPT_TEXT),
+        "aviso": BOOK.render(
+            "conversacion/notas/aviso",
+            fallback=e.ANNOUNCE_TEMPLATE,
+            text="La charla de las 11 cambia a la sala 2.",
+        ),
+        "avisos_del_dia": BOOK.render(
+            "conversacion/notas/avisos_del_dia", fallback=e.NOTES_TEMPLATE, text="Rifa a las cinco."
+        ),
+        "avisos_retirados": BOOK.text(
+            "conversacion/notas/avisos_retirados", fallback=e.NOTES_CLEARED_TEXT
+        ),
+        "delegacion_fallida": BOOK.text(
+            "conversacion/notas/delegacion_fallida", fallback=e.DELEGATION_FAILED_TEXT
+        ),
+        "agenda_cambiada": BOOK.render(
+            "conversacion/notas/agenda_cambiada",
+            fallback=e.AGENDA_CHANGED_TEMPLATE,
+            changes="La charla de Kotlin pasa a las 12:00.",
         )
-        + e.AGENDA_MORE_TEXT,
+        + " "
+        + BOOK.text("conversacion/notas/agenda_mas", fallback=e.AGENDA_MORE_TEXT),
         "galeria": gallery_note(["nuevo"], ["viejo"], ["logo", "nuevo"], max_chars=1200),
     }
 

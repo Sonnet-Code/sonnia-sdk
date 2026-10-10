@@ -84,6 +84,7 @@ def register_all() -> None:
         _register_persona,
         _register_knowledge,
         _register_live,
+        _register_live_notes,
         _register_backend,
         _register_vision,
         _register_showcase,
@@ -560,6 +561,83 @@ def _register_live() -> None:
             "_LOOKS_REMINDER",
             mode,
             help=f"La última línea de las instrucciones cuando la cámara va así: {title}.",
+        )
+
+
+def _register_live_notes() -> None:
+    """Lo que el motor le manda a GPT-Live con la sesión abierta (``session.*.append``)."""
+    engine = "sonia.live.engine"
+    cut = f" Con lo que rellena el código, lo que pase de {APPEND_MAX} caracteres se corta."
+    notes = (
+        (
+            "texto_escrito",
+            "Durante la conversación: un visitante escribe en la pantalla",
+            "TEXT_INPUT_TEMPLATE",
+            ("text",),
+            "{text}: lo que escribió. Se le pide que conteste en voz alta.",
+        ),
+        (
+            "interrupcion",
+            "Durante la conversación: interrupción desde Unity",
+            "INTERRUPT_TEXT",
+            (),
+            "Al tocar «Interrumpir» en los controles de desarrollo.",
+        ),
+        (
+            "aviso",
+            "Durante la conversación: aviso del panel para decir en voz alta",
+            "ANNOUNCE_TEMPLATE",
+            ("text",),
+            "{text}: el aviso que escribe el equipo en el panel.",
+        ),
+        (
+            "avisos_del_dia",
+            "Durante la conversación: cambian los avisos de hoy",
+            "NOTES_TEMPLATE",
+            ("text",),
+            "{text}: los avisos nuevos del panel. Al abrir sesión van con «Encabezado de los "
+            "avisos de hoy».",
+        ),
+        (
+            "avisos_retirados",
+            "Durante la conversación: se retiran los avisos de hoy",
+            "NOTES_CLEARED_TEXT",
+            (),
+            "",
+        ),
+        (
+            "delegacion_fallida",
+            "Durante la conversación: el backend no terminó la tarea",
+            "DELEGATION_FAILED_TEXT",
+            (),
+            "Se le pide que lo diga en voz alta sin inventarse la respuesta.",
+        ),
+        (
+            "agenda_cambiada",
+            "Durante la conversación: la agenda cambió en la web",
+            "AGENDA_CHANGED_TEMPLATE",
+            ("changes",),
+            "{changes}: los cambios detectados, ya escritos (los que caben).",
+        ),
+        (
+            "agenda_mas",
+            "Durante la conversación: hay más cambios de agenda de los que caben",
+            "AGENDA_MORE_TEXT",
+            (),
+            "Va detrás de «la agenda cambió en la web» si no caben todos los cambios.",
+        ),
+    )
+    for key, title, name, fields, extra in notes:
+        _add(
+            f"conversacion/notas/{key}",
+            CONVERSATION,
+            title,
+            _const(engine, name),
+            fields=fields,
+            required=fields,
+            applies="peticion",
+            max_len=APPEND_MAX,
+            help=(extra + cut).strip(),
         )
 
 
