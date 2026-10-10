@@ -5,6 +5,13 @@
 //    ocurre en un Task de fondo. Ese hilo NUNCA toca la API de Unity.
 //  - Los mensajes ya parseados se encolan en una ConcurrentQueue y se despachan
 //    como eventos de C# en Update(), es decir, en el hilo principal.
+//  - Los frames de la vista en vivo de los juegos ("SNCV") no van a la cola: se
+//    guarda solo el último (los viejos se descartan en el hilo de red) y Update
+//    entrega como mucho uno por fotograma, porque decodificar el JPEG
+//    (Texture2D.LoadImage) va en el hilo principal.
+//
+// La URL del orquestador se puede cambiar al arrancar con -sonia-ws
+// ws://127.0.0.1:<puerto> (cada agente prueba con su orquestador falso).
 
 using System;
 using System.Collections.Concurrent;
@@ -170,9 +177,46 @@ namespace Sonia
         /// <summary>El orquestador pide una captura de la cámara de Unity.</summary>
         public event Action<RequestFrameMessage> OnRequestFrame;
 
+        /// <summary>Un mensaje del sobre común de los juegos (lo reparte <see cref="GameRouter"/>).</summary>
+        public event Action<GameMessage> OnGame;
+
+        /// <summary>Se enciende o se apaga la vista en vivo de la cámara.</summary>
+        public event Action<CameraPreviewMessage> OnCameraPreview;
+
+        /// <summary>
+        /// Un frame de la vista en vivo ("SNCV"), el más reciente que llegó. Como
+        /// mucho uno por fotograma; los de <c>seq</c> menor ya vienen descartados.
+        /// </summary>
+        public event Action<PreviewFrame> OnCameraPreviewFrame;
+
+        /// <summary>Orquestador falso de las pruebas: pide una captura con nombre.</summary>
+        public event Action<DevCaptureMessage> OnDevCapture;
+
+        /// <summary>Orquestador falso de las pruebas: se acabó la secuencia.</summary>
+        public event Action<DevDoneMessage> OnDevDone;
+
         // ------------------------------------------------------------------
         // Estado interno
         // ------------------------------------------------------------------
+
+        /// <summary>Argumento de línea de órdenes que cambia la URL del orquestador.</summary>
+        public const string ServerUrlArgument = "-sonia-ws";
+
+        /// <summary>
+        /// Un frame con un seq tantos por debajo del último ya no es uno atrasado
+        /// sino una secuencia nueva (el orquestador reinició la vista): se acepta.
+        /// </summary>
+        private const long PreviewRestartGap = 30;
+
+        // Lo que se anuncia en client_hello: lo fija el hilo principal (GameRouter,
+        // en Awake) y lo lee el hilo de red al conectar.
+        private volatile string[] _announcedGames;
+        private volatile string[] _announcedFeatures;
+
+        // Vista en vivo: el último frame pendiente (lo cambia el hilo de red y lo
+        // recoge Update) y el seq del último aceptado (solo el hilo de red).
+        private PreviewFrame _pendingPreview;
+        private long _previewSeq = -1;
 
         private static readonly object ConnectedSignal = new object();
         private static readonly object DisconnectedSignal = new object();
@@ -200,10 +244,42 @@ namespace Sonia
             get { return _isConnected; }
         }
 
-        /// <summary>URL a la que se conecta este cliente.</summary>
+        /// <summary>URL a la que se conecta este cliente (la de -sonia-ws si se arrancó con ella).</summary>
         public string ServerUrl
         {
-            get { return serverUrl; }
+            get { return EffectiveServerUrl(); }
+        }
+
+        /// <summary>
+        /// Lo que Unity anuncia en <c>client_hello</c>: los juegos que sabe pintar
+        /// y sus capacidades. Lo llama <see cref="GameRouter"/> en su Awake, antes
+        /// de conectar; si cambia con la conexión abierta, vale para la siguiente.
+        /// </summary>
+        public void SetAnnouncement(IList<string> games, IList<string> features)
+        {
+            _announcedGames = games != null ? new List<string>(games).ToArray() : null;
+            _announcedFeatures = features != null ? new List<string>(features).ToArray() : null;
+        }
+
+        /// <summary>URL de -sonia-ws ws://... en la línea de órdenes, o null si no la hay.</summary>
+        public static string CommandLineServerUrl()
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i] == ServerUrlArgument && !string.IsNullOrEmpty(args[i + 1]))
+                {
+                    return args[i + 1].Trim();
+                }
+            }
+
+            return null;
+        }
+
+        private string EffectiveServerUrl()
+        {
+            string fromCommandLine = CommandLineServerUrl();
+            return string.IsNullOrEmpty(fromCommandLine) ? serverUrl : fromCommandLine;
         }
 
         // ------------------------------------------------------------------
@@ -226,11 +302,17 @@ namespace Sonia
                 return;
             }
 
+            string url = EffectiveServerUrl();
             Uri uri;
-            if (!Uri.TryCreate(serverUrl, UriKind.Absolute, out uri))
+            if (!Uri.TryCreate(url, UriKind.Absolute, out uri))
             {
-                Debug.LogError("[Sonia] URL del orquestador inválida: " + serverUrl, this);
+                Debug.LogError("[Sonia] URL del orquestador inválida: " + url, this);
                 return;
+            }
+
+            if (url != serverUrl)
+            {
+                Debug.Log("[Sonia] Orquestador de " + ServerUrlArgument + ": " + url, this);
             }
 
             _cancellation = new CancellationTokenSource();
@@ -262,6 +344,14 @@ namespace Sonia
                     // Salvaguarda para no congelar un frame si llega una avalancha.
                     break;
                 }
+            }
+
+            // Después de la cola: un camera_preview que llegó antes que sus frames
+            // ya está aplicado. Uno por fotograma como mucho.
+            PreviewFrame preview = Interlocked.Exchange(ref _pendingPreview, null);
+            if (preview != null)
+            {
+                Raise(OnCameraPreviewFrame, preview);
             }
         }
 
@@ -372,6 +462,22 @@ namespace Sonia
         public void SendAnimations(IList<KeyValuePair<string, string>> clips)
         {
             SendJson(Protocol.AnimationsMessage(clips));
+        }
+
+        /// <summary>
+        /// Manda un evento de un juego al orquestador (<c>game_event</c>). El id y
+        /// el evento tienen que ser minúsculas, cifras o "_" (ver
+        /// <see cref="Protocol.IsValidGameName"/>); si no, no se manda.
+        /// </summary>
+        public void SendGameEvent(string game, string eventName, JObject data)
+        {
+            if (!Protocol.IsValidGameName(game) || !Protocol.IsValidGameName(eventName))
+            {
+                Debug.LogWarning("[Sonia] game_event con nombre inválido, no se manda: " + game + "/" + eventName, this);
+                return;
+            }
+
+            SendJson(Protocol.GameEventMessage(game, eventName, data));
         }
 
         /// <summary>Manda los gestos de Genies que puede reproducir, con su ficha (director de gestos).</summary>
@@ -522,10 +628,13 @@ namespace Sonia
 
                     delay = initialDelay;
                     announcedConnection = true;
+                    _previewSeq = -1;
+                    Interlocked.Exchange(ref _pendingPreview, null);
                     _inbox.Enqueue(ConnectedSignal);
 
-                    await SendSafeAsync(socket, Protocol.ClientHelloMessage(Protocol.ClientName, version), token)
-                        .ConfigureAwait(false);
+                    string hello = Protocol.ClientHelloMessage(
+                        Protocol.ClientName, version, _announcedGames, _announcedFeatures);
+                    await SendSafeAsync(socket, hello, token).ConfigureAwait(false);
                     await ReceiveLoopAsync(socket, token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
@@ -644,6 +753,7 @@ namespace Sonia
                     {
                         byte[] payload = assembled.ToArray();
                         AudioFrame frame;
+                        PreviewFrame preview;
                         if (Protocol.TryDecodeAudioFrame(payload, payload.Length, out frame))
                         {
                             _inbox.Enqueue(frame);
@@ -652,11 +762,31 @@ namespace Sonia
                         {
                             _inbox.Enqueue(new GuestAudioFrame { Frame = frame });
                         }
+                        else if (Protocol.TryDecodePreviewFrame(payload, payload.Length, out preview))
+                        {
+                            if (AcceptPreviewSeq(preview.Seq))
+                            {
+                                // Solo cuenta el último: si Unity va lenta, los viejos se pierden.
+                                Interlocked.Exchange(ref _pendingPreview, preview);
+                            }
+                        }
                     }
                     else
                     {
                         string json = Encoding.UTF8.GetString(assembled.ToArray());
                         object parsed = ParseTextMessage(json);
+                        CameraPreviewMessage previewSwitch = parsed as CameraPreviewMessage;
+                        if (previewSwitch != null)
+                        {
+                            // Cada encendido puede empezar otra secuencia; al apagar, fuera
+                            // el frame que no se llegó a enseñar (no puede salir después).
+                            _previewSeq = -1;
+                            if (!previewSwitch.On)
+                            {
+                                Interlocked.Exchange(ref _pendingPreview, null);
+                            }
+                        }
+
                         if (parsed != null)
                         {
                             _inbox.Enqueue(parsed);
@@ -664,6 +794,23 @@ namespace Sonia
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Descarta los frames de la vista en vivo con un seq menor o igual al último
+        /// aceptado (llegan tarde). Si el salto hacia atrás es grande, es una
+        /// secuencia nueva y se acepta. Solo desde el hilo de red.
+        /// </summary>
+        private bool AcceptPreviewSeq(uint seq)
+        {
+            long value = seq;
+            if (_previewSeq >= 0 && value <= _previewSeq && _previewSeq - value < PreviewRestartGap)
+            {
+                return false;
+            }
+
+            _previewSeq = value;
+            return true;
         }
 
         /// <summary>
@@ -749,6 +896,14 @@ namespace Sonia
                     return Protocol.Deserialize<ErrorMessage>(payload);
                 case MessageTypes.RequestFrame:
                     return Protocol.Deserialize<RequestFrameMessage>(payload);
+                case MessageTypes.Game:
+                    return Protocol.ParseGameMessage(payload);
+                case MessageTypes.CameraPreview:
+                    return Protocol.Deserialize<CameraPreviewMessage>(payload);
+                case MessageTypes.DevCapture:
+                    return Protocol.Deserialize<DevCaptureMessage>(payload);
+                case MessageTypes.DevDone:
+                    return Protocol.Deserialize<DevDoneMessage>(payload);
                 default:
                     return null;
             }
@@ -1053,6 +1208,34 @@ namespace Sonia
             if (requestFrame != null)
             {
                 Raise(OnRequestFrame, requestFrame);
+                return;
+            }
+
+            GameMessage game = message as GameMessage;
+            if (game != null)
+            {
+                Raise(OnGame, game);
+                return;
+            }
+
+            CameraPreviewMessage cameraPreview = message as CameraPreviewMessage;
+            if (cameraPreview != null)
+            {
+                Raise(OnCameraPreview, cameraPreview);
+                return;
+            }
+
+            DevCaptureMessage devCapture = message as DevCaptureMessage;
+            if (devCapture != null)
+            {
+                Raise(OnDevCapture, devCapture);
+                return;
+            }
+
+            DevDoneMessage devDone = message as DevDoneMessage;
+            if (devDone != null)
+            {
+                Raise(OnDevDone, devDone);
             }
         }
 
