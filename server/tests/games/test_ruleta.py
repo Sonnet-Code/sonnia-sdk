@@ -640,7 +640,7 @@ async def test_resume_dice_por_donde_va() -> None:
 
 async def test_empujones_segun_la_fase() -> None:
     game, host = await started("adivinanza")
-    assert game.nudge() is None  # girando
+    assert game.nudge() == t.NUDGE_SPINNING  # girando: solo parar
     await stop_wheel(game, host)
     assert game.nudge() == t.NUDGE_CHALLENGE
     await game.answer({"respuesta": "acierto"})

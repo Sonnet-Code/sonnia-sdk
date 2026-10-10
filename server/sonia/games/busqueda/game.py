@@ -244,6 +244,14 @@ class BusquedaGame(Game):
             except Exception:  # noqa: BLE001 - soltar la cámara nunca tumba nada
                 logger.exception("Búsqueda: no se pudo soltar la cámara")
 
+    def nudge(self) -> str | None:
+        """Si hablan y no se delega nada: comprobar el objeto en plena ronda o terminar el juego."""
+        if self._phase == "running":
+            return t.NUDGE_RUNNING
+        if self._phase in ("ready", "between"):
+            return t.NUDGE_STOP
+        return None
+
     def snapshot(self) -> dict[str, Any]:
         entry = self._current
         left = 0.0

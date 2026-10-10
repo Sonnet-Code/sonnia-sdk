@@ -519,6 +519,8 @@ class RuletaGame(Game):
             return t.NUDGE_CHALLENGE
         if self._phase == "result":
             return t.NUDGE_RESULT
+        if self._phase == "spinning":
+            return t.NUDGE_SPINNING
         return None
 
     def snapshot(self) -> dict[str, Any]:

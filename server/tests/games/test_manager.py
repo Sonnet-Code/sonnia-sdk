@@ -17,6 +17,7 @@ from sonia.games.manager import (
     CHOOSE_TEXT,
     FIXED_TEXT,
     NOTHING_TO_PLAY_TEXT,
+    NUDGE_TAIL,
     OFF_TEXT,
     PANEL_START_TEXT,
     STICKY_START,
@@ -592,7 +593,7 @@ async def test_empujon_si_el_visitante_habla_y_no_se_delega() -> None:
     clock.advance(3)
     await manager.tick(clock())
     await settle()
-    assert engine.spoken == [game.nudge_text]
+    assert engine.spoken == [game.nudge_text + NUDGE_TAIL]
     # Si delegó algo desde que empezó a hablar, no hay empujón.
     started = clock()
     manager.on_delegation(clock())

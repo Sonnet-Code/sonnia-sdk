@@ -23,6 +23,8 @@ __all__ = [
     "NO_ANSWER_TEXT",
     "NO_MORE_TEXT",
     "NOT_STARTED_TEXT",
+    "NUDGE_RUNNING",
+    "NUDGE_STOP",
     "RESUME_TEXT",
     "ROUND_TEXT",
     "RULES_TEXT",
@@ -34,6 +36,15 @@ __all__ = [
     "WIN_CONTACT_TEXT",
     "WON_TEXT",
 ]
+
+#: Empujones tras un turno del visitante sin delegación (``nudge``): órdenes cortas, y el
+#: manager añade al final que es una nota interna. En las pruebas con la API real, «Bueno,
+#: paramos» no terminaba el juego.
+NUDGE_RUNNING = (
+    "BÚSQUEDA: si dijeron que ya lo tienen («¡aquí!», «¡lo tengo!»), delega comprobarlo ya; si "
+    "pidieron parar o se despidieron, delega terminar el juego."
+)
+NUDGE_STOP = "BÚSQUEDA: si pidieron parar o se despidieron, delega terminar el juego."
 
 #: Las frases fijas con tiempo exacto: suenan grabadas (``cache/voice``) en el momento justo.
 GO_PHRASE = "¡Ya!"

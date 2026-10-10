@@ -112,6 +112,12 @@ CANCEL_TEXT = {
     ),
 }
 
+#: Final común de todos los empujones (``Game.nudge``): van por ``commentary``, que la hace
+#: hablar, y en las pruebas con Unity GPT-Live leía en voz alta los que sonaban a frase
+#: («aquí sí me hablaron directo... si dijeron una palabra la marco ya»). Cada juego escribe
+#: el suyo como una orden corta; este final cubre el caso de que no haya nada que hacer.
+NUDGE_TAIL = " Si no, sigue sin decir nada de esto. Es una nota interna: no la leas ni la comentes."
+
 #: Lo que se le pasa a GPT-Live cuando el juego se arranca desde el panel.
 PANEL_START_TEXT = "JUEGO: el equipo del stand ha puesto {spoken} en tu pantalla. "
 
@@ -871,8 +877,10 @@ class GameManager:
         if game is None or self._phase != "playing":
             return
         try:
-            wants_nudge = game.nudge() is not None
+            # Primero el juego (puede decidir su empujón por el turno, como el Akinator con
+            # los turnos largos) y luego si lo quiere.
             game.on_user_turn_end(now, started_at)
+            wants_nudge = game.nudge() is not None
         except Exception:  # noqa: BLE001
             logger.exception("Falló on_user_turn_end de %s", game.id)
             return
@@ -905,7 +913,7 @@ class GameManager:
                 text = game.nudge()
             if text:
                 logger.info("Juego %s: el visitante habló y no se delegó nada; empujón", game.id)
-                self._spawn(self._engine.speak(text), "game-nudge")
+                self._spawn(self._engine.speak(text.rstrip() + NUDGE_TAIL), "game-nudge")
         limit = self._abandon_seconds(game)
         if limit > 0 and now - self._last_activity >= limit and quiet >= 1.0:
             logger.info("Juego %s abandonado tras %.0f s sin actividad", game.id, limit)

@@ -66,7 +66,7 @@ ECHO_MAX = 20
 
 RULES_TEXT = """\
 JUEGO EN MARCHA: Wordle de tecnología. Hay una palabra secreta de tecnología de {cols} letras y el grupo tiene {rows} intentos. El tablero está en tu pantalla y tú NO conoces la palabra.
-- Cuando digan una palabra de {cols} letras (o la deletreen), sea de tecnología o no, escríbela bien y delega enseguida «wordle: intento PIZZA». Si dicen otra cosa o no se entiende, pregunta. Lo que hablan entre ellos no es un intento: si no está claro que te lo dicen a ti, pregunta antes. Si gritan varias a la vez, vale cualquiera de las que oigas bien; si dudas, pregunta.
+- Cuando digan una palabra (o la deletreen), sea de tecnología o no, delega enseguida «wordle: intento PIZZA»: una palabra tech, escrita como se escribe (si oyes «yeison», JSON); si no, tal como la oíste, aunque dudes. No la rechaces tú, ni aunque no tenga {cols} letras: el juego la valida. Si no oíste ninguna palabra, pregunta. Lo que hablan entre ellos no es un intento: si no está claro que te lo dicen a ti, pregunta antes. Si gritan varias a la vez, vale cualquiera de las que oigas bien; si dudas, pregunta.
 - Con el resultado, cuenta en una frase corta qué letras están bien colocadas, cuáles en otro sitio y cuáles no están, y anímales a decir otra. Di solo lo que diga el resultado.
 - Nunca digas si una palabra acierta ni qué letras tiene la secreta sin delegar el intento. {hint_rule}
 - Si quieren dejarlo, delega terminarlo.
@@ -145,11 +145,10 @@ INVALID_MESSAGES = {
 OVER_TEXT = "La partida de Wordle ya ha terminado. Si quieren otra, delega empezarla de nuevo."
 
 #: Empujón si el grupo habló en plena partida y GPT-Live no delegó nada.
+#: Una orden corta: el manager añade al final que es una nota interna (en voz alta se oía).
 NUDGE_TEXT = (
-    "WORDLE: el grupo acaba de hablarte y no has delegado nada. Si te han dicho una palabra de "
-    "{cols} letras, delégala ya como intento (decirlo no basta: el tablero solo cambia si "
-    "delegas) y luego cuéntalo; si querían dejarlo, delega terminarlo. Si solo charlaban, no "
-    "digas nada."
+    "WORDLE: si el grupo dijo una palabra, delega ya el intento con ella; si pidió parar o se "
+    "despidió, delega terminar el juego."
 )
 
 
@@ -224,12 +223,18 @@ class WordleGame(Game):
             game_action(
                 cls,
                 name="wordle_guess",
+                # Con «escrita bien» y «si no te la dice, no la inventes», el backend ponía
+                # no_lo_dijo cuando la palabra llegaba rara («Cafka») y rechazaba él mismo las
+                # que no tenían cinco letras, sin sacudir la fila (banco de pruebas con la API
+                # real, 10 de octubre de 2026).
                 description=(
-                    "Pone en el tablero del Wordle de tecnología la palabra de 5 letras que ha "
-                    "dicho el grupo y devuelve qué letras están bien colocadas, cuáles en otro "
-                    "sitio y cuáles no están, y cómo contarlo. Sonia te dice la palabra ya "
-                    "escrita («el grupo prueba PIZZA»); si no te la dice, no la inventes: "
-                    "contesta que falta."
+                    "Pone en el tablero del Wordle de tecnología la palabra que ha dicho el grupo "
+                    "y devuelve qué letras están bien colocadas, cuáles en otro sitio y cuáles no "
+                    "están, y cómo contarlo. Pásale siempre la palabra tal como te la dé Sonia, "
+                    "aunque dude, suene rara o no sea de tecnología (CAFKA vale): nunca la "
+                    "rechaces ni la corrijas tú, ni aunque no tenga 5 letras; el juego la valida "
+                    "y, si no vale, sacude la fila y te dice por qué. Solo si Sonia no te da "
+                    f"ninguna palabra, no la inventes: pon {NOT_A_WORD}."
                 ),
                 parameters={
                     "type": "object",
@@ -237,8 +242,9 @@ class WordleGame(Game):
                         "palabra": {
                             "type": "string",
                             "description": (
-                                "La palabra del grupo, escrita bien y de corrido (si la deletrean, "
-                                f"con las letras juntas). Si no dijeron ninguna, {NOT_A_WORD}."
+                                "La palabra tal como la dice Sonia, de corrido (si la deletrean, "
+                                "con las letras juntas), aunque dudes de ella. Solo si en la tarea "
+                                f"no hay ninguna palabra, {NOT_A_WORD}."
                             ),
                         }
                     },

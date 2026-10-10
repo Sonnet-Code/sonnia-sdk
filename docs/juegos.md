@@ -67,7 +67,7 @@ class WordleGame(Game):
 | `on_user_turn_end(now, started_at)` | Termina un turno del visitante | |
 | `on_delegation(now)` | GPT-Live delega algo | |
 | `on_unity_event(event, data)` | Un `game_event` de su pantalla | Por ejemplo `wheel_stopped`. |
-| `nudge()` | Tras un turno del visitante sin delegación | El texto del empujón (como el de la trivia) o `None` para no empujar (por defecto). Úsalo si cada turno del visitante debería ser una jugada. |
+| `nudge()` | Tras un turno del visitante sin delegación (después de `on_user_turn_end`, así que puede depender del turno) | El empujón o `None` para no empujar (por defecto). Va por `commentary`, que la hace hablar: escríbelo como una **orden corta** («WORDLE: si el grupo dijo una palabra, delega ya el intento; si pidió parar o se despidió, delega terminar el juego.»), sin frases que pueda repetir; el manager añade al final que, si no, siga sin decir nada y que es una nota interna (`NUDGE_TAIL`). En las pruebas con Unity, los empujones que sonaban a frase los leía en voz alta. Úsalo si cada turno del visitante debería ser una jugada, y siempre para parar («si pidió parar o se despidió, delega terminar el juego»). |
 | `snapshot()` | Estado del panel | En qué va la partida, en tipos JSON. |
 
 Los ganchos que fallan van al registro y no tumban nada; si `tick` falla 20 veces seguidas, la partida se cancela.

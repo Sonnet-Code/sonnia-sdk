@@ -433,7 +433,8 @@ async def test_resume_cuenta_donde_va() -> None:
 async def test_el_empujon_pide_delegar_y_no_nombra_el_stack() -> None:
     game, _ = make_wordle()
     text = game.nudge()
-    assert text and "delégala ya" in text and "no digas nada" in text
+    # Una orden corta; el manager añade al final que, si no, no diga nada (NUDGE_TAIL).
+    assert text and "delega ya el intento" in text and "terminar el juego" in text
     assert not brands_in(text)
 
 
@@ -891,7 +892,7 @@ async def test_el_nudge_solo_corre_mientras_se_juega_y_dispara_tras_hablar() -> 
     clock.advance(6)
     await manager.tick(clock())
     await settle()
-    assert len(engine.spoken) == 1 and "delégala ya" in engine.spoken[0]
+    assert len(engine.spoken) == 1 and "delega ya el intento" in engine.spoken[0]
 
 
 async def test_si_delega_no_hay_empujon() -> None:

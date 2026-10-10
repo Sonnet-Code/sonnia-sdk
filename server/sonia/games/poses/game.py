@@ -156,6 +156,9 @@ FINAL_TEXT = (
     "JUEGO: fin de Simón dice. Entre todos hicieron bien {done} de {possible} jugadas{trap}. "
     "Celébralo con energía en una o dos frases: nadie queda eliminado."
 )
+#: Empujón si hablan y no se delega nada: solo para parar. Una orden corta (el manager añade
+#: que es una nota interna); nunca en la ventana de la pose, que va con el tiempo justo.
+NUDGE_STOP = "SIMÓN DICE: si pidieron parar o se despidieron, delega terminar el juego."
 FINAL_TRAP_TEXT = " y en las trampas cayeron {fell}"
 FINAL_NO_TRAP_TEXT = " y en las trampas no cayó nadie"
 WIN_CONTACT_TEXT = (
@@ -299,6 +302,11 @@ class PosesGame(Game):
                 await release(self.id)
             except Exception:  # noqa: BLE001 - soltar nunca tumba nada
                 logger.debug("No se pudo soltar la visión de poses", exc_info=True)
+
+    def nudge(self) -> str | None:
+        if self._phase in ("placement", "round", "result"):
+            return NUDGE_STOP
+        return None
 
     def snapshot(self) -> dict[str, Any]:
         done, possible, fell = self._totals()

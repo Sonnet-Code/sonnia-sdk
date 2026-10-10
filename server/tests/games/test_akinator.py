@@ -456,7 +456,7 @@ async def test_arriesga_una_respuesta_y_sale_la_tarjeta() -> None:
     assert host.sent[-1]["event"] == "guess"
     state = last_state(host)
     assert state["phase"] == "guessing" and state["guess"] == "Kotlin" and state["asked"] == 6
-    assert game.nudge() is not None and "pantalla" in game.nudge()  # type: ignore[operator]
+    assert game.nudge() is not None and "akinator: resultado" in game.nudge()  # type: ignore[operator]
 
 
 async def test_no_deja_adivinar_antes_del_minimo_aunque_insista() -> None:
@@ -636,7 +636,7 @@ async def test_sin_preguntas_se_rinde_y_pregunta_que_era() -> None:
     assert "ya no puedes arriesgar más" in script and "pregúntale qué era" in script
     assert host.sent[-1]["event"] == "giveup"
     assert last_state(host)["phase"] == "giving_up"
-    assert game.nudge() is not None and "te has rendido" in game.nudge()  # type: ignore[operator]
+    assert game.nudge() is not None and "qué era" in game.nudge()  # type: ignore[operator]
     # El visitante dice qué era.
     script = await game.result({"acierto": "no", "respuesta_real": "Haskell"})
     assert "Haskell" in script

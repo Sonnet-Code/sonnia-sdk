@@ -15,7 +15,9 @@ from sonia.games.akinator.bank import Theme, themes_for_live
 from sonia.games.base import INSTRUCT_MAX_CHARS
 
 __all__ = [
+    "ASKING_NUDGE",
     "FEW_LEFT_TEXT",
+    "GUESS_REMIND_TEXT",
     "GIVEUP_NUDGE",
     "START_NUDGE",
     "GIVEUP_SCRIPT",
@@ -42,8 +44,10 @@ AKINATOR EN MARCHA: el visitante piensa en algo del mundo tech y tú lo adivinas
 - Acepta «sí», «no», «no sé», «a veces» y «probablemente». No repitas preguntas. Lo que hablan entre ellos no es una respuesta.
 - Empieza por lo general (¿persona?, ¿lenguaje?, ¿de Google?) y afina.
 - Puede ser: {themes}.
-- No arriesgues antes de la pregunta {min}. Si lo tienes claro, delega «akinator: adivina X» y pregunta «¿es X?». Cuando diga si acertaste o qué era, delega «akinator: resultado: sí o no, era Y».
+- No arriesgues antes de la pregunta {min}. Si lo tienes claro, delega «akinator: adivina X» y pregunta «¿es X?».
+- En cuanto diga si acertaste o qué era, delega «akinator: resultado» (acierto sí o no y lo que era) antes de celebrar o lamentarte; nunca «adivina» con lo que te diga.
 - Si llegas a la {max} sin saberlo, arriesga o ríndete y pídele qué era.
+- Si quieren dejarlo, delega terminar el juego: decir «paramos» no lo para.
 - La pantalla solo cambia si delegas: nunca digas que acertaste o fallaste sin delegarlo."""
 
 START_SCRIPT = (
@@ -122,24 +126,36 @@ RESUME_SCRIPT = (
 )
 RESUME_GUESS = " Tu respuesta «{answer}» está en la pantalla esperando que diga si acertaste."
 
-#: Empujones: el visitante habló y no se delegó nada (``GAMES_NUDGE_SECONDS``). Lo decide ella.
+#: Empujones: el visitante habló y no se delegó nada (``GAMES_NUDGE_SECONDS``). Órdenes cortas:
+#: el manager añade al final que es una nota interna (en voz alta se oían). Lo decide ella.
 GUESS_NUDGE = (
-    "AKINATOR: tu respuesta está en la pantalla y el visitante acaba de hablarte. Si te dijo si "
-    "acertaste, o qué era, delega «akinator: resultado» ahora mismo (decirlo no basta: la "
-    "pantalla solo cambia si delegas). Si solo charlaba, no digas nada."
+    "AKINATOR: si el visitante dijo si acertaste o qué era, delega ya «akinator: resultado», "
+    "antes de celebrar; si pidió parar o se despidió, delega terminar el juego."
 )
 LIMIT_NUDGE = (
-    "AKINATOR: ya hiciste tus {max} preguntas y no puedes hacer más. Si el visitante te dijo qué "
-    "era, delega «akinator: resultado» con lo que era. Si no, delega «akinator: adivina X» con tu "
-    "mejor idea, o ríndete y pregúntale qué era."
+    "AKINATOR: ya hiciste tus {max} preguntas. Si te dijo qué era, delega «akinator: resultado»; "
+    "si no, delega «akinator: adivina X» con tu mejor idea o pregúntale qué era."
 )
 START_NUDGE = (
-    "AKINATOR: si el visitante ya te dijo que tiene algo en mente y aún no has hecho tu primera "
-    "pregunta, hazla ahora: una pregunta corta de sí o no. Si no, no digas nada."
+    "AKINATOR: si el visitante ya tiene algo en mente y no has hecho tu primera pregunta, hazla: "
+    "una corta de sí o no."
 )
 GIVEUP_NUDGE = (
-    "AKINATOR: te has rendido y esperas que te diga qué era. Si ya te lo dijo, delega «akinator: "
-    "resultado» con lo que era. Si no, pregúntaselo."
+    "AKINATOR: si ya te dijo qué era, delega «akinator: resultado» con lo que era; si no, "
+    "pregúntaselo."
+)
+#: Tras un turno largo del visitante mientras preguntas (un «sí» o un «no» no lo son): puede
+#: ser que lo deje o que diga qué era. En las pruebas con la API real, «Espera, mejor lo
+#: dejamos» se quedaba en «Dale, paramos aquí» sin delegar.
+ASKING_NUDGE = (
+    "AKINATOR: si el visitante pidió parar o se despidió, delega terminar el juego; si dijo qué "
+    "era, delega «akinator: resultado»."
+)
+
+#: Recordatorio, una vez: la respuesta de Sonia sigue en la pantalla sin resultado.
+GUESS_REMIND_TEXT = (
+    "AKINATOR: tu respuesta sigue en la pantalla sin resultado. Si ya te dijo si acertaste o qué "
+    "era, delega ahora «akinator: resultado», sin celebrar antes; si no, pregúntale si acertaste."
 )
 
 #: Avisos silenciosos (``instructions.append``) mientras pregunta.

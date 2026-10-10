@@ -22,6 +22,7 @@ JUEGO EN MARCHA: la ruleta de Sonia. En tu pantalla gira una ruleta de cinco ret
 - Cada respuesta del visitante se delega: «ruleta: responde» (la letra, acierto, fallo o se rinden), «ruleta: nota» o «ruleta: predicción», según el reto. En la pantalla nada cambia si no lo delegas: nunca digas si acierta, su nota o «ya está» sin haberlo delegado.
 - Lo que hablan entre ellos no es una respuesta: si no está claro que te contesta a ti, pregunta.
 - Al terminar cada reto, pregunta si quieren otra vuelta: si dicen que sí, delega «ruleta: girar»; si no, delega terminar el juego. Si piden otro reto, también «ruleta: girar».
+- Si en cualquier momento se despiden o dicen que ya está («gracias», «hasta luego»), delega terminar el juego.
 - No hay premios: si preguntan, no sabes de ninguno; que hablen con {contact}."""
 
 #: Si no hay nadie a quien mandar (``TRIVIA_WIN_CONTACT`` vacío).
@@ -60,7 +61,8 @@ TRIVIA_RULES = (
 )
 TRIVIA_ANNOUNCE = (
     "RULETA: ha caído en TRIVIA RELÁMPAGO. Anúncialo con emoción en pocas palabras y lee solo "
-    "la pregunta, tal cual: «{question}». No leas las opciones: ya están en la pantalla."
+    "la pregunta, tal cual: «{question}». No leas las opciones: ya están en la pantalla. "
+    "Luego espera su respuesta: no digas si acierta, delégala."
 )
 
 RIDDLE_RULES = (
@@ -68,12 +70,14 @@ RIDDLE_RULES = (
     "«{answer}»{variants}: es SOLO PARA TI, para juzgar lo que contesten; no la digas ni la "
     "insinúes hasta el resultado. Si contestan eso o algo equivalente, delega «ruleta: "
     "responde acierto»; si no, «ruleta: responde fallo» (tienen {tries} intentos); si se "
-    "rinden o piden la solución, «ruleta: responde se rinden». La pista sale sola en la "
+    "rinden o piden la solución, «ruleta: responde se rinden». Aunque sepas que no es, no lo "
+    "digas tú: delega «ruleta: responde fallo» y espera el resultado. La pista sale sola en la "
     "pantalla a los {hint_seconds} segundos."
 )
 RIDDLE_ANNOUNCE = (
     "RULETA: ha caído en ADIVINANZA GEEK. Anúncialo con emoción en pocas palabras y lee la "
-    "adivinanza tal cual: «{riddle}». No digas la respuesta."
+    "adivinanza tal cual: «{riddle}». No digas la respuesta. Luego espera la suya: no digas "
+    "si acierta, delégala."
 )
 VARIANTS_TEXT = "; también valen: {variants}"
 
@@ -114,7 +118,8 @@ SONNET_QUESTION_RULES = (
 )
 SONNET_QUESTION_ANNOUNCE = (
     "RULETA: ha caído en el RETO SORPRESA DE SONNET CODE. Anúncialo con emoción en pocas "
-    "palabras y haz la pregunta tal cual: «{question}». No digas la respuesta."
+    "palabras y haz la pregunta tal cual: «{question}». No digas la respuesta. Luego espera la "
+    "suya: no digas si acierta, delégala."
 )
 SONNET_TASK_RULES = (
     NEW_CHALLENGE + "RETO SORPRESA DE SONNET CODE: «{task}». No lo puedes comprobar: créele. "
@@ -161,19 +166,16 @@ AGAIN_TEXT = (
     " Luego pregunta si quieren otra vuelta a la ruleta: si dicen que sí, delega «ruleta: "
     "girar»; si no, delega terminar el juego."
 )
-FACT_TEXT = " Apóyate en este dato: {fact}"
+FACT_TEXT = " Si cabe, en media frase: {fact}"
 
-TRIVIA_RIGHT = (
-    "Ha elegido la {letter}, «{option}»: es CORRECTA. Celébralo y explica en una frase por qué "
-    "es la buena."
-)
+TRIVIA_RIGHT = "Ha elegido la {letter}, «{option}»: es CORRECTA. Celébralo en una frase corta."
 TRIVIA_WRONG = (
     "Ha elegido la {letter}, «{option}»: NO es correcta; la buena era la {right_letter}, "
-    "«{right_option}». Díselo con cariño y explica en una frase por qué."
+    "«{right_option}». Díselo con cariño en una frase corta."
 )
 TRIVIA_PASS = (
-    "No lo sabe: la buena era la {right_letter}, «{right_option}». Díselo con cariño y explica "
-    "en una frase por qué."
+    "No lo sabe: la buena era la {right_letter}, «{right_option}». Díselo con cariño en una "
+    "frase corta."
 )
 
 RIDDLE_RIGHT = "¡ACIERTO! Era «{answer}». Celébralo en una frase."
@@ -188,14 +190,13 @@ RIDDLE_LOST = (
 RIDDLE_PASS = "Se rinden: la respuesta era «{answer}». Díselo con humor, en una frase."
 
 EXPLAIN_SCORE = (
-    "Nota {score} de 10 en la pantalla. Coméntala con humor y cariño en una o dos frases: qué "
-    "le salió bien y qué le faltó."
+    "Nota {score} de 10 en la pantalla. Coméntala con humor y cariño en una frase corta."
 )
 EXPLAIN_PASS = "No quiere explicarlo, y no pasa nada: dilo con humor en una frase."
 
 FUTURE_DONE = (
     "En la pantalla: «{prediction}», con un {probability} % de probabilidad. Coméntalo con "
-    "humor en una o dos frases."
+    "humor en una frase corta."
 )
 FUTURE_PASS = "No quiere predecir nada, y no pasa nada: dilo con humor en una frase."
 
@@ -266,16 +267,15 @@ NO_PREDICTION = (
 # ---------------------------------------------------------------------------
 
 NUDGE_CHALLENGE = (
-    "RULETA: el visitante acaba de hablarte y no has delegado nada. Si te ha dado su respuesta "
-    "al reto, delégala ahora («ruleta: responde», «ruleta: nota» o «ruleta: predicción»): "
-    "decirlo no basta, la pantalla solo cambia si delegas. Si pidió otra vuelta o terminar, "
-    "delégalo. Si solo charlaba, no digas nada."
+    "RULETA: si el visitante dio su respuesta al reto, delégala ya, sin decir si acierta; si "
+    "pidió otra vuelta, delega girar; si pidió parar o se despidió, delega terminar el juego."
 )
 NUDGE_RESULT = (
-    "RULETA: el visitante acaba de hablarte y no has delegado nada. Si pidió otra vuelta, "
-    "delega «ruleta: girar»; si no quiere seguir, delega terminar el juego. Si solo charlaba, "
-    "no digas nada."
+    "RULETA: si el visitante pidió otra vuelta, delega girar; si no quiere seguir o se "
+    "despidió, delega terminar el juego."
 )
+#: Mientras gira la ruleta solo cuenta parar (el reto aún no ha salido).
+NUDGE_SPINNING = "RULETA: si el visitante pidió parar o se despidió, delega terminar el juego."
 
 # ---------------------------------------------------------------------------
 # Si GPT-Live vuelve a delegar empezar la ruleta en plena partida (``resume``)
