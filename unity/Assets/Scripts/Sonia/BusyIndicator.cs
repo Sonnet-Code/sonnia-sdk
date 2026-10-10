@@ -16,9 +16,12 @@
 // que no tapa ni su cara ni sus manos.
 //
 // Tiempos: entra en unos 0,14 s, se queda al menos 0,6 s aunque llegue antes el
-// off (para que no parpadee), cambia el texto en el sitio y sale en 0,2 s. Si se
-// cae el orquestador se retira sola. Nada de aquí lanza: sin HUD monta su propio
-// Canvas y sin orquestador no sale (o sale con Show, para probar).
+// off (para que no parpadee) y sale en 0,2 s, con la misma curva suave en los dos
+// sentidos y sin rebote: sale en cada delegación, también en las rápidas, y un on
+// que llega mientras sale la devuelve desde donde está. Si cambia el texto estando
+// encendida, el nuevo se funde en el sitio y el ancho se acomoda, sin volver a
+// entrar. Si se cae el orquestador se retira sola. Nada de aquí lanza: sin HUD
+// monta su propio Canvas y sin orquestador no sale (o sale con Show, para probar).
 
 using System;
 using System.Collections.Generic;
@@ -121,7 +124,7 @@ namespace Sonia
         private bool _showing;
         private float _width;
         private float _targetWidth;
-        private float _pulse;
+        private float _textFade = 1f;
 
         /// <summary>Cierto mientras la pastilla se ve, aunque sea a medias (entrando o saliendo).</summary>
         public bool IsVisible
@@ -317,14 +320,13 @@ namespace Sonia
 
             if (_pendingText != null)
             {
+                // Encendida: el texto nuevo se funde y el ancho se acomoda. Apagada o
+                // empezando a entrar: directamente a su tamaño.
                 bool inPlace = _visibility > 0.5f;
                 SetText(_pendingText);
                 _pendingText = null;
-                if (inPlace)
-                {
-                    _pulse = 1f;
-                }
-                else
+                _textFade = inPlace ? 0f : 1f;
+                if (!inPlace)
                 {
                     _width = _targetWidth;
                 }
@@ -354,10 +356,10 @@ namespace Sonia
                 }
             }
 
-            Apply(now, dt, show);
+            Apply(now, dt);
         }
 
-        private void Apply(float now, float dt, bool entering)
+        private void Apply(float now, float dt)
         {
             bool visible = _visibility > 0.001f;
             if (_pill.gameObject.activeSelf != visible)
@@ -370,40 +372,36 @@ namespace Sonia
                 return;
             }
 
-            // Entrada: cae unos píxeles, crece con un pequeño rebote y se funde.
-            // Salida: sube un poco, encoge y se funde, más corta.
+            // Entrada y salida con la misma curva, solo cambia la velocidad: baja
+            // unos píxeles hasta su sitio, crece un poco sin rebote y se funde; al
+            // salir, al revés. Así un on a media salida no da saltos.
             float v = _visibility;
-            float alpha;
-            float scale;
-            float drop;
-            if (entering)
-            {
-                alpha = Mathf.Clamp01(v * 1.6f);
-                scale = Mathf.LerpUnclamped(0.86f, 1f, EaseOutBack(v));
-                drop = -18f * (1f - EaseOutCubic(v));
-            }
-            else
-            {
-                alpha = v;
-                scale = Mathf.Lerp(0.94f, 1f, v);
-                drop = 10f * (1f - v);
-            }
+            float eased = EaseOutCubic(v);
+            float alpha = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(v * 1.25f));
+            float scale = Mathf.Lerp(0.94f, 1f, eased);
+            float lift = 12f * (1f - eased);
 
-            // Al cambiar el texto en el sitio: un latido y el ancho que se acomoda.
-            if (_pulse > 0f)
-            {
-                _pulse = Mathf.Max(0f, _pulse - (dt / 0.25f));
-                scale *= 1f + (0.045f * Mathf.Sin(_pulse * Mathf.PI));
-            }
-
+            // El ancho se acomoda al texto nuevo sin pasarse.
             _width = Mathf.Abs(_width - _targetWidth) < 0.5f
                 ? _targetWidth
                 : Mathf.Lerp(_width, _targetWidth, 1f - Mathf.Exp(-dt * 22f));
 
             _group.alpha = alpha;
             _pill.localScale = new Vector3(scale, scale, 1f);
-            _pill.anchoredPosition = new Vector2(0f, -top - drop);
+            _pill.anchoredPosition = new Vector2(0f, -top + lift);
             _pill.sizeDelta = new Vector2(_width, PillHeight);
+
+            // El texto que cambia en el sitio se funde en 0,18 s.
+            if (_textFade < 1f)
+            {
+                _textFade = Mathf.MoveTowards(_textFade, 1f, dt / 0.18f);
+            }
+
+            float textAlpha = Mathf.Lerp(0.25f, 1f, Mathf.SmoothStep(0f, 1f, _textFade));
+            if (!Mathf.Approximately(_message.alpha, textAlpha))
+            {
+                _message.alpha = textAlpha;
+            }
 
             // Tres puntos que saltan uno detrás de otro.
             for (int i = 0; i < _dots.Count; i++)
@@ -729,14 +727,6 @@ namespace Sonia
 
             string clean = text.Replace('\n', ' ').Replace('\r', ' ').Trim();
             return clean.Length == 0 ? "Pensando…" : clean;
-        }
-
-        private static float EaseOutBack(float t)
-        {
-            const float c1 = 1.70158f;
-            const float c3 = c1 + 1f;
-            float x = t - 1f;
-            return 1f + (c3 * x * x * x) + (c1 * x * x);
         }
 
         private static float EaseOutCubic(float t)

@@ -43,13 +43,14 @@ async def test_el_veredicto_del_juez_manda_en_cada_ronda_y_en_las_trampas() -> N
     await host.run_tasks()
     results = sent(host, "result")
     assert len(results) == ROUNDS
-    # Lo local veía 3 de 5 (1 en la trampa): manda el juez, también en la trampa.
-    assert {(r["count"], r["total"]) for r in results} == {(4, 6)}
+    # Lo local veía 3 de 5 (1 en la trampa): cuántos la hacen lo dice el juez, también en la
+    # trampa; cuántos juegan, lo local (el juez cuenta también a quien pasa por el fondo).
+    assert {(r["count"], r["total"]) for r in results} == {(4, 5)}
     assert any(not r["simon"] for r in results)
-    assert any("TRAMPA" in s and "cayeron 4 de 6" in s for s in host.spoken)
-    assert sum(1 for s in host.spoken if "4 de 6" in s) == ROUNDS
+    assert any("TRAMPA" in s and "cayeron 4 de 5" in s for s in host.spoken)
+    assert sum(1 for s in host.spoken if "4 de 5" in s) == ROUNDS
     final = sent(host, "final")[-1]
-    assert (final["done"], final["possible"], final["fell"]) == (5 * 4 + 2, 36, 4)
+    assert (final["done"], final["possible"], final["fell"]) == (5 * 4 + 1, 30, 4)
     # Una foto por ronda, la de la cámara, entera (la reduce el juez).
     assert referee.photos == [("poses", (360, 640, 3))] * ROUNDS
     # La pastilla, encendida mientras mira y apagada después, en cada ronda.
@@ -78,17 +79,37 @@ async def test_un_veredicto_sin_la_pose_deja_lo_local() -> None:
 
 
 async def test_la_cuenta_del_juez_no_pasa_de_sus_personas() -> None:
-    referee = FakeReferee(poses=[PoseVerdict(2, {pose: 2 for pose in POSE_IDS})] * ROUNDS)
+    referee = FakeReferee(poses=[PoseVerdict(2, {pose: 3 for pose in POSE_IDS})] * ROUNDS)
     game, host, _ = judged_game(Crowd(players=5, doers=3, fallers=1), referee)
     await game.start("voice", {})
     await host.run_tasks()
+    # El juez ve 2 personas: no puede decir que la hicieron 3. Juegan los 5 que ve lo local.
+    assert {(r["count"], r["total"]) for r in sent(host, "result")} == {(2, 5)}
+
+
+async def test_gente_de_fondo_no_infla_el_total() -> None:
+    # Lo local ve a los 2 que juegan; el juez cuenta 40 personas (el pasillo) y 2 con la pose.
+    referee = FakeReferee(poses=[everyone(2, 40)] * ROUNDS)
+    game, host, _ = judged_game(Crowd(players=2, doers=1, fallers=0), referee)
+    await game.start("voice", {})
+    await host.run_tasks()
     assert {(r["count"], r["total"]) for r in sent(host, "result")} == {(2, 2)}
-    assert any("la hicieron todos, 2 de 2" in s for s in host.spoken)
 
 
-async def test_si_el_juez_no_ve_a_nadie_las_rondas_vacias_acaban_el_juego() -> None:
+async def test_si_lo_local_no_ve_a_nadie_el_total_del_juez_va_con_tope() -> None:
+    referee = FakeReferee(poses=[everyone(3, 40)] * ROUNDS)
+    game, host, _ = judged_game(Crowd(players=0), referee)
+    await game.start("voice", {})
+    await host.run_tasks()
+    results = sent(host, "result")
+    assert results and {(r["count"], r["total"]) for r in results} == {
+        (3, poses_game.MAX_JUDGED_PLAYERS)
+    }
+
+
+async def test_si_nadie_ve_a_nadie_las_rondas_vacias_acaban_el_juego() -> None:
     referee = FakeReferee(poses=[everyone(0, 0)] * ROUNDS)
-    game, host, _ = judged_game(Crowd(players=5, doers=3, fallers=1), referee)
+    game, host, _ = judged_game(Crowd(players=0), referee)
     await game.start("voice", {})
     await host.run_tasks()
     assert len(sent(host, "result")) == poses_game.EMPTY_ROUNDS_TO_STOP

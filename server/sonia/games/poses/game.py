@@ -108,6 +108,10 @@ EMPTY_ROUNDS_TO_STOP = 2
 #: nunca se queda esperando más que esto.
 JUDGE_GRACE_S = 1.0
 
+#: Tope de jugadores cuando solo los cuenta el juez (lo local no vio a nadie): una foto con
+#: gente de fondo no puede convertir una ronda en «2 de 40».
+MAX_JUDGED_PLAYERS = 10
+
 # -- textos para GPT-Live («Sonia», sin marcas del stack) ------------------------------
 
 RULES_TEXT = """\
@@ -733,8 +737,13 @@ class PosesGame(Game):
             await self._set_busy(None)
         if verdict is None or pose not in verdict.counts:
             return count, total
-        people = max(0, int(verdict.people))
-        judged = min(max(0, int(verdict.counts[pose])), people)
+        seen = max(0, int(verdict.people))
+        judged = min(max(0, int(verdict.counts[pose])), seen, max(total, MAX_JUDGED_PLAYERS))
+        # Quién juega: el juez cuenta a todos los que ve, también a quien pasa por el fondo,
+        # y la detección local solo a los que están cerca (``GAME_POSES_MIN_PERSON``). Si lo
+        # local vio jugadores, el total es el suyo, nunca menos que los que hicieron la pose;
+        # si no vio a nadie, el del juez, con tope.
+        people = max(total, judged) if total > 0 else max(min(seen, MAX_JUDGED_PLAYERS), judged)
         if (judged, people) != (count, total):
             logger.info(
                 "Simón dice, %s: el juez ve %d de %d (lo local, %d de %d)",
