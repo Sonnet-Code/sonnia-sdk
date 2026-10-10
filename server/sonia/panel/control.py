@@ -40,6 +40,7 @@ from sonia.clock import resolve_timezone
 from sonia.config import Settings
 from sonia.games.banks import is_bank_id
 from sonia.games.manager import normalize_game_banks, normalize_games_judge, normalize_games_off
+from sonia.prompts import APPLIES_TEXT, BOOK, PROMPT_ID, PROMPT_MAX_LEN
 from sonia.showcase import ATTENTION_DANCE, ATTENTION_FOURTH_WALL, load_lines
 from sonia.types import ActionContext
 from sonia.ws import protocol as p
@@ -134,6 +135,7 @@ SHARED_SETTINGS: tuple[str, ...] = (
     "game_banks",
     "games_pose_model",
     "games_judge",
+    "prompts",
 )
 
 #: Variantes del modelo de poses que se pueden elegir en el panel, si la visión de los
@@ -293,6 +295,9 @@ class PanelState:
     #: el de la app (``GAMES_JUDGE``). Si Gemini va lento o falla, se pasa a local sin tocar
     #: el ``.env``.
     games_judge: str | None = None
+    #: Prompts de Sonnia guardados desde «Developer» (``{id: texto}``, solo los cambiados);
+    #: ``None``: todos los de la app. Si hay versión de la nube válida, se usa solo esa.
+    prompts: dict[str, str] | None = None
     #: Modo debug: Sonnia quieta (sin GPT-Live ni nada automático) para pruebas visuales.
     debug: bool = False
     #: Gasto del día: segundos de sesión de GPT-Live acumulados en ``usage_date``
@@ -340,6 +345,8 @@ class PanelState:
             )
         with contextlib.suppress(ValueError):
             state.games_judge = _normalize_shared("games_judge", raw.get("games_judge"))
+        with contextlib.suppress(ValueError):
+            state.prompts = _normalize_shared("prompts", raw.get("prompts"))
         for name in ("volume", "mic_gate", "usage_seconds", "trial_seconds"):
             value = raw.get(name)
             if _is_number(value):
@@ -490,6 +497,7 @@ class StandControl:
             caps.append("camera_watch")
         if self._engine.trivia is not None:
             caps.extend(("trivia", "trivia_bank"))
+        caps.append("prompts")
         if self._engine.presence_available:
             caps.append("mic_presence")
         games = self._games
@@ -544,6 +552,7 @@ class StandControl:
             await engine.set_notes(state.notes)
         if state.trivia_bank and engine.trivia is not None:
             engine.trivia.use_cloud_bank(state.trivia_bank)
+        BOOK.set_overrides(state.prompts)
         games = self._games
         if games is not None:
             await games.set_games_off(state.games_off)
@@ -776,6 +785,8 @@ class StandControl:
         message = result[1]
         if action in ("trivia_bank", "game_bank") and result[0]:
             message = f"banco de {len(message)} caracteres"  # el banco entero no va al registro
+        elif action in ("prompt", "prompt_catalog") and result[0]:
+            message = f"{len(message)} caracteres"  # los prompts enteros no van al registro
         logger.log(level, "Panel: %s %s -> %s", action, _summary(params), message)
         return result
 
@@ -1378,6 +1389,65 @@ class StandControl:
             "Sonnias actualizadas."
         )
 
+    # -- prompts de Sonnia («Developer») -----------------------------------------------------
+
+    async def _act_prompt_catalog(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """Las piezas editables (sin su texto), en JSON, para el selector del panel."""
+        catalog = await asyncio.to_thread(BOOK.catalog)
+        return True, json.dumps({"prompts": catalog}, ensure_ascii=False)
+
+    async def _act_prompt(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """Una pieza entera, en JSON: el texto en uso, el de la app y de dónde sale."""
+        prompt_id = _prompt_id(params)
+
+        def read() -> dict[str, Any]:
+            spec = BOOK.spec(prompt_id)
+            return {
+                "id": prompt_id,
+                "text": BOOK.text(prompt_id),
+                "default": BOOK.default(prompt_id),
+                "source": BOOK.source(prompt_id),
+                "fields": list(spec.fields),
+                "applies_text": APPLIES_TEXT[spec.applies],
+            }
+
+        try:
+            data = await asyncio.to_thread(read)
+        except KeyError:
+            raise _BadRequest(f"No hay ningún prompt «{prompt_id}» en esta Sonnia.") from None
+        return True, json.dumps(data, ensure_ascii=False)
+
+    async def _act_set_prompt(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Guardar en la nube» de un prompt (``prompts``). Vacío, o igual al de la app,
+        vuelve al de la app. Lo que no valida no se guarda y dice por qué."""
+        prompt_id = _prompt_id(params)
+        text = params.get("text")
+        if text is None:
+            text = ""
+        if not isinstance(text, str):
+            raise _BadRequest("«text» tiene que ser texto.")
+        text = text.strip()
+        try:
+            spec = BOOK.spec(prompt_id)
+            default = (await asyncio.to_thread(BOOK.default, prompt_id)).strip()
+        except KeyError:
+            raise _BadRequest(f"No hay ningún prompt «{prompt_id}» en esta Sonnia.") from None
+        when = APPLIES_TEXT[spec.applies]
+        prompts = dict(self.state.prompts or {})
+        if not text or text == default:
+            if prompt_id not in prompts:
+                return True, "Ya usa el de la app."
+            del prompts[prompt_id]
+            await self._set_shared("prompts", prompts or None)
+            return True, f"Vuelve al de la app {when}, en todas las Sonnias actualizadas."
+        problems = BOOK.validate(prompt_id, text)
+        if problems:
+            raise _BadRequest("No se guarda: " + " ".join(problems))
+        prompts[prompt_id] = text
+        self._check_settings_room("prompts", prompts)
+        await self._set_shared("prompts", prompts)
+        return True, f"Guardado en la nube. Se usa {when}, en todas las Sonnias actualizadas."
+
     async def _act_greet(self, params: dict[str, Any]) -> tuple[bool, str]:
         self._need_sonia_on_stage()
         return await self.greet("greeting")
@@ -1577,6 +1647,9 @@ class StandControl:
         elif key == "games_judge":
             state.games_judge = value
             self._apply_games_judge(value)
+        elif key == "prompts":
+            state.prompts = value
+            BOOK.set_overrides(value)
         else:  # pragma: no cover - SHARED_SETTINGS y esto van juntos
             raise ValueError(f"Ajuste desconocido: {key}")
 
@@ -2058,7 +2131,26 @@ def _normalize_shared(key: str, value: Any) -> Any:
         if mode is None:
             raise ValueError(key)
         return mode
+    if key == "prompts":
+        return normalize_prompts(value)
     raise ValueError(key)
+
+
+def normalize_prompts(value: Any) -> dict[str, str] | None:
+    """Los prompts que llegan de la nube: ``{id: texto}`` con ids válidos y textos no
+    vacíos y con tope. Se guardan también los ids que esta app no registra (una Sonnia
+    más nueva pudo guardarlos); el registro solo usa los que validan."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("prompts")
+    out: dict[str, str] = {}
+    for key, text in value.items():
+        if isinstance(key, str) and PROMPT_ID.match(key) and isinstance(text, str):
+            text = text.strip()
+            if text and len(text) <= PROMPT_MAX_LEN:
+                out[key] = text
+    return out or None
 
 
 def _normalize_pose_model(value: Any) -> str | None:
@@ -2100,3 +2192,11 @@ def _level(params: dict[str, Any]) -> str | None:
 
     value = params.get("level")
     return normalize_level(value) if isinstance(value, str) else None
+
+
+def _prompt_id(params: dict[str, Any]) -> str:
+    """El ``id`` de un prompt pedido por el panel, ya comprobado."""
+    prompt_id = params.get("id")
+    if not isinstance(prompt_id, str) or not PROMPT_ID.match(prompt_id):
+        raise _BadRequest("¿Qué prompt? Elige uno de la lista.")
+    return prompt_id
