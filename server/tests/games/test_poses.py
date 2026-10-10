@@ -476,6 +476,7 @@ def test_ningun_texto_para_sonia_nombra_el_stack_ni_se_pasa() -> None:
         poses_game.TRAP_NONE_TEXT,
         poses_game.EMPTY_TEXT,
         poses_game.FINAL_TEXT + poses_game.FINAL_TRAP_TEXT + poses_game.WIN_CONTACT_TEXT,
+        poses_game.FINAL_NO_TRAP_TEXT,
         poses_game.EMPTY_FINAL_TEXT,
         poses_game.FAILED_TEXT,
     ]

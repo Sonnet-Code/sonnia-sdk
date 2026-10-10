@@ -157,6 +157,7 @@ FINAL_TEXT = (
     "Celébralo con energía en una o dos frases: nadie queda eliminado."
 )
 FINAL_TRAP_TEXT = " y en las trampas cayeron {fell}"
+FINAL_NO_TRAP_TEXT = " y en las trampas no cayó nadie"
 WIN_CONTACT_TEXT = (
     " Si alguien pregunta por premios, que hable con {contact} aquí en el stand; no sabes qué "
     "premios hay: no prometas ninguno."
@@ -460,7 +461,9 @@ class PosesGame(Game):
     async def _final(self) -> None:
         done, possible, fell = self._totals()
         await self._show("final")
-        trap = FINAL_TRAP_TEXT.format(fell=fell) if any(not r.simon for r in self._results) else ""
+        trap = ""
+        if any(not r.simon for r in self._results):
+            trap = FINAL_TRAP_TEXT.format(fell=fell) if fell else FINAL_NO_TRAP_TEXT
         text = FINAL_TEXT.format(done=done, possible=possible, trap=trap)
         contact = self.host.settings.trivia.win_contact.strip()
         if contact:
