@@ -6,6 +6,9 @@ modelo con visión (el de ``LLM_*``, cualquiera compatible con OpenAI) la
 describe en una o dos frases y la descripción entra en la sesión como nota
 silenciosa (``session.thinking.append``). La foto no sale de aquí hacia
 GPT-Live ni se guarda en disco.
+
+El prompt y la pregunta que acompaña a la foto se pueden cambiar desde el panel
+(``vision/narrador`` y ``vision/pregunta``, ver ``sonia/prompts``).
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from collections.abc import AsyncIterator
 from typing import Protocol
 
 from sonia.llm.messages import user_with_image
+from sonia.prompts import BOOK
 from sonia.types import Frame, LLMEvent, Message, TextDelta, TurnDone
 
 __all__ = ["NARRATOR_PROMPT", "VisionNarrator"]
@@ -46,8 +50,8 @@ class VisionNarrator:
     async def describe(self, frame: Frame) -> str:
         """Devuelve la descripción, o cadena vacía si el modelo no dijo nada."""
         messages: list[Message] = [
-            {"role": "system", "content": NARRATOR_PROMPT},
-            user_with_image(NARRATOR_REQUEST, frame),
+            {"role": "system", "content": BOOK.text("vision/narrador", fallback=NARRATOR_PROMPT)},
+            user_with_image(BOOK.text("vision/pregunta", fallback=NARRATOR_REQUEST), frame),
         ]
         parts: list[str] = []
         final = ""

@@ -9,6 +9,12 @@ GPT-Live separa dos prompts (ver la guía de prompting de la API Live):
   que ejecuta las acciones: herramientas, ids de la galería y reglas.
 
 Así la persona vive en un solo sitio.
+
+Cada bloque de texto es una pieza editable desde el panel (``sonia.prompts``, registradas
+en ``sonia/prompts/specs_conversa.py``): las constantes de aquí son el texto de la app y se
+piden con :func:`_text` o ``BOOK.render`` al montar las instrucciones. Qué bloques entran
+según la configuración lo sigue decidiendo este código. Las piezas no llevan espacios ni
+saltos de línea al principio ni al final (la nube los quita): los pone el código.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ from typing import Any, Literal
 from sonia.actions.registry import ActionRegistry
 from sonia.config import Settings
 from sonia.persona import SYSTEM_PROMPT, KnowledgeSource, host_of, is_local_host, load_knowledge
+from sonia.prompts import BOOK
 
 __all__ = [
     "CAMERA_NOTE_PREFIX",
@@ -41,6 +48,18 @@ CLOCK_NOTE_PREFIX = "[Reloj]"
 
 #: Prefijo de las notas silenciosas con las imágenes que el equipo añade o quita de la galería.
 GALLERY_NOTE_PREFIX = "[Galería]"
+
+
+def _text(prompt_id: str, app: str) -> str:
+    """El texto en uso de una pieza: la versión de la nube si vale; si no, ``app``."""
+    return BOOK.text(prompt_id, fallback=app)
+
+
+def _line(prompt_id: str, app: str) -> str:
+    """Una pieza de las que van pegadas en las reglas (``{look_when}{moves_when}...``), con su
+    salto de línea: en la nube se guardan sin él."""
+    return _text(prompt_id, app) + "\n"
+
 
 LIVE_RULES = """\
 CÓMO FUNCIONAS (voz a voz en tiempo real):
@@ -102,6 +121,9 @@ _CAPABILITIES = {
     ),
 }
 
+#: Las capacidades cuando el backend no tiene ninguna herramienta.
+_NO_CAPABILITIES = "- Ninguna en este momento: no delegues."
+
 
 def games_capability(registry: ActionRegistry | None) -> str:
     """La única línea de los juegos (``docs/juegos.md``): cuáles hay y que se delegan.
@@ -143,7 +165,7 @@ _MOVES_WHEN = (
     "- Te pidan bailar, saludar o hacer un gesto, el que sea («¡baila!», «hazme un bailecito», "
     "«haz la de la paz», «tócate un ojo»): delégalo en ese mismo turno, sin preguntar ni decir "
     "antes que no lo tienes, y acompáñalo con una frase corta. "
-    "No te muevas por tu cuenta a cada rato: solo cuando te lo pidan o al celebrar algo.\n"
+    "No te muevas por tu cuenta a cada rato: solo cuando te lo pidan o al celebrar algo."
 )
 
 #: Cómo va la trivia (solo si el backend tiene la acción). El procedimiento (requisito y
@@ -152,7 +174,7 @@ _TRIVIA_RULE = (
     "- Trivia: las preguntas, sus opciones y la tarjeta de la pantalla salen solo del backend: "
     "nunca te inventes ni digas una pregunta que no te haya dado. Para jugar hay que seguir a "
     "Sonnet Code en Instagram y LinkedIn; lo que haya que preguntar antes te lo dice el backend. "
-    "Si alguien no sabe qué preguntarte, puedes proponerle la trivia.\n"
+    "Si alguien no sabe qué preguntarte, puedes proponerle la trivia."
 )
 
 #: La fecha y la hora. Antes llegaba una nota ``[Reloj]`` por minuto y Sonia decía la hora
@@ -168,7 +190,7 @@ _CLOCK_RULE = (
     "llegan."
 )
 _CLOCK_ASK_RULE = (
-    " Si te preguntan la hora exacta, delega: la de FECHA Y HORA puede tener un rato y el "
+    "Si te preguntan la hora exacta, delega: la de FECHA Y HORA puede tener un rato y el "
     "backend la consulta al momento."
 )
 
@@ -177,17 +199,17 @@ _TRIVIA_WHEN = (
     "- El visitante quiera jugar a la trivia: delega empezarla en ese mismo turno, sin "
     "preguntarle nada antes (pasa el nivel y si sigue a Sonnet Code solo si ya te lo dijo). "
     "También cuando elija una opción («la B», «Kotlin»), pida la siguiente pregunta, quiera "
-    "empezar otra desde cero o quiera dejar de jugar.\n"
+    "empezar otra desde cero o quiera dejar de jugar."
 )
 
 #: Cuándo consultar la agenda en la web (``check_agenda``) y enseñar una charla (``show_talk``).
 _AGENDA_WHEN = (
     "- Te pregunten si ha cambiado algo de la agenda, quieran confirmar una charla, una hora o "
-    "una sala, no tengas claro qué hay ahora o qué viene, o te pregunten qué hora es.\n"
+    "una sala, no tengas claro qué hay ahora o qué viene, o te pregunten qué hora es."
 )
 _TALK_WHEN = (
     "- Hables de una charla, un workshop o un ponente concretos: enseña su tarjeta en tu "
-    "pantalla mientras la cuentas; cuando cambies de tema, retírala.\n"
+    "pantalla mientras la cuentas; cuando cambies de tema, retírala."
 )
 
 #: Cuándo buscar en internet (``web_search`` del backend).
@@ -195,7 +217,7 @@ _SEARCH_WHEN = (
     "- Te pregunten algo que no está en tu base de conocimiento y se puede buscar en internet "
     "(una noticia, el tiempo, un dato de una empresa, una tecnología, un evento o una persona "
     "pública): búscalo antes de decir que no lo sabes. Nunca busques datos de visitantes ni de "
-    "particulares.\n"
+    "particulares."
 )
 
 #: Cómo le llega a Sonia lo que ve la cámara (ver :func:`camera_mode`).
@@ -245,7 +267,7 @@ _FACES_RULE = (
 _FACES_LOOK_WHEN = (
     "- Te pregunten si les reconoces o si sabes quiénes son y no te haya llegado una nota "
     '"[Cámara]" con su nombre: mira antes de contestar. Si el resultado tampoco lo trae, di que '
-    "no les reconoces y pregúntales cómo se llaman.\n"
+    "no les reconoces y pregúntales cómo se llaman."
 )
 
 _FACES_BACKEND_RULE = (
@@ -256,12 +278,11 @@ _FACES_BACKEND_RULE = (
 )
 
 _LOOK_WHEN: dict[CameraMode, str] = {
-    "notes": "- Te pregunten qué ves, te enseñen algo a la cámara o necesites mirar de nuevo.\n",
+    "notes": "- Te pregunten qué ves, te enseñen algo a la cámara o necesites mirar de nuevo.",
     "look": (
         "- Quieras mirar por la cámara: te preguntan qué ves o cuántos son, te enseñan algo o "
-        "llega alguien nuevo al que quieres saludar con un detalle de lo que lleva.\n"
+        "llega alguien nuevo al que quieres saludar con un detalle de lo que lleva."
     ),
-    "none": "",
 }
 
 _NO_DELEGATE_CHAT: dict[CameraMode, str] = {
@@ -311,7 +332,7 @@ _MEETING_LOOK_CAPABILITY = (
 
 _MEETING_LOOK_WHEN = (
     "- Quieras mirar la reunión: te preguntan qué ves, quién está o cuántos son, alguien enseña "
-    "algo a su cámara o comparten pantalla.\n"
+    "algo a su cámara o comparten pantalla."
 )
 
 _MEETING_BACKEND_RULE = (
@@ -365,6 +386,62 @@ def _action_names(registry: ActionRegistry | None) -> list[str]:
     return list(registry.names()) if registry is not None else []
 
 
+#: Las líneas del stack (:func:`describe_live_stack`), una pieza cada una. El código les pone
+#: el guion delante.
+_STACK_TITLE = "TU STACK AHORA MISMO (generado automáticamente al arrancar):"
+_STACK_VOICE = (
+    "Voz y conversación: un modelo de inteligencia artificial de voz a voz, en tiempo real "
+    "y en la nube: te oye y habla directamente con su propia voz, por eso se te puede "
+    "interrumpir como en una charla normal."
+)
+_STACK_BACKEND = (
+    "Acciones y tareas delegadas: tu backend, un agente de inteligencia artificial con "
+    "herramientas que trabaja por detrás, también en la nube."
+)
+_STACK_EYES_NONE = (
+    "Ojos: sin cámara en este momento; no puedes ver a nadie, no inventes lo que ves."
+)
+#: ``{origen}``: de dónde salen las fotos (:func:`_eyes`).
+_STACK_EYES_LOOK = (
+    "Ojos: {origen}; no miras sola: cuando tú lo decides, tu backend toma una foto "
+    "y te dice qué se ve. Las fotos no se guardan."
+)
+#: ``{donde}``: «en este mismo equipo» o «en la nube», según el servidor del modelo de visión.
+_STACK_EYES_NOTES = (
+    "Ojos: {origen}; cuando alguien empieza a hablarte, un modelo de visión ({donde}) "
+    "describe la foto y te llega como nota [Cámara]. Las fotos no se guardan."
+)
+_STACK_FACES = (
+    "Reconocer caras: aquí mismo, en el equipo del stand, tu cámara reconoce al equipo "
+    "de Sonnet Code y a los ponentes del DevFest por sus fotos públicas. Ninguna foto sale "
+    "del equipo y de los visitantes no se guarda nada."
+)
+_STACK_SEARCH = (
+    "Búsqueda en internet: tu backend puede buscar en la web cuando le pides un dato que no sabes."
+)
+_STACK_BODY = (
+    "Cuerpo: un avatar 3D animado en tiempo real aquí, en el equipo del stand: gestos, "
+    "mirada, parpadeo, bailes y la boca, que sigue los sonidos de tu voz. Mientras hablas, "
+    "otro modelo ligero lee lo que vas diciendo y elige el gesto que mejor le va."
+)
+#: ``{acciones}``: los nombres de las acciones del registro, separados por comas.
+_STACK_ACTIONS = "Acciones disponibles a través del backend: {acciones}."
+_STACK_NO_ACTIONS = "Acciones disponibles: ninguna en este momento."
+_STACK_CLOUD = (
+    "TU VOZ Y TU CONVERSACIÓN CORREN EN LA NUBE: si te preguntan dónde corres, dilo con "
+    "naturalidad. El avatar y la cámara están aquí, en el equipo del stand; la conversación "
+    "la procesa en tiempo real un modelo de voz en la nube. No digas que corres en local."
+)
+_STACK_NO_BRANDS = (
+    "SIN MARCAS: no nombres empresas, productos, modelos ni programas de la tecnología con "
+    "la que estás hecha. Si te preguntan qué modelo eres, qué empresa hay detrás de tu voz o "
+    "con qué programa te hicieron, di que Sonnet Code te creó combinando modelos de "
+    "inteligencia artificial en la nube con un avatar 3D en tiempo real, y que los detalles "
+    "técnicos te los cuenta con gusto el equipo del stand. No lo niegues ni digas otra marca: "
+    "sencillamente no hablas de marcas."
+)
+
+
 def describe_live_stack(
     settings: Settings, *, action_names: list[str] | None = None, faces: bool = False
 ) -> str:
@@ -376,77 +453,57 @@ def describe_live_stack(
     """
     live = settings.live
     lines = [
-        "Voz y conversación: un modelo de inteligencia artificial de voz a voz, en tiempo real "
-        "y en la nube: te oye y habla directamente con su propia voz, por eso se te puede "
-        "interrumpir como en una charla normal.",
-        "Acciones y tareas delegadas: tu backend, un agente de inteligencia artificial con "
-        "herramientas que trabaja por detrás, también en la nube.",
+        _text("conversacion/stack/voz", _STACK_VOICE),
+        _text("conversacion/stack/backend", _STACK_BACKEND),
     ]
 
     mode = camera_mode(settings, action_names or [])
     if mode == "none":
-        lines.append(
-            "Ojos: sin cámara en este momento; no puedes ver a nadie, no inventes lo que ves."
-        )
+        lines.append(_text("conversacion/stack/ojos_ninguno", _STACK_EYES_NONE))
     elif mode == "look":
-        origin = _eyes(settings)
         lines.append(
-            f"Ojos: {origin}; no miras sola: cuando tú lo decides, tu backend toma una foto "
-            "y te dice qué se ve. Las fotos no se guardan."
+            BOOK.render(
+                "conversacion/stack/ojos_look", fallback=_STACK_EYES_LOOK, origen=_eyes(settings)
+            )
         )
     else:
-        origin = _eyes(settings)
         host = host_of(settings.llm.base_url)
         where = "en este mismo equipo" if is_local_host(host) else "en la nube"
         lines.append(
-            f"Ojos: {origin}; cuando alguien empieza a hablarte, un modelo de visión ({where}) "
-            "describe la foto y te llega como nota [Cámara]. Las fotos no se guardan."
+            BOOK.render(
+                "conversacion/stack/ojos_notas",
+                fallback=_STACK_EYES_NOTES,
+                origen=_eyes(settings),
+                donde=where,
+            )
         )
     if faces:
-        lines.append(
-            "Reconocer caras: aquí mismo, en el equipo del stand, tu cámara reconoce al equipo "
-            "de Sonnet Code y a los ponentes del DevFest por sus fotos públicas. Ninguna foto sale "
-            "del equipo y de los visitantes no se guarda nada."
-        )
+        lines.append(_text("conversacion/stack/caras", _STACK_FACES))
     if live.backend_web_search:
-        lines.append(
-            "Búsqueda en internet: tu backend puede buscar en la web cuando le pides un dato "
-            "que no sabes."
+        lines.append(_text("conversacion/stack/busqueda", _STACK_SEARCH))
+    lines.append(_text("conversacion/stack/cuerpo", _STACK_BODY))
+    lines.append(
+        BOOK.render(
+            "conversacion/stack/acciones", fallback=_STACK_ACTIONS, acciones=", ".join(action_names)
         )
-    lines.append(
-        "Cuerpo: un avatar 3D animado en tiempo real aquí, en el equipo del stand: gestos, "
-        "mirada, parpadeo, bailes y la boca, que sigue los sonidos de tu voz. Mientras hablas, "
-        "otro modelo ligero lee lo que vas diciendo y elige el gesto que mejor le va."
-    )
-    lines.append(
-        "Acciones disponibles a través del backend: " + ", ".join(action_names) + "."
         if action_names
-        else "Acciones disponibles: ninguna en este momento."
+        else _text("conversacion/stack/sin_acciones", _STACK_NO_ACTIONS)
     )
-    lines.append(
-        "TU VOZ Y TU CONVERSACIÓN CORREN EN LA NUBE: si te preguntan dónde corres, dilo con "
-        "naturalidad. El avatar y la cámara están aquí, en el equipo del stand; la conversación "
-        "la procesa en tiempo real un modelo de voz en la nube. No digas que corres en local."
-    )
-    lines.append(
-        "SIN MARCAS: no nombres empresas, productos, modelos ni programas de la tecnología con "
-        "la que estás hecha. Si te preguntan qué modelo eres, qué empresa hay detrás de tu voz o "
-        "con qué programa te hicieron, di que Sonnet Code te creó combinando modelos de "
-        "inteligencia artificial en la nube con un avatar 3D en tiempo real, y que los detalles "
-        "técnicos te los cuenta con gusto el equipo del stand. No lo niegues ni digas otra marca: "
-        "sencillamente no hablas de marcas."
-    )
+    lines.append(_text("conversacion/stack/nube", _STACK_CLOUD))
+    lines.append(_text("conversacion/stack/sin_marcas", _STACK_NO_BRANDS))
     return "\n".join(
-        ["TU STACK AHORA MISMO (generado automáticamente al arrancar):"]
-        + [f"- {line}" for line in lines]
+        [_text("conversacion/stack/titulo", _STACK_TITLE)] + [f"- {line}" for line in lines]
     )
+
+
+#: ``{fecha}``: la fecha y la hora habladas al abrir la sesión.
+_CLOCK_SECTION = (
+    "FECHA Y HORA (al empezar esta conversación): {fecha}. No la digas si no te la preguntan."
+)
 
 
 def _clock_section(clock_text: str) -> str:
-    return (
-        f"FECHA Y HORA (al empezar esta conversación): {clock_text}. No la digas si no te la "
-        "preguntan."
-    )
+    return BOOK.render("conversacion/fecha_hora", fallback=_CLOCK_SECTION, fecha=clock_text)
 
 
 #: Nada de inventarse el aspecto de nadie (registro del 7 de octubre: «me encantan esas gafas»
@@ -474,6 +531,27 @@ _BACKEND_DOES = {
     "check_agenda": "consultar la agenda en la web",
     "show_talk": "enseñar la tarjeta de una charla",
 }
+_BACKEND_DOES_SEARCH = "buscar en internet"
+
+_REMINDER_TITLE = "ANTES DE CADA RESPUESTA, RECUERDA (manda sobre todo lo anterior):"
+#: ``{lista}``: lo que solo hace el backend (``_BACKEND_DOES``), con comas y una «y».
+_REMINDER_DELEGATE = (
+    "- Esto solo pasa si lo delegas en tu backend: {lista}. Delega primero y habla "
+    "después. Nunca digas que ya lo haces, que está hecho o «ahí va» sin haberlo delegado: "
+    "si no delegas, en la pantalla no pasa nada."
+)
+_REMINDER_MOVES = (
+    "- Si te piden bailar o un gesto, delégalo en ese mismo turno. Si te dicen que no "
+    "lo hiciste, es que no lo delegaste: delégalo ahora."
+)
+_REMINDER_TRIVIA = (
+    "- En la trivia nunca digas preguntas ni opciones de tu cabeza: empiézala delegando "
+    "y lee la pregunta que te devuelva el backend."
+)
+_REMINDER_SEARCH = (
+    "- Si no sabes algo y se puede buscar en internet, delega la búsqueda antes de "
+    "decir que no lo sabes."
+)
 
 
 def _reminder_section(names: list[str], *, web_search: bool, mode: CameraMode = "look") -> str:
@@ -483,42 +561,54 @@ def _reminder_section(names: list[str], *, web_search: bool, mode: CameraMode = 
     en decir «¡ahí va el bailecito!» o en inventarse la pregunta de la trivia sin
     delegar nada (registro del 7 de octubre de 2026).
     """
-    things = [text for name, text in _BACKEND_DOES.items() if name in names]
+    things = [
+        _text(f"conversacion/recordatorio/hace/{name}", text)
+        for name, text in _BACKEND_DOES.items()
+        if name in names
+    ]
     if web_search:
-        things.append("buscar en internet")
+        things.append(_text("conversacion/recordatorio/hace/web_search", _BACKEND_DOES_SEARCH))
     if not things:
         return ""
     listed = ", ".join(things[:-1]) + f" y {things[-1]}" if len(things) > 1 else things[0]
     lines = [
-        "ANTES DE CADA RESPUESTA, RECUERDA (manda sobre todo lo anterior):",
-        f"- Esto solo pasa si lo delegas en tu backend: {listed}. Delega primero y habla "
-        "después. Nunca digas que ya lo haces, que está hecho o «ahí va» sin haberlo delegado: "
-        "si no delegas, en la pantalla no pasa nada.",
+        _text("conversacion/recordatorio/titulo", _REMINDER_TITLE),
+        BOOK.render("conversacion/recordatorio/delegar", fallback=_REMINDER_DELEGATE, lista=listed),
     ]
     if "play_animation" in names:
-        lines.append(
-            "- Si te piden bailar o un gesto, delégalo en ese mismo turno. Si te dicen que no "
-            "lo hiciste, es que no lo delegaste: delégalo ahora."
-        )
+        lines.append(_text("conversacion/recordatorio/gestos", _REMINDER_MOVES))
     if "start_trivia" in names:
-        lines.append(
-            "- En la trivia nunca digas preguntas ni opciones de tu cabeza: empiézala delegando "
-            "y lee la pregunta que te devuelva el backend."
-        )
+        lines.append(_text("conversacion/recordatorio/trivia", _REMINDER_TRIVIA))
     if web_search:
-        lines.append(
-            "- Si no sabes algo y se puede buscar en internet, delega la búsqueda antes de "
-            "decir que no lo sabes."
-        )
-    lines.append(_LOOKS_REMINDER[mode])
+        lines.append(_text("conversacion/recordatorio/busqueda", _REMINDER_SEARCH))
+    lines.append(_text(f"conversacion/recordatorio/aspecto_{mode}", _LOOKS_REMINDER[mode]))
     return "\n".join(lines)
 
 
+#: ``{avisos}``: los avisos del día que escribe el equipo en el panel. También en el backend.
+_NOTES_SECTION = (
+    "AVISOS DE HOY DEL EQUIPO DEL STAND (son más recientes que tu base de conocimiento; "
+    "si chocan, mandan estos):\n{avisos}"
+)
+
+
 def _notes_section(notes: str) -> str:
-    return (
-        "AVISOS DE HOY DEL EQUIPO DEL STAND (son más recientes que tu base de conocimiento; "
-        "si chocan, mandan estos):\n" + notes.strip()
-    )
+    return BOOK.render("conversacion/avisos", fallback=_NOTES_SECTION, avisos=notes.strip())
+
+
+#: ``{conocimiento}``: los archivos de ``assets/knowledge`` (o sus versiones de la nube).
+_KNOWLEDGE_SECTION = (
+    "BASE DE CONOCIMIENTO (son tus únicos datos verificados; lo que no esté aquí, "
+    "no lo afirmes):\n\n{conocimiento}"
+)
+
+#: ``{imagenes}``: los ids de la galería, separados por comas.
+_GALLERY_LINE = "Imágenes que el backend puede mostrar en tu pantalla: {imagenes}"
+_GALLERY_EMPTY = "La galería de imágenes está vacía: no tienes imágenes que enseñar en tu pantalla."
+_GALLERY_WATCH = (
+    f'Si el equipo añade o quita imágenes, te llegará una nota interna "{GALLERY_NOTE_PREFIX}" '
+    "con la lista nueva: manda esa."
+)
 
 
 def build_live_instructions(
@@ -544,66 +634,82 @@ def build_live_instructions(
 
     def capability(name: str) -> str:
         if meeting and name == "look":
-            return _MEETING_LOOK_CAPABILITY
+            return _text("conversacion/capacidades/look_reunion", _MEETING_LOOK_CAPABILITY)
         if any_gesture and name == "play_animation":
-            return _ANY_GESTURE_CAPABILITY
+            return _text(
+                "conversacion/capacidades/play_animation_cualquiera", _ANY_GESTURE_CAPABILITY
+            )
         if name == "start_game":
             return games_capability(registry)
-        return _CAPABILITIES[name]
+        return _text(f"conversacion/capacidades/{name}", _CAPABILITIES[name])
 
     capabilities = "\n".join(
         [capability(n) for n in names if n in _CAPABILITIES or n == "start_game"]
-        + ([_SEARCH_CAPABILITY] if web_search else [])
+        + ([_text("conversacion/capacidades/web_search", _SEARCH_CAPABILITY)] if web_search else [])
     )
-    camera_rule = _CAMERA_RULE[mode]
-    look_when = _LOOK_WHEN[mode]
+    camera_rule = _text(f"conversacion/camara/{mode}", _CAMERA_RULE[mode])
+    look_when = (
+        _line(f"conversacion/delegar/mirar_{mode}", _LOOK_WHEN[mode]) if mode in _LOOK_WHEN else ""
+    )
     if meeting:
-        camera_rule = _MEETING_RULE + "\n" + camera_rule
+        camera_rule = _text("conversacion/camara/reunion", _MEETING_RULE) + "\n" + camera_rule
         if mode == "look":
-            look_when = _MEETING_LOOK_WHEN
+            look_when = _line("conversacion/delegar/mirar_reunion", _MEETING_LOOK_WHEN)
     if faces:
-        camera_rule += "\n" + _FACES_RULE
-        look_when += _FACES_LOOK_WHEN
-    rules = LIVE_RULES.format(
-        capabilities=capabilities or "- Ninguna en este momento: no delegues.",
-        clock_rule=_CLOCK_RULE + (_CLOCK_ASK_RULE if "check_agenda" in names else ""),
-        setting_rule=_MEETING_SETTING_RULE if in_meeting(settings) else _STAND_RULE,
+        camera_rule += "\n" + _text("conversacion/caras", _FACES_RULE)
+        look_when += _line("conversacion/delegar/caras", _FACES_LOOK_WHEN)
+    clock_rule = _text("conversacion/reloj", _CLOCK_RULE)
+    if "check_agenda" in names:
+        clock_rule += " " + _text("conversacion/reloj/hora_exacta", _CLOCK_ASK_RULE)
+    agenda_when = (
+        _line("conversacion/delegar/agenda", _AGENDA_WHEN) if "check_agenda" in names else ""
+    )
+    if "show_talk" in names:
+        agenda_when += _line("conversacion/delegar/charla", _TALK_WHEN)
+    trivia = "start_trivia" in names
+    rules = BOOK.render(
+        "conversacion/reglas",
+        fallback=LIVE_RULES,
+        capabilities=capabilities or _text("conversacion/capacidades/ninguna", _NO_CAPABILITIES),
+        clock_rule=clock_rule,
+        setting_rule=_text("conversacion/lugar/reunion", _MEETING_SETTING_RULE)
+        if in_meeting(settings)
+        else _text("conversacion/lugar/stand", _STAND_RULE),
         camera_rule=camera_rule,
         look_when=look_when if "look" in names else "",
-        moves_when=_MOVES_WHEN if "play_animation" in names else "",
-        trivia_rule=_TRIVIA_RULE if "start_trivia" in names else "",
-        trivia_when=_TRIVIA_WHEN if "start_trivia" in names else "",
-        agenda_when=(_AGENDA_WHEN if "check_agenda" in names else "")
-        + (_TALK_WHEN if "show_talk" in names else ""),
-        search_when=_SEARCH_WHEN if web_search else "",
-        no_delegate_chat=_NO_DELEGATE_CHAT[mode],
+        moves_when=_line("conversacion/delegar/gestos", _MOVES_WHEN)
+        if "play_animation" in names
+        else "",
+        trivia_rule=_line("conversacion/trivia", _TRIVIA_RULE) if trivia else "",
+        trivia_when=_line("conversacion/delegar/trivia", _TRIVIA_WHEN) if trivia else "",
+        agenda_when=agenda_when,
+        search_when=_line("conversacion/delegar/busqueda", _SEARCH_WHEN) if web_search else "",
+        no_delegate_chat=_text(f"conversacion/no_delegar/{mode}", _NO_DELEGATE_CHAT[mode]),
     )
-    parts = [SYSTEM_PROMPT, rules]
+    parts = [_text("sonnia/persona", SYSTEM_PROMPT), rules]
     if clock_text:
         parts.append(_clock_section(clock_text))
     if in_meeting(settings):
-        parts.append(MEETING_SECTION)
+        parts.append(_text("conversacion/reunion", MEETING_SECTION))
     knowledge = load_knowledge(knowledge_dir)
     if knowledge:
         parts.append(
-            "BASE DE CONOCIMIENTO (son tus únicos datos verificados; lo que no esté aquí, "
-            "no lo afirmes):\n\n" + knowledge
+            BOOK.render(
+                "conversacion/conocimiento", fallback=_KNOWLEDGE_SECTION, conocimiento=knowledge
+            )
         )
     if agenda.strip():
         parts.append(agenda.strip())
     if notes.strip():
         parts.append(_notes_section(notes))
     if gallery_ids:
-        gallery = "Imágenes que el backend puede mostrar en tu pantalla: " + ", ".join(gallery_ids)
+        gallery = BOOK.render(
+            "conversacion/galeria", fallback=_GALLERY_LINE, imagenes=", ".join(gallery_ids)
+        )
     else:
-        gallery = (
-            "La galería de imágenes está vacía: no tienes imágenes que enseñar en tu pantalla."
-        )
+        gallery = _text("conversacion/galeria/vacia", _GALLERY_EMPTY)
     if settings.gallery_watch_seconds > 0:
-        gallery += (
-            f' Si el equipo añade o quita imágenes, te llegará una nota interna "{GALLERY_NOTE_PREFIX}" '
-            "con la lista nueva: manda esa."
-        )
+        gallery += " " + _text("conversacion/galeria/cambios", _GALLERY_WATCH)
     parts.append(gallery)
     parts.append(describe_live_stack(settings, action_names=names, faces=faces))
     reminder = _reminder_section(names, web_search=web_search, mode=mode)
@@ -622,6 +728,20 @@ _BACKEND_SEARCH_RULE = (
     "particulares: di que eso no lo buscas."
 )
 
+#: ``{fecha}``: la fecha y la hora habladas al abrir la sesión.
+_BACKEND_CLOCK = (
+    "Fecha y hora al empezar la conversación: {fecha}. Si la tarea trae una hora "
+    "más reciente, manda esa."
+)
+#: ``{imagenes}``: los ids de la galería, separados por comas (o «ninguna»).
+_BACKEND_GALLERY = (
+    "Imágenes de la galería al empezar (ids exactos): {imagenes}. El equipo puede añadir o "
+    "quitar imágenes durante la conversación: si la tarea nombra una que no está en esta "
+    "lista, pruébala igual; show_image dice cuáles hay."
+)
+#: ``{conocimiento}``: los archivos de ``assets/knowledge`` (o sus versiones de la nube).
+_BACKEND_KNOWLEDGE = "BASE DE CONOCIMIENTO:\n\n{conocimiento}"
+
 
 def build_backend_instructions(
     *,
@@ -635,28 +755,28 @@ def build_backend_instructions(
     faces: bool = False,
 ) -> str:
     """Instrucciones del backend Responses: reglas, galería, conocimiento y agenda."""
-    rules = BACKEND_PROMPT
+    rules = _text("backend/reglas", BACKEND_PROMPT)
     if meeting:
-        rules += "\n" + _MEETING_BACKEND_RULE
+        rules += "\n" + _text("backend/reunion", _MEETING_BACKEND_RULE)
     if faces:
-        rules += "\n" + _FACES_BACKEND_RULE
+        rules += "\n" + _text("backend/caras", _FACES_BACKEND_RULE)
     if web_search:
-        rules += "\n" + _BACKEND_SEARCH_RULE
+        rules += "\n" + _text("backend/busqueda", _BACKEND_SEARCH_RULE)
     parts = [rules]
     if clock_text:
-        parts.append(
-            f"Fecha y hora al empezar la conversación: {clock_text}. Si la tarea trae una hora "
-            "más reciente, manda esa."
-        )
+        parts.append(BOOK.render("backend/fecha_hora", fallback=_BACKEND_CLOCK, fecha=clock_text))
     parts.append(
-        "Imágenes de la galería al empezar (ids exactos): "
-        + (", ".join(gallery_ids) or "ninguna")
-        + ". El equipo puede añadir o quitar imágenes durante la conversación: si la tarea nombra "
-        "una que no está en esta lista, pruébala igual; show_image dice cuáles hay."
+        BOOK.render(
+            "backend/galeria",
+            fallback=_BACKEND_GALLERY,
+            imagenes=", ".join(gallery_ids) or "ninguna",
+        )
     )
     knowledge = load_knowledge(knowledge_dir)
     if knowledge:
-        parts.append("BASE DE CONOCIMIENTO:\n\n" + knowledge)
+        parts.append(
+            BOOK.render("backend/conocimiento", fallback=_BACKEND_KNOWLEDGE, conocimiento=knowledge)
+        )
     if agenda.strip():
         parts.append(agenda.strip())
     if notes.strip():

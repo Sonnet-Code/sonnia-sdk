@@ -63,6 +63,7 @@ from sonia.live.prompts import (
 from sonia.live.vision import VisionNarrator
 from sonia.live.voicecache import VoiceCache
 from sonia.persona import KnowledgeSource
+from sonia.prompts import BOOK
 from sonia.showcase import Showcase
 from sonia.trivia import TriviaGame
 from sonia.types import (
@@ -178,7 +179,7 @@ AGENDA_CHANGED_TEMPLATE = (
     "La agenda oficial del DevFest acaba de cambiar en su web (mandan estos cambios sobre la "
     "agenda que tienes): {changes}"
 )
-AGENDA_MORE_TEXT = " Hay más cambios: si te preguntan por otra charla, consulta la agenda."
+AGENDA_MORE_TEXT = "Hay más cambios: si te preguntan por otra charla, consulta la agenda."
 
 #: Nivel RMS (0..1) a partir del cual un trozo de la voz de GPT-Live es voz.
 #: GPT-Live manda audio sin parar, también cuando calla (silencio digital, 0):
@@ -222,6 +223,29 @@ MOMENT_FOCUS = {
         "interrumpirte para ver que hablas en tiempo real."
     ),
 }
+
+#: Id de la pieza editable (``sonia.prompts``) de cada ``MOMENT_FOCUS``.
+MOMENT_FOCUS_IDS = {
+    "agenda": "animacion/momento/agenda",
+    "cámara": "animacion/momento/camara",
+    "invitación": "animacion/momento/invitacion",
+}
+
+
+def showcase_prompt(text: str) -> str:
+    """Cómo se le pide a GPT-Live una frase del stand (pieza ``animacion/frase``)."""
+    return BOOK.render("animacion/frase", fallback=SHOWCASE_TEMPLATE, text=text)
+
+
+def moment_focus(kind: str, text: str = "") -> str:
+    """De qué tira un momento (``agenda``, ``cámara`` o ``invitación``), con su texto."""
+    return BOOK.render(MOMENT_FOCUS_IDS[kind], fallback=MOMENT_FOCUS[kind], text=text)
+
+
+def moment_prompt(focus: str) -> str:
+    """Cómo se le pide a GPT-Live un momento del stand (pieza ``animacion/momento``)."""
+    return BOOK.render("animacion/momento", fallback=MOMENT_TEMPLATE, focus=focus)
+
 
 #: Tope para preparar un momento (la foto y su descripción): mientras, no sale otro número.
 MOMENT_PREP_S = 15.0
@@ -665,7 +689,11 @@ class LiveEngine:
             return
         try:
             # ``instructions.append`` no la hace hablar; ``commentary`` sí.
-            await client.append_commentary(TEXT_INPUT_TEMPLATE.format(text=text))
+            await client.append_commentary(
+                BOOK.render(
+                    "conversacion/notas/texto_escrito", fallback=TEXT_INPUT_TEMPLATE, text=text
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             _log_stage_failure("No se pudo pasar el texto a GPT-Live: %s", exc)
             return
@@ -1221,7 +1249,10 @@ class LiveEngine:
                         "type": "message",
                         "role": "user",
                         "content": [
-                            {"type": "input_text", "text": LOOK_IMAGE_TEXT},
+                            {
+                                "type": "input_text",
+                                "text": BOOK.text("vision/look", fallback=LOOK_IMAGE_TEXT),
+                            },
                             {
                                 "type": "input_image",
                                 "image_url": result.image.to_data_url(),
@@ -1339,7 +1370,9 @@ class LiveEngine:
         )
         if delegation is not None:
             self._finish_delegation(delegation)
-        await self.speak(DELEGATION_FAILED_TEXT)
+        await self.speak(
+            BOOK.text("conversacion/notas/delegacion_fallida", fallback=DELEGATION_FAILED_TEXT)
+        )
 
     def _finish_delegation(self, delegation: _Delegation) -> None:
         self._delegations.pop(delegation.id, None)
@@ -1404,7 +1437,9 @@ class LiveEngine:
         client = self._client
         if tell_model and was_audible and client is not None:
             with contextlib.suppress(Exception):
-                await client.append_instructions(INTERRUPT_TEXT)
+                await client.append_instructions(
+                    BOOK.text("conversacion/notas/interrupcion", fallback=INTERRUPT_TEXT)
+                )
         self._audible = False
         self._settle_after = 0.0
         self._expect_response_until = 0.0
@@ -1620,7 +1655,7 @@ class LiveEngine:
 
     async def _request_showcase(self, client: LiveClient, text: str) -> None:
         try:
-            await client.append_commentary(SHOWCASE_TEMPLATE.format(text=text))
+            await client.append_commentary(showcase_prompt(text))
         except Exception as exc:  # noqa: BLE001
             logger.debug("No se pudo pedir el número del stand: %s", exc)
             self._ambient_expected_until = 0.0
@@ -1638,7 +1673,7 @@ class LiveEngine:
             await self._hub.broadcast_json(p.msg_attention(attention))
         self._ambient_expected_until = time.monotonic() + AMBIENT_WAIT_S
         try:
-            await client.append_commentary(MOMENT_TEMPLATE.format(focus=focus))
+            await client.append_commentary(moment_prompt(focus))
         except Exception as exc:  # noqa: BLE001
             logger.debug("No se pudo pedir el momento del stand: %s", exc)
             self._ambient_expected_until = 0.0
@@ -1664,12 +1699,12 @@ class LiveEngine:
         kind = options[self._moment_turn % len(options)]
         self._moment_turn += 1
         if kind == "agenda":
-            return MOMENT_FOCUS["agenda"].format(text=today)
+            return moment_focus("agenda", today)
         if kind == "cámara":
             text = await self._moment_scene()
             if text:
-                return MOMENT_FOCUS["cámara"].format(text=text)
-        return MOMENT_FOCUS["invitación"]
+                return moment_focus("cámara", text)
+        return moment_focus("invitación")
 
     async def _moment_scene(self) -> str:
         """Lo que ve ahora la cámara para un momento (vacío si no se pudo). La foto no se guarda."""
@@ -1920,7 +1955,9 @@ class LiveEngine:
         text = text.strip()
         if client is None or not text:
             return False
-        await client.append_commentary(ANNOUNCE_TEMPLATE.format(text=text))
+        await client.append_commentary(
+            BOOK.render("conversacion/notas/aviso", fallback=ANNOUNCE_TEMPLATE, text=text)
+        )
         self._touch()
         self._expect_response_until = time.monotonic() + RESPONSE_WAIT_S
         logger.info("Aviso pedido desde el panel: %s", text)
@@ -2071,15 +2108,21 @@ class LiveEngine:
         """
         if self._client is None or not changes:
             return
-        budget = APPEND_MAX_CHARS - len(AGENDA_CHANGED_TEMPLATE) - len(AGENDA_MORE_TEXT)
+        template = BOOK.text("conversacion/notas/agenda_cambiada", AGENDA_CHANGED_TEMPLATE)
+        more = " " + BOOK.text("conversacion/notas/agenda_mas", AGENDA_MORE_TEXT)
+        budget = APPEND_MAX_CHARS - len(template) - len(more)
         shown: list[str] = []
         for change in changes:
             if sum(len(c) + 1 for c in shown) + len(change) > budget:
                 break
             shown.append(change)
-        text = AGENDA_CHANGED_TEMPLATE.format(changes=" ".join(shown))
+        text = BOOK.render(
+            "conversacion/notas/agenda_cambiada",
+            fallback=AGENDA_CHANGED_TEMPLATE,
+            changes=" ".join(shown),
+        )
         if len(shown) < len(changes):
-            text += AGENDA_MORE_TEXT
+            text += more
         # Si ya había otro pendiente, el nuevo lo incluye: la web solo va a más.
         self._pending_agenda_note = text
         logger.info(
@@ -2096,7 +2139,11 @@ class LiveEngine:
         self._notes = text
         client = self._client
         if client is not None:
-            content = NOTES_TEMPLATE.format(text=text) if text else NOTES_CLEARED_TEXT
+            content = (
+                BOOK.render("conversacion/notas/avisos_del_dia", fallback=NOTES_TEMPLATE, text=text)
+                if text
+                else BOOK.text("conversacion/notas/avisos_retirados", fallback=NOTES_CLEARED_TEXT)
+            )
             with contextlib.suppress(Exception):
                 await client.append_instructions(content)
         logger.info("Avisos del día actualizados (%d caracteres)", len(text))
