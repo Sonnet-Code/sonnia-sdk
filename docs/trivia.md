@@ -11,7 +11,7 @@ Las dos vías entran por el mismo `TriviaGame.start` (`server/sonia/trivia/game.
 - **Por qué no en dos delegaciones (8 de octubre de 2026).** Antes, `start_trivia` sin el requisito devolvía «aún no empieza» y GPT-Live tenía que volver a delegar con el «ya las sigo». Si el visitante contestaba mientras ella aún hablaba, GPT-Live metía la respuesta en la misma frase, no delegaba y se inventaba la pregunta con sus opciones (el registro del 8 de octubre a las 03:12). Probado con la API real metiendo voz como micrófono y contestando a los 3 s de empezar a hablar ella: así fallaba 2 de cada 3; ni una nota por `instructions.append` (0 de 4), ni por `thinking.append` (2 de 4), ni el empujón (2 de 4, y tarde) lo arreglaban, y una regla más en el prompt se quedaba en 3 de 4. Con la partida preparada desde la primera delegación, 4 de 4 en el mismo caso. Con la pregunta ya en la mano, Sonia a veces la leía sin esperar el «ya las sigo» (4 de 8): por eso el guion y la nota con las opciones le dicen que espere su respuesta. La versión final, 12 de 12 (contestar a la vez, al callar, «todavía no, ahora las sigo» y otro nivel): pide seguirlas, espera, la trivia sale al leer la primera y nunca se inventa la pregunta. Lo que sigue fallando: pedir otro nivel en la misma frase del «ya las sigo» (0 de 2, se queda en el que estaba).
 - **Desde el panel.** En el local y en sonia.sonnetcode.com: botón «Empezar trivia» de la tarjeta «Trivia».
 
-Solo funciona en «Conversando» y con la pantalla conectada. No funciona con el Modo Jean, el editor de personaje ni el modo debug.
+Solo funciona en «Conversando» y con la pantalla conectada. No funciona con el Modo Jean, el editor de personaje, el modo debug ni con un juego del stand en marcha (`docs/juegos.md`): uno a la vez.
 
 ## Quién hace qué
 
@@ -69,7 +69,7 @@ El banco está en `assets/trivia/preguntas.md` y se edita sin tocar código. Tie
 
 **Banco en la nube.** Desde el panel (tarjeta Trivia, «Banco de preguntas») se carga el banco en uso, se edita con el mismo formato y se guarda en la nube como ajuste compartido (`trivia_bank`, ver `docs/panel.md`): lo usan todas las Sonias actualizadas desde su próxima partida, sin reiniciar ni mandar una app nueva, y sobrevive a los reinicios sin red (se guarda en `cache/panel_state.json`). Manda sobre el archivo de la app; «Volver al de la app» lo borra. Un banco que no llegue a las preguntas de una partida no se guarda y, si llega así de la nube, se sigue con el de la app. Las apps anteriores (1.0.195 y antes) lo ignoran y siguen con su archivo.
 
-**Sin repetir.** El orquestador recuerda en qué partida salió cada pregunta y saca primero las que nunca han salido y después las que hace más que salieron, así que no se repite ninguna hasta agotar las de ese nivel (con 58 intermedias, once partidas seguidas). Lo recuerda mientras no se reinicia.
+**Sin repetir.** El orquestador recuerda en qué partida salió cada pregunta y saca primero las que nunca han salido y después las que hace más que salieron, así que no se repite ninguna hasta agotar las de ese nivel (con 58 intermedias, once partidas seguidas). Lo recuerda mientras no se reinicia. La trivia relámpago de la ruleta saca preguntas sueltas del mismo banco en uso con el mismo «sin repetir» (`TriviaGame.draw_one`, `docs/juegos.md`).
 
 Jean las revisó y aprobó el 8 de octubre de 2026; si se cambian, que las vuelva a revisar.
 

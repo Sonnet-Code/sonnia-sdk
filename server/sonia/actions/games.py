@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 __all__ = [
     "NO_GAMES",
     "STOP_GAME",
+    "StartGame",
     "build_start_game",
     "game_action",
     "game_actions",
@@ -77,6 +78,20 @@ async def stop_game(ctx: ActionContext, arguments: dict[str, Any]) -> ActionResu
     )
 
 
+class StartGame:
+    """El handler de ``start_game``: sabe qué juegos lleva su enum.
+
+    Así la línea de juegos de las instrucciones (``live/prompts.py``) sale de la misma
+    acción que ve el backend, con el nombre de cada juego para GPT-Live.
+    """
+
+    def __init__(self, games: Sequence[type[Game]]) -> None:
+        self.games: tuple[type[Game], ...] = tuple(games)
+
+    async def __call__(self, ctx: ActionContext, arguments: dict[str, Any]) -> ActionResult:
+        return await start_game(ctx, arguments)
+
+
 def build_start_game(games: Sequence[type[Game]]) -> ActionSpec:
     """``start_game`` con el enum de los juegos encendidos al arrancar."""
     listed = "; ".join(f"{g.id} ({g.spoken})" for g in games)
@@ -98,7 +113,7 @@ def build_start_game(games: Sequence[type[Game]]) -> ActionSpec:
             },
             "required": ["juego"],
         },
-        handler=start_game,
+        handler=StartGame(games),
     )
 
 

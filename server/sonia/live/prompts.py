@@ -109,19 +109,13 @@ def games_capability(registry: ActionRegistry | None) -> str:
     Sale de ``start_game``: los juegos de su enum, con su nombre para GPT-Live. Las reglas
     de cada juego no van aquí: entran al empezar (``instructions.append``).
     """
-    from sonia.games.base import NOT_SAID
-    from sonia.games.registry import find_game, games_line_for
+    from sonia.actions.games import StartGame
+    from sonia.games.registry import games_line_for
 
     spec = registry.get("start_game") if registry is not None else None
-    if spec is None:
+    if spec is None or not isinstance(spec.handler, StartGame):
         return ""
-    prop = spec.parameters.get("properties", {}).get("juego", {})
-    ids = [i for i in prop.get("enum", []) if isinstance(i, str) and i != NOT_SAID]
-    names = []
-    for game_id in ids:
-        cls = find_game(game_id)
-        names.append(cls.spoken if cls is not None else game_id.replace("_", " "))
-    return games_line_for(names)
+    return games_line_for([game.spoken for game in spec.handler.games])
 
 
 #: ``play_animation`` cuando el director de gestos puede elegir cualquier gesto de Sage.

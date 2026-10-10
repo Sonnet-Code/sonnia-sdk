@@ -90,6 +90,7 @@ Los ganchos que fallan van al registro y no tumban nada; si `tick` falla 20 vece
 | `stream`, `preview`, `poses`, `hands`, `judge` | La visión (`sonia/vision/contracts.py`). Pide y suelta a tu nombre (`self.id`). |
 | `spawn(coro, name)` | Una tarea en segundo plano que se cancela sola al terminar la partida. |
 | `load_bank(bank)` / `read_bank(bank)` | Las entradas del banco en uso (en un hilo / síncrona). |
+| `draw_trivia(nivel)` | Una pregunta del banco de la trivia en uso (`TriviaQuestion`: `text`, `options`, `correct`, `fact`, `level`), con las opciones barajadas y sin repetir hasta agotar el nivel (`TriviaGame.draw_one`). `None` si la trivia está apagada. Para la trivia relámpago de la ruleta. |
 
 ### Hablar con GPT-Live
 
@@ -222,7 +223,7 @@ Antes de cada commit: `uv run --no-sync ruff check sonia tests && uv run --no-sy
 uv run --no-sync python ../scripts/juegos_demo.py --juego wordle --puerto 8791
 ```
 
-Unity se apunta a él con `-sonia-ws ws://127.0.0.1:8791` (receta de Unity en batch y capturas en `docs/juegos-unity.md`).
+Unity se apunta a él con `-sonia-ws ws://127.0.0.1:8791` (receta de Unity en batch y capturas en `docs/juegos-unity.md`). `--juego ejemplo` reproduce una secuencia de ejemplo con solo la pantalla común (`start`, la vista en vivo sintética y `end`) usando el id de `--como` (por defecto, `ruleta`). Otras opciones: `--espera` (segundos esperando a Unity, 180), `--tras-captura` (lo que se deja a Unity tras pedir cada captura, 0,5 s) y `--quedarse` (no manda `dev_done`: para mirar a mano). Sale con 0 si la secuencia terminó, 1 si Unity no llegó, 2 si se fue a mitad y 3 si falló un paso.
 
 Cada juego escribe su secuencia en `server/sonia/games/<paquete>/demo.py` con una función `steps()` (formato en `server/sonia/games/demo.py`):
 
@@ -232,7 +233,7 @@ Cada juego escribe su secuencia en `server/sonia/games/<paquete>/demo.py` con un
 | `Send(msg)` | Cualquier mensaje del protocolo tal cual (`speech_start`, `transcript`, `state`...). |
 | `Wait(segundos)` | Esperar (animaciones, giros, contadores). |
 | `WaitEvent(evento, timeout)` | Esperar un `game_event` de Unity (`wheel_stopped`). |
-| `Preview(segundos, source=..., draw=...)` | La vista en vivo: `camera_preview` y frames `SNCV` de una foto o un vídeo público de tu scratchpad (nunca del repo), o sintéticos; `draw` pinta encima como el overlay del juego. |
+| `Preview(segundos, source=..., draw=..., off=False)` | La vista en vivo **en segundo plano** (los pasos siguientes van a la vez, así puedes capturarla): `camera_preview` y unos 10 frames `SNCV` por segundo, en espejo, de una foto o un vídeo público de tu scratchpad (nunca del repo) o sintéticos; `draw(frame, en_espejo)` pinta encima como el overlay del juego; `off=True` la apaga al acabar. |
 | `Capture(nombre, settle_s=1.0)` | Espera `settle_s` y pide una captura 9:16. |
 
 ### `dev_capture` y `dev_done`
@@ -248,13 +249,26 @@ Mensajes de pruebas, fuera del protocolo de producción: solo los manda el orque
 - `dev_done`: Unity sale.
 - La herramienta conecta Unity al orquestador falso cuando el avatar ya está cargado (hasta 60 s): por eso el orquestador falso espera al `client_hello`. Deja como un segundo entre un evento y su captura para que acaben las animaciones de entrada (`Capture` lo hace por defecto).
 
+## El motor
+
+`LiveEngine` crea el `GameManager` junto a la trivia (`engine.games`; `None` si no hay ningún juego encendido o en una videollamada) y le pasa lo mismo que a ella:
+
+- lo que dice Sonia (`on_assistant_text`: el texto acumulado de cada frase y, al cerrarla, la frase entera) y lo que dice el visitante (`on_user_text`, `on_user_turn_end`);
+- las delegaciones (`on_delegation`) y el ciclo de 50 ms (`tick`);
+- la sesión que se cae o se renueva, y GPT-Live apagada al cambiar de modo, de Modo Jean, de modo debug o con el editor de personaje (`on_session_lost`: la partida se cancela);
+- `client_hello` y `game_event` del hub; `ctx.extra["games"]` para las acciones y `snapshot()["games"]` para el panel.
+
+Mientras hay un juego en pantalla no hay animación de stand ni renovación de la sesión por inactividad, como con la trivia. El saludo automático con la mano lo apaga Unity (`GameHud`). La trivia no empieza con un juego en marcha ni al revés. La visión llega de `build_game_vision` con la cámara del motor (solo `VISION_SOURCE=opencv`), el hub (vista en vivo) y el modelo de visión (`vision_llm`, que pasa la CLI). Si un `tick` falla 20 veces seguidas, la partida se cancela (`error`).
+
+La CLI (`build_components`) registra `start_game`, `stop_game` y las jugadas de los juegos encendidos (`enabled_games`), salvo en una videollamada. El prompt base solo gana la línea «Juegos en tu pantalla: …. Delega empezarlos y terminarlos; las reglas te llegan al empezar.», que sale de esos mismos juegos, y el recordatorio final («empezar y terminar los juegos y sus jugadas» solo pasa si lo delega).
+
 ## El panel (para F0-Panel)
 
 El panel usa el `GameManager` del motor (`engine.games`, `None` si esta Sonnia no tiene juegos) y no toca los juegos:
 
 | Qué | Cómo |
 |---|---|
-| Estado | `manager.snapshot()`: `enabled`, `active` (id o `null`), `title`, `phase` (`off`, `playing`, `finishing`), `elapsed_s`, `state` (el `snapshot()` del juego), `games` (`[{id, title, needs, off, available, reason}]`), `games_off`, `banks` (`[{id, game, title, file, min_entries, source}]`, `source` = `cloud` o `app`), `unity_games` (o `null` si la pantalla no anunció juegos) y `preview`. |
+| Estado | `manager.snapshot()` (también en `engine.snapshot()["games"]`): `enabled`, `active` (id o `null`), `title`, `phase` (`off`, `playing`, `finishing`), `elapsed_s`, `state` (el `snapshot()` del juego), `games` (`[{id, title, needs, off, available, reason}]`), `games_off`, `banks` (`[{id, game, title, file, min_entries, source}]`, `source` = `cloud` o `app`), `unity_games` (o `null` si la pantalla no anunció juegos) y `preview`. |
 | Capacidades | `manager.capabilities()`: `games`, `game:<id>` (solo los que anuncia la Unity conectada) y `game_banks`. Van con las demás en `data-cap`. |
 | Empezar | Orden `game_start` (`game`): `await manager.start(id, "panel")` → `(ok, mensaje)`. Antes, lo mismo que la trivia: «Conversando», sin modo debug, sin editor de personaje y con la pantalla conectada. |
 | Terminar | Orden `game_stop`: `await manager.stop("panel")`. |
