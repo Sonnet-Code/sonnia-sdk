@@ -20,6 +20,10 @@ Una palabra que no vale (no tiene cinco letras, lleva símbolos o ya la probaron
 intento: sacude la fila y GPT-Live recibe un guion que lo dice. Ninguna jugada lanza: fuera
 de turno devuelve un guion que reconduce.
 
+Desde el panel (:meth:`WordleGame.panel_controls`) el equipo puede llevar la partida a mano:
+«Probar palabra» pone en el tablero lo que escribe, como un intento de GPT-Live, y «Ver la
+palabra» la termina enseñándola, como «Terminar».
+
 Eventos de la pantalla (``docs/protocolo.md``): ``start`` (la rejilla vacía), ``guess`` (un
 intento, con el tablero entero y el estado de las letras, fijo) e ``invalid`` (una sacudida,
 suelto); el final lo manda el manager (``end``) tras :meth:`GameHost.finish`.
@@ -150,6 +154,22 @@ NUDGE_TEXT = (
     "WORDLE: si el grupo dijo una palabra, delega ya el intento con ella; si pidió parar o se "
     "despidió, delega terminar el juego."
 )
+
+#: Controles a mano del panel (``docs/juegos.md``, «Control a mano desde el panel»).
+CONTROL_GUESS = "guess"
+CONTROL_REVEAL = "reveal"
+
+#: Lo que lee el equipo en el panel si la palabra que escribió no vale. Es una errata del
+#: panel, no del grupo: no gasta intento, no sacude la fila delante de los visitantes y Sonia
+#: no dice nada.
+PANEL_INVALID_TEXT = {
+    "empty": "Escribe la palabra que dijeron: {cols} letras.",
+    "length": "«{said}» tiene {count}: tienen que ser {cols}.",
+    "chars": "«{said}» no vale: solo letras, sin números ni símbolos.",
+}
+PANEL_REPEATED_TEXT = "«{word}» ya está en el tablero."
+PANEL_OVER_TEXT = "La partida de Wordle ya ha terminado."
+PANEL_UNKNOWN_TEXT = "Ese control no está disponible ahora."
 
 
 @dataclass(frozen=True, slots=True)
@@ -350,6 +370,49 @@ class WordleGame(Game):
         if attempts == 0:
             return f"{self._rows} intentos"
         return f"Intento {attempts} de {self._rows}"
+
+    # -- control a mano desde el panel -------------------------------------------
+
+    def panel_controls(self) -> list[dict[str, Any]]:
+        """Mientras se juega, «Probar palabra» (un campo) y «Ver la palabra». El ejemplo del
+        campo no es una palabra: el panel se ve delante de los visitantes."""
+        if self._over or not self._word:
+            return []
+        return [
+            {
+                "id": CONTROL_GUESS,
+                "label": "Probar palabra",
+                "kind": "text",
+                "placeholder": f"{WORD_LENGTH} letras",
+            },
+            {"id": CONTROL_REVEAL, "label": "Ver la palabra"},
+        ]
+
+    async def panel_control(self, control: str, value: str) -> str:
+        """«Probar palabra» entra como un intento de ``wordle_guess`` (el mismo tablero y el
+        mismo guion); si no vale, ``GameError`` para el equipo sin tocar la partida. «Ver la
+        palabra» es :meth:`stop_requested`: la enseña con su pista y cierra la partida."""
+        if control == CONTROL_REVEAL:
+            script = await self.stop_requested("panel")
+            if script is None:
+                raise GameError(PANEL_OVER_TEXT)
+            return script
+        if control != CONTROL_GUESS:
+            raise GameError(PANEL_UNKNOWN_TEXT)
+        async with self._lock:
+            if self._over or not self._word:
+                raise GameError(PANEL_OVER_TEXT)
+            checked = check_word(value)
+            if not checked.ok:
+                template = PANEL_INVALID_TEXT.get(checked.reason, PANEL_INVALID_TEXT["chars"])
+                raise GameError(
+                    template.format(
+                        said=_echo(value), count=_letters(len(checked.word)), cols=WORD_LENGTH
+                    )
+                )
+            if checked.word in {guess.letters for guess in self._guesses}:
+                raise GameError(PANEL_REPEATED_TEXT.format(word=checked.word))
+            return await self._place(checked.word)
 
     # -- la jugada -------------------------------------------------------------
 

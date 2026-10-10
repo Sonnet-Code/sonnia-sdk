@@ -202,10 +202,16 @@
       <!-- ===== Juegos del stand (docs/juegos.md) ===== -->
       <section class="card" id="juegos" aria-labelledby="juegos-title">
         <h2 id="juegos-title">Juegos</h2>
-        <p class="help">Juegos en la pantalla de Sonnia, de uno en uno. También se los pueden pedir a ella: «¿jugamos a algo?». El interruptor de cada juego vale para todas las Sonnias: apagado, Sonnia no lo ofrece y no se puede empezar.</p>
+        <p class="help">Juegos en la pantalla de Sonnia, de uno en uno. También se los pueden pedir a ella: «¿jugamos a algo?». Todos los juegos vienen encendidos. Si uno falla, apágalo aquí con su interruptor: deja de ofrecerse en todas las Sonnias al momento, sin reinstalar.</p>
         <p class="trivia-state game-state" id="game-state" aria-live="polite">No hay ningún juego en marcha.</p>
+        <fieldset class="game-controls" id="game-controls" data-cap="game_controls" hidden>
+          <legend class="game-controls-title">Control del juego</legend>
+          <p class="help game-controls-help">Por si falla la voz o la cámara: lleva la partida a mano. Sonnia lo cuenta en cuanto calla.</p>
+          <div class="game-control-list" id="game-control-list"></div>
+          <p class="cap-note" data-cap-note="game_controls" hidden>Esta Sonnia no tiene control a mano de los juegos: hay que instalarle una versión más nueva de la app. Mientras, «Terminar juego» la saca del juego.</p>
+        </fieldset>
         <div class="game-list" id="game-list"></div>
-        <div class="row">
+        <div class="row" id="game-stop-row">
           <button type="button" class="btn" id="game-stop-btn" data-cap="games" data-extra="game_active">Terminar juego</button>
         </div>
         <p class="note" id="game-note" hidden>Los juegos necesitan a Sonnia en «Conversando».</p>

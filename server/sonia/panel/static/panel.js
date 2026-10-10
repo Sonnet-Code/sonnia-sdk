@@ -306,6 +306,7 @@
       "trivia-bank-info", "trivia-bank-load-btn", "trivia-bank-editor", "trivia-bank-input", "trivia-bank-save-btn",
       "trivia-bank-reset-btn", "trivia-bank-state",
       "game-state", "game-list", "game-stop-btn", "game-note", "game-bank-info", "game-bank-select",
+      "game-stop-row", "game-controls", "game-control-list",
       "game-bank-load-btn", "game-bank-detail", "game-bank-editor", "game-bank-input", "game-bank-save-btn",
       "game-bank-reset-btn", "game-bank-state", "game-pose", "game-pose-select", "game-pose-help",
     ];
@@ -1561,6 +1562,7 @@
     setText(ui.gameState, text);
     ui.gameState.classList.toggle("is-playing", Boolean(active));
     setHidden(ui.gameNote, status.mode === "conversation" || Boolean(active) || list.length === 0);
+    renderGameControls(games);
     renderGameBanks(games);
     renderGameBankState();
     renderPoseModel(status, list);
@@ -1647,13 +1649,143 @@
     lockControl(input);
   }
 
+  // ------------------------------------------------------------ control a mano del juego
+
+  /** Tope del texto de un control (GAME_CONTROL_VALUE_MAX_LEN en server/sonia/panel/control.py). */
+  const GAME_CONTROL_MAX_CHARS = 200;
+
+  /** Los controles que pone el orquestador para todos los juegos; se confirman antes. */
+  const COMMON_GAME_CONTROLS = new Set(["restart", "stop"]);
+
+  let gameControlsKey = "";
+
+  /** `controls` del estado de los juegos: [{id, label, kind?, placeholder?}], ya en orden. */
+  function gameControls(games) {
+    const list = Array.isArray(games.controls) ? games.controls : [];
+    return list.filter((control) => control && typeof control.id === "string" && control.id);
+  }
+
+  /**
+   * «Control del juego», con un juego en marcha: pinta tal cual los controles que manda la
+   * Sonnia. Solo se rehace si cambian, para no borrar lo que se está escribiendo.
+   */
+  function renderGameControls(games) {
+    const active = gameActive();
+    setHidden(ui.gameControls, !active);
+    // Las Sonnias anteriores no tienen controles a mano: les queda «Terminar juego».
+    setHidden(ui.gameStopRow, app.capsKnown && hasCap("game_controls"));
+    const controls = active ? gameControls(games) : [];
+    const key = JSON.stringify(controls.map((c) => [c.id, c.label, c.kind, c.placeholder]));
+    if (key === gameControlsKey) return;
+    gameControlsKey = key;
+    // Lo escrito en un campo que sigue después de rehacerlos no se pierde, ni su foco.
+    const typed = new Map();
+    let focused = null;
+    for (const input of ui.gameControlList.querySelectorAll("input[data-control]")) {
+      typed.set(input.dataset.control, input.value);
+      if (input === document.activeElement) focused = input.dataset.control;
+    }
+    const nodes = [];
+    const common = [];
+    let row = null;
+    for (const control of controls) {
+      if (COMMON_GAME_CONTROLS.has(control.id)) {
+        common.push(gameControlButton(control));
+      } else if (control.kind === "text") {
+        nodes.push(gameControlForm(control, typed.get(control.id) || ""));
+        row = null;
+      } else {
+        if (!row) {
+          row = el("div", { class: "game-control-row" });
+          nodes.push(row);
+        }
+        row.append(gameControlButton(control));
+      }
+    }
+    if (common.length) nodes.push(el("div", { class: "game-control-row game-control-common" }, ...common));
+    ui.gameControlList.replaceChildren(...nodes);
+    if (focused) {
+      for (const input of ui.gameControlList.querySelectorAll("input[data-control]")) {
+        if (input.dataset.control === focused) input.focus();
+      }
+    }
+  }
+
+  function gameControlLabel(control) {
+    return typeof control.label === "string" && control.label ? control.label : control.id;
+  }
+
+  /** Un botón: manda su id tal cual (los comunes, después de confirmarlo). */
+  function gameControlButton(control) {
+    const common = COMMON_GAME_CONTROLS.has(control.id);
+    const button = el("button", {
+      type: "button",
+      class: common ? "btn btn-small" : "btn",
+      "data-cap": "game_controls",
+      text: gameControlLabel(control),
+    });
+    button.addEventListener("click", () => onGameControl(control, "", button));
+    return button;
+  }
+
+  /** `kind: "text"`: un campo con su botón; Enter también lo manda. */
+  function gameControlForm(control, typed) {
+    const label = gameControlLabel(control);
+    const input = el("input", {
+      type: "text",
+      class: "game-control-input",
+      maxLength: GAME_CONTROL_MAX_CHARS,
+      autocomplete: "off",
+      spellcheck: false,
+      placeholder: typeof control.placeholder === "string" ? control.placeholder : "",
+      value: typed,
+      "data-cap": "game_controls",
+      "data-control": control.id,
+      "aria-label": label,
+    });
+    const button = el("button", { type: "submit", class: "btn", "data-cap": "game_controls", text: label });
+    const form = el("form", { class: "game-control-form" }, input, button);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const value = input.value.trim();
+      if (!value) {
+        showToast("Escribe algo primero.", "error");
+        input.focus();
+        return;
+      }
+      const result = await onGameControl(control, value, button);
+      if (result.ok) input.value = "";
+    });
+    return form;
+  }
+
+  async function onGameControl(control, value, button) {
+    if (COMMON_GAME_CONTROLS.has(control.id)) {
+      const title = gamesInfo().title || "el juego";
+      const restart = control.id === "restart";
+      const ok = await confirmAction({
+        title: restart ? `¿Reiniciar ${title}?` : `¿Terminar ${title}?`,
+        text: restart
+          ? "Se pierde la partida en marcha y empieza otra desde cero."
+          : "Sonnia lo cuenta en una frase y vuelve a conversar.",
+        confirmLabel: restart ? "Reiniciar" : "Terminar",
+        danger: true,
+      });
+      if (!ok) return { ok: false, message: "" };
+    }
+    return sendAction("game_control", { control: control.id, value }, { button });
+  }
+
   /** Borra lo de los juegos de la Sonnia anterior (al cambiar de Sonnia). */
   function clearGames() {
     closeGameBank();
     gamesKey = "";
     gameBanksKey = "";
+    gameControlsKey = "";
     gameTiles.clear();
     ui.gameList.replaceChildren();
+    ui.gameControlList.replaceChildren();
+    setHidden(ui.gameControls, true);
     ui.gameBankSelect.replaceChildren();
     setText(ui.gameBankInfo, "");
     setHidden(ui.gameBankDetail, true);
