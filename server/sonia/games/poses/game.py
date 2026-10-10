@@ -538,14 +538,10 @@ class PosesGame(Game):
         while host.now() - began < PHRASE_MAX_S:
             self._poll()
             quiet = host.quiet_for()
-            if quiet <= 0.05:
-                sounding = True
-            elif (
-                sounding
-                and quiet >= PHRASE_END_QUIET_S
-                or not sounding
-                and host.now() - began >= PHRASE_START_MAX_S
-            ):
+            sounding = sounding or quiet <= 0.05
+            if sounding and quiet >= PHRASE_END_QUIET_S:
+                return
+            if not sounding and host.now() - began >= PHRASE_START_MAX_S:
                 return
             await host.sleep(WINDOW_POLL_S)
 
