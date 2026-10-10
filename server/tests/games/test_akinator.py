@@ -328,6 +328,7 @@ async def test_empezar_de_nuevo_reinicia_todo() -> None:
     await game.result({"acierto": "no", "respuesta_real": NOT_SAID})
     await game.start("voice", {})
     assert game.snapshot() == {
+        "summary": "Esperando a que piense en algo",
         "phase": "waiting",
         "asked": 0,
         "max": 20,
@@ -719,6 +720,26 @@ async def test_reanudar_cuenta_donde_iba() -> None:
     check_for_live(script)
 
 
+async def test_el_panel_lee_una_linea_de_resumen_en_cada_fase() -> None:
+    game, host = await start_game()
+    assert game.snapshot()["summary"] == "Esperando a que piense en algo"
+    visitor_speaks(game, host)
+    await ask(game, *questions(7))
+    assert game.snapshot()["summary"] == "Pregunta 7 de 20"
+    await game.guess({"respuesta": "Kotlin"})
+    assert game.snapshot()["summary"] == "Pregunta 7 de 20 · arriesga: Kotlin"
+    await game.result({"acierto": "si", "respuesta_real": "Kotlin"})
+    assert game.snapshot()["summary"] == "Acertó: Kotlin"
+
+    game, host = await start_game()
+    visitor_speaks(game, host)
+    await ask(game, *questions(7))
+    await say(game, "¡Me rindo! ¿Qué era?")
+    assert game.snapshot()["summary"] == "Se rinde: pregunta qué era"
+    await game.result({"acierto": "no", "respuesta_real": "Rust"})
+    assert game.snapshot()["summary"] == "Perdió: era Rust"
+
+
 async def test_el_estado_de_la_pantalla_es_el_mismo_en_el_juego_y_en_la_demo() -> None:
     game, host = await start_game()
     visitor_speaks(game, host)
@@ -1054,6 +1075,8 @@ async def test_en_el_motor_cuenta_las_preguntas_de_sonia_con_parciales_y_finales
     shutil.copy(BANK_FILE, tmp_path / "games" / "akinator" / "temas.md")
     monkeypatch.setattr("sonia.games.akinator.game.READY_GRACE_S", 0.0)
     async with games_rig(tmp_path, games=[AkinatorGame]) as rig:
+        rig.settings.games.result_seconds = 0.05
+        rig.settings.games.final_wait_seconds = 0.3
         conn = await rig.conn()
         instructions = conn.start["session"]["instructions"]
         assert "el Akinator dev" in instructions and "AKINATOR EN MARCHA" not in instructions

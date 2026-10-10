@@ -286,6 +286,7 @@ class AkinatorGame(Game):
 
     def snapshot(self) -> dict[str, Any]:
         return {
+            "summary": self._summary(),
             "phase": self._phase,
             "asked": self._asked,
             "max": self._max,
@@ -294,6 +295,20 @@ class AkinatorGame(Game):
             "missed": list(self._misses),
             "ready": self._ready,
         }
+
+    def _summary(self) -> str:
+        """Una línea para la tarjeta «Juegos» del panel (``summary`` del ``snapshot``)."""
+        if self._phase == "waiting":
+            return "Esperando a que piense en algo"
+        if self._phase == "guessing":
+            return f"Pregunta {self._asked} de {self._max} · arriesga: {self._guess}"
+        if self._phase == "giving_up":
+            return "Se rinde: pregunta qué era"
+        if self._phase == "revealed":
+            if self._outcome == "sonnia":
+                return f"Acertó: {self._answer}"
+            return f"Perdió: era {self._answer}" if self._answer else "Perdió"
+        return f"Pregunta {self._asked} de {self._max}"
 
     # -- lo que dice Sonia y lo que dice el visitante ---------------------------
 
