@@ -580,13 +580,14 @@ class GameManager:
             script = await game.start(source, dict(options or {}))
         except GameError as exc:
             logger.info("Juego %s: no se pudo empezar: %s", game_id, exc)
-            await self._abort(match)
+            await self._abort(match, game)
             return False, str(exc) or f"No se pudo empezar {game.spoken}."
         except Exception:  # noqa: BLE001 - un juego roto no tumba el motor
             logger.exception("Juego %s: falló al empezar", game_id)
-            await self._abort(match)
+            await self._abort(match, game)
             return False, f"No se pudo empezar {game.spoken}: falló al prepararse."
         if match != self._match or self._phase != "playing":
+            await self._release_orphaned_vision(game)
             return False, f"{game.title} se canceló al empezar."
         await self._ensure_started(game)
         if source == "voice":
@@ -604,10 +605,21 @@ class GameManager:
             logger.exception("Falló resume de %s", game.id)
             return f"{game.spoken} ya está en marcha: sigue con la partida."
 
-    async def _abort(self, match: int) -> None:
+    async def _abort(self, match: int, game: Game) -> None:
         """El juego no pudo empezar: se retira sin decir nada."""
-        if match == self._match and self._active is not None:
+        if match == self._match and self._active is game:
             await self._end_now("error", result="cancel")
+            return
+        await self._release_orphaned_vision(game)
+
+    async def _release_orphaned_vision(self, game: Game) -> None:
+        """``game.start`` terminó cuando su partida ya se había cerrado por fuera (la
+        sesión se cayó, el panel, la Unity que se reconectó): la vista en vivo, las poses
+        o la cámara que pidiera después de que ``_end_now`` las soltara se quedarían
+        abiertas hasta la siguiente partida de ese juego. Si el mismo juego ya está otra
+        vez en pantalla, lo suyo es de esa partida y no se toca."""
+        if self._active is not game:
+            await self._release_vision(game.id)
 
     async def stop(self, reason: StopReason = "panel") -> tuple[bool, str]:
         """Termina el juego en marcha. ``reason``: ``voice``, ``panel``, ``abandoned``,
