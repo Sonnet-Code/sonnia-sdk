@@ -76,6 +76,9 @@ class PromptSpec:
     #: Ayuda para el panel: qué rellena cada marcador, cuidados.
     help: str = ""
     max_len: int = PROMPT_MAX_LEN
+    #: Texto libre (el conocimiento, la persona): sin marcadores, así que las llaves que
+    #: lleve se quedan tal cual y no se comprueban.
+    literal: bool = False
 
 
 class PromptBook:
@@ -116,6 +119,8 @@ class PromptBook:
         """Añade (o sustituye) una pieza. Se puede llamar en cualquier momento."""
         if not PROMPT_ID.match(spec.id):
             raise ValueError(f"Id de prompt no válido: {spec.id!r}")
+        if spec.literal and spec.fields:
+            raise ValueError(f"{spec.id}: una pieza literal no lleva marcadores")
         unknown = set(spec.required) - set(spec.fields)
         if unknown:
             raise ValueError(f"{spec.id}: marcadores obligatorios que no admite: {unknown}")
@@ -173,6 +178,8 @@ class PromptBook:
         y vienen en ``values``; las demás llaves se quedan como están."""
         text = self.text(prompt_id, fallback)
         spec = self._specs.get(prompt_id)
+        if spec is not None and spec.literal:
+            return text
         allowed = set(spec.fields) if spec is not None else set(values)
 
         def fill(match: re.Match[str]) -> str:
@@ -199,7 +206,7 @@ class PromptBook:
             problems.append(
                 f"Es demasiado largo: {len(text)} caracteres y el tope es {spec.max_len}."
             )
-        found = set(PLACEHOLDER.findall(text))
+        found = set() if spec.literal else set(PLACEHOLDER.findall(text))
         extra = sorted(found - set(spec.fields))
         if extra:
             allowed = ", ".join(f"{{{name}}}" for name in spec.fields) or "ninguno"
@@ -273,6 +280,7 @@ class PromptBook:
                     "applies": spec.applies,
                     "applies_text": APPLIES_TEXT[spec.applies],
                     "help": spec.help,
+                    "literal": spec.literal,
                     "source": self.source(spec.id),
                     "ignored": spec.id in self._raw and spec.id not in self._valid,
                 }

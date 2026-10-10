@@ -61,6 +61,7 @@ def _add(
     applies: Applies = "sesion",
     help: str = "",
     max_len: int = PROMPT_MAX_LEN,
+    literal: bool = False,
 ) -> None:
     register(
         PromptSpec(
@@ -74,6 +75,7 @@ def _add(
             applies=applies,
             help=help,
             max_len=max_len,
+            literal=literal,
         )
     )
 
@@ -105,6 +107,7 @@ def _register_persona() -> None:
         SONNIA,
         "Persona: quién es Sonnia, cómo habla, la cámara, las imágenes y su aspecto",
         _const("sonia.persona", "SYSTEM_PROMPT"),
+        literal=True,
         help=(
             "Lo primero de las instrucciones de GPT-Live. Detrás van las reglas de la voz, la "
             "fecha, el conocimiento, la agenda, los avisos, la galería, el stack y el "
@@ -143,6 +146,7 @@ def _register_knowledge() -> None:
             KNOWLEDGE,
             _knowledge_title(path),
             functools.partial(_read_file, path),
+            literal=True,
             help=(
                 f"El archivo assets/knowledge/{path.name}. Va en la «BASE DE CONOCIMIENTO» de "
                 "GPT-Live y del backend, en su sitio (por orden de nombre). Si guardas una "

@@ -162,3 +162,27 @@ async def test_los_prompts_guardados_se_aplican_al_arrancar(
     async with make_panel_rig(tmp_path, state=state):
         assert BOOK.source(global_spec) == "nube"
         assert BOOK.render(global_spec, objeto="Y") == "Arranque, en JSON: Y"
+
+
+def test_una_pieza_literal_admite_llaves_y_no_las_toca() -> None:
+    book = PromptBook()
+    book.register(
+        PromptSpec(
+            id="prueba/libre", group="Conocimiento", title="t", default=lambda: "x", literal=True
+        )
+    )
+    texto = "Usa {nombre} o {lo_que_sea} si quieres: aquí no hay marcadores."
+    assert book.validate("prueba/libre", texto) == []
+    assert book.set_overrides({"prueba/libre": texto}) == []
+    assert book.render("prueba/libre", nombre="Ana") == texto
+    with pytest.raises(ValueError):
+        book.register(
+            PromptSpec(
+                id="prueba/mal",
+                group="g",
+                title="t",
+                default=lambda: "x",
+                fields=("a",),
+                literal=True,
+            )
+        )
