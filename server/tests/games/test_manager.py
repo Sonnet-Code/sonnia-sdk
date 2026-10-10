@@ -318,10 +318,14 @@ async def test_solo_se_ofrece_lo_que_la_pantalla_anuncia() -> None:
     assert reason is not None and "versión anterior" in reason
     ok, text = await manager.start("sonda", "voice")
     assert not ok and "versión anterior" in text and "la cámara" in text  # propone la que sí
-    assert manager.capabilities() == ["games", "game:camara", "game_banks"]
+    assert manager.capabilities() == ["games", "game:camara", "game_banks", "game_controls"]
     # Una Unity anterior a los juegos no anuncia ninguno.
     await manager.on_client_hello({"type": "client_hello", "client": "unity", "version": "1.0.195"})
-    assert manager.playable() == [] and manager.capabilities() == ["games", "game_banks"]
+    assert manager.playable() == [] and manager.capabilities() == [
+        "games",
+        "game_banks",
+        "game_controls",
+    ]
     assert manager.choose_text() == NOTHING_TO_PLAY_TEXT
     # Sin pantalla conectada, nada.
     await manager.on_client_hello(
@@ -810,3 +814,26 @@ def test_el_protocolo_de_los_juegos() -> None:
         {},
     )
     assert p.parse_game_event({"game": "ruleta", "event": "x", "data": [1]}) is None
+
+
+# ---------------------------------------------------------------------------
+# Control a mano desde el panel
+# ---------------------------------------------------------------------------
+
+
+async def test_controles_comunes_y_sin_juego() -> None:
+    manager, _, _, _ = await make_manager([ProbeGame])
+    ok, text = await manager.panel_control("restart")
+    assert not ok and "ningún juego" in text
+    assert manager.snapshot()["controls"] == []
+    ok, _ = await manager.start("sonda", "panel")
+    assert ok
+    ids = [c["id"] for c in manager.snapshot()["controls"]]
+    assert ids[-2:] == ["restart", "stop"]
+    # Un control que el juego no tiene: mensaje para el equipo, sin excepción.
+    ok, text = await manager.panel_control("nada")
+    assert not ok and text
+    ok, _ = await manager.panel_control("restart")
+    assert ok and manager.snapshot()["active"] == "sonda"
+    ok, _ = await manager.panel_control("stop")
+    assert ok and manager.snapshot()["active"] is None

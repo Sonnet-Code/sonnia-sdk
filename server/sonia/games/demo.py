@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from websockets.asyncio.server import ServerConnection
 
 __all__ = [
+    "ESPERA",
     "EXAMPLE",
     "MSG_DEV_CAPTURE",
     "MSG_DEV_DONE",
@@ -72,6 +73,10 @@ MSG_DEV_DONE = "dev_done"
 
 #: ``--juego`` de la secuencia de ejemplo: solo los eventos comunes y la vista en vivo.
 EXAMPLE = "ejemplo"
+
+#: ``--juego`` de la secuencia del aviso de espera (``busy``) en todos los encuadres: no es un
+#: juego (``sonia/games/espera_demo.py``).
+ESPERA = "espera"
 
 #: Tamaño de los frames de la vista en vivo (como la de verdad).
 PREVIEW_SIZE = (640, 360)
@@ -167,11 +172,15 @@ def example_steps() -> list[Step]:
 def load_demo(game_id: str) -> list[Step]:
     """Los pasos de la secuencia de un juego (``sonia/games/<paquete>/demo.py:steps``).
 
-    ``ejemplo`` es :func:`example_steps`. Lanza ``LookupError`` si el juego no existe o
-    aún no tiene secuencia.
+    ``ejemplo`` es :func:`example_steps` y ``espera``, la del aviso de espera. Lanza
+    ``LookupError`` si el juego no existe o aún no tiene secuencia.
     """
     if game_id == EXAMPLE:
         return example_steps()
+    if game_id == ESPERA:
+        from sonia.games.espera_demo import steps as busy_steps
+
+        return busy_steps()
     from sonia.games.registry import find_game
 
     cls = find_game(game_id)

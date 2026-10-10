@@ -22,7 +22,7 @@ from sonia.vision import models as models_module
 from sonia.vision.camera import OpenCVCamera
 from sonia.vision.contracts import HandShape, HandVerdict, NoReferee, PoseVerdict
 from sonia.vision.games import NoJudge, build_game_vision
-from sonia.vision.judge import ModelJudge
+from sonia.vision.judge import FallbackJudge, ModelJudge
 from sonia.vision.referee import (
     HANDS_PROMPT,
     HANDS_QUESTION,
@@ -300,25 +300,18 @@ async def test_con_gemini_y_clave_juzga_gemini_y_la_busqueda_tambien(
     vision = build(gemini_settings(key="clave-de-prueba"), vision_llm=luna)
     assert isinstance(vision.referee, GeminiReferee)
     assert vision.referee.available
-    assert isinstance(vision.judge, ModelJudge)
-    # La búsqueda pregunta a Gemini (el mismo cliente que las rondas), no al modelo de visión.
+    # La búsqueda pregunta primero a Gemini (el mismo cliente que las rondas) y, si falla,
+    # al modelo de visión.
+    assert isinstance(vision.judge, FallbackJudge)
     client = vision.referee._llm
     assert isinstance(client, LLMClient)
-    assert vision.judge._llm is client
-    # Si Gemini falla en la búsqueda, la misma foto va al modelo de visión (luna).
-    assert vision.judge._fallback is luna
+    assert vision.judge._primary._llm is client
+    assert vision.judge._secondary._llm is luna
     await vision.close()
     assert closed == [client]
-
-
-async def test_con_gemini_sin_modelo_de_vision_la_busqueda_no_tiene_respaldo() -> None:
+    # Sin modelo de visión, solo Gemini.
     vision = build(gemini_settings(key="clave-de-prueba"))
-    assert isinstance(vision.judge, ModelJudge)
-    assert vision.judge._fallback is None
-    settings = gemini_settings(key="clave-de-prueba")
-    settings.llm.supports_vision = False
-    vision = build(settings, vision_llm=object())
-    assert isinstance(vision.judge, ModelJudge) and vision.judge._fallback is None
+    assert isinstance(vision.judge, ModelJudge) and vision.judge._llm is vision.referee._llm
     await vision.close()
 
 
@@ -345,3 +338,85 @@ async def test_sin_camara_usb_no_hay_juez_de_rondas() -> None:
     vision = build(gemini_settings(key="clave-de-prueba", source="unity"))
     assert not vision.referee.available
     assert not vision.judge.available
+
+
+# ---------------------------------------------------------------------------
+# La búsqueda: Gemini y, si falla, el modelo de visión (``FallbackJudge``)
+# ---------------------------------------------------------------------------
+
+
+class _FakeCamera:
+    def __init__(self, *, frames: bool = True) -> None:
+        self.frames = frames
+        self.captures = 0
+
+    async def capture(self, *, max_width: int | None = None, quality: int | None = None) -> Any:
+        from sonia.types import Frame
+
+        self.captures += 1
+        return Frame(data=b"\xff\xd8jpeg", width=640, height=360) if self.frames else None
+
+
+class _FakeVisionLLM:
+    def __init__(self, reply: str | None = None, *, error: Exception | None = None) -> None:
+        self.reply = reply
+        self.error = error
+        self.calls = 0
+
+    async def complete(self, messages: Any) -> Any:
+        from sonia.llm import Completion
+
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return Completion(content=self.reply or "")
+
+
+async def test_busqueda_va_a_luna_si_gemini_falla() -> None:
+    camera = _FakeCamera()
+    gemini = _FakeVisionLLM(error=RuntimeError("429 Too Many Requests"))
+    luna = _FakeVisionLLM('{"visto": true, "objeto": "botella azul"}')
+    judge = FallbackJudge(ModelJudge(gemini, camera), ModelJudge(luna, camera))
+    judge.start_round(3)
+    answer = await judge.ask("¿Alguien enseña algo azul?")
+    assert answer is not None and answer.seen and answer.what == "botella azul"
+    assert (gemini.calls, luna.calls, judge.fallbacks) == (1, 1, 1)
+    # El tope cuenta preguntas, no llamadas: queda lo mismo que si hubiera contestado Gemini.
+    assert judge.remaining == 2 and judge.calls == 1
+
+
+async def test_busqueda_no_va_a_luna_si_gemini_contesta_o_no_hay_foto() -> None:
+    camera = _FakeCamera()
+    gemini = _FakeVisionLLM('{"visto": false, "objeto": ""}')
+    luna = _FakeVisionLLM('{"visto": true, "objeto": "taza"}')
+    judge = FallbackJudge(ModelJudge(gemini, camera), ModelJudge(luna, camera))
+    judge.start_round(1)
+    answer = await judge.ask("¿Una taza?")
+    assert answer is not None and not answer.seen
+    assert luna.calls == 0
+    # Tope alcanzado: ni Gemini ni luna.
+    assert await judge.ask("¿Una taza?") is None
+    assert (gemini.calls, luna.calls) == (1, 0)
+    # Sin foto: tampoco se repite.
+    blind = FallbackJudge(
+        ModelJudge(_FakeVisionLLM(error=RuntimeError("x")), _FakeCamera(frames=False)),
+        ModelJudge(luna, _FakeCamera()),
+    )
+    assert await blind.ask("¿Una taza?") is None
+    assert luna.calls == 0
+
+
+async def test_busqueda_va_a_luna_si_gemini_no_llega_a_tiempo() -> None:
+    class _Slow(_FakeVisionLLM):
+        async def complete(self, messages: Any) -> Any:
+            self.calls += 1
+            await asyncio.sleep(1.0)
+            return await super().complete(messages)
+
+    camera = _FakeCamera()
+    gemini = _Slow('{"visto": true, "objeto": "tarde"}')
+    luna = _FakeVisionLLM('{"visto": true, "objeto": "libro"}')
+    judge = FallbackJudge(ModelJudge(gemini, camera, timeout_s=0.05), ModelJudge(luna, camera))
+    answer = await judge.ask("¿Un libro?")
+    assert answer is not None and answer.what == "libro"
+    assert judge.fallbacks == 1

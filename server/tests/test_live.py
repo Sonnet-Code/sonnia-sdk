@@ -1698,3 +1698,169 @@ async def test_activity_no_avisa_de_una_tarea_rapida(tmp_path: Path) -> None:
         await wait_until(lambda: not rig.engine._delegations)
         await asyncio.sleep(0.1)
         assert _activities(rig) == []
+
+
+# ---------------------------------------------------------------------------
+# Aviso de espera en pantalla (``busy``, sonia.busy)
+# ---------------------------------------------------------------------------
+
+
+def _busy(rig: LiveRig) -> list[str]:
+    """Los ``busy`` que llegaron a Unity: el texto de cada ``on`` o ``off``."""
+    return [m["text"] if m["on"] else "off" for m in rig.rec.of_type("busy")]
+
+
+async def test_busy_pensando_desde_que_empieza_la_delegacion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(engine_module, "THINK_DELAY_S", 0.0)
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(_delegation_created())
+        await rig.rec.wait_for(lambda _: _busy(rig) == ["Pensando…"])
+        await rig.rec.wait_state("thinking")
+        # Sin retardo sale al nacer la tarea, antes incluso del estado ``thinking``.
+        msgs = rig.rec.json()
+        first_busy = next(i for i, m in enumerate(msgs) if m["type"] == "busy")
+        thinking = next(
+            i for i, m in enumerate(msgs) if m["type"] == "state" and m["state"] == "thinking"
+        )
+        assert first_busy < thinking
+        assert rig.rec.of_type("busy")[0] == {
+            "type": "busy",
+            "on": True,
+            "kind": "think",
+            "text": "Pensando…",
+        }
+        await conn.response_event({"type": "response.created"})
+        await conn.response_event({"type": "response.output_text.delta", "delta": "Listo."})
+        await conn.response_event({"type": "response.completed"})
+        await rig.rec.wait_for(lambda _: _busy(rig) == ["Pensando…", "off"])
+        # La lluvia y la mano en la barbilla siguen siendo solo para las que tardan.
+        assert _activities(rig) == []
+        assert rig.engine.busy_board.current() is None
+
+
+async def test_busy_pensando_espera_un_momento(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """«Pensando…» no sale hasta ``THINK_DELAY_S``; una tarea que acaba antes no la enciende."""
+    monkeypatch.setattr(engine_module, "THINK_DELAY_S", 0.4)
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(_delegation_created())
+        await rig.rec.wait_state("thinking")
+        assert _busy(rig) == []
+        await rig.rec.wait_for(lambda _: _busy(rig) == ["Pensando…"])
+        await conn.response_event({"type": "response.created"})
+        await conn.response_event({"type": "response.completed"})
+        await rig.rec.wait_for(lambda _: _busy(rig) == ["Pensando…", "off"])
+    monkeypatch.setattr(engine_module, "THINK_DELAY_S", 5.0)
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(_delegation_created())
+        await rig.rec.wait_state("thinking")
+        await conn.response_event({"type": "response.created"})
+        await conn.response_event({"type": "response.output_text.delta", "delta": "Ya."})
+        await conn.response_event({"type": "response.completed"})
+        for _ in range(60):
+            if not rig.engine._delegations:
+                break
+            await asyncio.sleep(0.05)
+        assert not rig.engine._delegations
+        await asyncio.sleep(0.15)
+        assert _busy(rig) == []
+
+
+async def test_busy_buscando_en_internet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(engine_module, "THINK_DELAY_S", 0.0)
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(_delegation_created())
+        await conn.response_event({"type": "response.created"})
+        await conn.response_event(
+            {
+                "type": "response.output_item.added",
+                "item": {"type": "web_search_call", "id": "ws_1", "status": "in_progress"},
+            }
+        )
+        await rig.rec.wait_for(lambda _: _busy(rig) == ["Pensando…", "Buscando en internet…"])
+        assert rig.rec.of_type("busy")[-1]["kind"] == "search"
+        await conn.response_event({"type": "response.web_search_call.completed", "item_id": "ws_1"})
+        await rig.rec.wait_for(
+            lambda _: _busy(rig) == ["Pensando…", "Buscando en internet…", "Pensando…"]
+        )
+        await conn.response_event({"type": "response.output_text.delta", "delta": "Ya lo vi."})
+        await conn.response_event({"type": "response.completed"})
+        await rig.rec.wait_for(lambda _: _busy(rig)[-1:] == ["off"])
+        assert _busy(rig) == ["Pensando…", "Buscando en internet…", "Pensando…", "off"]
+
+
+async def test_busy_se_olvida_con_la_tarea_perdida(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(engine_module, "DELEGATION_TIMEOUT_S", 0.3)
+    monkeypatch.setattr(engine_module, "THINK_DELAY_S", 0.0)
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(_delegation_created())
+        await rig.rec.wait_for(lambda _: _busy(rig) == ["Pensando…", "off"])
+        assert not rig.engine._delegations
+
+
+async def test_busy_se_repite_al_reconectarse_unity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from websockets.asyncio.client import connect
+
+    monkeypatch.setattr(engine_module, "THINK_DELAY_S", 0.0)
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(_delegation_created())
+        await rig.rec.wait_for(lambda _: _busy(rig) == ["Pensando…"])
+        # Unity se reconecta: tras su ``client_hello`` vuelve a ver la espera en marcha.
+        async with connect(f"ws://127.0.0.1:{rig.hub.port}/") as client:
+            assert json.loads(await asyncio.wait_for(client.recv(), 2.0))["type"] == "hello"
+            again = Recorder(client)
+            try:
+                await client.send(
+                    json.dumps({"type": "client_hello", "client": "unity", "games": []})
+                )
+                await again.wait_type("busy")
+                assert again.of_type("busy") == [
+                    {"type": "busy", "on": True, "kind": "think", "text": "Pensando…"}
+                ]
+            finally:
+                await again.close()
+        # Sin nada en marcha, un ``client_hello`` no manda ``busy``.
+        await conn.response_event({"type": "response.created"})
+        await conn.response_event({"type": "response.completed"})
+        await rig.rec.wait_for(lambda _: _busy(rig)[-1:] == ["off"])
+        count = len(rig.rec.of_type("busy"))
+        await rig.unity({"type": "client_hello", "client": "unity", "games": []})
+        await asyncio.sleep(0.1)
+        assert len(rig.rec.of_type("busy")) == count
+
+
+async def test_busy_no_queda_colgado_al_perder_la_sesion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(engine_module, "THINK_DELAY_S", 0.0)
+    async with make_rig(tmp_path) as rig:
+        conn = await rig.conn()
+        await conn.send(_delegation_created())
+        await conn.response_event({"type": "response.created"})
+        await conn.response_event(
+            {
+                "type": "response.output_item.added",
+                "item": {"type": "web_search_call", "id": "ws_1", "status": "in_progress"},
+            }
+        )
+        await rig.rec.wait_for(lambda _: _busy(rig)[-1:] == ["Buscando en internet…"])
+        # Se cae la sesión a media búsqueda: la pastilla se va con ella.
+        await conn.ws.close()
+        await rig.rec.wait_for(lambda _: _busy(rig)[-1:] == ["off"])
+        assert rig.engine.busy_board.keys == ()
+        await rig.conn(2)
+        await asyncio.sleep(0.1)
+        assert _busy(rig)[-1:] == ["off"]

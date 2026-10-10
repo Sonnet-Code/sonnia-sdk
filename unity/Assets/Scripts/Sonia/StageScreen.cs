@@ -20,6 +20,8 @@
 //    (las frases grabadas), lo que aún no ha dicho se ve atenuado y se va
 //    encendiendo al ritmo estimado de la voz: el karaoke del diseño.
 //  - Con una imagen, la trivia o un juego en la franja alta, el QR se aparta.
+//  - Con el aviso de espera (BusyIndicator) en la franja de arriba, se apartan el
+//    logo y el QR: la pastilla ocupa su sitio mientras se ve.
 
 using System.Collections.Generic;
 using System.Text;
@@ -120,6 +122,7 @@ namespace Sonia
         private TriviaController _trivia;
         private GameHud _games;
         private PresenceController _presence;
+        private BusyIndicator _busy;
         private bool _built;
 
         private TMP_FontAsset _display;
@@ -129,6 +132,7 @@ namespace Sonia
         private Sprite _shadow;
 
         private CanvasGroup _topGroup;
+        private CanvasGroup _logoGroup;
         private CanvasGroup _invitationGroup;
         private RectTransform _invitationRect;
         private CanvasGroup _subtitleGroup;
@@ -250,6 +254,7 @@ namespace Sonia
             _trivia = GetComponentInChildren<TriviaController>(true);
             _games = GetComponentInChildren<GameHud>(true);
             _presence = GetComponentInChildren<PresenceController>(true);
+            _busy = GetComponentInChildren<BusyIndicator>(true);
             Build();
         }
 
@@ -584,6 +589,7 @@ namespace Sonia
             bool imageUp = _imagePanel != null && _imagePanel.IsVisible;
             bool triviaUp = (_trivia != null && _trivia.IsActive) || (_games != null && _games.HoldsTopStrip);
             bool away = _presence != null && (_presence.IsAway || !_presence.TargetPresent);
+            bool busyUp = _busy != null && _busy.IsShowing;
             bool hasText = _sonia.Length > 0 || _pendingText != null || _visitor.Length > 0;
             bool recent = _speaking || now - _lastActivity < lingerSeconds;
             bool subtitles = _subtitlesOn && hasText && recent && !away;
@@ -593,7 +599,8 @@ namespace Sonia
                                 && !imageUp && !triviaUp && !away
                                 && now - _lastActivity > lingerSeconds + invitationDelay;
 
-            Fade(_topGroup, imageUp || triviaUp ? 0f : 1f, dt, 4f);
+            Fade(_topGroup, imageUp || triviaUp || busyUp ? 0f : 1f, dt, busyUp ? 8f : 4f);
+            Fade(_logoGroup, busyUp ? 0f : 1f, dt, busyUp ? 8f : 4f);
             Fade(_subtitleGroup, subtitles ? 1f : 0f, dt, subtitles ? 8f : 3f);
             Fade(_visitorGroup, _visitor.Length > 0 ? 1f : 0f, dt, 6f);
             Fade(_invitationGroup, invitationUp ? 1f : 0f, dt, invitationUp ? 2.5f : 6f);
@@ -670,7 +677,8 @@ namespace Sonia
             stage.SetAsFirstSibling();
 
             BuildScrim(stage);
-            BuildLogo(stage);
+            _logoGroup = NewGroup("Logo", stage);
+            BuildLogo((RectTransform)_logoGroup.transform);
             _topGroup = NewGroup("Arriba", stage);
             BuildQrCard((RectTransform)_topGroup.transform);
             BuildInvitation(stage);

@@ -36,6 +36,7 @@ from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, S
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar
 
+from sonia.busy import TEXT_CAMERA, TEXT_GAME
 from sonia.games.banks import BANK_MAX_CHARS, GameBank, is_bank_id
 from sonia.games.base import (
     INSTRUCT_MAX_CHARS,
@@ -81,6 +82,11 @@ STICKY_STATE = "game"
 #: Tope de espera a que Sonia calle antes de contar un juego arrancado desde el panel.
 PANEL_WAIT_S = 3.0
 
+#: «Encendiendo la cámara…» (``sonia.busy``): cada cuánto se mira si ya llegó el primer
+#: frame de un juego de cámara y hasta cuándo como mucho.
+CAMERA_BUSY_POLL_S = 0.1
+CAMERA_BUSY_MAX_S = 10.0
+
 #: Fallos seguidos de ``Game.tick`` tras los que la partida se cancela (un juego roto no
 #: puede llenar el registro 20 veces por segundo).
 MAX_TICK_FAILURES = 20
@@ -125,6 +131,17 @@ PANEL_START_TEXT = "JUEGO: el equipo del stand ha puesto {spoken} en tu pantalla
 #: Lo que se le pasa a GPT-Live cuando el equipo termina desde el panel un juego que cierra
 #: enseñando su final (``Game.stop_requested``).
 PANEL_STOP_TEXT = "JUEGO: el equipo del stand ha terminado {spoken}. "
+
+#: Lo que se le pasa a GPT-Live cuando el equipo lleva la partida a mano desde el panel
+#: (``Game.panel_control``): el guion del juego va detrás.
+PANEL_CONTROL_TEXT = (
+    "JUEGO: el equipo del stand ha llevado la partida a mano desde el panel (cuéntalo como "
+    "parte del juego, sin hablar del panel). "
+)
+
+#: Controles del panel que pone el manager para todos los juegos.
+CONTROL_RESTART = "restart"
+CONTROL_STOP = "stop"
 
 #: Sin juego elegido (``start_game`` con ``no_lo_dijo``).
 CHOOSE_TEXT = (
@@ -420,6 +437,7 @@ class GameManager:
             "phase": self._phase,
             "elapsed_s": round(self._clock() - self._started_at, 1) if game is not None else 0.0,
             "state": state,
+            "controls": self._controls(game),
             "games": games,
             "games_off": sorted(self._off),
             "banks": self.bank_list(),
@@ -427,6 +445,52 @@ class GameManager:
             "preview": self.preview_supported(),
             "pose_model": self._pose_model_state(),
         }
+
+    def _controls(self, game: Game | None) -> list[dict[str, Any]]:
+        """Los controles a mano de la partida en marcha (``Game.panel_controls``) más los comunes."""
+        if game is None:
+            return []
+        controls: list[dict[str, Any]] = []
+        if self._phase == "playing":
+            try:
+                controls = [dict(c) for c in game.panel_controls()]
+            except Exception:  # noqa: BLE001
+                logger.exception("Falló panel_controls de %s", game.id)
+                controls = []
+        controls.append({"id": CONTROL_RESTART, "label": "Reiniciar"})
+        controls.append({"id": CONTROL_STOP, "label": "Terminar"})
+        return controls
+
+    async def panel_control(self, control: str, value: str = "") -> tuple[bool, str]:
+        """Un control a mano del panel con el juego en marcha (acción ``game_control``).
+
+        ``restart`` empieza el mismo juego desde cero y ``stop`` lo termina, para todos; el
+        resto los resuelve el juego (:meth:`Game.panel_control`) y su guion se le pasa a
+        GPT-Live en cuanto calla. Nunca lanza: ``(ok, mensaje para el equipo)``.
+        """
+        game = self._active
+        if game is None:
+            return False, "No hay ningún juego en marcha."
+        if control == CONTROL_STOP:
+            return await self.stop("panel")
+        if control == CONTROL_RESTART:
+            await self.stop("panel")
+            return await self.start(game.id, "panel")
+        if self._phase != "playing":
+            return False, f"{game.title} ya está terminando."
+        self._note_activity()
+        try:
+            script = await game.panel_control(control, str(value or ""))
+        except GameError as exc:
+            return False, str(exc) or "Ese control no está disponible ahora."
+        except Exception:  # noqa: BLE001 - la demo nunca se cae por un botón
+            logger.exception("Falló el control %s de %s", control, game.id)
+            return False, "Ese control falló; prueba otra vez o termina el juego."
+        if script:
+            self._spawn(
+                self._speak_when_quiet(self._match, PANEL_CONTROL_TEXT + script), "game-control"
+            )
+        return True, "Hecho."
 
     def capabilities(self) -> list[str]:
         """Capacidades para el panel (``data-cap``): ``games``, ``game:<id>`` y ``game_banks``.
@@ -442,6 +506,9 @@ class GameManager:
             caps.append("game_banks")
         if self._pose_model_setter() is not None:
             caps.append("game_pose_model")
+        # Controles a mano de la partida en marcha (``snapshot()["controls"]``, acción
+        # ``game_control``): las apps anteriores no los tienen.
+        caps.append("game_controls")
         return caps
 
     # -- panel: modelo de poses -------------------------------------------------
@@ -597,6 +664,12 @@ class GameManager:
         self._pending = None
         self._engine.touch()
         logger.info("Juego %s en marcha (%s)", game_id, source)
+        # Aviso de espera (``sonia.busy``) hasta la primera pantalla del juego (su ``start``;
+        # si falla, ``_end_now`` lo apaga) y, en los de cámara, hasta su primer frame: abrir
+        # la cámara tarda segundos y no se ve nada.
+        await self.set_busy(game_id, "game", TEXT_GAME)
+        if "camera" in game.needs:
+            self._spawn(self._camera_busy(match, game), "game-camera-busy")
         with contextlib.suppress(Exception):
             await self._screen.hide_image()
         try:
@@ -610,6 +683,8 @@ class GameManager:
             await self._abort(match, game)
             return False, f"No se pudo empezar {game.spoken}: falló al prepararse."
         if match != self._match or self._phase != "playing":
+            if match == self._match:
+                await self.set_busy(game_id, "game", None)
             await self._release_orphaned_vision(game)
             return False, f"{game.title} se canceló al empezar."
         await self._ensure_started(game)
@@ -620,6 +695,29 @@ class GameManager:
             "game-intro",
         )
         return True, f"{game.title} en marcha."
+
+    async def _camera_busy(self, match: int, game: Game) -> None:
+        """«Encendiendo la cámara…» desde que arranca un juego de cámara hasta su primer frame.
+
+        La cámara tarda en abrir (el dispositivo y su primer frame, dentro del ``start``
+        del juego) y el visitante no ve nada mientras. Mira cada ``CAMERA_BUSY_POLL_S``
+        el último frame del stream; se rinde a los ``CAMERA_BUSY_MAX_S`` y se cancela con
+        la partida (``_end_now``, que además apaga los avisos del juego).
+        """
+        stream = self._vision.stream
+        deadline = self._clock() + CAMERA_BUSY_MAX_S
+        shown = False
+        try:
+            while match == self._match and self._clock() < deadline:
+                if stream.latest() is not None:
+                    break
+                if not shown:
+                    shown = True
+                    await self.set_busy(game.id, "camera", TEXT_CAMERA)
+                await self._sleep(CAMERA_BUSY_POLL_S)
+        finally:
+            if shown and match == self._match:
+                await self.set_busy(game.id, "camera", None)
 
     async def _resume(self, game: Game) -> str:
         try:
@@ -1000,6 +1098,8 @@ class GameManager:
             self._screen_started = True
             self._screen.clear_sticky(STICKY_STATE)
             await self._screen.set_sticky(STICKY_START, msg)
+            # Primera pantalla del juego: ya no se prepara.
+            await self.set_busy(game_id, "game", None)
             return
         await self._ensure_started(game)
         msg = p.msg_game(game_id, event, self._next_seq(), data)

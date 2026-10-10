@@ -24,7 +24,7 @@ equipo son fotos reducidas, sin guardarlas, hacia un modelo de visión:
 | `PreviewStreamer` | `stream.py` (`LivePreview`) | La vista en vivo: frames `SNCV` a Unity, en espejo, 640x360, JPEG de calidad 60, 10 por segundo, con el dibujo del juego encima. |
 | `PoseDetector` | `poses.py` (`YoloPoseDetector`) | Personas con sus 17 puntos (YOLOv8-pose en ONNX con `cv2.dnn`), en continuo o suelta. |
 | `HandDetector` | `hands.py` (`MediaPipeHandDetector`) | Las manos de una persona: 21 puntos y piedra, papel, tijera o sin lectura. |
-| `VisionJudge` | `judge.py` (`ModelJudge`) | Pregunta cerrada sobre una foto fresca, con respuesta en JSON (búsqueda relámpago): a Gemini con `GAMES_JUDGE=gemini`, al modelo de visión de Sonia con `local`. |
+| `VisionJudge` | `judge.py` (`ModelJudge`, `FallbackJudge`) | Pregunta cerrada sobre una foto fresca, con respuesta en JSON (búsqueda relámpago): a Gemini con `GAMES_JUDGE=gemini` y, si falla, al modelo de visión de Sonia; solo a este con `local`. |
 | `GameReferee` | `referee.py` (`GeminiReferee`) | El juez de las rondas de Simón dice y de piedra, papel o tijera: una foto por ronda a Gemini, con respuesta en JSON (`PoseVerdict`, `HandVerdict`). Sin él, `NoReferee`. |
 | Dibujos | `overlay.py` | Esqueletos (verde o gris), manos, cajas, marcas ✓ y ✗ y etiquetas para la vista en vivo. |
 | Modelos | `models.py` | Descarga con revisión fijada y SHA-256, y carga con el motor clásico de `cv2.dnn`. |
@@ -100,7 +100,7 @@ quién juega y el momento de la foto, y es la que decide si Gemini no contesta.
 | Ajuste | Por defecto | Qué hace |
 |---|---|---|
 | `GAMES_JUDGE` | `gemini` | `gemini`: las rondas de Simón dice y de piedra, papel o tijera y las miradas de la búsqueda las juzga Gemini. `local`: como antes, todo en el equipo y la búsqueda con el modelo de visión (`LLM_*`). |
-| `GAMES_JUDGE_TIMEOUT_SECONDS` | 4 | Plazo de Gemini en Simón dice, en piedra, papel o tijera y en la búsqueda (allí, si falla, la misma foto va a luna con 6 s, `FALLBACK_TIMEOUT_S`). |
+| `GAMES_JUDGE_TIMEOUT_SECONDS` | 4 | Plazo de Gemini en Simón dice, en piedra, papel o tijera y en cada mirada de la búsqueda; en la búsqueda, si Gemini no contesta, el modelo de visión tiene lo que queda de los 8 s que espera el juego (`JUDGE_TIMEOUT_S`). |
 
 **Qué decide en cada juego:**
 
@@ -109,8 +109,7 @@ quién juega y el momento de la foto, y es la que decide si Gemini no contesta.
 - **Piedra, papel o tijera** (`docs/juegos/piedra_papel_tijera.md`): la jugada del visitante en cada
   tirada, con el frame que elige la lectura local.
 - **Búsqueda relámpago** (`docs/juegos/busqueda.md`): si se ve el objeto en cada mirada (`ModelJudge`
-  con un cliente de Gemini, el mismo `JUDGE_PROMPT` y el tope por ronda de siempre; si Gemini falla,
-  la misma foto va al modelo de visión de Sonia, luna, y cuenta una sola vez para el tope).
+  con un cliente de Gemini, el mismo `JUDGE_PROMPT`, su plazo de 8 s y el tope por ronda de siempre).
 
 **El juez** (`server/sonia/vision/referee.py`, `GeminiReferee`, que implementa `GameReferee` de
 `contracts.py`):
@@ -144,7 +143,7 @@ quién juega y el momento de la foto, y es la que decide si Gemini no contesta.
 |---|---|
 | `GAMES_JUDGE=local` | `NoReferee`: Simón dice y piedra, papel o tijera deciden en el equipo, sin fotos ni aviso; la búsqueda, con el modelo de visión (`LLM_*`) o sin juez si no hay. |
 | Sin `GEMINI_API_KEY`, o los gestos apuntan a otro servidor | Lo mismo que `local`. |
-| Gemini no contesta en el plazo, falla o el JSON no cuadra | Esa ronda la decide la detección local, como antes. En la búsqueda, la misma foto va al modelo de visión (`LLM_*`, luna) con 6 s de plazo, si lo hay (no sabemos si la clave de Gemini tiene topes por minuto o por día, y los gestos ya la usan); sin foto o pasado el tope, no se pregunta a ninguno. |
+| Gemini no contesta en el plazo, falla o el JSON no cuadra | Esa ronda la decide la detección local, como antes. En la búsqueda, la misma pregunta va al modelo de visión (`LLM_*`) con una foto nueva (`FallbackJudge`): un 429 de la clave de Gemini, que también usan los gestos todo el día, no deja la búsqueda sin juez. Sin foto o con el tope de la ronda alcanzado no se repite, y el tope cuenta preguntas, no llamadas. |
 
 **Aviso de espera.** Mientras el juez mira, la pantalla enseña la pastilla de espera (`busy` con tipo
 `judge`, `docs/protocolo.md`): «Mirando las poses…», «Mirando tu mano…» o «Mirando lo que
