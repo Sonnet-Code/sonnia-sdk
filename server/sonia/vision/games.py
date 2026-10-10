@@ -203,7 +203,7 @@ def _build(
         return unavailable_game_vision()
 
     from sonia.vision.hands import MediaPipeHandDetector
-    from sonia.vision.judge import JUDGE_TIMEOUT_S, ModelJudge
+    from sonia.vision.judge import JUDGE_TIMEOUT_S, FallbackJudge, ModelJudge
     from sonia.vision.models import (
         DEFAULT_POSE_VARIANT,
         download_game_models,
@@ -247,7 +247,18 @@ def _build(
 
             gemini = LLMClient(gemini_settings)
             referee = GeminiReferee(gemini, timeout_s=timeout_s)
-            judge = ModelJudge(gemini, camera)
+            # La búsqueda: Gemini con el plazo del juez y, si falla (un 429 de la clave, el
+            # plazo), la misma pregunta al modelo de visión con lo que queda de los 8 s que
+            # espera el juego (``JUDGE_TIMEOUT_S``).
+            gemini_judge = ModelJudge(gemini, camera, timeout_s=timeout_s)
+            judge = (
+                FallbackJudge(
+                    gemini_judge,
+                    ModelJudge(vision_llm, camera, timeout_s=max(2.0, JUDGE_TIMEOUT_S - timeout_s)),
+                )
+                if vision_llm is not None and settings.llm.supports_vision
+                else gemini_judge
+            )
             referee_name = f"Gemini ({gemini_settings.model}, plazo {timeout_s:g} s)"
     # Al arrancar solo se exigen el de poses de GAME_POSES_MODEL y los de manos: el otro de
     # poses (la app lleva los dos) se baja la primera vez que se pide desde el panel.
@@ -287,7 +298,13 @@ def _build(
         variant,
         "listas" if hands.available else "sin modelo",
         referee_name,
-        ("con Gemini" if gemini is not None else "con el modelo de visión")
+        (
+            "con Gemini y, si falla, el modelo de visión"
+            if isinstance(judge, FallbackJudge)
+            else "con Gemini"
+            if gemini is not None
+            else "con el modelo de visión"
+        )
         if judge.available
         else "sin modelo de visión",
     )

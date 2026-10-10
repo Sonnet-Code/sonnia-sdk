@@ -179,7 +179,7 @@ Desde el 10 de octubre de 2026 (Jean: «es una mac m3 pro que habrá. mejor usem
 
 - Simón dice: una foto por ronda (también las trampa) y Gemini cuenta personas y quién hace cada pose.
 - Piedra, papel o tijera: la lectura local elige el momento (la muestra estable o, si no la hay, la última) y Gemini dice el gesto de la mano que enseña la persona más cercana.
-- Búsqueda: la misma pregunta cerrada de siempre (`JUDGE_PROMPT`) a Gemini; si falla, esa mirada no cuenta. Sin clave de Gemini, el modelo de visión de `LLM_*`, como antes.
+- Búsqueda: la misma pregunta cerrada de siempre (`JUDGE_PROMPT`) a Gemini, con el plazo del juez; si falla (un 429 de la clave, que también usan los gestos, o el plazo), la misma pregunta va al modelo de visión de `LLM_*` con lo que queda de los 8 s (`FallbackJudge`). Sin clave de Gemini, el modelo de visión, como antes.
 - Mientras el juez mira, la pastilla de espera («Mirando las poses…», «Mirando tu mano…», «Mirando lo que enseñas…»).
 
 Banco de pruebas del 10 de octubre de 2026, con la API real y 80 fotos públicas de Commons etiquetadas a mano (unas 165 llamadas):
