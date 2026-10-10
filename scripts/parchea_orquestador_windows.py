@@ -46,7 +46,14 @@ DATA_DIRS = [
     *(
         (REPO / "assets" / name, Path("assets") / name)
         for name in (
-            "knowledge", "gallery", "showcase", "trivia", "agenda", "faces", "fonts", "games"
+            "knowledge",
+            "gallery",
+            "showcase",
+            "trivia",
+            "agenda",
+            "faces",
+            "fonts",
+            "games",
         )
     ),
     (SERVER / "sonia" / "panel" / "static", Path("sonia") / "panel" / "static"),
