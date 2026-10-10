@@ -308,6 +308,7 @@
       "game-state", "game-list", "game-stop-btn", "game-note", "game-bank-info", "game-bank-select",
       "game-bank-load-btn", "game-bank-detail", "game-bank-editor", "game-bank-input", "game-bank-save-btn",
       "game-bank-reset-btn", "game-bank-state", "game-pose", "game-pose-select", "game-pose-help",
+      "game-judge", "game-judge-select", "game-judge-help",
     ];
     for (const id of ids) {
       // "topbar-status" -> ui.topbarStatus
@@ -1564,6 +1565,7 @@
     renderGameBanks(games);
     renderGameBankState();
     renderPoseModel(status, list);
+    renderGameJudge(status, list);
   }
 
   function buildGameTiles(list) {
@@ -1662,6 +1664,7 @@
     poseKey = "";
     ui.gamePoseSelect.replaceChildren();
     setHidden(ui.gamePose, true);
+    setHidden(ui.gameJudge, true);
   }
 
   // ------------------------------------------------------------ modelo de poses
@@ -1732,6 +1735,51 @@
     const saved = app.status && typeof app.status.games_pose_model === "string" ? app.status.games_pose_model : "";
     lockControl(select);
     const result = await sendAction("set_game_pose_model", { model }, { button: select });
+    if (!result.ok) select.value = saved;
+    lockControl(select);
+  }
+
+  // ------------------------------------------------------------ juez de las rondas de cámara
+
+  /** Cómo se llama cada juez (GAMES_JUDGE) en la ayuda y en «El de la app». */
+  const JUDGE_NAMES = { gemini: "Gemini", local: "Local" };
+
+  /** `judge` de los juegos: `{mode, app, requested, gemini}` (o null si no lo manda). */
+  function gameJudgeInfo() {
+    const info = gamesInfo().judge;
+    return info && typeof info === "object" ? info : null;
+  }
+
+  /**
+   * «Juez de las rondas de cámara»: solo si esta Sonnia tiene algún juego de cámara. «El de
+   * la app» borra el ajuste de la nube (vuelve a GAMES_JUDGE). Vale al momento, también con
+   * una partida en marcha.
+   */
+  function renderGameJudge(status, list) {
+    const usesCamera = list.some((game) => Array.isArray(game.needs) && game.needs.includes("camera"));
+    setHidden(ui.gameJudge, !usesCamera);
+    if (!usesCamera) return;
+    const info = gameJudgeInfo();
+    const appMode = info && JUDGE_NAMES[info.app] ? info.app : "";
+    const appOption = ui.gameJudgeSelect.querySelector('option[value=""]');
+    if (appOption) setText(appOption, appMode ? `El de la app: ${JUDGE_NAMES[appMode]}` : "El de la app");
+    const saved = typeof status.games_judge === "string" ? status.games_judge : "";
+    if (!isLocked(ui.gameJudgeSelect) && ui.gameJudgeSelect.value !== saved) ui.gameJudgeSelect.value = saved;
+    let help = "Si Gemini va lento o falla, pon Local: vale para todas las Sonnias, al momento.";
+    if (info && info.gemini === false) {
+      help += " Esta Sonnia no tiene Gemini (le falta la clave): juzga en local.";
+    } else if (info && JUDGE_NAMES[info.mode]) {
+      help += ` En uso ahora: ${JUDGE_NAMES[info.mode]}.`;
+    }
+    setText(ui.gameJudgeHelp, help);
+  }
+
+  async function onGameJudgeChange() {
+    const select = ui.gameJudgeSelect;
+    const judge = select.value;
+    const saved = app.status && typeof app.status.games_judge === "string" ? app.status.games_judge : "";
+    lockControl(select);
+    const result = await sendAction("set_game_judge", { judge }, { button: select });
     if (!result.ok) select.value = saved;
     lockControl(select);
   }
@@ -3060,6 +3108,7 @@
     ui.gameBankResetBtn.addEventListener("click", onGameBankReset);
     ui.gameBankInput.addEventListener("input", renderGameBankState);
     ui.gamePoseSelect.addEventListener("change", onPoseModelChange);
+    ui.gameJudgeSelect.addEventListener("change", onGameJudgeChange);
 
     trackDragging(ui.volumeInput);
     ui.volumeInput.addEventListener("input", () => {

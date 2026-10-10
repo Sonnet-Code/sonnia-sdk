@@ -218,6 +218,18 @@
           <p class="help game-pose-help" id="game-pose-help">Para los juegos que miran el cuerpo (Simón dice con poses y piedra, papel o tijera). El ligero gasta la mitad de CPU con la pantalla en marcha; el preciso acierta algo más con gente tapada. Vale para todas las Sonnias.</p>
           <p class="cap-note" data-cap-note="game_pose_model" hidden>Esta Sonnia no puede cambiar el modelo de poses: le falta la cámara de los juegos o una versión más nueva de la app.</p>
         </div>
+        <div class="game-pose game-judge" id="game-judge" hidden>
+          <div class="row">
+            <label class="game-pose-label" for="game-judge-select">Juez de las rondas de cámara</label>
+            <select id="game-judge-select" data-cap="game_judge">
+              <option value="">El de la app</option>
+              <option value="gemini">Gemini (más acierto, manda una foto por ronda)</option>
+              <option value="local">Local (todo en el equipo)</option>
+            </select>
+          </div>
+          <p class="help game-pose-help" id="game-judge-help">Si Gemini va lento o falla, pon Local: vale para todas las Sonnias, al momento.</p>
+          <p class="cap-note" data-cap-note="game_judge" hidden>Esta Sonnia no puede cambiar el juez: le falta la cámara de los juegos o una versión más nueva de la app.</p>
+        </div>
         <details class="trivia-bank game-banks" id="game-banks">
           <summary><span class="trivia-bank-title">Bancos de los juegos</span> <span class="summary-hint" id="game-bank-info"></span></summary>
           <p class="help">Palabras, retos, adivinanzas… de cada juego. Lo que guardes aquí va a la nube y lo usan todas las Sonnias actualizadas desde su próxima partida, sin reiniciar. Cada banco explica su formato al principio, entre <code>&lt;!--</code> y <code>--&gt;</code>. Si está mal escrito o tiene pocas entradas, no se guarda y te dice por qué.</p>
