@@ -63,8 +63,8 @@ class WordCheck:
     - ``word``: las letras normalizadas (mayúsculas, sin tildes); con ``ok`` son cinco.
     - ``reason``: si no vale, por qué: ``empty`` (no se dijo ninguna), ``length`` (no tiene
       cinco letras) o ``chars`` (lleva algo que no es una letra, como cifras o símbolos).
-    - ``shown``: lo que se pinta en la fila al sacudirla (hasta cinco letras, o signos
-      de interrogación si no hay nada que enseñar).
+    - ``shown``: lo que se pinta en la fila al sacudirla (hasta cinco letras; vacío si no hay
+      nada que enseñar).
     """
 
     ok: bool
@@ -155,6 +155,11 @@ def used_letters(rows: Sequence[tuple[str, str]]) -> dict[str, str]:
     }
 
 
+def _ordinal(index: int) -> str:
+    """La posición de una letra (de 0): «primera», «segunda»..."""
+    return _ORDINALS[index] if index < len(_ORDINALS) else f"{index + 1}.ª"
+
+
 def _join(items: Sequence[str]) -> str:
     """«a, b y c»."""
     if len(items) <= 1:
@@ -184,7 +189,7 @@ def describe_marks(letters: str, marks: str) -> str:
     parts: list[str] = []
     if greens:
         shown = [
-            f"{letter} ({_join([_ORDINALS[i] for i in places])})"
+            f"{letter} ({_join([_ordinal(i) for i in places])})"
             for letter, places in greens.items()
         ]
         parts.append(f"bien colocadas (verdes): {_join(shown)}")
