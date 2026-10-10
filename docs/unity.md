@@ -314,8 +314,17 @@ cómo va cada 90 s. Mientras tanto se ve el doble.
 
 Antes la abandonaba a los 90 s y pedía otra que competía con la primera. En el
 primer PC con Windows (7 de octubre de 2026) se quedó en el doble hasta que se
-reabrió la app, y entonces montó en segundos. Aun así, conviene abrir la app una
-vez en el equipo del stand antes del evento, con internet.
+reabrió la app, y entonces montó en segundos. Hasta la 1.0.501, la espera larga
+tampoco funcionaba: `AwaitLoad` volvía a poner `Timeout` sobre la misma carga y
+UniTask, también con `Preserve`, no admite dos esperas mientras sigue en marcha
+(«Already continuation registered» en el registro). Así que la daba por fallida
+en el primer tramo y pedía otra. Ahora la carga se espera a través de
+`GeniesAvatarLoader.Watch`, un `UniTaskCompletionSource` que sí admite varias.
+
+Si NAF empieza una carga sin poder escribir su caché, esa carga se queda colgada
+aunque luego haya permiso: solo lo arregla reabrir la app (comprobado el 10 de
+octubre de 2026). Aun así, conviene abrir la app una vez en el equipo del stand
+antes del evento, con internet.
 
 El post-procesado (Volume con ACES y bloom) se ve también en la app: en
 `UniversalRenderPipelineGlobalSettings` está desactivado «Strip Unused Post
