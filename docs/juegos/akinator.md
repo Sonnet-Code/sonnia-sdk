@@ -36,7 +36,7 @@ No usa la cámara ni el modelo de visión, y no hay parser de lo que dice el vis
 | Acción | Cuándo la usa | Qué devuelve |
 |---|---|---|
 | `start_game` (`juego`: `akinator`) | El visitante quiere jugar. | El guion de arranque con los temas del banco (marcado `PARA SONIA:`). Con la partida ya en marcha, cómo seguir. |
-| `akinator_guess` (`respuesta`) | Tiene claro qué pensó el visitante. | Cómo preguntárselo («¿Es… X?»). Antes de la quinta pregunta la rechaza una vez («todavía es pronto»); no deja repetir una respuesta que ya falló. |
+| `akinator_guess` (`respuesta`) | Tiene claro qué pensó el visitante. | Cómo preguntárselo («¿Es… X?»). Antes de la quinta pregunta la rechaza («todavía es pronto»), aunque insista, mientras ni las preguntas contadas ni las respuestas del visitante lleguen a cinco; no deja repetir una respuesta que ya falló. |
 | `akinator_result` (`acierto`: `si`, `no` o `no_lo_dijo`; `respuesta_real`) | El visitante dice si acertó, o qué era. | El guion de la reacción. `respuesta_real` es lo que era (si acertó, su respuesta; `no_lo_dijo` si no lo dijo). Sin respuesta pendiente, un «no» no hace nada («las preguntas de sí o no no se delegan»). |
 | `stop_game` | Ya no quiere seguir. | La partida se cancela. |
 
@@ -103,7 +103,7 @@ Ninguna: el Akinator no tiene tiempos exactos, así que todo lo dice GPT-Live co
 |---|---|---|
 | `ENABLED` | `true` | Si se ofrece (además de su línea de `games/registry.py`, `GAMES_ENABLED` y el interruptor del panel). |
 | `MAX_QUESTIONS` | 20 | Preguntas de sí o no como mucho (mínimo 5). Son los puntos de la pantalla. |
-| `MIN_QUESTIONS` | 5 | No arriesga antes de esta pregunta (el orquestador rechaza una vez una respuesta anterior). |
+| `MIN_QUESTIONS` | 5 | No arriesga antes de esta pregunta: el orquestador rechaza la respuesta mientras ni las preguntas contadas ni las respuestas del visitante (su segunda cuenta, por si el contador se queda corto) lleguen a ella. |
 | `ABANDON_SECONDS` | 60 | Sin voz del visitante durante esto, la partida se cancela. |
 
 Constantes del juego (en `game.py`): tres respuestas fallidas como mucho antes de rendirse (`MAX_GUESSES`), aunque queden preguntas.

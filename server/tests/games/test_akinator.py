@@ -459,14 +459,36 @@ async def test_arriesga_una_respuesta_y_sale_la_tarjeta() -> None:
     assert game.nudge() is not None and "pantalla" in game.nudge()  # type: ignore[operator]
 
 
-async def test_no_deja_adivinar_pronto_pero_solo_una_vez() -> None:
+async def test_no_deja_adivinar_antes_del_minimo_aunque_insista() -> None:
     game, host = await start_game()
+    minimum = host.settings.games.akinator.min_questions
     visitor_speaks(game, host)
     await ask(game, *questions(2))
+    for _ in range(2):
+        with pytest.raises(GameError, match="pronto"):
+            await game.guess({"respuesta": "Kotlin"})
+    assert host.sent[-1]["event"] == "question", "no se pinta nada"
+    # Con las preguntas que faltan hasta el mínimo, ya puede.
+    await ask(game, *questions(minimum)[2:])
+    await game.guess({"respuesta": "Kotlin"})
+    assert host.sent[-1]["event"] == "guess"
+
+
+async def test_si_el_contador_se_queda_corto_valen_las_respuestas_del_visitante() -> None:
+    """No todas las preguntas de Sonia se cuentan (una transcripción sin «?»): si el
+    visitante ya contestó al menos el mínimo de veces, se deja arriesgar."""
+    game, host = await start_game()
+    minimum = host.settings.games.akinator.min_questions
+    visitor_speaks(game, host)
+    game.on_user_turn_end(host.now(), host.now())  # el «ya lo tengo» no es una respuesta
+    await ask(game, *questions(1))
+    for _ in range(minimum - 1):
+        host.clock.advance(5)
+        game.on_user_turn_end(host.now(), host.now())
     with pytest.raises(GameError, match="pronto"):
         await game.guess({"respuesta": "Kotlin"})
-    assert host.sent[-1]["event"] == "question", "no se pinta nada"
-    # Si insiste (o la cuenta se quedó corta), se deja pasar.
+    host.clock.advance(5)
+    game.on_user_turn_end(host.now(), host.now())
     await game.guess({"respuesta": "Kotlin"})
     assert host.sent[-1]["event"] == "guess"
 
@@ -1124,6 +1146,7 @@ async def test_en_el_motor_cuenta_las_preguntas_de_sonia_con_parciales_y_finales
     async with games_rig(tmp_path, games=[AkinatorGame]) as rig:
         rig.settings.games.result_seconds = 0.05
         rig.settings.games.final_wait_seconds = 0.3
+        rig.settings.games.akinator.min_questions = 4
         conn = await rig.conn()
         instructions = conn.start["session"]["instructions"]
         assert "el Akinator dev" in instructions and "AKINATOR EN MARCHA" not in instructions
@@ -1171,16 +1194,19 @@ async def test_en_el_motor_cuenta_las_preguntas_de_sonia_con_parciales_y_finales
         await asyncio.sleep(0.3)
         assert [m["data"]["asked"] for m in question_events(rig)] == [1, 2, 3]
 
-        # Arriesga (con 3 preguntas la rechaza una vez) y el veredicto cierra la partida.
+        # Arriesga antes del mínimo (4): la rechaza. Con la cuarta pregunta ya puede, y el
+        # veredicto cierra la partida.
         result = await _backend_call(conn, "g2", "akinator_guess", {"respuesta": "Kotlin"})
         assert "pronto" in result and not result.startswith(SCRIPT_PREFIX)
+        await sonia_says(conn, "Vale", ". ", "¿", "Es", " de", " pago", "?")
+        await wait_until(lambda: len(question_events(rig)) >= 4)
         result = await _backend_call(conn, "g3", "akinator_guess", {"respuesta": "Kotlin"})
         assert result.startswith(SCRIPT_PREFIX) and "«Kotlin»" in result
         result = await _backend_call(
             conn, "g4", "akinator_result", {"acierto": "si", "respuesta_real": "Kotlin"}
         )
         assert (
-            result.startswith(SCRIPT_PREFIX) and "Acertaste" in result and "3 preguntas" in result
+            result.startswith(SCRIPT_PREFIX) and "Acertaste" in result and "4 preguntas" in result
         )
         await rig.rec.wait_for(
             lambda msgs: any(m.get("event") == "end" for m in rig.rec.of_type("game", msgs)),
