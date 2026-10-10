@@ -93,15 +93,15 @@ GUESS_TEXT = (
 )
 ALL_GRAY_TEXT = " No ha salido ninguna letra, pero así descartan {n} de golpe."
 CLOSE_TEXT = " ¡Van muy cerca!"
-HINT_TEXT = " Ha salido la pista en la pantalla: léela tal cual, «{hint}»."
+HINT_TEXT = " Ha salido la pista en la pantalla: léela tal cual, «{hint}»"
 
 WON_TEXT = (
-    "¡LO HAN ADIVINADO en el intento {number} de {rows}! La palabra era {word} (para que la "
-    "cuentes: {hint}). Celébralo a lo grande y felicítales."
+    "¡LO HAN ADIVINADO en el intento {number} de {rows}! La palabra era {word}. Un dato para que "
+    "lo cuentes: {hint} Celébralo a lo grande y felicítales."
 )
 LOST_TEXT = (
-    "Se acabaron los {rows} intentos y no lo adivinaron: la palabra era {word} (para que la "
-    "cuentes: {hint}). Díselo con cariño y buen humor, que ha estado reñido, y anímales a una "
+    "Se acabaron los {rows} intentos y no lo adivinaron: la palabra era {word}. Un dato para que "
+    "lo cuentes: {hint} Díselo con cariño y buen humor, que ha estado reñido, y anímales a una "
     "revancha."
 )
 #: Sonia no sabe qué premios hay: a quien gana lo manda con el equipo del stand.
@@ -158,6 +158,12 @@ def _echo(raw: object) -> str:
     """Lo que dijo el grupo, para repetirlo en un guion: solo letras y cifras, con tope."""
     text = "".join(char for char in str(raw or "") if char.isalnum())
     return text[:ECHO_MAX] + ("…" if len(text) > ECHO_MAX else "")
+
+
+def _sentence(text: str) -> str:
+    """El texto como frase: con punto final si no acaba ya en un signo (los bancos se editan a mano)."""
+    text = text.strip()
+    return text if not text or text[-1] in ".!?…" else text + "."
 
 
 def _letters(count: int) -> str:
@@ -270,7 +276,9 @@ class WordleGame(Game):
 
     async def resume(self) -> str:
         tried = f" ({', '.join(g.letters for g in self._guesses)})" if self._guesses else ""
-        hint = f" La pista de la pantalla dice: «{self._hint}»." if self._hint_shown else ""
+        hint = (
+            f" La pista de la pantalla dice: «{_sentence(self._hint)}»" if self._hint_shown else ""
+        )
         return RESUME_TEXT.format(used=len(self._guesses), rows=self._rows, tried=tried, hint=hint)
 
     async def stop(self, reason: StopReason) -> None:
@@ -357,11 +365,13 @@ class WordleGame(Game):
         await self.host.send("guess", self._state(result))
         if won:
             await self.host.finish("win", {"word": self._word, "attempts": number})
-            text = WON_TEXT.format(number=number, rows=self._rows, word=self._word, hint=self._hint)
+            text = WON_TEXT.format(
+                number=number, rows=self._rows, word=self._word, hint=_sentence(self._hint)
+            )
             return self._ending(text, win=True)
         if lost:
             await self.host.finish("lose", {"word": self._word, "attempts": number})
-            text = LOST_TEXT.format(rows=self._rows, word=self._word, hint=self._hint)
+            text = LOST_TEXT.format(rows=self._rows, word=self._word, hint=_sentence(self._hint))
             return self._ending(text, win=False)
         return GUESS_TEXT.format(
             number=number,
@@ -383,7 +393,7 @@ class WordleGame(Game):
         elif marks.count(GREEN) >= CLOSE_GREENS:
             extra += CLOSE_TEXT
         if hint_now:
-            extra += HINT_TEXT.format(hint=self._hint)
+            extra += HINT_TEXT.format(hint=_sentence(self._hint))
         return extra
 
     def _ending(self, text: str, *, win: bool) -> str:
