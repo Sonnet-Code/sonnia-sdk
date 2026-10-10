@@ -10,10 +10,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from sonia.games.poses import game as poses_game
+from sonia.prompts import BOOK
 from tests.games.fakes import FakeGameHost, game_settings
 from tests.games.test_controles_camara import PanelCrowd, play_poses
 from tests.games.test_poses import Crowd, crowd_game
-from tests.prompt_snapshots import assert_snapshot
+from tests.prompt_snapshots import assert_snapshot, cloud_prompts
 
 
 def live(host: FakeGameHost, **extra: Any) -> dict[str, Any]:
@@ -69,3 +71,42 @@ async def poses_texts() -> dict[str, Any]:
 
 async def test_con_los_textos_de_la_app_nada_cambia() -> None:
     assert_snapshot("prompts_poses", await poses_texts())
+
+
+def test_las_piezas_de_la_app_validan_y_son_los_textos_del_juego() -> None:
+    ids = [prompt_id for prompt_id in BOOK.ids() if prompt_id.startswith("juegos/poses/")]
+    assert len(ids) == 16
+    for prompt_id in ids:
+        assert BOOK.validate(prompt_id, BOOK.default(prompt_id)) == [], prompt_id
+        assert BOOK.spec(prompt_id).group == "Juego: Simón dice"
+    assert BOOK.default("juegos/poses/reglas") == poses_game.RULES_TEXT
+    assert BOOK.spec("juegos/poses/reglas").max_len == 1200
+    # Los trozos que van pegados se guardan sin el espacio de delante (la nube lo quitaría).
+    assert BOOK.default("juegos/poses/siguiente") == poses_game.NEXT_TEXT.strip()
+    assert BOOK.default("juegos/poses/premios") == poses_game.WIN_CONTACT_TEXT.strip()
+
+
+async def test_con_la_version_de_la_nube_se_usa_esa_y_no_la_de_la_app() -> None:
+    cloud = {
+        "juegos/poses/reglas": "REGLAS DE LA NUBE: {rounds} rondas.",
+        "juegos/poses/presentacion": "Preséntalo en una frase: {rounds} rondas.",
+        "juegos/poses/ronda_algunos": "{count} de {total}, ¡bien!",
+        "juegos/poses/trampa_cayeron": "trampa: cayeron {count}.",
+        "juegos/poses/siguiente": "Y a callar.",
+        "juegos/poses/final": "FIN: {done} de {possible}{trap}.",
+        "juegos/poses/premios": "Premios: {contact}.",
+    }
+    with cloud_prompts(cloud):
+        data = await full_game(Crowd(players=5, doers=3, fallers=1))
+    assert data["instructions"] == ["REGLAS DE LA NUBE: 6 rondas."]
+    assert data["script"] == "Preséntalo en una frase: 6 rondas."
+    rounds, final = data["spoken"][:-1], data["spoken"][-1]
+    assert rounds[0].startswith("JUEGO: ronda 1 de 6, «")
+    assert rounds[0].endswith("»: 3 de 5, ¡bien! Y a callar.")
+    assert any(text.endswith(": trampa: cayeron 1. Y a callar.") for text in rounds)
+    assert final == "FIN: 19 de 30 y en las trampas cayeron 1. Premios: Brian o Mariel."
+    joined = " ".join([*data["instructions"], data["script"], *data["spoken"]])
+    for app in ("SIMÓN DICE CON POSES EN MARCHA", "Explícalo con energía", "Reacciona en una"):
+        assert app not in joined
+    # Fuera del «with», otra vez los de la app.
+    assert BOOK.source("juegos/poses/reglas") == "app"
