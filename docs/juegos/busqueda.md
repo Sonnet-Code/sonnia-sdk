@@ -23,10 +23,10 @@ Nada de lo que oye el visitante se interpreta. Si alguien grita «¡aquí!», GP
 
 ### Cuando algo falla
 
-- **El modelo no contesta** (sin foto, plazo de 8 s, error): esa mirada cuenta contra el tope pero no pasa nada. Si en una ronda no contesta **ninguna**, Sonia no dice «nadie lo enseñó» sino que no ha podido mirar bien (`timeout` con `silent: true`). Con dos rondas seguidas así, se cancela el juego con una disculpa corta.
+- **El modelo no contesta** (sin foto, plazo de 8 s, error): esa mirada cuenta contra el tope pero no pasa nada. Si en una ronda no contesta **ninguna**, Sonia no dice «nadie lo enseñó» sino que la cámara no contestó (`timeout` con `silent: true`). Con dos rondas seguidas así, se cancela el juego con una disculpa corta.
 - **Una mirada tarda más que la ronda:** la foto que va en el aire al acabar el tiempo aún cuenta durante 3 s; si no llega, la ronda se pierde y la respuesta tardía se ignora.
 - **Se cae GPT-Live, cambia el modo o se reconecta Unity:** como dice el contrato (`docs/juegos.md`). Cada mensaje de ronda (`round`, `go`, `found`, `timeout`) lleva el estado completo, así que el último que se repite tras `hello` repinta toda la pantalla.
-- **Abandono:** `GAMES_ABANDON_SECONDS` (60 s) sin voz ni actividad (ver a alguien enseñar el objeto cuenta como actividad). Se cancela y suelta la cámara.
+- **Abandono:** `GAMES_ABANDON_SECONDS` (60 s) sin voz ni actividad (que el modelo vea el objeto cuenta como actividad). Se cancela y suelta la cámara.
 
 ## Quién hace qué
 
