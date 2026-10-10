@@ -129,6 +129,11 @@ namespace Sonia.Games.Ppt
         [Tooltip("Hacia dónde mira la palma (en los ejes del avatar): al público.")]
         private Vector3 palmDirection = new Vector3(0f, 0f, 1f);
 
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("Cuánto siguen la mano y el brazo al pecho (0: solo los ejes del avatar). Si el cuerpo se balancea o se inclina con la animación, la mano va con él y la muñeca no se tuerce.")]
+        private float followChest = 0.6f;
+
         [Header("Cuenta")]
         [SerializeField]
         [Range(0f, 0.2f)]
@@ -227,6 +232,10 @@ namespace Sonia.Games.Ppt
         private Transform _shoulder;
         private Transform _elbow;
         private Transform _wrist;
+        private Transform _chest;
+        private Quaternion _chestRest = Quaternion.identity;
+        private bool _chestReady;
+        private bool _chestCapture;
         private readonly Transform[] _fingers = new Transform[FingerBones.Length];
         private readonly Quaternion[,] _targets = new Quaternion[ShapeCount, FingerBones.Length];
         private Vector3 _fingerLocal = Vector3.forward;
@@ -326,6 +335,12 @@ namespace Sonia.Games.Ppt
                 _raisedAt = Time.time;
             }
 
+            if (_blend <= 0f)
+            {
+                // Sube desde abajo: la postura del pecho de ahora es la de referencia.
+                _chestCapture = true;
+            }
+
             _up = true;
             _counting = false;
             _revealed = false;
@@ -388,6 +403,11 @@ namespace Sonia.Games.Ppt
         /// <summary>Enseña <paramref name="shape"/> ya, con el brazo arriba (al reconectar a mitad de un resultado).</summary>
         public void Show(PptHand shape)
         {
+            if (_blend <= 0f)
+            {
+                _chestCapture = true;
+            }
+
             _shape = shape;
             _up = true;
             _counting = false;
@@ -500,6 +520,14 @@ namespace Sonia.Games.Ppt
             }
 
             float weight = Smooth(_blend);
+            if ((_chestCapture || !_chestReady) && _chest != null)
+            {
+                // La postura del pecho al empezar a subir el brazo: lo que se gire luego
+                // (balanceo al hablar, una inclinación) lo sigue la mano.
+                _chestRest = Quaternion.Inverse(_avatar.rotation) * _chest.rotation;
+                _chestReady = true;
+                _chestCapture = false;
+            }
 
             // Cuenta: cuánto ha bajado el puño (0 arriba, 1 abajo) y si toca enseñar la mano.
             float drop = 0f;
@@ -529,9 +557,19 @@ namespace Sonia.Games.Ppt
                 push = revealPush * GameUi.EaseOutBack(Mathf.Clamp01(since / 0.22f));
             }
 
-            Vector3 right = _avatar.right;
-            Vector3 up = _avatar.up;
-            Vector3 forward = _avatar.forward;
+            // Ejes del brazo: los del avatar, siguiendo en parte al pecho (balanceos, inclinaciones).
+            // El giro del pecho respecto a su postura neutra, en los ejes del avatar.
+            Quaternion frame = _avatar.rotation;
+            if (_chestReady && _chest != null && followChest > 0f)
+            {
+                Quaternion inverse = Quaternion.Inverse(_avatar.rotation);
+                Quaternion delta = (inverse * _chest.rotation) * Quaternion.Inverse(_chestRest);
+                frame = _avatar.rotation * Quaternion.Slerp(Quaternion.identity, delta, followChest);
+            }
+
+            Vector3 up = frame * Vector3.up;
+            Vector3 forward = frame * Vector3.forward;
+            Vector3 right = frame * Vector3.right;
             Vector3 shoulder = _shoulder.position;
             Vector3 target = shoulder + (right * wristOffset.x) + (up * wristOffset.y) + (forward * wristOffset.z);
             target += (-up * pumpDrop * drop) + (forward * push);
@@ -696,6 +734,8 @@ namespace Sonia.Games.Ppt
             _bound = false;
             _fingersReady = false;
             _warnedFingers = false;
+            _chestReady = false;
+            _chest = null;
             _avatar = null;
             if (_up || _blend > 0f)
             {
@@ -726,6 +766,12 @@ namespace Sonia.Games.Ppt
             if (_shoulder == null || _elbow == null || _wrist == null)
             {
                 return;
+            }
+
+            _chest = animator.GetBoneTransform(HumanBodyBones.UpperChest);
+            if (_chest == null)
+            {
+                _chest = animator.GetBoneTransform(HumanBodyBones.Chest);
             }
 
             for (int i = 0; i < FingerBones.Length; i++)
@@ -818,6 +864,7 @@ namespace Sonia.Games.Ppt
                 {
                     rest[i] = _fingers[i] != null ? _fingers[i].localRotation : Quaternion.identity;
                 }
+
 
                 for (int s = 0; s < ShapeCount; s++)
                 {
