@@ -697,6 +697,7 @@ async def test_la_jugada_tiene_un_esquema_estricto() -> None:
     assert spec.parameters["required"] == ["palabra"]
     assert set(spec.parameters["properties"]) == {"palabra"}
     assert not brands_in(spec.description) and "no la inventes" in spec.description
+    assert not brands_in(json.dumps(spec.parameters, ensure_ascii=False))
     await registry.execute("start_game", {"juego": "wordle"}, ctx)
     for arguments in ({}, {"palabra": None}, {"palabra": 5}):
         result = await registry.execute("wordle_guess", arguments, ctx)
