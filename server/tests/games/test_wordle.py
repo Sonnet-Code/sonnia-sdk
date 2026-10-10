@@ -359,7 +359,9 @@ async def test_dos_intentos_a_la_vez_no_se_pisan() -> None:
     await game.start("voice", {})
     send = host.send
 
-    async def slow_send(event: str, data: dict[str, Any] | None = None, *, sticky: bool = True):
+    async def slow_send(
+        event: str, data: dict[str, Any] | None = None, *, sticky: bool = True
+    ) -> None:
         await asyncio.sleep(0)  # la pantalla tarda: el otro intento podría colarse
         await send(event, data, sticky=sticky)
 
@@ -549,14 +551,14 @@ def demo_games(steps: list[Step]) -> list[list[GameMsg]]:
 async def test_la_secuencia_del_orquestador_falso_es_la_del_juego_real() -> None:
     # Se juega con el juego de verdad lo mismo que dice la secuencia y se comparan los mensajes.
     won, lost, many, replay = demo_games(wordle_demo.steps())
-    plan = (
+    plan: list[tuple[list[GameMsg], tuple[str, str], list[str], dict[str, Any], str]] = [
         (won, wordle_demo.WON, wordle_demo.WON_GUESSES, {}, "win"),
         (lost, wordle_demo.LOST, wordle_demo.LOST_GUESSES, {}, "lose"),
         # La tercera: ocho filas, sin pista y se cancela a medias (el end lo manda el manager).
         (many, wordle_demo.MANY, wordle_demo.MANY_GUESSES, {"rows": 8, "hint_after": 0}, "cancel"),
         # La cuarta: una pantalla que se conecta a mitad y solo recibe el último estado.
         (replay, wordle_demo.LONG, wordle_demo.LONG_GUESSES, {}, "replay"),
-    )
+    ]
     for messages, (secret, hint), words, own, outcome in plan:
         game, host = make_wordle(secret, hint=hint, settings=wordle_settings(**own))
         await game.start("voice", {})
@@ -681,7 +683,8 @@ async def test_partida_ganada_por_voz() -> None:
     result = await registry.execute("wordle_guess", {"palabra": secret}, ctx)
     assert "LO HAN ADIVINADO en el intento 2 de 6" in result.text
     # La victoria se queda en pantalla hasta que Sonia la cuente; mientras, no entran jugadas.
-    assert manager.phase == "finishing"
+    phase: str = manager.phase
+    assert phase == "finishing"
     again = await registry.execute("wordle_guess", {"palabra": "REACT"}, ctx)
     assert "ya ha terminado" in again.text
     await settle()
