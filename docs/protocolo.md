@@ -310,6 +310,61 @@ Enciende o apaga la vista en vivo de la cámara en la franja alta, encima de Son
 {"type": "camera_preview", "on": true, "mirror": true}
 ```
 
+### Juegos: `game`
+
+Los juegos del stand (`docs/juegos.md`) mandan su pantalla en un sobre común. Unity lo reparte por `game` al controlador de ese juego, que lee su `data` con sus propias clases.
+
+```json
+{"type": "game", "game": "wordle", "event": "guess", "seq": 7, "data": {"row": 2, "letters": "LINUX", "marks": "gyxxg"}}
+```
+
+- `game`: el id del juego (`ruleta`, `poses`, `akinator`, `piedra_papel_tijera`, `wordle`, `busqueda`). Ids y eventos: minúsculas, cifras y `_`, empezando por letra (`^[a-z][a-z0-9_]{0,39}$`).
+- `seq`: sube en cada mensaje de juego del orquestador, de cualquier juego. Vuelve a empezar si se reinicia el orquestador. Unity ignora un `game` con un `seq` que ya vio en la partida en marcha.
+- `data`: lo de cada evento (tablas de abajo). Nunca falta: como poco, `{}`.
+
+Dos eventos son comunes a todos los juegos:
+
+- `start` monta la pantalla común del juego (la tarjeta de la franja alta, el plano de panel, aparta el QR y la invitación) y abre una partida. Siempre lleva `data.title`, el título en pantalla (con «Sonnia»), y lo que añada cada juego. Es siempre el primer mensaje de la partida. Un `start` con un `seq` nuevo abre partida nueva: si había otra en pantalla, se retira.
+- `end` retira la pantalla. `data.result` vale `win`, `lose` o `cancel`, más lo que añada el juego. Si el juego ya enseñó su resultado con sus eventos, Unity solo hace el fundido de salida; si no y es `win` o `lose`, saca unos segundos una tarjeta de resultado genérica; con `cancel`, fuera al momento.
+
+Mientras dura la partida, el orquestador guarda dos mensajes fijos que se repiten tras `hello`, en este orden: el `start` de la partida y el último estado del juego, los dos con su `seq` original. Así una Unity que se reconecta vuelve a montar la pantalla y una que solo perdió la conexión no repinta nada. Los efectos sueltos (un confeti) no quedan fijos. `end` no es fijo y borra los dos. Si tras un `hello` no llega en 2,5 s el `game` del juego que Unity tenía en pantalla, Unity lo da por cancelado y lo retira (como la trivia).
+
+Unity solo recibe juegos que anunció en `client_hello.games`; los mensajes de un juego que no conoce los ignora.
+
+#### Eventos de cada juego
+
+Cada agente apunta los de su juego en su tabla (además de `start` y `end`). En la columna «Fijo», «sí» si el orquestador lo guarda como último estado.
+
+##### `ruleta` (La ruleta de Sonnia, `docs/juegos/ruleta.md`)
+
+| Evento | Sentido | `data` | Fijo | Qué hace |
+|---|---|---|---|---|
+
+##### `poses` (Simón dice con poses, `docs/juegos/poses.md`)
+
+| Evento | Sentido | `data` | Fijo | Qué hace |
+|---|---|---|---|---|
+
+##### `akinator` (Akinator dev, `docs/juegos/akinator.md`)
+
+| Evento | Sentido | `data` | Fijo | Qué hace |
+|---|---|---|---|---|
+
+##### `piedra_papel_tijera` (Piedra, papel o tijera, `docs/juegos/piedra_papel_tijera.md`)
+
+| Evento | Sentido | `data` | Fijo | Qué hace |
+|---|---|---|---|---|
+
+##### `wordle` (Wordle de tecnología, `docs/juegos/wordle.md`)
+
+| Evento | Sentido | `data` | Fijo | Qué hace |
+|---|---|---|---|---|
+
+##### `busqueda` (Búsqueda relámpago, `docs/juegos/busqueda.md`)
+
+| Evento | Sentido | `data` | Fijo | Qué hace |
+|---|---|---|---|---|
+
 ### `error`
 
 ```json
@@ -350,10 +405,21 @@ Unity muestra siempre el último frame y descarta los que lleguen con un `seq` m
 
 ### `client_hello`
 
-Opcional. Identifica al cliente.
+Opcional. Identifica al cliente y dice lo que sabe hacer. Unity lo manda cada vez que se conecta.
 
 ```json
-{"type": "client_hello", "client": "unity", "version": "0.1.0"}
+{"type": "client_hello", "client": "unity", "version": "1.0.200", "games": ["ruleta", "wordle"], "features": ["camera_preview"]}
+```
+
+- `games`: los juegos cuya pantalla sabe pintar (sus controladores registrados). El orquestador solo ofrece esos. Sin `games` (una Unity anterior a los juegos), ninguno. Si se conecta una Unity que no anuncia el juego en marcha, el orquestador lo cancela.
+- `features`: lo que sabe hacer además. Hoy, `camera_preview` (la vista en vivo, frames `SNCV`): sin ella no se manda `camera_preview` ni se ofrecen los juegos que la necesitan.
+
+### `game_event`
+
+Lo que pasa en la pantalla de un juego y le importa al orquestador (la ruleta se paró, una animación terminó). Va al juego en marcha si es el suyo; si no, se ignora. `data` puede faltar (equivale a `{}`). Los eventos de cada juego están en su tabla, arriba («Eventos de cada juego», sentido Unity → orquestador).
+
+```json
+{"type": "game_event", "game": "ruleta", "event": "wheel_stopped", "data": {"segment": 3}}
 ```
 
 ### `interrupt`
