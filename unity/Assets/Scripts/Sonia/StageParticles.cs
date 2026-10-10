@@ -4,8 +4,8 @@
 //  - Ambiente: las motas del escenario (SoniaStage/Motes, que monta
 //    Sonia > Iluminación de estudio). Se adoptan tal cual y se reescalan.
 //  - Trivia: destellos y símbolos («?», «!», estrellas) en los colores de
-//    Google mientras hay una trivia en pantalla (también la pantalla final), una
-//    explosión de destellos en cada acierto y otra mayor al ganar.
+//    Google mientras hay una trivia o un juego en pantalla (también la pantalla
+//    final), una explosión de destellos en cada acierto y otra mayor al ganar.
 //  - Matrix: lluvia de glifos verdes en columnas detrás de Sonia, con el fondo
 //    oscurecido, mientras el orquestador dice que busca en internet (mensaje
 //    activity, search). Se queda al menos matrixMinSeconds. El fondo se
@@ -144,6 +144,7 @@ namespace Sonia
 
         private SoniaClient _client;
         private TriviaController _trivia;
+        private GameHud _games;
         private StageScreen _screen;
         private AvatarChoreographer _choreographer;
         private Transform _halo;
@@ -229,6 +230,8 @@ namespace Sonia
                 _screen = GetComponent<StageScreen>();
             }
 
+            // Los juegos (GameRouter) los añade SoniaBootstrap por código en su Awake.
+            _games = GetComponent<GameHud>();
             Build();
         }
 
@@ -297,7 +300,7 @@ namespace Sonia
             }
             else if (_settings.contextual)
             {
-                if (_trivia != null && _trivia.IsActive)
+                if ((_trivia != null && _trivia.IsActive) || (_games != null && _games.IsOpen))
                 {
                     effect = StageEffect.Trivia;
                 }
