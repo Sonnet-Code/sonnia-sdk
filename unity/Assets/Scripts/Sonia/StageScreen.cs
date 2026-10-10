@@ -589,7 +589,7 @@ namespace Sonia
             bool imageUp = _imagePanel != null && _imagePanel.IsVisible;
             bool triviaUp = (_trivia != null && _trivia.IsActive) || (_games != null && _games.HoldsTopStrip);
             bool away = _presence != null && (_presence.IsAway || !_presence.TargetPresent);
-            bool busyUp = _busy != null && _busy.IsVisible;
+            bool busyUp = _busy != null && _busy.IsShowing;
             bool hasText = _sonia.Length > 0 || _pendingText != null || _visitor.Length > 0;
             bool recent = _speaking || now - _lastActivity < lingerSeconds;
             bool subtitles = _subtitlesOn && hasText && recent && !away;

@@ -64,12 +64,12 @@ namespace Sonia
         [Header("Diseño (píxeles de la referencia 1080x1920)")]
         [SerializeField]
         [Tooltip("Distancia del borde de arriba de la pantalla al de la pastilla.")]
-        private float top = 40f;
+        private float top = 32f;
 
         [SerializeField]
         [Range(32f, 72f)]
-        [Tooltip("Tamaño del texto (se encoge si no cabe).")]
-        private float textSize = 52f;
+        [Tooltip("Tamaño del texto (se encoge si no cabe). El de los subtítulos es 64.")]
+        private float textSize = 58f;
 
         [SerializeField]
         [Tooltip("Ancho máximo de la pastilla.")]
@@ -85,10 +85,10 @@ namespace Sonia
         private static readonly Color Royal = new Color32(37, 87, 172, 255);
         private static readonly Color Sky = new Color32(143, 208, 255, 255);
 
-        private const float PillHeight = 124f;
+        private const float PillHeight = 136f;
         private const float PadLeft = 40f;
         private const float PadRight = 46f;
-        private const float DotSize = 20f;
+        private const float DotSize = 22f;
         private const float DotGap = 12f;
         private const float DotsWidth = (DotSize * 3f) + (DotGap * 2f);
         private const float DotsGapToText = 28f;
@@ -118,6 +118,7 @@ namespace Sonia
         private float _wantedSince = -100f;
         private float _shownAt = -100f;
         private float _visibility;
+        private bool _showing;
         private float _width;
         private float _targetWidth;
         private float _pulse;
@@ -126,6 +127,15 @@ namespace Sonia
         public bool IsVisible
         {
             get { return _visibility > 0.001f || _wanted; }
+        }
+
+        /// <summary>
+        /// Cierto mientras entra o se queda (no mientras sale): StageScreen aparta el
+        /// logo y el QR con esto, así vuelven a la vez que ella se va.
+        /// </summary>
+        public bool IsShowing
+        {
+            get { return _wanted || _showing; }
         }
 
         /// <summary>Cierto mientras el orquestador la pide (o se pidió con <see cref="Show"/>).</summary>
@@ -206,10 +216,7 @@ namespace Sonia
             }
 
             _wanted = true;
-            if (clean != _text)
-            {
-                _pendingText = clean;
-            }
+            _pendingText = clean != _text ? clean : null;
         }
 
         /// <summary>Pide quitarla: se va en cuanto lleve <see cref="minVisibleSeconds"/> a la vista.</summary>
@@ -270,9 +277,11 @@ namespace Sonia
                 }
 
                 _wanted = false;
-                if (_group != null)
+                _showing = false;
+                _visibility = 0f;
+                if (_pill != null)
                 {
-                    _group.alpha = 0f;
+                    _pill.gameObject.SetActive(false);
                 }
             }
         }
@@ -292,10 +301,11 @@ namespace Sonia
                 }
 
                 Build();
-                if (!_built)
-                {
-                    return;
-                }
+            }
+
+            if (_pill == null)
+            {
+                return;
             }
 
             if (_wanted && now - _wantedSince > maxVisibleSeconds)
@@ -322,6 +332,7 @@ namespace Sonia
 
             // Se queda al menos minVisibleSeconds desde que empezó a verse.
             bool show = _wanted || (_visibility > 0.001f && now - _shownAt < minVisibleSeconds);
+            _showing = show;
             float previous = _visibility;
             if (show)
             {
@@ -549,16 +560,16 @@ namespace Sonia
 
             // «SONNIA» pequeño y espaciado encima del texto, como en la invitación.
             float textLeft = PadLeft + DotsWidth + DotsGapToText;
-            _label = NewText("Quien", _pill, mono, 21f, Sky, layer);
+            _label = NewText("Quien", _pill, mono, 22f, Sky, layer);
             _label.text = speaker;
             _label.characterSpacing = 14f;
             _label.alignment = TextAlignmentOptions.BottomLeft;
-            PlaceLeft(_label.rectTransform, textLeft, 18f, 26f);
+            PlaceLeft(_label.rectTransform, textLeft, 20f, 28f);
 
             _message = NewText("Texto", _pill, display, textSize, Color.white, layer);
             _message.alignment = TextAlignmentOptions.TopLeft;
             _message.characterSpacing = -1f;
-            PlaceLeft(_message.rectTransform, textLeft, 44f, 66f);
+            PlaceLeft(_message.rectTransform, textLeft, 48f, 74f);
 
             SetText(string.IsNullOrEmpty(_pendingText) ? "Pensando…" : _pendingText);
             _width = _targetWidth;
