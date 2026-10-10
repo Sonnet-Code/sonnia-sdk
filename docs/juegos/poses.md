@@ -44,10 +44,18 @@ No hay jugadas delegadas: nada de lo que dice el visitante cambia el juego, así
 
 Sus eventos están en `docs/protocolo.md` («Eventos de cada juego», `poses`). Todos son fijos y llevan el estado completo, así que una Unity que se reconecta lo pinta todo con el último.
 
-- **Vista en vivo** grande, justo debajo de la cabecera de la tarjeta («SIMÓN DICE CON POSES» y «RONDA 2 DE 6»), con «En vivo · no se graba». La cámara pasa a un plano de panel más alejado para que Sonnia quepa debajo con los brazos levantados.
-- **Encima de la vista**, en la capa del juego: el pictograma de la pose (un monigote blanco) arriba a la derecha con su instrucción; el rótulo de la orden abajo, como un rótulo de televisión, con «Simón dice» resaltado cuando lo dijo; el contador circular de la ventana; el resultado en el centro («7 de 9», «¡Cayeron 4!» o «¡Nadie cayó!»); y, al colocarse, cuántos juegan y el aviso («Un paso atrás: a unos 2 m»).
-- **Final**: la tarjeta de resultado con el total del grupo y celebración.
-- **Demostración de Sonnia**: cada pose sostenida por código sobre el humanoide desde `round` hasta `result`, con entrada y salida suaves (`PosesDemo`). Si el banco trae en `demo` el nombre de un clip, la enseña con ese clip; con `ninguna`, sin demostración.
+Todo lo monta `PosesController` (`unity/Assets/Scripts/Sonia/Games/Poses/`) por código, en la capa del juego; la tarjeta común no se enseña hasta el final.
+
+- **Cabecera fina** arriba: el título con las letras en los colores de Google y, a la derecha, «COLÓCATE» o «RONDA 2 DE 6».
+- **Vista en vivo** grande justo debajo (960x540), con «En vivo · no se graba». Si se retira y vuelve, se recoloca; sin imagen, «Esperando la cámara…». La cámara de la escena usa el plano de panel automático, con sitio reservado para que se vean las manos de Sonnia arriba.
+- **Encima de la imagen:**
+  - el pictograma de la pose (un monigote blanco, `PosesPictogram`) arriba a la derecha, con su instrucción;
+  - el rótulo de abajo, como uno de televisión: «¡Atentos a Sonnia!» mientras demuestra, y la orden tal cual sonó, con «Simón dice» en amarillo cuando lo dijo;
+  - el contador circular de la ventana a la izquierda;
+  - el resultado en el centro: «7 de 9» (con destellos si la hicieron todos), «¡Cayeron 4!» con «Era trampa: sin «Simón dice»», o «¡Nadie cayó!»;
+  - al colocarse, cuántos juegan («3 JUGANDO», «NO VEO A NADIE») y el aviso del orquestador en amarillo («Un paso atrás: a unos 2 m»).
+- **Final**: lo del juego se funde y sale arriba la tarjeta común del resultado, dorada y con confeti: «¡QUÉ EQUIPO!», «38 de 50», «poses bien hechas · 3 cayeron en la trampa».
+- **Demostración de Sonnia** (`PosesDemo`): sostiene la pose de `round` a `result` con IK de dos huesos por brazo hacia objetivos medidos cada frame sobre su propio cuerpo (hombros, largo del brazo, y la cabeza y la barbilla medidas una vez en la malla, con el pelo). El codo dobla por su bisagra y la mano se orienta entera, con cada falange apuntada: abierta y relajada (nunca en garra), puño con el pulgar recogido en el bíceps y puño suelto bajo la barbilla. Entra en 0,5 s y sale en 0,45 s, con el camino de la mano abombado para no atravesar el cuerpo ni la cabeza. Corre en `LateUpdate` muy tarde (orden 12650), después del Animator, los gestos de Genies, la cabeza y los ojos, así que gana a cualquier clip que suene y pone las manos en la cabeza ya girada. En la pose T la cámara se aleja un poco mientras dura, para que entren las dos manos. Si el banco trae en `demo` el nombre de un clip, la enseña con ese clip; con `ninguna`, sin demostración. Validada por fotogramas (entrada, sostenida y salida, con primeros planos de las manos) en las seis poses.
 
 ## Cámara
 
@@ -117,5 +125,6 @@ Los tiempos internos (colocación, espera a que calle, demostración, reintentos
 ## Pendiente
 
 - Probarlo con la API real (gasta: lo decide Jean): que delegue `start_game` a la primera, que reaccione en una frase a cada resultado sin inventar números y que no diga las órdenes ella.
-- Medir los umbrales con gente de verdad delante de la cámara del stand (solo se han probado con monigotes inventados).
+- Medir los umbrales con gente de verdad delante de la cámara del stand (se han probado con monigotes inventados y con fotos públicas, nunca con la cámara de nadie).
+- Pose T: en los primeros ~0,3 s de la entrada las manos de Sonnia rozan el borde de la pantalla mientras la cámara aún se aleja (ya sostenida, quedan dentro con margen), y durante esa ronda Sonnia sale algo más pequeña.
 - El banco, pendiente de revisión de Jean.
