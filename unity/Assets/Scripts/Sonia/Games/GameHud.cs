@@ -2040,7 +2040,8 @@ namespace Sonia
             float t = Mathf.Clamp01(Vector2.Dot(p - tip, edge) / edge.sqrMagnitude);
             float distance = (p - (tip + (edge * t))).magnitude;
             float side = (edge.x * (p.y - tip.y)) - (edge.y * (p.x - tip.x));
-            return side > 0f ? -distance : distance;
+            // Negativa dentro de la estrella y positiva fuera (el centro da side < 0).
+            return side > 0f ? distance : -distance;
         }
     }
 }

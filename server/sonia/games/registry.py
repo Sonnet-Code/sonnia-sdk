@@ -47,7 +47,7 @@ class GameEntry:
 
 GAMES: tuple[GameEntry, ...] = (
     # A2: la ruleta de Sonnia (docs/juegos/ruleta.md).
-    GameEntry(RuletaGame, on=False),
+    GameEntry(RuletaGame, on=True),
     #
     # A3: Simón dice con poses (docs/juegos/poses.md).
     GameEntry(PosesGame, on=False),

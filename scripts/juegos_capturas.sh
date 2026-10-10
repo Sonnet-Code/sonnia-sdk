@@ -143,6 +143,9 @@ fi
 LOCK=""
 ORQ_PID=""
 UNITY_PID=""
+# Si esta pasada llegó a lanzar su Unity. Con el clon compartido, una pasada que solo
+# esperaba turno no puede matar al salir el Unity de quien tiene el candado.
+LAUNCHED=""
 
 cleanup() {
   local rc=$?
@@ -162,8 +165,11 @@ cleanup() {
   fi
   # Lo que Unity lanzó para este clon: importadores de assets y el relay del
   # asistente de IA (bun, con --log-dir en los Logs del clon; si no, sigue 180 s).
-  pkill -f -- "-projectPath $PROJECT" 2>/dev/null
-  pkill -f -- "$PROJECT/Logs" 2>/dev/null
+  # Solo si esta pasada lanzó Unity: si no, serían los de otro agente.
+  if [ -n "$LAUNCHED" ]; then
+    pkill -f -- "-projectPath $PROJECT" 2>/dev/null
+    pkill -f -- "$PROJECT/Logs" 2>/dev/null
+  fi
   if [ -n "$LOCK" ]; then
     rmdir "$LOCK" 2>/dev/null
   fi
@@ -265,6 +271,7 @@ UNITY_MCP_DISABLE_BATCH=1 "$UNITY" -batchmode -projectPath "$PROJECT" \
   ${EXTRA[@]+"${EXTRA[@]}"} \
   -logFile "$SALIDA/unity.log" &
 UNITY_PID=$!
+LAUNCHED=1
 
 # Espera a que Unity salga. Si pasa el tiempo (más un margen para compilar) o el
 # orquestador falso termina y Unity no sale en 20 s, se cierra Unity.
