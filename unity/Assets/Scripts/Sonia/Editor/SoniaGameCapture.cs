@@ -71,6 +71,9 @@ namespace Sonia.EditorTools
         private const float DefaultTimeout = 600f;
         private const float DefaultAvatarTimeout = 60f;
 
+        /// <summary>Segundos como mucho esperando a que se hornee la camiseta de staff tras llegar el avatar.</summary>
+        private const float ShirtWaitSeconds = 20f;
+
         private static Session s_session;
         private static bool s_exiting;
 
@@ -306,6 +309,7 @@ namespace Sonia.EditorTools
             private bool _connectRequested;
             private float _playStart = -1f;
             private float _avatarAt = -1f;
+            private float _shirtAt = -1f;
             private int _count;
             private bool _done;
             private bool _closed;
@@ -477,7 +481,11 @@ namespace Sonia.EditorTools
                 return true;
             }
 
-            /// <summary>Avatar del SDK puesto (o tiempo de espera agotado), pantalla montada y un par de segundos de calma.</summary>
+            /// <summary>
+            /// Avatar del SDK puesto (o tiempo de espera agotado), con su camiseta de
+            /// staff (como mucho ShirtWaitSeconds más), pantalla montada y un par de
+            /// segundos de calma.
+            /// </summary>
             private bool WaitReady()
             {
                 float now = Time.realtimeSinceStartup;
@@ -500,15 +508,69 @@ namespace Sonia.EditorTools
                     {
                         _hud.EnsureBuilt();
                     }
+                }
 
+                // La camiseta se hornea aparte, al poco de llegar el avatar.
+                if (avatar && _shirtAt < 0f)
+                {
+                    bool dressed = HasStaffShirt(_binder.Current);
+                    bool waitedEnough = now - _avatarAt > ShirtWaitSeconds;
+                    if (!dressed && !waitedEnough)
+                    {
+                        return false;
+                    }
+
+                    _shirtAt = now;
+                    Write(dressed
+                        ? "camiseta de staff puesta tras " + (now - _avatarAt).ToString("0.0", CultureInfo.InvariantCulture) + " s"
+                        : "sin camiseta de staff tras " + ShirtWaitSeconds.ToString("0", CultureInfo.InvariantCulture) + " s: sigue sin ella");
                     if (_framing != null)
                     {
                         _framing.SnapNextFrame();
                     }
                 }
+                else if (!avatar && _shirtAt < 0f)
+                {
+                    _shirtAt = now;
+                }
 
                 // Que la cámara llegue a su plano y la animación de reposo se asiente.
-                return now - _avatarAt >= 2.5f;
+                return now - Mathf.Max(_avatarAt, _shirtAt) >= 2.5f;
+            }
+
+            /// <summary>Cierto si alguna prenda del avatar lleva ya la textura horneada de la camiseta de staff.</summary>
+            private static bool HasStaffShirt(Transform avatar)
+            {
+                if (avatar == null)
+                {
+                    return false;
+                }
+
+                string[] properties = { "_BaseMap", "_AlbedoTransparency", "_MainTex" };
+                foreach (Renderer renderer in avatar.GetComponentsInChildren<Renderer>(true))
+                {
+                    foreach (Material material in renderer.sharedMaterials)
+                    {
+                        if (material == null)
+                        {
+                            continue;
+                        }
+
+                        foreach (string property in properties)
+                        {
+                            if (material.HasProperty(property))
+                            {
+                                Texture texture = material.GetTexture(property);
+                                if (texture != null && texture.name == GeniesStaffShirt.BakedTextureName)
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return false;
             }
 
             private void HandleDevCapture(DevCaptureMessage message)
