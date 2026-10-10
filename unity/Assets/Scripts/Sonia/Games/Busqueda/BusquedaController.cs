@@ -298,7 +298,7 @@ namespace Sonia.Games.Busqueda
             Hud.StartCountdown(seconds);
             if (running)
             {
-                SetLabel("¡BUSCA!", GameColors.Green);
+                SetLabel("¡A LA CÁMARA!", GameColors.Green);
             }
             else
             {
