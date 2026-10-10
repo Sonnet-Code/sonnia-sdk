@@ -1128,9 +1128,10 @@ class LiveEngine:
             self._last_delegation_id = new_id
             created = True
 
-        searching = delegation is not None and _is_web_search_event(kind, item)
-        if delegation is not None and searching:
+        searching = False
+        if delegation is not None and _is_web_search_event(kind, item):
             self._track_search(delegation, kind, nested)
+            searching = True
         if created or searching:
             await self._update_busy()
         if kind == "response.created" and delegation is not None:
@@ -1486,7 +1487,7 @@ class LiveEngine:
         El estado ``thinking`` (GPT-Live preparando su respuesta) no lo enciende, a
         propósito: se deduce de la transcripción y también salta con voces del pasillo
         que GPT-Live decide no contestar, así que el aviso saldría sin que nadie espere
-        nada (decisión de Jean del 10 de octubre de 2026).
+        nada (se dejó fuera el 10 de octubre de 2026).
         """
         wanted: dict[str, tuple[BusyKind, str]] = {}
         for delegation in self._delegations.values():
