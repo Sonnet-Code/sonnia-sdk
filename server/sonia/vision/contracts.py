@@ -16,8 +16,8 @@ bucle de ``asyncio`` lleva el micrófono a GPT-Live a tiempo real y no puede esp
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal, Protocol
 
@@ -43,6 +43,7 @@ __all__ = [
     "R_SHOULDER",
     "R_WRIST",
     "CameraStream",
+    "GameVision",
     "HandDetector",
     "HandReading",
     "HandShape",
@@ -264,3 +265,23 @@ class VisionJudge(Protocol):
     async def ask(self, question: str) -> JudgeAnswer | None:
         """``None`` si no hubo foto o el modelo no contestó a tiempo."""
         ...
+
+
+async def _nothing_to_close() -> None:
+    return None
+
+
+@dataclass(slots=True)
+class GameVision:
+    """Lo que la visión le da a los juegos (``GameHost``).
+
+    Lo monta :func:`sonia.vision.games.build_game_vision` al arrancar el motor. ``close``
+    suelta hilos y modelos al apagar.
+    """
+
+    stream: CameraStream
+    preview: PreviewStreamer
+    poses: PoseDetector
+    hands: HandDetector
+    judge: VisionJudge
+    close: Callable[[], Awaitable[None]] = field(default=_nothing_to_close)
