@@ -170,6 +170,9 @@ AWAY_MESSAGE_MAX_LEN = 140
 #: la nube guarda todos los ajustes compartidos en un documento de 256 KB.
 TRIVIA_BANK_MAX_LEN = 100_000
 
+#: Tope del texto de un control a mano de los juegos («Probar palabra», una predicción...).
+GAME_CONTROL_VALUE_MAX_LEN = 200
+
 #: Tope de todos los ajustes compartidos juntos, en JSON. La nube los guarda en un solo
 #: documento de 256 KB (``MAX_SETTINGS_BYTES`` en ``cloud/panel``) y, si no caben, descarta
 #: el cambio sin avisar: lo guardado volvería atrás al confirmarlo. Se deja margen.
@@ -1119,6 +1122,39 @@ class StandControl:
         if games is None or not games.active:
             return True, "No hay ningún juego en marcha."
         _, message = await games.stop("panel")
+        return True, message
+
+    async def _act_game_control(self, params: dict[str, Any]) -> tuple[bool, str]:
+        """«Control del juego»: llevar a mano la partida en marcha por si falla la voz o la
+        cámara (``controls`` del estado de los juegos). ``control`` es el id del botón y
+        ``value``, el texto de su campo si lo tiene."""
+        from sonia.games.manager import CONTROL_STOP
+
+        games = self._need_games()
+        control = params.get("control")
+        if not isinstance(control, str) or not control.strip():
+            raise _BadRequest("Falta el control del juego.")
+        control = control.strip()
+        value = _text(params, "value", max_len=GAME_CONTROL_VALUE_MAX_LEN)
+        if not games.active:
+            raise _BadRequest("No hay ningún juego en marcha.")
+        # Terminar vale siempre, como «Terminar juego»; lo demás hace hablar a Sonnia o
+        # vuelve a empezar, así que pide lo mismo que empezar un juego.
+        if control != CONTROL_STOP:
+            self._need_sonia_on_stage()
+            if self.state.mode != "conversation":
+                raise _BadRequest(
+                    "Los juegos necesitan a Sonnia conversando: pásala a «Conversando»."
+                )
+            if self.state.debug:
+                raise _BadRequest("En modo debug Sonnia no conversa: desactívalo antes.")
+            if self._avatar_editor_open:
+                raise _BadRequest("Cierra antes el editor de personaje.")
+            if self._hub.client_count == 0:
+                raise _BadRequest("La pantalla de Sonnia no está conectada.")
+        ok, message = await games.panel_control(control, value)
+        if not ok:
+            raise _BadRequest(message)
         return True, message
 
     async def _act_set_game_enabled(self, params: dict[str, Any]) -> tuple[bool, str]:
