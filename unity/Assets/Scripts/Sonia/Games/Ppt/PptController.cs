@@ -41,7 +41,12 @@ namespace Sonia.Games.Ppt
         public static readonly bool SoniaHandEnabled = true;
 
         // Alto del contenido de la tarjeta: marcador y fila de jugadas.
-        private const float ContentHeight = 292f;
+        private const float ContentHeight = 216f;
+
+        // La vista en vivo, algo más estrecha que la común (960): con la tarjeta debajo, lo
+        // de arriba acaba antes y Sonnia sale más grande, con la mano a la vista.
+        private const float PreviewTop = 0.105f;
+        private const float PreviewWidth = 800f;
 
         // Retraso esperado entre que llega «countdown» y que suena la frase (si no se oye el audio).
         private const float FallbackAudioLag = 0.12f;
@@ -212,6 +217,31 @@ namespace Sonia.Games.Ppt
             }
         }
 
+        private void OnEnable()
+        {
+            if (Preview != null)
+            {
+                Preview.VisibilityChanged += HandlePreviewVisibility;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (Preview != null)
+            {
+                Preview.VisibilityChanged -= HandlePreviewVisibility;
+            }
+        }
+
+        private void HandlePreviewVisibility(bool visible)
+        {
+            // Al retirarse, la vista vuelve a su sitio de siempre: al volver, al nuestro.
+            if (visible && IsActive && !IsEnding && Preview != null)
+            {
+                Preview.SetPlacement(PreviewTop, PreviewWidth);
+            }
+        }
+
         // ------------------------------------------------------------------
         // Eventos
         // ------------------------------------------------------------------
@@ -219,6 +249,11 @@ namespace Sonia.Games.Ppt
         protected override void OnStart(string dataJson)
         {
             StartData data = ParseData<StartData>(dataJson);
+            if (Preview != null)
+            {
+                Preview.SetPlacement(PreviewTop, PreviewWidth);
+            }
+
             BuildOnce();
             ResetBoard();
             _rounds = data.Rounds > 0 ? data.Rounds : 3;
@@ -306,6 +341,11 @@ namespace Sonia.Games.Ppt
             {
                 // Baja con su fundido: si la pantalla se cierra con la mano arriba, no salta.
                 _hand.Lower();
+            }
+
+            if (Preview != null)
+            {
+                Preview.ResetPlacement();
             }
 
             ResetBoard();
@@ -748,17 +788,17 @@ namespace Sonia.Games.Ppt
             scoreRow.anchorMin = new Vector2(0f, 1f);
             scoreRow.anchorMax = new Vector2(1f, 1f);
             scoreRow.pivot = new Vector2(0.5f, 1f);
-            scoreRow.sizeDelta = new Vector2(0f, 104f);
-            scoreRow.anchoredPosition = new Vector2(0f, -4f);
-            TextMeshProUGUI sonniaLabel = Hud.NewText("SonniaNombre", scoreRow, "SONNIA", 40f, GameColors.Muted, TextAlignmentOptions.Right);
+            scoreRow.sizeDelta = new Vector2(0f, 84f);
+            scoreRow.anchoredPosition = new Vector2(0f, 0f);
+            TextMeshProUGUI sonniaLabel = Hud.NewText("SonniaNombre", scoreRow, "SONNIA", 34f, GameColors.Muted, TextAlignmentOptions.Right);
             Place(sonniaLabel.rectTransform, new Vector2(0f, 0f), new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(-150f, 0f));
-            _sonniaScore = Hud.NewText("SonniaPuntos", scoreRow, "0", 92f, Color.white);
+            _sonniaScore = Hud.NewText("SonniaPuntos", scoreRow, "0", 76f, Color.white);
             Place(_sonniaScore.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 1f), new Vector2(-140f, 0f), new Vector2(-50f, 0f));
-            _dash = Hud.NewText("Guion", scoreRow, "–", 70f, GameColors.Muted);
+            _dash = Hud.NewText("Guion", scoreRow, "–", 60f, GameColors.Muted);
             Place(_dash.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 1f), new Vector2(-40f, 0f), new Vector2(40f, 0f));
-            _playerScore = Hud.NewText("TuPuntos", scoreRow, "0", 92f, Color.white);
+            _playerScore = Hud.NewText("TuPuntos", scoreRow, "0", 76f, Color.white);
             Place(_playerScore.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 1f), new Vector2(50f, 0f), new Vector2(140f, 0f));
-            TextMeshProUGUI playerLabel = Hud.NewText("TuNombre", scoreRow, "TÚ", 40f, GameColors.Muted, TextAlignmentOptions.Left);
+            TextMeshProUGUI playerLabel = Hud.NewText("TuNombre", scoreRow, "TÚ", 34f, GameColors.Muted, TextAlignmentOptions.Left);
             Place(playerLabel.rectTransform, new Vector2(0.5f, 0f), new Vector2(1f, 1f), new Vector2(150f, 0f), new Vector2(0f, 0f));
 
             // Fila de jugadas: SONNIA y TÚ, con «contra» en medio, y la palabra de la cuenta encima.
@@ -766,13 +806,13 @@ namespace Sonia.Games.Ppt
             movesRow.anchorMin = new Vector2(0f, 0f);
             movesRow.anchorMax = new Vector2(1f, 0f);
             movesRow.pivot = new Vector2(0.5f, 0f);
-            movesRow.sizeDelta = new Vector2(0f, 168f);
-            movesRow.anchoredPosition = new Vector2(0f, 12f);
-            _sonniaChip = NewChip("FichaSonnia", movesRow, "SONNIA", new Vector2(0f, 0f), new Vector2(0.43f, 1f));
-            _playerChip = NewChip("FichaTu", movesRow, "TÚ", new Vector2(0.57f, 0f), new Vector2(1f, 1f));
-            _versus = Hud.NewText("Contra", movesRow, "contra", 34f, GameColors.Muted);
-            Place(_versus.rectTransform, new Vector2(0.43f, 0f), new Vector2(0.57f, 1f), Vector2.zero, Vector2.zero);
-            _beat = Hud.NewText("Cuenta", movesRow, string.Empty, 104f, Color.white);
+            movesRow.sizeDelta = new Vector2(0f, 124f);
+            movesRow.anchoredPosition = new Vector2(0f, 4f);
+            _sonniaChip = NewChip("FichaSonnia", movesRow, "SONNIA", new Vector2(0f, 0f), new Vector2(0.445f, 1f));
+            _playerChip = NewChip("FichaTu", movesRow, "TÚ", new Vector2(0.555f, 0f), new Vector2(1f, 1f));
+            _versus = Hud.NewText("Contra", movesRow, "vs", 36f, GameColors.Muted);
+            Place(_versus.rectTransform, new Vector2(0.445f, 0f), new Vector2(0.555f, 1f), Vector2.zero, Vector2.zero);
+            _beat = Hud.NewText("Cuenta", movesRow, string.Empty, 92f, Color.white);
             GameUi.Stretch(_beat.rectTransform);
             _beat.textWrappingMode = TextWrappingModes.NoWrap;
         }
@@ -788,14 +828,14 @@ namespace Sonia.Games.Ppt
             chip.Glow.rectTransform.offsetMax = new Vector2(8f, 8f);
             chip.Fill = Hud.NewRound("Fondo", chip.Rect, GameColors.OptionFill, 26f);
             GameUi.Stretch(chip.Fill.rectTransform);
-            chip.Label = Hud.NewText("Etiqueta", chip.Rect, label, 30f, GameColors.Muted);
+            chip.Label = Hud.NewText("Etiqueta", chip.Rect, label, 24f, GameColors.Muted);
             Place(chip.Label.rectTransform, new Vector2(0f, 0.62f), new Vector2(1f, 1f), new Vector2(10f, 0f), new Vector2(-10f, -6f));
-            chip.Move = Hud.NewText("Jugada", chip.Rect, string.Empty, 62f, Color.white);
+            chip.Move = Hud.NewText("Jugada", chip.Rect, string.Empty, 54f, Color.white);
             Place(chip.Move.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0.68f), new Vector2(8f, 10f), new Vector2(-8f, 0f));
             chip.Move.textWrappingMode = TextWrappingModes.NoWrap;
             chip.Move.enableAutoSizing = true;
-            chip.Move.fontSizeMin = 36f;
-            chip.Move.fontSizeMax = 62f;
+            chip.Move.fontSizeMin = 32f;
+            chip.Move.fontSizeMax = 54f;
             return chip;
         }
 
