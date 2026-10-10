@@ -215,7 +215,11 @@ músculos del puño y de la tijera salieron de una galería de 16 variantes (pul
 ## Pendiente
 
 - Probar la lectura de manos con la cámara del stand y gente de verdad (los tiempos de la lectura y
-  de la reacción salen de lo razonable, no de medidas).
-- Capturas 9:16 de cada estado y la mano de Sonnia validada por fotogramas.
+  de la reacción salen de lo razonable, no de medidas). Con la visión de verdad sobre fotos públicas
+  de Wikimedia, el juego acierta todas las manos de una persona sola delante; falla en fotos de
+  grupo, con la otra mano ocupada a la misma altura (se pide repetir con una sola mano) y con una V
+  pegada a la cámara.
+- Grabar la frase «¡Piedra, papel o tijera… ya!» con «Preparar voces» antes de jugar: sin grabar, el
+  «ya» sale de la transcripción y la mano de Sonnia se abre con menos precisión.
 - Una partida con la API real (con permiso de Jean) para ver que GPT-Live no dice la cuenta por su
   cuenta ni se inventa resultados.
