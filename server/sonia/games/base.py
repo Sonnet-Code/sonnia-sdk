@@ -438,3 +438,26 @@ class Game:
     def snapshot(self) -> dict[str, Any]:
         """Para el panel: en qué va la partida (tipos JSON)."""
         return {}
+
+    # -- control a mano desde el panel (``docs/juegos.md``, «Control a mano») ------
+
+    def panel_controls(self) -> list[dict[str, Any]]:
+        """Los controles del panel para llevar la partida a mano ahora, por si falla la voz
+        o la cámara (Jean, 10 de octubre de 2026: «por si acaso algo sale mal»).
+
+        Solo los que valen en este momento de la partida, en orden: cada uno
+        ``{"id": "found", "label": "¡Lo encontró!"}`` (un botón) o, con ``"kind": "text"``,
+        un campo de texto con su botón (``"placeholder"`` opcional). El panel los pinta tal
+        cual y manda el ``id`` (y el texto) a :meth:`panel_control`. «Reiniciar» y
+        «Terminar» los pone el manager para todos.
+        """
+        return []
+
+    async def panel_control(self, control: str, value: str) -> str:
+        """Lo que hace el control ``control`` del panel (``value``: el texto de un campo).
+
+        Mueve el juego y la pantalla como la jugada de GPT-Live (reutiliza su handler) y
+        devuelve el guion para Sonia, que el manager le pasa en cuanto calla. ``GameError``
+        con un mensaje para el equipo si no vale ahora.
+        """
+        raise GameError("Ese control no está disponible ahora.")

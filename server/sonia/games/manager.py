@@ -126,6 +126,17 @@ PANEL_START_TEXT = "JUEGO: el equipo del stand ha puesto {spoken} en tu pantalla
 #: enseñando su final (``Game.stop_requested``).
 PANEL_STOP_TEXT = "JUEGO: el equipo del stand ha terminado {spoken}. "
 
+#: Lo que se le pasa a GPT-Live cuando el equipo lleva la partida a mano desde el panel
+#: (``Game.panel_control``): el guion del juego va detrás.
+PANEL_CONTROL_TEXT = (
+    "JUEGO: el equipo del stand ha llevado la partida a mano desde el panel (cuéntalo como "
+    "parte del juego, sin hablar del panel). "
+)
+
+#: Controles del panel que pone el manager para todos los juegos.
+CONTROL_RESTART = "restart"
+CONTROL_STOP = "stop"
+
 #: Sin juego elegido (``start_game`` con ``no_lo_dijo``).
 CHOOSE_TEXT = (
     "El visitante quiere jugar pero no ha dicho a qué. Pregúntale a cuál, en una frase: "
@@ -420,6 +431,7 @@ class GameManager:
             "phase": self._phase,
             "elapsed_s": round(self._clock() - self._started_at, 1) if game is not None else 0.0,
             "state": state,
+            "controls": self._controls(game),
             "games": games,
             "games_off": sorted(self._off),
             "banks": self.bank_list(),
@@ -427,6 +439,52 @@ class GameManager:
             "preview": self.preview_supported(),
             "pose_model": self._pose_model_state(),
         }
+
+    def _controls(self, game: Game | None) -> list[dict[str, Any]]:
+        """Los controles a mano de la partida en marcha (``Game.panel_controls``) más los comunes."""
+        if game is None:
+            return []
+        controls: list[dict[str, Any]] = []
+        if self._phase == "playing":
+            try:
+                controls = [dict(c) for c in game.panel_controls()]
+            except Exception:  # noqa: BLE001
+                logger.exception("Falló panel_controls de %s", game.id)
+                controls = []
+        controls.append({"id": CONTROL_RESTART, "label": "Reiniciar"})
+        controls.append({"id": CONTROL_STOP, "label": "Terminar"})
+        return controls
+
+    async def panel_control(self, control: str, value: str = "") -> tuple[bool, str]:
+        """Un control a mano del panel con el juego en marcha (acción ``game_control``).
+
+        ``restart`` empieza el mismo juego desde cero y ``stop`` lo termina, para todos; el
+        resto los resuelve el juego (:meth:`Game.panel_control`) y su guion se le pasa a
+        GPT-Live en cuanto calla. Nunca lanza: ``(ok, mensaje para el equipo)``.
+        """
+        game = self._active
+        if game is None:
+            return False, "No hay ningún juego en marcha."
+        if control == CONTROL_STOP:
+            return await self.stop("panel")
+        if control == CONTROL_RESTART:
+            await self.stop("panel")
+            return await self.start(game.id, "panel")
+        if self._phase != "playing":
+            return False, f"{game.title} ya está terminando."
+        self._note_activity()
+        try:
+            script = await game.panel_control(control, str(value or ""))
+        except GameError as exc:
+            return False, str(exc) or "Ese control no está disponible ahora."
+        except Exception:  # noqa: BLE001 - la demo nunca se cae por un botón
+            logger.exception("Falló el control %s de %s", control, game.id)
+            return False, "Ese control falló; prueba otra vez o termina el juego."
+        if script:
+            self._spawn(
+                self._speak_when_quiet(self._match, PANEL_CONTROL_TEXT + script), "game-control"
+            )
+        return True, "Hecho."
 
     def capabilities(self) -> list[str]:
         """Capacidades para el panel (``data-cap``): ``games``, ``game:<id>`` y ``game_banks``.
@@ -442,6 +500,9 @@ class GameManager:
             caps.append("game_banks")
         if self._pose_model_setter() is not None:
             caps.append("game_pose_model")
+        # Controles a mano de la partida en marcha (``snapshot()["controls"]``, acción
+        # ``game_control``): las apps anteriores no los tienen.
+        caps.append("game_controls")
         return caps
 
     # -- panel: modelo de poses -------------------------------------------------
