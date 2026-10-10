@@ -2052,6 +2052,9 @@
   const UPLOAD_TARGET_BYTES = 220 * 1024;
   const UPLOAD_BAD_FORMAT = "Usa una foto JPG o PNG: este navegador no puede abrir esa imagen.";
 
+  /** Error de la subida con un texto para el operador (los demás salen como UPLOAD_BAD_FORMAT). */
+  class UploadError extends Error {}
+
   async function onGalleryFile() {
     const file = ui.galleryFile.files && ui.galleryFile.files[0];
     ui.galleryFile.value = ""; // para poder elegir otra vez la misma
@@ -2062,7 +2065,7 @@
     try {
       prepared = await prepareUpload(file);
     } catch (error) {
-      setUploadState(error instanceof Error && error.message ? error.message : UPLOAD_BAD_FORMAT, "error");
+      setUploadState(error instanceof UploadError ? error.message : UPLOAD_BAD_FORMAT, "error");
       return;
     }
     app.pendingUpload = prepared;
@@ -2093,13 +2096,13 @@
       try {
         await img.decode();
       } catch {
-        throw new Error(UPLOAD_BAD_FORMAT);
+        throw new UploadError(UPLOAD_BAD_FORMAT);
       }
       const width = img.naturalWidth;
       const height = img.naturalHeight;
-      if (!width || !height) throw new Error(UPLOAD_BAD_FORMAT);
+      if (!width || !height) throw new UploadError(UPLOAD_BAD_FORMAT);
       if (Math.min(width, height) < UPLOAD_MIN_SIDE) {
-        throw new Error(`La imagen es demasiado pequeña: tiene que medir al menos ${UPLOAD_MIN_SIDE} píxeles por lado.`);
+        throw new UploadError(`La imagen es demasiado pequeña: tiene que medir al menos ${UPLOAD_MIN_SIDE} píxeles por lado.`);
       }
       let scale = Math.min(1, UPLOAD_MAX_SIDE / Math.max(width, height));
       if (file.type === "image/png") {
@@ -2109,12 +2112,12 @@
       for (let attempt = 0; attempt < 6; attempt += 1) {
         for (const quality of [0.86, 0.78, 0.7, 0.62, 0.54, 0.46]) {
           const blob = await drawToBlob(img, width * scale, height * scale, "image/jpeg", quality);
-          if (!blob) throw new Error(UPLOAD_BAD_FORMAT);
+          if (!blob) throw new UploadError(UPLOAD_BAD_FORMAT);
           if (blob.size <= UPLOAD_TARGET_BYTES) return finishUpload(blob);
         }
         scale *= 0.75;
       }
-      throw new Error("La imagen pesa demasiado incluso reducida: prueba con otra.");
+      throw new UploadError("La imagen pesa demasiado incluso reducida: prueba con otra.");
     } finally {
       URL.revokeObjectURL(url);
     }
