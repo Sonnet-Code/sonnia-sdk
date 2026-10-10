@@ -123,3 +123,58 @@ def test_si_algo_falla_al_montar_no_lanza(tmp_path: Path, monkeypatch: pytest.Mo
     settings = make_settings(tmp_path)
     vision = build(settings, OpenCVCamera(settings.vision))
     assert not vision.poses.available
+
+
+async def test_la_vista_solo_sale_si_la_unity_conectada_la_anuncia(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Con el ``GameManager`` de los cimientos: ``preview_supported`` sale de ``client_hello``."""
+    from sonia.games.manager import GameManager
+    from sonia.ws import protocol as p
+    from tests.games.fakes import FakeEngine, FakeScreen, game_settings
+    from tests.test_vision_stream import FakeVideo, wait_for
+
+    settings = game_settings()
+    settings.vision.source = "opencv"
+    manager = GameManager(
+        settings, engine=FakeEngine(), screen=FakeScreen(), games=[], camera_ready=lambda: True
+    )
+    camera = OpenCVCamera(settings.vision)
+    device = FakeVideo()
+    monkeypatch.setattr(camera, "_open_sync", lambda: device)
+    frames: list[bytes] = []
+    messages: list[dict[str, Any]] = []
+
+    async def send_json(msg: dict[str, Any]) -> None:
+        messages.append(msg)
+
+    async def send_bytes(data: bytes) -> None:
+        frames.append(data)
+
+    vision = build_game_vision(
+        settings=settings,
+        camera=camera,
+        send_json=send_json,
+        send_bytes=send_bytes,
+        preview_supported=manager.preview_supported,
+        vision_llm=None,
+        download_models=False,
+    )
+
+    def hello(features: list[str]) -> dict[str, Any]:
+        return {"type": "client_hello", "client": "unity", "games": [], "features": features}
+
+    # Una Unity anterior a los juegos no la sabe pintar: no se manda nada.
+    await manager.on_client_hello(hello([]))
+    assert await vision.preview.start("poses") is False
+    await manager.on_client_hello(hello([p.FEATURE_CAMERA_PREVIEW]))
+    assert await vision.preview.start("poses")
+    await wait_for(lambda: len(frames) >= 2)
+    assert p.decode_preview_frame(frames[0])[1:4] == (640, 360, True)
+    assert messages[0] == p.msg_camera_preview(True)
+    # Lo que sueltan los cimientos al terminar la partida, a nombre del juego.
+    for release in (vision.preview.stop, vision.poses.release, vision.stream.release):
+        await release("poses")
+    assert not vision.stream.active
+    assert messages[-1] == p.msg_camera_preview(False)
+    await vision.close()
