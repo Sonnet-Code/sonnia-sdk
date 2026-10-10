@@ -79,7 +79,7 @@ START_TEXT = (
     "El Wordle de tecnología está en tu pantalla: hay una palabra secreta de tecnología de {cols} "
     "letras y el grupo tiene {rows} intentos. No la conoces. Explícalo en dos frases con energía "
     "(que griten palabras de {cols} letras y tú las vas poniendo en el tablero) y pídeles la "
-    "primera."
+    "primera. Cada palabra que digan, la delegas antes de decir nada del resultado."
 )
 
 RESUME_TEXT = (
