@@ -487,8 +487,11 @@ class GameManager:
             logger.exception("Falló el control %s de %s", control, game.id)
             return False, "Ese control falló; prueba otra vez o termina el juego."
         if script:
+            # Con ``_speak_ending``: si el control cerró la partida (el intento que gana del
+            # Wordle, «Acertó» del Akinator), la fase ya es ``finishing`` y el final también
+            # se cuenta.
             self._spawn(
-                self._speak_when_quiet(self._match, PANEL_CONTROL_TEXT + script), "game-control"
+                self._speak_ending(self._match, PANEL_CONTROL_TEXT + script), "game-control"
             )
         return True, "Hecho."
 

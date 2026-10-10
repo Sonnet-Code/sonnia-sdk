@@ -161,8 +161,9 @@ def test_los_bancos_tienen_lo_que_pide_el_plan() -> None:
     riddles = parse_riddles((games_dir / RIDDLES.file).read_text(encoding="utf-8")).entries
     techs = parse_techs((games_dir / TECHS.file).read_text(encoding="utf-8")).entries
     sonnet = parse_sonnet((games_dir / SONNET.file).read_text(encoding="utf-8")).entries
-    assert len(riddles) >= 30 and len(techs) >= 40 and len(sonnet) >= 12
-    assert {c.kind for c in sonnet} == {"pregunta", "reto"}
+    assert len(riddles) >= 30 and len(techs) >= 40 and len(sonnet) >= SONNET.min_entries
+    # Solo retos: nada de preguntas sobre Sonnet Code, que nadie se sabe (Jean, 10-oct-2026).
+    assert {c.kind for c in sonnet} == {"reto"}
     # Nada de lo que lee GPT-Live nombra el stack.
     for riddle in riddles:
         assert not brands_in(" ".join((riddle.text, riddle.answer, riddle.hint, *riddle.variants)))

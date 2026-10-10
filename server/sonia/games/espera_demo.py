@@ -117,6 +117,25 @@ def _outside() -> list[Step]:
         Capture("espera-09d-buscando", settle_s=0.4),
         OFF,
         Wait(1.5),
+        # Una cadena de textos con la pastilla encendida, como al empezar un juego de
+        # cámara: cambia en el sitio, sin volver a entrar.
+        _on("game", TEXT_GAME),
+        Capture("espera-09e-cadena-juego", settle_s=0.5),
+        _on("camera", TEXT_CAMERA),
+        Capture("espera-09f-cadena", settle_s=0.0),
+        Capture("espera-09g-cadena", settle_s=0.05),
+        Capture("espera-09h-cadena-camara", settle_s=0.3),
+        _on("think", TEXT_THINK),
+        Capture("espera-09i-cadena", settle_s=0.0),
+        Capture("espera-09j-cadena-pensando", settle_s=0.3),
+        # Un on que llega a media salida: vuelve desde donde está, sin saltos.
+        OFF,
+        Wait(0.08),
+        _on("think", TEXT_THINK),
+        Capture("espera-09k-vuelve", settle_s=0.0),
+        Capture("espera-09l-vuelve", settle_s=0.05),
+        OFF,
+        Wait(1.5),
     ]
 
 
