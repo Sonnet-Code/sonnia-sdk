@@ -130,8 +130,10 @@ Tiempos fijos en `game.py`: `READY_LEAD_S` (0,8), `AUDIO_LAG_S` (0,12), `REACTIO
 
 `PptController` (sobre `GameControllerBase` y `GameHud`) y `SoniaHandPoser`, en `Games/Ppt/`.
 
-**Pantalla.** La vista en vivo arriba (la manda el orquestador, con el jugador resaltado) y, debajo,
-la tarjeta común:
+**Pantalla.** La vista en vivo arriba (la manda el orquestador, con el jugador resaltado), algo más
+estrecha que la común (800 px en vez de 960), y debajo la tarjeta común, compacta: así lo de arriba
+acaba hacia los 1040 px en vez de 1200 y el plano de panel deja a Sonnia más grande, con la mano a
+la vista y por encima de los subtítulos.
 
 - En la cabecera, «AL MEJOR DE 3 · RONDA 2» (y «· OTRA VEZ» si se repite).
 - El marcador «SONNIA 1 – 2 TÚ», que late al sumar.
@@ -150,7 +152,11 @@ la tarjeta común:
 
 - El brazo derecho delante del pecho con IK de dos huesos (como `TriviaHat`), la palma hacia el
   público y los dedos hacia arriba: es como mejor se lee la jugada en la pantalla vertical (con los
-  dedos hacia la cámara, el papel se vería de canto). La cara queda libre.
+  dedos hacia la cámara, el papel se vería de canto). La mano va a la altura de la parte alta del
+  pecho: la cara queda libre y los subtítulos de abajo no la tapan.
+- Los ejes del brazo son los del avatar, pero siguen en parte (60 %) al pecho desde la postura que
+  tenía al empezar a subir la mano: si el cuerpo se balancea al hablar o se inclina con un gesto, la
+  mano va con él y la muñeca no se tuerce.
 - `ready` sube el puño. `countdown` lo agita: baja en cada tiempo de la frase (tres golpes, cada uno
   rápido hacia abajo y más lento hacia arriba, inclinando el puño como un martillo) y en el cuarto,
   el «¡ya!», la mano se abre en su forma en 0,13 s y empuja un poco hacia el público.
@@ -195,12 +201,15 @@ músculos del puño y de la tijera salieron de una galería de 16 variantes (pul
     marcas del stack) y la frase declarada;
   - de punta a punta con `GameManager`: `start_game`, la partida, `end` con su resultado,
     `stop_game` y lo que vuelve a pintar una Unity que se reconecta.
-- Orquestador falso: `server/sonia/games/ppt/demo.py`, con una captura por estado
-  (`ppt-1-empezar`, `ppt-2-cuenta`, `ppt-3-ya`, `ppt-4-acierto`, `ppt-5-fallo`, `ppt-6-sin-mano`,
-  `ppt-7-final`):
+- Orquestador falso: `server/sonia/games/ppt/demo.py`, con una captura por estado (`ppt-1-empezar`,
+  `ppt-4-acierto`, `ppt-5-fallo`, `ppt-6-sin-mano`, `ppt-7-final`) y varias seguidas de la mano de
+  Sonnia en el plano real: el puño arriba y la cuenta (`ppt-2a` a `ppt-2d`) y cada forma en el «ya»
+  (`ppt-3a-ya-tijera`, `ppt-3b-tijera`, `ppt-5a-ya-papel`, `ppt-6a-ya-piedra`). Las capturas en
+  batch (`docs/juegos-unity.md`):
 
   ```bash
-  cd server && uv run --no-sync python ../scripts/juegos_demo.py --juego piedra_papel_tijera --puerto 8795
+  SONIA_UNITY_LOCKS=$SP/unity-locks scripts/juegos_capturas.sh --juego piedra_papel_tijera \
+    --puerto 8795 --salida $SP/capturas-ppt --clon <clon compartido>
   ```
 
 ## Pendiente
