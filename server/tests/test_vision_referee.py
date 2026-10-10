@@ -305,8 +305,21 @@ async def test_con_gemini_y_clave_juzga_gemini_y_la_busqueda_tambien(
     client = vision.referee._llm
     assert isinstance(client, LLMClient)
     assert vision.judge._llm is client
+    # Si Gemini falla en la búsqueda, la misma foto va al modelo de visión (luna).
+    assert vision.judge._fallback is luna
     await vision.close()
     assert closed == [client]
+
+
+async def test_con_gemini_sin_modelo_de_vision_la_busqueda_no_tiene_respaldo() -> None:
+    vision = build(gemini_settings(key="clave-de-prueba"))
+    assert isinstance(vision.judge, ModelJudge)
+    assert vision.judge._fallback is None
+    settings = gemini_settings(key="clave-de-prueba")
+    settings.llm.supports_vision = False
+    vision = build(settings, vision_llm=object())
+    assert isinstance(vision.judge, ModelJudge) and vision.judge._fallback is None
+    await vision.close()
 
 
 async def test_con_gemini_sin_clave_todo_como_antes() -> None:

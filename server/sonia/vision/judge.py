@@ -9,7 +9,10 @@ GPT-Live:
 - respuesta en JSON estricto, ``{"visto": bool, "objeto": str}``, que habla solo del
   objeto: el prompt prohíbe describir a las personas;
 - con plazo (``JUDGE_TIMEOUT_S``) y con tope de llamadas por ronda, que pone quien llama
-  (:meth:`ModelJudge.start_round`): pasado el tope, ``ask`` no llama y devuelve ``None``.
+  (:meth:`ModelJudge.start_round`): pasado el tope, ``ask`` no llama y devuelve ``None``;
+- con un modelo de respaldo opcional (``fallback``): con ``GAMES_JUDGE=gemini`` el juez es
+  Gemini y, si falla (error, 429, plazo o JSON roto), la misma foto va al modelo de visión de
+  Sonia (``LLM_*``). Una pregunta es una foto: cuenta una sola vez para el tope.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ if TYPE_CHECKING:
     from sonia.types import Frame, Message
 
 __all__ = [
+    "FALLBACK_TIMEOUT_S",
     "JUDGE_PROMPT",
     "JUDGE_QUALITY",
     "JUDGE_TIMEOUT_S",
@@ -46,6 +50,11 @@ JUDGE_QUALITY = 75
 #: Plazo de cada pregunta. El modelo de visión tarda unos 2 s (medido el 7-oct-2026); una
 #: respuesta que llega a los 8 ya no sirve en una ronda de 25 s.
 JUDGE_TIMEOUT_S = 8.0
+
+#: Plazo del modelo de respaldo cuando el principal falla. Con los 4 s de Gemini
+#: (``GAMES_JUDGE_TIMEOUT_SECONDS``) cabe en los 12 s con los que la búsqueda espera cada
+#: mirada (``sonia.games.busqueda.game.JUDGE_TIMEOUT_S``); luna tardó 3,6 s como mucho.
+FALLBACK_TIMEOUT_S = 6.0
 
 #: Tope de caracteres de ``objeto``: Sonia lo dice en voz alta.
 MAX_WHAT_CHARS = 60
@@ -96,11 +105,13 @@ def parse_judge_answer(text: str) -> JudgeAnswer | None:
 
 
 class ModelJudge:
-    """``VisionJudge`` con el modelo de visión de Sonia y la cámara del motor.
+    """``VisionJudge`` con un modelo con visión (Gemini o el de Sonia) y la cámara del motor.
 
-    Lleva la cuenta de las llamadas de la ronda: el juego la empieza con
-    :meth:`start_round` y su tope (``GAME_BUSQUEDA_MAX_CHECKS``). Sin ronda empezada no
-    hay tope propio, solo el de ``max_calls`` si se dio. Las preguntas van de una en una.
+    Lleva la cuenta de las fotos de la ronda: el juego la empieza con :meth:`start_round` y
+    su tope (``GAME_BUSQUEDA_MAX_CHECKS``). Sin ronda empezada no hay tope propio, solo el
+    de ``max_calls`` si se dio. Las preguntas van de una en una. Con ``fallback``, si ``llm``
+    falla (error, plazo o JSON roto), la misma foto va a ``fallback`` con su plazo
+    (``fallback_timeout_s``); sin foto o pasado el tope, no se pregunta a ninguno.
     """
 
     def __init__(
@@ -112,17 +123,23 @@ class ModelJudge:
         width: int = JUDGE_WIDTH,
         quality: int = JUDGE_QUALITY,
         max_calls: int | None = None,
+        fallback: _VisionLLM | None = None,
+        fallback_timeout_s: float = FALLBACK_TIMEOUT_S,
     ) -> None:
         self._llm = llm
         self._camera = camera
         self._timeout_s = timeout_s
+        self._fallback = fallback
+        self._fallback_timeout_s = fallback_timeout_s
         self._width = width
         self._quality = quality
         self._limit = max_calls
         self._lock = asyncio.Lock()
-        #: Llamadas al modelo en la ronda actual y en total (el total, para medir el gasto).
+        #: Fotos juzgadas en la ronda actual y en total (el total, para medir el gasto).
         self.calls = 0
         self.total_calls = 0
+        #: Preguntas que acabaron en el modelo de respaldo.
+        self.fallback_calls = 0
         #: Segundos que tardó la última respuesta.
         self.last_seconds = 0.0
 
@@ -157,20 +174,35 @@ class ModelJudge:
             ]
             started = time.monotonic()
             try:
-                completion = await asyncio.wait_for(
-                    self._llm.complete(messages), timeout=self._timeout_s
-                )
-            except TimeoutError:
-                logger.warning("El modelo de visión no juzgó la foto en %.0f s", self._timeout_s)
-                return None
-            except Exception as exc:  # noqa: BLE001 - sin respuesta, el juego sigue
-                logger.warning("El modelo de visión no pudo juzgar la foto: %s", exc)
-                return None
+                answer = await self._judge(self._llm, messages, self._timeout_s, "")
+                if answer is None and self._fallback is not None:
+                    # La misma foto al de respaldo: una pregunta, una foto para el tope.
+                    self.fallback_calls += 1
+                    answer = await self._judge(
+                        self._fallback, messages, self._fallback_timeout_s, " de respaldo"
+                    )
             finally:
                 self.last_seconds = time.monotonic() - started
-            answer = parse_judge_answer(completion.content)
-            if answer is None:
-                logger.warning(
-                    "Respuesta del juez sin el JSON esperado: %r", completion.content[:200]
-                )
             return answer
+
+    async def _judge(
+        self, llm: _VisionLLM, messages: list[Message], timeout_s: float, label: str
+    ) -> JudgeAnswer | None:
+        """Una pregunta a ``llm`` con plazo. ``None`` si falla, no llega o no cuadra."""
+        started = time.monotonic()
+        try:
+            completion = await asyncio.wait_for(llm.complete(messages), timeout=timeout_s)
+        except TimeoutError:
+            logger.warning("El juez%s no juzgó la foto en %.0f s", label, timeout_s)
+            return None
+        except Exception as exc:  # noqa: BLE001 - sin respuesta, el juego sigue
+            logger.warning("El juez%s no pudo juzgar la foto: %s", label, exc)
+            return None
+        answer = parse_judge_answer(completion.content)
+        if answer is None:
+            logger.warning(
+                "Respuesta del juez%s sin el JSON esperado: %r", label, completion.content[:200]
+            )
+        else:
+            logger.info("Juez%s de la búsqueda: %.2f s", label, time.monotonic() - started)
+        return answer

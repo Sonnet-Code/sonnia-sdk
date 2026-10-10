@@ -203,7 +203,7 @@ def _build(
         return unavailable_game_vision()
 
     from sonia.vision.hands import MediaPipeHandDetector
-    from sonia.vision.judge import JUDGE_TIMEOUT_S, ModelJudge
+    from sonia.vision.judge import FALLBACK_TIMEOUT_S, ModelJudge
     from sonia.vision.models import (
         DEFAULT_POSE_VARIANT,
         download_game_models,
@@ -223,20 +223,19 @@ def _build(
     preview = LivePreview(stream, send_json, send_bytes, preview_supported)
     poses = YoloPoseDetector(stream, folder, variant=variant, download=download_models)
     hands = MediaPipeHandDetector(folder)
-    judge: VisionJudge = (
-        ModelJudge(vision_llm, camera)
-        if vision_llm is not None and settings.llm.supports_vision
-        else NoJudge()
-    )
+    luna = vision_llm if vision_llm is not None and settings.llm.supports_vision else None
+    judge: VisionJudge = ModelJudge(luna, camera) if luna is not None else NoJudge()
     # El juez de las rondas (GAMES_JUDGE). Con Gemini, un solo cliente para las rondas y la
-    # búsqueda (la conexión se reutiliza); su tope de petición es el más largo de los dos
-    # plazos, que cada uno corta con el suyo. Sin Gemini, todo como antes.
+    # búsqueda (la conexión se reutiliza), con el plazo de GAMES_JUDGE_TIMEOUT_SECONDS. En la
+    # búsqueda, si Gemini falla, la misma foto va al modelo de visión (luna), si lo hay: no
+    # se sabe si la clave de Gemini tiene topes por minuto o por día, y los gestos ya la usan
+    # todo el día. Sin Gemini, todo como antes.
     referee: GameReferee = NoReferee()
     gemini: LLMClient | None = None
     referee_name = "local"
     if settings.games.judge == "gemini":
         timeout_s = max(0.5, float(settings.games.judge_timeout_seconds))
-        gemini_settings = gemini_llm_settings(settings, max(timeout_s, JUDGE_TIMEOUT_S))
+        gemini_settings = gemini_llm_settings(settings, timeout_s)
         if gemini_settings is None:
             logger.warning(
                 "GAMES_JUDGE=gemini sin Gemini (falta GEMINI_API_KEY o los gestos van por otro "
@@ -247,7 +246,13 @@ def _build(
 
             gemini = LLMClient(gemini_settings)
             referee = GeminiReferee(gemini, timeout_s=timeout_s)
-            judge = ModelJudge(gemini, camera)
+            judge = ModelJudge(
+                gemini,
+                camera,
+                timeout_s=timeout_s,
+                fallback=luna,
+                fallback_timeout_s=FALLBACK_TIMEOUT_S,
+            )
             referee_name = f"Gemini ({gemini_settings.model}, plazo {timeout_s:g} s)"
     # Al arrancar solo se exigen el de poses de GAME_POSES_MODEL y los de manos: el otro de
     # poses (la app lleva los dos) se baja la primera vez que se pide desde el panel.
@@ -287,7 +292,11 @@ def _build(
         variant,
         "listas" if hands.available else "sin modelo",
         referee_name,
-        ("con Gemini" if gemini is not None else "con el modelo de visión")
+        (
+            ("con Gemini" + (" y respaldo del modelo de visión" if luna is not None else ""))
+            if gemini is not None
+            else "con el modelo de visión"
+        )
         if judge.available
         else "sin modelo de visión",
     )
