@@ -69,9 +69,14 @@ Todo va en la tarjeta de la franja alta (la de la trivia): la rejilla a la izqui
 - **Sacudida.** Con `invalid`, la primera fila libre enseña lo que se entendió con el borde en rojo, se sacude (`GameAnim.Shake`) y un rótulo rojo dice por qué (`Hud.ShowBanner`). Se limpia sola al cabo de 1,4 s y no gasta fila.
 - **Pista.** Candada al empezar (un signo de pregunta y «sale tras 4 intentos»). Al llegar `hint` sale con un rebote y destellos. Al terminar, la tarjeta enseña «la palabra era» con la palabra en fichas (verdes si acertaron) y su pista.
 - **Letras.** Las 26 letras en cuatro filas, cada una en su mejor color (verde antes que amarillo antes que gris; las que no han salido, en azul). Es el teclado del Wordle, algo más que «una fila con las letras usadas» del plan: así se ve también lo que falta por probar.
-- **Final.** Al acertar, la fila baila (un salto con latido, de ficha en ficha), llueve confeti (`Hud.Celebrate`) y Sonnia lo celebra (`QuickAction_vibe`, alegría). Al perder, `emotions-0049-traitsKind`. Con el `end` sale la tarjeta de resultado de los juegos («¡LO ADIVINARON! KAFKA · 3 DE 6» o «¡CASI! ERA KAFKA») unos 3,5 s.
+- **Final.** Al acertar, la fila baila (un salto con latido, de ficha en ficha), llueve confeti (`Hud.Celebrate`) y Sonnia lo celebra (`QuickAction_vibe`, alegría). Al perder, `emotions-0049-traitsKind`. Con el `end` sale la tarjeta de resultado de los juegos («¡GANARON! KAFKA · 3 DE 6» o «¡CASI! ERA KAFKA») unos 3,5 s.
 - **Reconexión.** El último `guess` lleva el tablero entero (`board`) y las letras usadas (`used`): una Unity que se reconecta o arranca a mitad pinta ya puestas las filas que no había visto y solo voltea la última.
+- **Sin tirones.** La rejilla (unos 250 objetos de interfaz) se monta la primera vez y se reutiliza mientras no cambien las filas ni la pista; cada partida solo la deja como nueva.
 - Con menos o más filas (3 a 8), las fichas se encogen para que la rejilla no pase de 578 px de alto.
+
+## En el panel
+
+La tarjeta «Juegos» enseña «Jugando a Wordle de tecnología · 1:15 · Intento 3 de 6» (el `summary` de `snapshot()`: «6 intentos» al empezar, «Intento N de 6» mientras se juega, «Acertaron en N de 6» o «Sin intentos (6 de 6)» al terminar). El estado del panel **no lleva la palabra ni la pista**: se ve delante de los visitantes, y sin `summary` el panel enseñaría los datos del estado tal cual. Los bancos se editan en «Bancos de los juegos» (`wordle_palabras`), y el interruptor del juego (`games_off`) lo apaga en todas las Sonnias sin reinstalar.
 
 ## Bancos
 
@@ -110,7 +115,7 @@ Los comunes (`GAMES_*`): `GAMES_NUDGE_SECONDS` (3), `GAMES_RESULT_SECONDS` (4) y
 
 ## Pruebas y capturas
 
-- `uv run --no-sync pytest -q tests/games/test_wordle.py tests/games/test_wordle_logica.py` (sin red, sin Unity y sin cámara): las reglas con letras repetidas, la normalización, el banco (el de la app y el mal formado), el flujo entero (empezar, jugar, pista, ganar, perder, cancelar, abandonar y reconectar), las jugadas fuera de turno, el tope de 1200 caracteres, que ningún texto nombre el stack ni lleve la palabra antes del final, y que la secuencia del orquestador falso sea la que manda el juego de verdad.
+- `uv run --no-sync pytest -q tests/games/test_wordle.py tests/games/test_wordle_logica.py tests/games/test_wordle_motor.py` (sin red, sin Unity y sin cámara; el último pasa por el motor de verdad con un GPT-Live falso: herramientas, reglas por `instructions.append`, guiones con `PARA SONIA:` y los mensajes de pantalla): las reglas con letras repetidas, la normalización, el banco (el de la app y el mal formado), el flujo entero (empezar, jugar, pista, ganar, perder, cancelar, abandonar y reconectar), las jugadas fuera de turno, el tope de 1200 caracteres, que ningún texto nombre el stack ni lleve la palabra antes del final, y que la secuencia del orquestador falso sea la que manda el juego de verdad.
 - Capturas 9:16 de cada estado (`server/sonia/games/wordle/demo.py`): `scripts/juegos_capturas.sh --juego wordle --puerto 87xx --salida <carpeta>` (receta en `docs/juegos-unity.md`). La secuencia pasa por: la rejilla vacía, un intento a medio volteo y terminado, la palabra que no vale, la pista, el acierto con confeti, el resultado, la derrota con la palabra y su resultado.
 
 ## Pendiente

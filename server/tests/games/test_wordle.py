@@ -469,6 +469,39 @@ async def test_el_resumen_del_panel_cuenta_el_final() -> None:
     assert lost.snapshot()["summary"] == "6 intentos" and lost.snapshot()["result"] == ""
 
 
+async def test_palabras_al_azar_nunca_rompen_el_juego_ni_el_tablero() -> None:
+    # Muchas partidas con lo que sea: letras, tildes, cifras, signos, vacío y tipos raros. Nunca
+    # lanza, todo guion es texto que GPT-Live puede leer, y el tablero queda coherente.
+    rng = random.Random(2026)
+    alphabet = "abcdefghijklmnñopqrstuvwxyzÁÉÍÓÚÜ ABCDE12-_.!¿?"
+    for match in range(40):
+        game, host = make_wordle(settings=wordle_settings(rows=rng.choice([3, 6, 8])))
+        host.rng = random.Random(match)
+        await game.start("voice", {})
+        for _ in range(40):
+            raw: object = "".join(rng.choice(alphabet) for _ in range(rng.randint(0, 9)))
+            if rng.random() < 0.1:
+                raw = rng.choice([None, 7, 3.5, [], {}])
+            script = await game.guess({"palabra": raw})
+            assert isinstance(script, str) and script.strip()
+            assert not brands_in(script)
+            if match % 2 == 0 and rng.random() < 0.3:
+                # Y de vez en cuando, la buena o una válida cualquiera.
+                await play(game, rng.choice([game.word, "PIZZA", "ñandú", "REDIS"]))
+        state = game.snapshot()
+        assert state["attempts"] <= state["rows"]
+        guesses = state["guesses"]
+        assert len(guesses) == len(set(guesses))
+        assert all(re.fullmatch(r"[A-Z]{5}", g) for g in guesses)
+        for event in host.events("guess"):
+            for row in event["board"]:
+                assert row["marks"] == score_guess(row["letters"], game.word)
+        # Cada intento que cuenta ha mandado un «guess» y ninguna palabra mala lo ha mandado.
+        assert len(host.events("guess")) == len(guesses)
+        if host.finished:
+            assert len(host.finished) == 1 and state["over"] is True
+
+
 async def test_sin_frases_grabadas_ni_camara() -> None:
     game, host = make_wordle()
     assert game.phrases() == [] and WordleGame.needs == frozenset()
