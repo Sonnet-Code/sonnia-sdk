@@ -226,8 +226,16 @@ class GameManager:
                 logger.warning("Juego repetido en el registro: %s", cls.id)
                 continue
             host = ManagedGameHost(self, cls.id)
+            try:
+                # Lo que se lee al arrancar: un juego roto se queda fuera y Sonia sigue.
+                cls.actions()
+                cls.banks()
+                game = cls(host)
+            except Exception:  # noqa: BLE001 - un juego roto no tumba el arranque
+                logger.exception("El juego %s está roto y se deja fuera", cls.id)
+                continue
             self._hosts[cls.id] = host
-            self._games[cls.id] = cls(host)
+            self._games[cls.id] = game
         #: Modelo de poses pedido desde el panel (ajuste compartido ``games_pose_model``);
         #: ``None``: el de ``GAME_POSES_MODEL``. Se guarda por si la visión llega después.
         self._pose_model_request: str | None = None
@@ -415,7 +423,7 @@ class GameManager:
         caps = ["games"]
         shown = self._unity_games or frozenset()
         caps.extend(f"game:{gid}" for gid in self._games if gid in shown)
-        if any(type(g).banks() for g in self._games.values()):
+        if self.bank_specs():
             caps.append("game_banks")
         if self._pose_model_setter() is not None:
             caps.append("game_pose_model")
