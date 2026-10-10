@@ -270,3 +270,27 @@ def test_la_pregunta_abierta_se_reconoce() -> None:
     assert open_question("Vale. ¿Es un lenguaje? Sí") == ""
     assert open_question("Vale, sigamos") == ""
     assert open_question("¿Una? ¿Otra") == "¿Otra"
+
+
+def test_el_contador_aguanta_cualquier_transcripcion_sin_lanzar_ni_bajar() -> None:
+    import random
+
+    rng = random.Random(7)
+    vocabulary = [
+        "¿", "?", ".", "!", "¡", "es", "un", "lenguaje", "de", "Google", "Kotlin", "[", "]",
+        "[laugh]", "Sonia", "…", ",", ":", "listo", "qué", "era", "\n", "  ",
+    ]  # fmt: skip
+    for _ in range(300):
+        counter = QuestionCounter()
+        previous = 0
+        for _ in range(rng.randint(1, 8)):
+            parts: list[str] = []
+            for _ in range(rng.randint(1, 14)):
+                parts.append(rng.choice(vocabulary) + rng.choice(["", " ", " "]))
+                text = clean_transcript("".join(parts))
+                counter.feed(text, final=False)
+                assert counter.count >= previous
+                previous = counter.count
+            counter.feed(clean_transcript("".join(parts)), final=rng.random() < 0.8)
+            assert counter.count >= previous
+            previous = counter.count
