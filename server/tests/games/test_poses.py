@@ -607,3 +607,30 @@ async def test_no_se_ofrece_sin_camara_ni_con_la_trivia() -> None:
     manager, *_ = await make_manager([PosesGame], busy=lambda: "Hay una trivia en marcha.")
     ok, message = await manager.start("poses", "voice")
     assert not ok and "trivia" in message
+
+
+# ---------------------------------------------------------------------------
+# La secuencia del orquestador falso
+# ---------------------------------------------------------------------------
+
+
+def test_la_secuencia_del_orquestador_falso_pasa_por_cada_estado() -> None:
+    from sonia.games.demo import Capture, GameMsg, Preview, load_demo
+
+    steps = load_demo("poses")
+    msgs = [s for s in steps if isinstance(s, GameMsg)]
+    assert msgs[0].event == "start" and msgs[-1].event == "end"
+    events = {m.event for m in msgs}
+    assert {"placement", "round", "command", "window", "result", "final"} <= events
+    for msg in msgs[1:-1]:
+        assert set(msg.data) == STATE_KEYS and msg.data["phase"] == msg.event
+    assert {m.data["pose"] for m in msgs if m.event == "round"} == set(POSE_IDS)
+    names = [s.name for s in steps if isinstance(s, Capture)]
+    assert len(names) == len(set(names)) >= 10
+    # La vista en vivo sintética se dibuja sin fallar, en espejo y sin él.
+    for step in steps:
+        if isinstance(step, Preview) and step.draw is not None:
+            for mirrored in (True, False):
+                frame = np.zeros((360, 640, 3), dtype=np.uint8)
+                step.draw(frame, mirrored)
+                assert frame.any()
