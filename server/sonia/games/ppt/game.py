@@ -150,8 +150,8 @@ RETRY_NO_HAND = (
     "de cara a la cámara, y que repetís la ronda. Una frase corta y calla."
 )
 RETRY_UNCLEAR = (
-    "No entendiste la mano del jugador: dile que no la viste clara, que la deje quieta justo "
-    "en el «¡ya!», y que repetís la ronda. Una frase corta y calla."
+    "No entendiste la mano del jugador: dile que no la viste clara, que enseñe una sola mano, "
+    "quieta, justo en el «¡ya!», y que repetís la ronda. Una frase corta y calla."
 )
 
 FINAL_PLAYER = (
