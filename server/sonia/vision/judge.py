@@ -33,6 +33,7 @@ __all__ = [
     "JUDGE_QUALITY",
     "JUDGE_TIMEOUT_S",
     "JUDGE_WIDTH",
+    "FallbackJudge",
     "ModelJudge",
     "parse_judge_answer",
 ]
@@ -125,6 +126,9 @@ class ModelJudge:
         self.total_calls = 0
         #: Segundos que tardó la última respuesta.
         self.last_seconds = 0.0
+        #: ``True`` si la última pregunta se quedó sin respuesta por el modelo (un fallo, el
+        #: plazo o una respuesta sin el JSON esperado), no por falta de foto o por el tope.
+        self.last_failed = False
 
     @property
     def available(self) -> bool:
@@ -142,6 +146,7 @@ class ModelJudge:
 
     async def ask(self, question: str) -> JudgeAnswer | None:
         async with self._lock:
+            self.last_failed = False
             if self._limit is not None and self.calls >= self._limit:
                 logger.info("Tope de fotos de la ronda alcanzado (%d): no se pregunta", self._limit)
                 return None
@@ -162,9 +167,11 @@ class ModelJudge:
                 )
             except TimeoutError:
                 logger.warning("El modelo de visión no juzgó la foto en %.0f s", self._timeout_s)
+                self.last_failed = True
                 return None
             except Exception as exc:  # noqa: BLE001 - sin respuesta, el juego sigue
                 logger.warning("El modelo de visión no pudo juzgar la foto: %s", exc)
+                self.last_failed = True
                 return None
             finally:
                 self.last_seconds = time.monotonic() - started
@@ -173,4 +180,54 @@ class ModelJudge:
                 logger.warning(
                     "Respuesta del juez sin el JSON esperado: %r", completion.content[:200]
                 )
+                self.last_failed = True
             return answer
+
+
+class FallbackJudge:
+    """Gemini primero y, si falla, el modelo de visión de ``LLM_*`` (búsqueda relámpago).
+
+    ``primary`` (Gemini, con ``GAMES_JUDGE=gemini``) lleva el tope de fotos de la ronda. Si
+    no contesta por un fallo, por el plazo o sin el JSON esperado (un 429 de la clave, por
+    ejemplo: los gestos también la usan todo el día), la misma pregunta va a ``secondary``
+    con una foto nueva. Sin foto o con el tope alcanzado no se repite. Como cada pregunta
+    cuenta una vez en el tope de ``primary``, el total de fotos no pasa del tope.
+    """
+
+    def __init__(self, primary: ModelJudge, secondary: ModelJudge) -> None:
+        self._primary = primary
+        self._secondary = secondary
+        #: Preguntas que acabaron en ``secondary`` (para el registro y las pruebas).
+        self.fallbacks = 0
+
+    @property
+    def available(self) -> bool:
+        return self._primary.available or self._secondary.available
+
+    @property
+    def remaining(self) -> int | None:
+        return self._primary.remaining
+
+    @property
+    def calls(self) -> int:
+        return self._primary.calls
+
+    @property
+    def total_calls(self) -> int:
+        return self._primary.total_calls + self._secondary.total_calls
+
+    @property
+    def last_seconds(self) -> float:
+        return self._primary.last_seconds
+
+    def start_round(self, max_calls: int | None) -> None:
+        self._primary.start_round(max_calls)
+        self._secondary.start_round(None)
+
+    async def ask(self, question: str) -> JudgeAnswer | None:
+        answer = await self._primary.ask(question)
+        if answer is not None or not self._primary.last_failed:
+            return answer
+        self.fallbacks += 1
+        logger.info("El juez de Gemini no contestó: la pregunta va al modelo de visión")
+        return await self._secondary.ask(question)

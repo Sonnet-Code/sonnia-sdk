@@ -299,6 +299,13 @@ namespace Sonia
                 gameObject.AddComponent<StageScreen>();
             }
 
+            if (GetComponent<BusyIndicator>() == null)
+            {
+                // También por código: el aviso de espera (busy), una pastilla
+                // arriba del todo mientras Sonia piensa, busca o mira la foto.
+                gameObject.AddComponent<BusyIndicator>();
+            }
+
             if (GetComponent<StageParticles>() == null)
             {
                 // También por código: las partículas del escenario (motas, trivia

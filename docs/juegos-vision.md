@@ -1,13 +1,20 @@
 # Visión de los juegos
 
 La parte de visión de los juegos nuevos del stand (`docs/plan-juegos.md`, sección 6): la cámara en
-vivo, la vista en vivo encima de Sonnia, las poses, las manos de piedra, papel o tijera y el juez de
-la búsqueda relámpago. Código en `server/sonia/vision`; los juegos lo usan a través de `GameHost`
-(`sonia.games`) con las interfaces de `sonia/vision/contracts.py`.
+vivo, la vista en vivo encima de Sonnia, las poses, las manos de piedra, papel o tijera, el juez de
+la búsqueda relámpago y el juez de las rondas (Gemini, `GAMES_JUDGE`). Código en
+`server/sonia/vision`; los juegos lo usan a través de `GameHost` (`sonia.games`) con las interfaces
+de `sonia/vision/contracts.py`.
 
 Todo corre en el equipo del stand y en memoria: **nunca se guarda una imagen ni un dato de nadie y
 no se reconoce a nadie** (solo dónde están hombros, codos, muñecas y dedos). Lo único que sale del
-equipo es la foto reducida que el juez manda al modelo de visión, y solo en la búsqueda relámpago.
+equipo son fotos reducidas, sin guardarlas, hacia un modelo de visión:
+
+- con `GAMES_JUDGE=gemini` (por defecto desde el 10 de octubre de 2026), a Gemini: una por ronda de
+  Simón dice, una por tirada de piedra, papel o tijera y las de la búsqueda relámpago (con su tope
+  por ronda);
+- con `GAMES_JUDGE=local` (o sin `GEMINI_API_KEY`), solo las de la búsqueda relámpago, al modelo de
+  visión de Sonia (`LLM_*`), como antes.
 
 ## Qué hay
 
@@ -17,10 +24,11 @@ equipo es la foto reducida que el juez manda al modelo de visión, y solo en la 
 | `PreviewStreamer` | `stream.py` (`LivePreview`) | La vista en vivo: frames `SNCV` a Unity, en espejo, 640x360, JPEG de calidad 60, 10 por segundo, con el dibujo del juego encima. |
 | `PoseDetector` | `poses.py` (`YoloPoseDetector`) | Personas con sus 17 puntos (YOLOv8-pose en ONNX con `cv2.dnn`), en continuo o suelta. |
 | `HandDetector` | `hands.py` (`MediaPipeHandDetector`) | Las manos de una persona: 21 puntos y piedra, papel, tijera o sin lectura. |
-| `VisionJudge` | `judge.py` (`ModelJudge`) | Pregunta cerrada al modelo de visión sobre una foto fresca, con respuesta en JSON. |
+| `VisionJudge` | `judge.py` (`ModelJudge`, `FallbackJudge`) | Pregunta cerrada sobre una foto fresca, con respuesta en JSON (búsqueda relámpago): a Gemini con `GAMES_JUDGE=gemini` y, si falla, al modelo de visión de Sonia; solo a este con `local`. |
+| `GameReferee` | `referee.py` (`GeminiReferee`) | El juez de las rondas de Simón dice y de piedra, papel o tijera: una foto por ronda a Gemini, con respuesta en JSON (`PoseVerdict`, `HandVerdict`). Sin él, `NoReferee`. |
 | Dibujos | `overlay.py` | Esqueletos (verde o gris), manos, cajas, marcas ✓ y ✗ y etiquetas para la vista en vivo. |
 | Modelos | `models.py` | Descarga con revisión fijada y SHA-256, y carga con el motor clásico de `cv2.dnn`. |
-| Montaje | `games.py` (`build_game_vision`) | Monta todo con `VISION_SOURCE=opencv`; si algo falta, esa pieza dice que no está disponible. |
+| Montaje | `games.py` (`build_game_vision`) | Monta todo con `VISION_SOURCE=opencv` y elige el juez (`GAMES_JUDGE`); si algo falta, esa pieza dice que no está disponible. |
 
 Sin cámara USB (`VISION_SOURCE` distinto de `opencv`), sin los modelos o sin una Unity que anuncie
 `camera_preview`, la pieza correspondiente dice que no está disponible y los juegos de cámara no se
@@ -48,6 +56,14 @@ readings = await host.hands.read(latest[1], player)   # las que tienen lectura p
 # Búsqueda relámpago: tope de fotos por ronda (lo pone el juego).
 host.judge.start_round(max_checks)               # solo ModelJudge; sin tope si no se llama
 answer = await host.judge.ask("¿Alguien enseña algo azul a la cámara?")   # JudgeAnswer o None
+
+# Juez de las rondas (GAMES_JUDGE=gemini): una foto por ronda; None, decide lo local.
+if host.referee.available:
+    await host.set_busy("judge", TEXT_POSES)     # la pastilla de espera mientras mira
+    try:
+        verdict = await host.referee.poses(frame_bgr)   # PoseVerdict(people, counts) o None
+    finally:
+        await host.set_busy("judge", None)
 ```
 
 - **Dueños.** Cada `acquire`/`start` lleva un dueño (el id del juego) y cada `release`/`stop`
@@ -68,9 +84,95 @@ answer = await host.judge.ask("¿Alguien enseña algo azul a la cámara?")   # J
   del antebrazo. Si así no sale ninguna lectura (alguien muy cerca, sin muñecas a la vista), se
   buscan palmas en la caja de la persona. La tabla de la sección 5.4 del plan está en
   `hands.classify`.
-- **Juez.** Foto de 640 px de ancho y calidad 75, prompt que prohíbe describir a las personas (la
-  ropa, las gafas o el pelo no cuentan como objeto), respuesta `{"visto": bool, "objeto": str}`,
-  plazo de 8 s y tope por ronda (`start_round`). Pasado el tope, `ask` devuelve `None` sin llamar.
+- **Juez de la búsqueda.** Foto de 640 px de ancho y calidad 75, prompt que prohíbe describir a las
+  personas (la ropa, las gafas o el pelo no cuentan como objeto), respuesta
+  `{"visto": bool, "objeto": str}`, plazo de 8 s y tope por ronda (`start_round`). Pasado el tope,
+  `ask` devuelve `None` sin llamar. Con `GAMES_JUDGE=gemini` pregunta a Gemini y con `local`, al
+  modelo de visión de Sonia (ver «Juez de Gemini»).
+
+## Juez de Gemini (`GAMES_JUDGE`)
+
+Encargo de Jean del 10 de octubre de 2026 («mejor usemos gemini»): las rondas de cámara las decide
+Gemini con una foto, que acierta más que la detección local (ver «Banco de pruebas» abajo). La
+detección local no se va: sigue a 8 por segundo para la vista en vivo, los esqueletos, la colocación,
+quién juega y el momento de la foto, y es la que decide si Gemini no contesta.
+
+| Ajuste | Por defecto | Qué hace |
+|---|---|---|
+| `GAMES_JUDGE` | `gemini` | `gemini`: las rondas de Simón dice y de piedra, papel o tijera y las miradas de la búsqueda las juzga Gemini. `local`: como antes, todo en el equipo y la búsqueda con el modelo de visión (`LLM_*`). |
+| `GAMES_JUDGE_TIMEOUT_SECONDS` | 4 | Plazo de Gemini en Simón dice, en piedra, papel o tijera y en cada mirada de la búsqueda; en la búsqueda, si Gemini no contesta, el modelo de visión tiene lo que queda de los 8 s que espera el juego (`JUDGE_TIMEOUT_S`). |
+
+**Qué decide en cada juego:**
+
+- **Simón dice** (`docs/juegos/poses.md`): cuántos hacen la pose y cuántos juegan en cada ronda,
+  también en las trampas, con una foto: la del mejor recuento local de la ventana.
+- **Piedra, papel o tijera** (`docs/juegos/piedra_papel_tijera.md`): la jugada del visitante en cada
+  tirada, con el frame que elige la lectura local.
+- **Búsqueda relámpago** (`docs/juegos/busqueda.md`): si se ve el objeto en cada mirada (`ModelJudge`
+  con un cliente de Gemini, el mismo `JUDGE_PROMPT`, su plazo de 8 s y el tope por ronda de siempre).
+
+**El juez** (`server/sonia/vision/referee.py`, `GeminiReferee`, que implementa `GameReferee` de
+`contracts.py`):
+
+- **Modelo.** El cliente del director de gestos (`settings.gestures.llm_settings(settings.llm)`):
+  `gemini-3.1-flash-lite` por su endpoint compatible con OpenAI, con razonamiento `minimal` y
+  `max_tokens` 1024. Solo está disponible si esa configuración apunta a Gemini y tiene clave
+  (`GEMINI_API_KEY`, la misma que ya usan los gestos); si no, `build_game_vision` monta `NoReferee` y
+  todo sigue como con `local`.
+- **La foto.** Una por ronda, reducida a 640 px de ancho y en JPEG de calidad 75, sin espejo. Se
+  codifica en un hilo (`asyncio.to_thread`) y nunca se guarda.
+- **Las preguntas.** Dos prompts cerrados que prohíben describir a las personas:
+  - poses: cuenta las personas que se ven (al menos de medio cuerpo o con los brazos a la vista; ni
+    carteles ni murales) y cuántas hacen cada pose del banco (`brazos_arriba`, `un_brazo`,
+    `pose_t`, `manos_cabeza`, `biceps`, `barbilla` o `ninguna`; cada persona en una sola), con el
+    mensaje «Analiza la foto.» y la respuesta `{"personas": N, "brazos_arriba": n, ...}`;
+  - manos: los gestos de piedra, papel o tijera de «la mano que enseña a la cámara la persona más
+    cercana», de la más visible a la menos, con el mensaje «¿Qué gestos de piedra, papel o tijera se
+    ven?» y la respuesta `{"manos": ["piedra" | "papel" | "tijera", ...]}`. El primero es la jugada;
+    la lista vacía, que ninguna mano hace un gesto claro.
+- **La respuesta.** Parseo tolerante: vale el JSON dentro de ```` ``` ```` o con texto alrededor.
+  Poses: `PoseVerdict(people, counts)`, sin negativos y sin pasar de `personas`; las claves que no
+  son poses se ignoran. Manos: `HandVerdict(shapes)`; las formas desconocidas se descartan.
+- **Sin veredicto (`None`).** Si no contesta en el plazo, si falla o si el JSON no es el esperado.
+  Nunca lanza. Lo que tarda cada foto va al registro.
+- **Al arrancar**, el registro dice qué juez se usa; al apagar, `close()` cierra su cliente HTTP.
+
+**Vueltas a lo local:**
+
+| Caso | Qué pasa |
+|---|---|
+| `GAMES_JUDGE=local` | `NoReferee`: Simón dice y piedra, papel o tijera deciden en el equipo, sin fotos ni aviso; la búsqueda, con el modelo de visión (`LLM_*`) o sin juez si no hay. |
+| Sin `GEMINI_API_KEY`, o los gestos apuntan a otro servidor | Lo mismo que `local`. |
+| Gemini no contesta en el plazo, falla o el JSON no cuadra | Esa ronda la decide la detección local, como antes. En la búsqueda, la misma pregunta va al modelo de visión (`LLM_*`) con una foto nueva (`FallbackJudge`): un 429 de la clave de Gemini, que también usan los gestos todo el día, no deja la búsqueda sin juez. Sin foto o con el tope de la ronda alcanzado no se repite, y el tope cuenta preguntas, no llamadas. |
+
+**Aviso de espera.** Mientras el juez mira, la pantalla enseña la pastilla de espera (`busy` con tipo
+`judge`, `docs/protocolo.md`): «Mirando las poses…», «Mirando tu mano…» o «Mirando lo que
+enseñas…». El juego la enciende justo antes de mandar la foto y la apaga en cuanto contesta (o se
+acaba el plazo, o falla); al terminar la partida se apagan todas las suyas. Sin juez no sale.
+
+### Banco de pruebas (10 de octubre de 2026)
+
+Con la API real y 80 fotos públicas etiquetadas (nunca la cámara de nadie), `gemini-3.1-flash-lite`
+por su endpoint compatible con OpenAI, con razonamiento `minimal`, fotos de 640 px y JPEG de calidad
+75. Los prompts y la llamada son los del juez; el banco de pruebas quedó en el scratchpad de esa
+sesión, no en el repo.
+
+| Prueba | Gemini | Local `s` | Local `n` |
+|---|---|---|---|
+| Pose de una persona | 22 de 22 | 21 | 17 |
+| Cuántos la hacen en un grupo (±1) | 10 de 11 | 9 | 9 |
+| Piedra, papel o tijera | 18 de 18 | 15 | 14 |
+| Fotos sin gesto, sin inventarse ninguno | 3 de 3 | 1 | 1 |
+| Búsqueda relámpago | 25 de 25 | — | — |
+
+- **Búsqueda:** el juez anterior (`gpt-6-luna`, el modelo de visión) acertó 24 de 25.
+- **Tiempos:** mediana 1,25 s, p90 1,7 s y máximo 2,8 s, sin ningún error. La detección local tarda
+  33 ms con `n` y 65 ms con `s`: el juez añade algo más de un segundo por ronda, que cubre la
+  pastilla de espera.
+- **Constancia:** la misma foto cinco veces da lo mismo.
+- **Fallos:** contó a tres personas con los dos brazos arriba como `un_brazo`, y en multitudes de más
+  de 60 personas se inventa las cifras (en el stand juegan unas pocas).
+- **Tokens:** unos 1.350 de entrada por foto; `detail` no cambia nada.
 
 ## Modelos
 

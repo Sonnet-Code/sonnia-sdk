@@ -7,7 +7,11 @@ Es la costura entre los cimientos de los juegos (``sonia.games``, que llaman a
 - ``preview``: la vista en vivo hacia Unity, en frames ``SNCV`` (``sonia.vision.stream``);
 - ``poses``: YOLOv8-pose con ``cv2.dnn`` (``sonia.vision.poses``);
 - ``hands``: las manos de MediaPipe para piedra, papel o tijera (``sonia.vision.hands``);
-- ``judge``: la pregunta cerrada al modelo de visión (``sonia.vision.judge``).
+- ``judge``: la pregunta cerrada al modelo de visión (``sonia.vision.judge``);
+- ``referee``: el juez de las rondas de Simón dice y de piedra, papel o tijera
+  (``sonia.vision.referee``). Con ``GAMES_JUDGE=gemini`` y ``GEMINI_API_KEY`` es Gemini, el
+  modelo de los gestos, y la búsqueda también pregunta a Gemini; con ``local`` o sin clave,
+  todo como antes: deciden las detecciones locales y la búsqueda va al modelo de visión.
 
 Sin cámara USB (``VISION_SOURCE`` distinto de ``opencv``) todo dice que no está disponible y
 los juegos de cámara no se ofrecen. Cada pieza se apaga sola si le falta lo suyo (los modelos,
@@ -25,9 +29,11 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from sonia.vision.contracts import (
+    GameReferee,
     GameVision,
     HandReading,
     JudgeAnswer,
+    NoReferee,
     Overlay,
     Person,
     PoseFrame,
@@ -197,7 +203,7 @@ def _build(
         return unavailable_game_vision()
 
     from sonia.vision.hands import MediaPipeHandDetector
-    from sonia.vision.judge import ModelJudge
+    from sonia.vision.judge import JUDGE_TIMEOUT_S, FallbackJudge, ModelJudge
     from sonia.vision.models import (
         DEFAULT_POSE_VARIANT,
         download_game_models,
@@ -207,6 +213,7 @@ def _build(
         pose_variant,
     )
     from sonia.vision.poses import YoloPoseDetector
+    from sonia.vision.referee import GeminiReferee, gemini_llm_settings
     from sonia.vision.stream import LivePreview, OpenCVCameraStream
 
     folder = games_models_dir(settings)
@@ -221,6 +228,38 @@ def _build(
         if vision_llm is not None and settings.llm.supports_vision
         else NoJudge()
     )
+    # El juez de las rondas (GAMES_JUDGE). Con Gemini, un solo cliente para las rondas y la
+    # búsqueda (la conexión se reutiliza); su tope de petición es el más largo de los dos
+    # plazos, que cada uno corta con el suyo. Sin Gemini, todo como antes.
+    referee: GameReferee = NoReferee()
+    gemini: LLMClient | None = None
+    referee_name = "local"
+    if settings.games.judge == "gemini":
+        timeout_s = max(0.5, float(settings.games.judge_timeout_seconds))
+        gemini_settings = gemini_llm_settings(settings, max(timeout_s, JUDGE_TIMEOUT_S))
+        if gemini_settings is None:
+            logger.warning(
+                "GAMES_JUDGE=gemini sin Gemini (falta GEMINI_API_KEY o los gestos van por otro "
+                "servidor): los juegos de cámara deciden en local"
+            )
+        else:
+            from sonia.llm import LLMClient
+
+            gemini = LLMClient(gemini_settings)
+            referee = GeminiReferee(gemini, timeout_s=timeout_s)
+            # La búsqueda: Gemini con el plazo del juez y, si falla (un 429 de la clave, el
+            # plazo), la misma pregunta al modelo de visión con lo que queda de los 8 s que
+            # espera el juego (``JUDGE_TIMEOUT_S``).
+            gemini_judge = ModelJudge(gemini, camera, timeout_s=timeout_s)
+            judge = (
+                FallbackJudge(
+                    gemini_judge,
+                    ModelJudge(vision_llm, camera, timeout_s=max(2.0, JUDGE_TIMEOUT_S - timeout_s)),
+                )
+                if vision_llm is not None and settings.llm.supports_vision
+                else gemini_judge
+            )
+            referee_name = f"Gemini ({gemini_settings.model}, plazo {timeout_s:g} s)"
     # Al arrancar solo se exigen el de poses de GAME_POSES_MODEL y los de manos: el otro de
     # poses (la app lleva los dos) se baja la primera vez que se pide desde el panel.
     missing = tuple(model for model in game_models(variant) if not model_present(folder, model))
@@ -247,16 +286,36 @@ def _build(
         await poses.close()
         for owner in list(stream.owners):
             await stream.release(owner)
+        if gemini is not None:
+            try:
+                await gemini.aclose()
+            except Exception:  # noqa: BLE001 - cerrar nunca tumba nada
+                logger.debug("No se pudo cerrar el cliente del juez de Gemini", exc_info=True)
 
     logger.info(
-        "Visión de los juegos: poses %s (%s), manos %s, juez %s",
+        "Visión de los juegos: poses %s (%s), manos %s, juez de rondas %s, búsqueda %s",
         "lista" if poses.available else "sin modelo",
         variant,
         "listas" if hands.available else "sin modelo",
-        "listo" if judge.available else "sin modelo de visión",
+        referee_name,
+        (
+            "con Gemini y, si falla, el modelo de visión"
+            if isinstance(judge, FallbackJudge)
+            else "con Gemini"
+            if gemini is not None
+            else "con el modelo de visión"
+        )
+        if judge.available
+        else "sin modelo de visión",
     )
     return GameVision(
-        stream=stream, preview=preview, poses=poses, hands=hands, judge=judge, close=close
+        stream=stream,
+        preview=preview,
+        poses=poses,
+        hands=hands,
+        judge=judge,
+        close=close,
+        referee=referee,
     )
 
 
