@@ -633,10 +633,13 @@ namespace Sonia.Games.Wordle
 
             if (_tiles != null)
             {
-                for (int r = 0; r < _rows; r++)
+                // Con las medidas de lo montado (las de la partida nueva aún pueden no serlo).
+                int rows = _tiles.GetLength(0);
+                int cols = _tiles.GetLength(1);
+                for (int r = 0; r < rows; r++)
                 {
                     GameAnim.Stop(_rowRects[r]);
-                    for (int c = 0; c < _cols; c++)
+                    for (int c = 0; c < cols; c++)
                     {
                         GameAnim.Stop(_tiles[r, c].Rect);
                     }

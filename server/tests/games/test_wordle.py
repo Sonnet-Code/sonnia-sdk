@@ -739,6 +739,31 @@ async def test_stop_game_cancela_la_partida() -> None:
     assert "No hay ninguna partida" in late.text
 
 
+async def test_cancelar_en_pleno_intento_no_rompe_nada() -> None:
+    manager, engine, screen, _, registry, ctx = await rig()
+    await registry.execute("start_game", {"juego": "wordle"}, ctx)
+    original = screen.set_sticky
+
+    async def slow(key: str, msg: dict[str, Any]) -> None:
+        await asyncio.sleep(0)  # la pantalla tarda: se puede cancelar a mitad del intento
+        await original(key, msg)
+
+    screen.set_sticky = slow  # type: ignore[method-assign]
+    guess = asyncio.create_task(registry.execute("wordle_guess", {"palabra": "LINUX"}, ctx))
+    await asyncio.sleep(0)
+    await manager.stop("panel")
+    result = await guess
+    assert not result.text.startswith("Error")
+    await settle()
+    # Una sola vez «end», y con cancel; nada queda en marcha ni fijo para una Unity que reconecte.
+    ends = screen.game_msgs("end")
+    assert len(ends) == 1 and ends[0]["data"] == {"result": "cancel"}
+    assert not manager.active
+    # Un intento que llega después contesta con el guion de siempre.
+    late = await registry.execute("wordle_guess", {"palabra": "REACT"}, ctx)
+    assert "No hay ninguna partida" in late.text
+
+
 async def test_empezar_otra_vez_mientras_se_juega_sigue_donde_iba() -> None:
     manager, _, _, _, registry, ctx = await rig()
     await registry.execute("start_game", {"juego": "wordle"}, ctx)
