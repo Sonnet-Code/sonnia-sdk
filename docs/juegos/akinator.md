@@ -12,7 +12,7 @@ No usa la cámara ni el modelo de visión, y no hay parser de lo que dice el vis
 
 ## Cómo se juega
 
-1. **Empezar.** `start_game(akinator)`, por voz o desde el panel. Sale la tarjeta «Piensa en algo… y no lo digas» con los temas del banco, la bola de cristal y los 20 puntos vacíos. Las reglas entran en GPT-Live por `instruct` (menos de 1200 caracteres, con los temas del banco) y el guion de arranque le dice que explique el juego en dos frases, espere a que el visitante avise y no pregunte nada todavía.
+1. **Empezar.** `start_game(akinator)`, por voz o desde el panel. Sale la tarjeta «Piensa en algo… y no lo digas» con la bola de cristal y los temas del banco; los puntos de progreso (uno por pregunta, 20) salen con la primera pregunta. Las reglas entran en GPT-Live por `instruct` (menos de 1200 caracteres, con los temas del banco) y el guion de arranque le dice que explique el juego en dos frases, espere a que el visitante avise y no pregunte nada todavía.
 2. **Preguntas.** Cuando el visitante avisa, GPT-Live hace sus preguntas: una cada vez, solo de sí o no, **sin delegar** (una delegación por pregunta la haría lentísima). El orquestador cuenta las preguntas en la transcripción de Sonnia y pinta «PREGUNTA 7 DE 20», los puntos y la pregunta en curso. No cuenta ni la apertura ni lo que no es una pregunta del juego («¿verdad?», «¿listo?», «¿cómo dices?»).
 3. **Adivinar.** Cuando lo tiene claro (no antes de la quinta pregunta) delega `akinator_guess(respuesta)`: sale la tarjeta grande «¿Es… Kotlin?» y Sonnia se lo pregunta.
 4. **Veredicto.** Cuando el visitante dice si acertó, o qué era, GPT-Live delega `akinator_result(acierto, respuesta_real)`:
