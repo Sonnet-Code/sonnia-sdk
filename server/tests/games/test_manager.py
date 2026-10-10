@@ -718,6 +718,32 @@ async def test_un_juego_roto_se_queda_fuera_y_el_manager_sigue() -> None:
     assert ok
 
 
+async def test_con_un_juego_en_pantalla_no_se_ensenan_imagenes() -> None:
+    """``show_image`` (y ``show_talk``) con una partida en pantalla no mandan nada a Unity:
+    la franja alta es del juego (``screen_busy`` mira ``active`` y ``current`` del manager)."""
+
+    class Avatar:
+        def __init__(self) -> None:
+            self.shown = 0
+
+        async def show_image(self, **kwargs: Any) -> None:
+            self.shown += 1
+
+        async def hide_image(self) -> None:
+            return None
+
+    manager, _, _, _ = await make_manager([ProbeGame])
+    await manager.start("sonda", "voice")
+    avatar = Avatar()
+    registry = build_default_registry(include_look=False)
+    ctx = ActionContext(camera=None, avatar=avatar, gallery_dir="", extra={"games": manager})
+    result = await registry.execute("show_image", {"image_id": "logo"}, ctx)
+    assert avatar.shown == 0 and "la sonda" in result.text and "con palabras" in result.text
+    await manager.stop("panel")
+    result = await registry.execute("show_image", {"image_id": "logo"}, ctx)
+    assert "la sonda" not in result.text  # ya solo falla por la galería vacía
+
+
 def test_un_juego_con_las_jugadas_rotas_no_entra_en_start_game() -> None:
     specs = game_actions([BrokenActionsGame, ProbeGame])
     names = [spec.name for spec in specs]
