@@ -25,13 +25,22 @@ import contextlib
 import logging
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
 import numpy as np
 
+from sonia.vision import models
 from sonia.vision.contracts import CameraStream, Person, Point, PoseFrame
-from sonia.vision.models import POSE_MODELS, GameModel, load_onnx, model_present
+from sonia.vision.models import (
+    DEFAULT_POSE_VARIANT,
+    POSE_MODELS,
+    POSE_VARIANTS,
+    load_onnx,
+    model_present,
+    pose_variant,
+)
 
 __all__ = [
     "DNN_THREADS",
@@ -182,8 +191,15 @@ class PoseModel:
 class YoloPoseDetector:
     """``PoseDetector`` sobre la cámara en vivo de los juegos (``CameraStream``).
 
-    El modelo se carga la primera vez que hace falta, en un hilo. Con varios dueños,
-    detecta a las ``fps`` más altas que pidan. ``detect`` suelto vale sin stream.
+    El modelo se carga en un hilo: al arrancar (:meth:`preload`) o en el primer uso. Con
+    varios dueños, detecta a las ``fps`` más altas que pidan. ``detect`` suelto vale sin
+    stream.
+
+    La variante (``n`` o ``s``) se cambia en caliente con :meth:`set_variant` (el panel, con
+    el ajuste compartido ``games_pose_model``): el modelo nuevo se carga en un hilo, y se
+    baja si no vino con la app, mientras se sigue detectando con el viejo; el cambio es un
+    solo atributo (``_loaded``), así que es atómico también con una partida en marcha. Si
+    el nuevo no carga, se queda el viejo con un aviso.
     """
 
     def __init__(
@@ -191,20 +207,44 @@ class YoloPoseDetector:
         stream: CameraStream,
         folder: Path,
         *,
-        variant: str = "s",
+        variant: str = DEFAULT_POSE_VARIANT,
         threads: int = DNN_THREADS,
         model: PoseEstimator | None = None,
+        opener: Callable[[Path], PoseEstimator] | None = None,
+        download: bool = True,
     ) -> None:
-        """``model``: un modelo ya cargado (los tests ponen uno falso); si no, el de ``folder``."""
+        """
+        - ``variant``: la de ``GAME_POSES_MODEL`` (``n`` o ``s``; otra cosa, ``n``).
+        - ``model``: un modelo ya cargado de esa variante (los tests ponen uno falso).
+        - ``opener``: carga un modelo de su archivo; por defecto :class:`PoseModel`, calentado
+          con una detección en vacío (los tests ponen uno falso).
+        - ``download``: bajar el de una variante pedida que no vino con la app.
+        """
         self._stream = stream
         self._folder = folder
-        self._model_file: GameModel = POSE_MODELS.get(variant, POSE_MODELS["s"])
-        if variant not in POSE_MODELS:
-            logger.warning("GAME_POSES_MODEL=%s no existe: se usa «s»", variant)
+        wanted = pose_variant(variant)
+        if wanted is None:
+            logger.warning(
+                "GAME_POSES_MODEL=%s no existe: se usa «%s»", variant, DEFAULT_POSE_VARIANT
+            )
+            wanted = DEFAULT_POSE_VARIANT
         self._threads = threads
-        self._model: PoseEstimator | None = model
-        self._broken = False
-        self._preload_lock = threading.Lock()
+        self._opener = opener
+        self._download = download
+        #: El modelo en uso y su variante, en un solo atributo: cambiarlo es atómico.
+        self._loaded: tuple[str, PoseEstimator] | None = (
+            (wanted, model) if model is not None else None
+        )
+        #: La última variante pedida, la que se está cargando (si alguna) y un contador de
+        #: peticiones: una carga que termina tarde no pisa lo que se pidió después.
+        self._wanted = wanted
+        self._pending: str | None = None
+        self._generation = 0
+        self._state = threading.Lock()
+        #: Una carga cada vez (al arrancar, en el primer uso o al cambiar de variante).
+        self._load_lock = threading.Lock()
+        #: Variantes cuyo archivo no carga: no cuentan para ``available``.
+        self._broken: set[str] = set()
         self._owners: dict[str, float] = {}
         self._task: asyncio.Task[None] | None = None
         self._latest: PoseFrame | None = None
@@ -214,13 +254,52 @@ class YoloPoseDetector:
 
     @property
     def variant(self) -> str:
-        return "n" if self._model_file is POSE_MODELS["n"] else "s"
+        """La variante en uso (``n`` o ``s``); sin modelo cargado aún, la que se cargará."""
+        loaded = self._loaded
+        return loaded[0] if loaded is not None else self._wanted
+
+    @property
+    def requested(self) -> str:
+        """La última variante pedida (puede estar cargándose aún)."""
+        return self._wanted
 
     @property
     def available(self) -> bool:
-        if self._broken:
-            return False
-        return self._model is not None or model_present(self._folder, self._model_file)
+        if self._loaded is not None:
+            return True
+        return any(
+            variant not in self._broken and model_present(self._folder, POSE_MODELS[variant])
+            for variant in self._candidates()
+        )
+
+    def set_variant(self, variant: str) -> None:
+        """Pasa a la variante ``variant`` (``n`` o ``s``) sin parar nada.
+
+        No bloquea: el modelo se carga (y se baja si falta) en un hilo, y mientras tanto se
+        sigue con el que hay. Pedir la que ya está en uso, o la que ya se está cargando, no
+        hace nada.
+        """
+        wanted = pose_variant(variant)
+        if wanted is None:
+            logger.warning("Modelo de poses desconocido: %r (vale n o s)", variant)
+            return
+        with self._state:
+            loaded = self._loaded
+            in_use = loaded[0] if loaded is not None else None
+            if wanted == self._wanted and (in_use == wanted or self._pending == wanted):
+                return
+            self._wanted = wanted
+            self._generation += 1
+            generation = self._generation
+            if in_use == wanted:
+                # Vuelta a la que ya está en uso: lo que se estuviera cargando se descarta.
+                self._pending = None
+                return
+            self._pending = wanted
+        logger.info("Modelo de poses: se pide «%s» (en uso: «%s»)", wanted, in_use or "ninguno")
+        threading.Thread(
+            target=self._switch, args=(wanted, generation), name="sonia-poses-modelo", daemon=True
+        ).start()
 
     async def acquire(self, owner: str, fps: float) -> bool:
         if not await self._ensure_model():
@@ -265,47 +344,116 @@ class YoloPoseDetector:
         for owner in list(self._owners):
             await self.release(owner)
 
+    def preload(self) -> bool:
+        """Carga el modelo de la variante pedida y lo calienta. ``True`` si hay uno listo.
+
+        Bloquea (unos cientos de milisegundos): va en un hilo. Se llama al arrancar, para
+        que la primera ronda no pague la carga, y si no, en el primer uso. Si el archivo de
+        la pedida falta o no carga, usa el de la otra variante si lo hay.
+        """
+        with self._load_lock:
+            if self._loaded is not None:
+                return True
+            for variant in self._candidates():
+                if variant in self._broken or not model_present(self._folder, POSE_MODELS[variant]):
+                    continue
+                model = self._open(variant)
+                if model is None:
+                    continue
+                if variant != self._wanted:
+                    logger.warning(
+                        "Sin el modelo de poses «%s»: se usa «%s»", self._wanted, variant
+                    )
+                self._loaded = (variant, model)
+                return True
+            return False
+
     # -- interno -----------------------------------------------------------------
 
+    def _candidates(self) -> tuple[str, ...]:
+        """La variante pedida y después las demás."""
+        wanted = self._wanted
+        return (wanted, *(v for v in POSE_VARIANTS if v != wanted))
+
+    def _open(self, variant: str) -> PoseEstimator | None:
+        """Carga y calienta el modelo de ``variant``. ``None`` (y apuntado) si no carga."""
+        path = self._folder / POSE_MODELS[variant].name
+        try:
+            if self._opener is not None:
+                model = self._opener(path)
+            else:
+                model = PoseModel(path, threads=self._threads)
+                model.detect(np.zeros((INPUT_SIZE // 2, INPUT_SIZE, 3), dtype=np.uint8))
+        except Exception:  # noqa: BLE001 - sin ese modelo se sigue con otro
+            logger.exception("No se pudo cargar el modelo de poses %s", path)
+            self._broken.add(variant)
+            return None
+        self._broken.discard(variant)
+        logger.info("Modelo de poses listo: «%s» (%s)", variant, path.name)
+        return model
+
+    def _switch(self, variant: str, generation: int) -> None:
+        """Hilo de :meth:`set_variant`: baja el modelo si falta, lo carga y cambia de golpe."""
+        switched = False
+        try:
+            model_file = POSE_MODELS[variant]
+            if not model_present(self._folder, model_file):
+                if not self._download:
+                    logger.warning(
+                        "Falta el modelo de poses «%s»: se sigue con «%s»", variant, self.variant
+                    )
+                    return
+                try:
+                    models.download_game_models(self._folder, (model_file,))
+                except Exception as exc:  # noqa: BLE001 - sin red: se sigue con el que hay
+                    logger.warning(
+                        "No se pudo bajar el modelo de poses «%s» (%s): se sigue con «%s»",
+                        variant,
+                        exc,
+                        self.variant,
+                    )
+                    return
+            with self._load_lock:
+                if generation != self._generation:
+                    return  # entretanto se pidió otra
+                loaded = self._loaded
+                if loaded is not None and loaded[0] == variant:
+                    switched = True
+                    return
+                model = self._open(variant)
+                if model is None:
+                    logger.warning(
+                        "El modelo de poses «%s» no carga: se sigue con «%s»", variant, self.variant
+                    )
+                    return
+                if generation != self._generation and self._loaded is not None:
+                    return  # se pidió otra mientras cargaba: se descarta este
+                self._loaded = (variant, model)
+                switched = True
+                logger.info("Modelo de poses cambiado a «%s»", variant)
+        finally:
+            with self._state:
+                if generation == self._generation:
+                    self._pending = None
+                    if not switched and self._loaded is not None:
+                        # No se pudo: lo pedido vuelve a ser lo que hay, y pedirlo otra vez
+                        # lo reintenta.
+                        self._wanted = self._loaded[0]
+
     def _detect_sync(self, frame_bgr: np.ndarray, at: float) -> PoseFrame:
-        model = self._model
+        loaded = self._loaded
         height, width = int(frame_bgr.shape[0]), int(frame_bgr.shape[1])
-        if model is None:
+        if loaded is None:
             return PoseFrame(at=at, width=width, height=height, people=())
         started = time.perf_counter()
-        people = model.detect(frame_bgr)
+        people = loaded[1].detect(frame_bgr)
         self.detect_ms = (time.perf_counter() - started) * 1000
         self.detections += 1
         return PoseFrame(at=at, width=width, height=height, people=people)
 
-    def preload(self) -> bool:
-        """Carga el modelo y lo calienta con una detección en vacío. ``True`` si está listo.
-
-        Bloquea (unos cientos de milisegundos): va en un hilo. Se llama al arrancar, para
-        que la primera ronda no pague la carga, y si no, en el primer uso.
-        """
-        with self._preload_lock:
-            if self._model is not None:
-                return True
-            path = self._folder / self._model_file.name
-            if self._broken or not model_present(self._folder, self._model_file):
-                return False
-            try:
-                model = PoseModel(path, threads=self._threads)
-                model.detect(np.zeros((INPUT_SIZE // 2, INPUT_SIZE, 3), dtype=np.uint8))
-            except Exception:  # noqa: BLE001 - sin modelo, el juego no se ofrece
-                logger.exception("No se pudo cargar el modelo de poses %s", path)
-                self._broken = True
-                return False
-            self._model = model
-            logger.info("Modelo de poses listo (%s)", self._model_file.name)
-            return True
-
     async def _ensure_model(self) -> bool:
-        if self._model is not None:
+        if self._loaded is not None:
             return True
-        if self._broken:
-            return False
         try:
             async with asyncio.timeout(_LOAD_TIMEOUT_S):
                 return await asyncio.to_thread(self.preload)
