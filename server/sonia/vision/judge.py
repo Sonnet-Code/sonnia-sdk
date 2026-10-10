@@ -55,7 +55,7 @@ JUDGE_PROMPT = """\
 Eres el juez de un juego de búsqueda en un stand de un evento de tecnología. Te llega una foto de la cámara del stand y una pregunta cerrada sobre un objeto que alguien tiene que enseñar a la cámara. Responde solo con un objeto JSON, sin markdown ni texto alrededor: {"visto": true o false, "objeto": "el objeto, en pocas palabras"}.
 - "visto" es true solo si en la foto se ve con claridad un objeto que cumple la pregunta. En la duda, false.
 - "objeto" nombra solo el objeto que lo cumple, en español y en menos de seis palabras, por ejemplo "botella azul" o "llaves con llavero rojo". Si "visto" es false, "objeto" va vacío.
-- Nunca describas a las personas: ni la cara, el cuerpo, el pelo, la edad, la piel, el género ni la ropa que llevan puesta. Lo que alguien lleva puesto o colgado no cuenta como objeto: la ropa, las gafas, el pelo, las gorras ni el gafete o la credencial del evento con su cordón. Si solo eso cumple la pregunta, "visto" es false."""
+- Nunca describas a las personas: ni la cara, el cuerpo, el pelo, la edad, la piel, el género ni la ropa que llevan puesta. Lo que alguien lleva puesto o colgado (la ropa, las gafas, el pelo, las gorras, el gafete o la credencial con su cordón) no cuenta mientras siga puesto o colgando; sí cuenta si lo sostiene con la mano y lo enseña a la cámara. Si solo cumple la pregunta algo puesto o colgando, "visto" es false."""
 
 
 class _VisionLLM(Protocol):
