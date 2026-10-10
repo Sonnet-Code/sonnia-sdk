@@ -234,6 +234,7 @@ namespace Sonia.Games.Ppt
         private bool _bound;
         private bool _fingersReady;
         private bool _warnedFingers;
+        private bool _broken;
 
         // Estado de la mano.
         private bool _up;
@@ -449,6 +450,29 @@ namespace Sonia.Games.Ppt
         // ------------------------------------------------------------------
 
         private void LateUpdate()
+        {
+            if (_broken)
+            {
+                return;
+            }
+
+            try
+            {
+                Pose();
+            }
+            catch (Exception ex)
+            {
+                // Un fallo aquí se repetiría en cada fotograma: se avisa una vez y la mano se
+                // queda con la animación (la jugada sigue saliendo en la tarjeta).
+                _broken = true;
+                _up = false;
+                _blend = 0f;
+                Debug.LogException(ex, this);
+                Debug.LogWarning("[Sonia] Piedra, papel o tijera: la mano de Sonnia se apaga por un error.", this);
+            }
+        }
+
+        private void Pose()
         {
             if (!_bound && (_up || _blend > 0f))
             {

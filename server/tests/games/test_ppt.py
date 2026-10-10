@@ -737,6 +737,8 @@ async def test_seguir_la_partida_y_estado_del_panel() -> None:
     assert (
         snap["rounds"] == 3 and snap["target"] == 2 and snap["score"] == {"sonnia": 0, "player": 0}
     )
+    # La línea corta de la tarjeta «Juegos» del panel (en pantalla, «Sonnia»).
+    assert snap["summary"] == "Ronda 1 (al mejor de 3), Sonnia 0 - 0 Tú"
     for task in host.tasks:
         task.cancel()
     await asyncio.gather(*host.tasks, return_exceptions=True)

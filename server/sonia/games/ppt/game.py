@@ -329,7 +329,12 @@ class PptGame(Game):
             self._ya_heard = True
 
     def snapshot(self) -> dict[str, Any]:
+        summary = (
+            f"Ronda {self._round} (al mejor de {self.rounds}), "
+            f"Sonnia {self._points['sonnia']} - {self._points['player']} Tú"
+        )
         return {
+            "summary": summary,
             "phase": self._phase,
             "round": self._round,
             "rounds": self.rounds,
