@@ -400,6 +400,55 @@ async def test_los_ajustes_de_los_juegos_llegan_de_la_nube(tmp_path: Path) -> No
     assert saved.games_off == [] and saved.game_banks is None and saved.cloud_rev == 7
 
 
+async def test_los_ajustes_de_los_juegos_viajan_con_la_nube(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Por la conexión con el panel de Cloudflare: las órdenes bajan, los ajustes suben y
+    el banco entero vuelve en el resultado de ``game_bank``."""
+    import sonia.panel.cloud as cloud_module
+    from tests.test_panel_cloud import FakeRoom, linked
+
+    monkeypatch.setattr(cloud_module, "SETTINGS_DEBOUNCE_S", 0.05)
+    write_app_bank(tmp_path)
+    room = FakeRoom()
+    async with linked(tmp_path, room, games=GAMES) as (rig, _):
+        await room.wait_for(lambda: bool(room.of_type("hello")))
+        hello = room.of_type("hello")[0]
+        values = hello["settings"]["values"]
+        assert values["games_off"] == [] and values["game_banks"] is None
+        assert values["games_pose_model"] is None
+        assert hello["status"]["games"]["enabled"] is True
+        assert "games" in hello["status"]["capabilities"]
+        await room.send({"type": "settings", "settings": values, "rev": 1, "ack": 0})
+        await wait_until(lambda: rig.control.status()["settings_sync"]["synced"])
+
+        actions = [
+            ("r1", "set_game_enabled", {"game": "camara", "enabled": False}),
+            ("r2", "set_game_bank", {"bank": "quiz_preguntas", "text": CLOUD_BANK}),
+            ("r3", "game_bank", {"bank": "quiz_preguntas"}),
+        ]
+        for request_id, action, params in actions:
+            await room.send(
+                {"type": "action", "request_id": request_id, "action": action, "params": params}
+            )
+            await room.wait_for(
+                lambda rid=request_id: any(r["request_id"] == rid for r in room.of_type("result"))
+            )
+        results = {r["request_id"]: r for r in room.of_type("result")}
+        assert all(r["ok"] for r in results.values()), results
+        assert results["r3"]["message"] == CLOUD_BANK.strip()
+
+        def uploaded() -> dict[str, Any]:
+            changes: dict[str, Any] = {}
+            for message in room.of_type("settings"):
+                changes.update(message["changes"])
+            return changes
+
+        await room.wait_for(lambda: {"games_off", "game_banks"} <= set(uploaded()))
+        assert uploaded()["games_off"] == ["camara"]
+        assert uploaded()["game_banks"] == {"quiz_preguntas": CLOUD_BANK.strip()}
+
+
 async def test_los_ajustes_de_los_juegos_sobreviven_al_reinicio(tmp_path: Path) -> None:
     write_app_bank(tmp_path)
     state = PanelState(games_off=["camara"], game_banks={"quiz_preguntas": CLOUD_BANK})

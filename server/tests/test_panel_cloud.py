@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
@@ -19,6 +19,7 @@ import pytest
 
 import sonia.panel.cloud as cloud_module
 from sonia.config import PanelSettings
+from sonia.games.base import Game
 from sonia.panel.cloud import CloudLink
 from sonia.panel.control import PanelState
 from sonia.panel.events import PanelEvents
@@ -81,9 +82,10 @@ async def running_room(room: FakeRoom) -> AsyncIterator[Any]:
 
 @contextlib.asynccontextmanager
 async def linked(
-    tmp_path: Path, room: FakeRoom, **panel: Any
+    tmp_path: Path, room: FakeRoom, *, games: Sequence[type[Game]] | None = None, **panel: Any
 ) -> AsyncIterator[tuple[Any, CloudLink]]:
-    async with make_panel_rig(tmp_path) as rig, running_room(room) as connect:
+    """El rig del panel conectado al Durable Object falso. ``games``: los juegos del motor."""
+    async with make_panel_rig(tmp_path, games=games) as rig, running_room(room) as connect:
         settings = rig.settings.panel.model_copy(
             update={"cloud_token": "token-de-prueba", "instance_name": "Mini PC Pabellón", **panel}
         )
