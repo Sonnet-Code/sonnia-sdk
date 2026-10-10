@@ -56,7 +56,7 @@ GAMES: tuple[GameEntry, ...] = (
     GameEntry(AkinatorGame, on=True),
     #
     # A5: piedra, papel o tijera (docs/juegos/piedra_papel_tijera.md).
-    GameEntry(PptGame, on=False),
+    GameEntry(PptGame, on=True),
     #
     # A6: Wordle de tecnología (docs/juegos/wordle.md).
     GameEntry(WordleGame, on=True),

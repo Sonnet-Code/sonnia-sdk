@@ -393,8 +393,21 @@ De Unity al orquestador, el Akinator no manda ningún `game_event`.
 
 ##### `piedra_papel_tijera` (Piedra, papel o tijera, `docs/juegos/piedra_papel_tijera.md`)
 
+Jugadas: `"piedra"`, `"papel"` o `"tijera"`; sin lectura, `null`. `score` es `{"sonnia": n, "player": n}`. Unity no manda ningún `game_event`.
+
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `start` | Orquestador → Unity | `title`, `rounds`, `target`, `round`, `score` | sí | Monta la tarjeta con el marcador «Sonnia 0 - 0 Tú» y «AL MEJOR DE 3» (`target`: victorias para ganar). |
+| `round` | Orquestador → Unity | `round`, `retry`, `rounds`, `target`, `score` | sí | Empieza una tirada; `retry` si se repite la ronda (empate o sin mano). Quita el resultado anterior. |
+| `ready` | Orquestador → Unity | `round` | no | Sonnia sube el puño delante del pecho (0,8 s antes de la cuenta). |
+| `countdown` | Orquestador → Unity | `round`, `sonnia`, `go_s`, `beats` | no | Empieza la frase grabada «¡Piedra, papel o tijera… ya!». `sonnia`: su jugada (elegida antes de mirar). `go_s`: segundos del principio del audio de la frase al «ya», o `null` si no se sabe (entonces la mano sale con `go`). `beats`: sacudidas del puño (3). Unity sigue el audio de la frase y, si no puede, cuenta desde que llega el mensaje (+0,12 s). |
+| `go` | Orquestador → Unity | `round`, `sonnia` | no | El «¡ya!» según el orquestador. Con `go_s` a `null`, la mano sale ahora; si no, es una red de seguridad (sale si 0,4 s después aún no ha salido). |
+| `abort` | Orquestador → Unity | `round` | no | La cuenta no llegó a sonar (Sonia hablaba): Sonnia baja el puño. Luego llega otro `round`. |
+| `result` | Orquestador → Unity | `round`, `sonnia`, `player`, `winner`, `reason`, `retry`, `score`, `rounds`, `target` | sí | Las dos jugadas en grande y el marcador. `winner`: `sonnia`, `player`, `tie` o `none` (sin lectura); `reason`: `""`, `no_hand` o `unclear`; `retry`: se repite esta ronda. |
+| `final` | Orquestador → Unity | `winner`, `score`, `rounds`, `target`, `sonnia`, `player`, `contact` | sí | El resultado de la partida (`winner`: `player`, `sonnia` o `tie`), con la última tirada. Si llega justo tras un `result`, Unity lo enseña 1,5 s después. `contact`: con quién hablar si gana (`TRIVIA_WIN_CONTACT`). |
+| `hint` | Orquestador → Unity | `text` | no | Un rótulo pasajero («¡Ponte delante de la cámara!»). |
+
+El `end` lleva `data` `{"winner", "score"}` además de `result` (`win` si gana el visitante, `lose` si gana Sonnia o queda empate; `cancel` con `reason`: `no_hand`, `no_player`, `countdown` o `error`).
 
 ##### `wordle` (Wordle de tecnología, `docs/juegos/wordle.md`)
 
