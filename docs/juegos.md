@@ -89,7 +89,8 @@ Los ganchos que fallan van al registro y no tumban nada; si `tick` falla 20 vece
 | `send(event, data, sticky=True)` | Un mensaje de tu pantalla (abajo). |
 | `play_animation(clip)` | Una animación o gesto de Sonia, entero (`whole=True`). |
 | `finish(result, data)` | El juego terminó: `win`, `lose` o `cancel` (abajo). |
-| `stream`, `preview`, `poses`, `hands`, `judge` | La visión (`sonia/vision/contracts.py`). Pide y suelta a tu nombre (`self.id`). |
+| `stream`, `preview`, `poses`, `hands`, `judge`, `referee` | La visión (`sonia/vision/contracts.py`). Pide y suelta a tu nombre (`self.id`). `referee` es el juez de las rondas de cámara (Gemini; abajo). |
+| `set_busy(kind, text)` | La pastilla de espera de la pantalla (`sonia/busy.py`): `text` la enciende y `None` la apaga. Para lo que el visitante espera sin ver nada, como el juez mirando la foto de la ronda (`judge`) o la cámara arrancando (`camera`). Se apagan solas al terminar la partida. |
 | `spawn(coro, name)` | Una tarea en segundo plano que se cancela sola al terminar la partida. |
 | `load_bank(bank)` / `read_bank(bank)` | Las entradas del banco en uso (en un hilo / síncrona). |
 | `draw_trivia(nivel)` | Una pregunta del banco de la trivia en uso (`TriviaQuestion`: `text`, `options`, `correct`, `fact`, `level`), con las opciones barajadas y sin repetir hasta agotar el nivel (`TriviaGame.draw_one`). `None` si la trivia está apagada. Para la trivia relámpago de la ruleta. |
@@ -170,7 +171,30 @@ Medido el 10 de octubre de 2026 en el Mac (M1 Pro, con la máquina cargada) con 
 - Pide y suelta a tu nombre: `await host.stream.acquire(self.id)`, `await host.poses.acquire(self.id, fps)`, `await host.preview.start(self.id, overlay=...)`. Al terminar la partida el manager suelta `preview`, `poses` y `stream` a tu nombre, aunque se te olvide.
 - Coordenadas de 0 a 1 sobre la imagen **sin espejo**; el espejo es solo de la vista en vivo. El `Overlay` dibuja sobre el frame BGR y sabe si va en espejo (`x` → `1 - x`).
 - Todo lo pesado (detectar, dibujar, codificar) va en hilos: lo hace la visión. En tu `tick`, usa `poses.latest()`.
-- Nunca se guarda una imagen ni un dato de nadie. `VisionJudge` (solo la búsqueda relámpago) manda una foto reducida al modelo de visión con un tope por ronda y nunca describe personas.
+- Nunca se guarda una imagen ni un dato de nadie. Solo salen fotos reducidas hacia un modelo de visión: las de `VisionJudge` en la búsqueda relámpago (con tope por ronda) y una por ronda de `GameReferee` en Simón dice y en piedra, papel o tijera. Con `GAMES_JUDGE=gemini` (por defecto) las dos van a Gemini; nunca describen personas.
+
+### El juez de las rondas: Gemini
+
+Desde el 10 de octubre de 2026 (Jean: «es una mac m3 pro que habrá. mejor usemos gemini») el veredicto de las rondas de cámara lo da `gemini-3.1-flash-lite`, el modelo de los gestos, por su endpoint compatible con OpenAI, con razonamiento `minimal`, fotos de 640 px y JPEG q75 (`server/sonia/vision/referee.py`; `GAMES_JUDGE=gemini`). La detección local sigue a lo suyo (vista en vivo, esqueletos, elegir el momento de la foto) y decide si Gemini no contesta en `GAMES_JUDGE_TIMEOUT_SECONDS` (4 s), falla o no hay `GEMINI_API_KEY`. Con `GAMES_JUDGE=local`, todo como antes.
+
+- Simón dice: una foto por ronda (también las trampa) y Gemini cuenta personas y quién hace cada pose.
+- Piedra, papel o tijera: la lectura local elige el momento (la muestra estable o, si no la hay, la última) y Gemini dice el gesto de la mano que enseña la persona más cercana.
+- Búsqueda: la misma pregunta cerrada de siempre (`JUDGE_PROMPT`) a Gemini; si falla, esa mirada no cuenta. Sin clave de Gemini, el modelo de visión de `LLM_*`, como antes.
+- Mientras el juez mira, la pastilla de espera («Mirando las poses…», «Mirando tu mano…», «Mirando lo que enseñas…»).
+
+Banco de pruebas del 10 de octubre de 2026, con la API real y 80 fotos públicas de Commons etiquetadas a mano (unas 165 llamadas):
+
+| | Gemini | Local `s` | Local `n` |
+|---|---|---|---|
+| Pose de una persona | 22/22 | 21/22 | 17/22 |
+| Cuántos la hacen en un grupo (±1) | 10/11 | 9/11 | 9/11 |
+| Piedra, papel o tijera | 18/18 | 15/18 | 14/18 |
+| Fotos sin gesto (sin inventar ninguno) | 3/3 | 1/3 | 1/3 |
+| Búsqueda | 25/25 | — | — |
+
+- Tiempos de Gemini: mediana 1,25 s, p90 1,7 s y máximo 2,8 s, sin errores. La detección local tarda 33 ms (`n`) y 65 ms (`s`); luna, el juez anterior de la búsqueda, 1,39 s y 24 de 25.
+- La misma foto cinco veces da lo mismo. Gasta unos 1.350 tokens de entrada por foto, sea cual sea el ancho (`detail` no cambia nada): unos 0,0004 USD.
+- Fallos vistos: tres personas con los dos brazos arriba contadas como `un_brazo`, y en multitudes de más de 60 personas se inventa las cifras.
 
 ## Bancos editables desde el backoffice
 
@@ -260,7 +284,7 @@ Mensajes de pruebas, fuera del protocolo de producción: solo los manda el orque
 
 ## El motor
 
-`LiveEngine` crea el `GameManager` junto a la trivia (`engine.games`; `None` si no hay ningún juego encendido o en una videollamada) y le pasa lo mismo que a ella:
+`LiveEngine` crea el `GameManager` junto a la trivia (`engine.games`; `None` si no hay ningún juego encendido o en una videollamada), con el `BusyBoard` de la pastilla de espera (`busy_board`), y le pasa lo mismo que a ella:
 
 - lo que dice Sonia (`on_assistant_text`: el texto acumulado de cada frase y, al cerrarla, la frase entera) y lo que dice el visitante (`on_user_text`, `on_user_turn_end`);
 - las delegaciones (`on_delegation`) y el ciclo de 50 ms (`tick`);
