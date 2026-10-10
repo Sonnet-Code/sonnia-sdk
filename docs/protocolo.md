@@ -359,6 +359,12 @@ Cada agente apunta los de su juego en su tabla (además de `start` y `end`). En 
 
 | Evento | Sentido | `data` | Fijo | Qué hace |
 |---|---|---|---|---|
+| `start` | orquestador → Unity | `{"title": "Wordle de tecnología", "rows": 6, "cols": 5, "hint_after": 4}` | sí | Monta la rejilla vacía de `rows`×`cols` (3 a 8 filas), la pista candada («sale tras `hint_after` intentos»; sin pista si `hint_after` es 0 o no cabe) y las 26 letras sin usar. |
+| `guess` | orquestador → Unity | `{"row": 2, "letters": "LINUX", "marks": "gyxxg", "board": [{"letters": "CLOUD", "marks": "xyyxx"}, ...], "used": {"g": "LX", "y": "IO", "x": "CDNU"}, "hint": "", "result": "", "word": ""}` | sí | Un intento: las letras entran en la fila `row` (desde 0), las fichas se voltean con sus `marks` (`g` verde, `y` amarilla, `x` gris) y sale la pista si viene en `hint`. Lleva el **estado completo**: `board` con todas las filas hasta esta (para repintar tras reconectar, sin animar las ya vistas) y `used` con cada letra en su mejor color. `result` vale `win` o `lose` en el último intento (con `word`, la palabra, y `hint`) y vacío mientras se juega; con `win`, confeti. |
+| `invalid` | orquestador → Unity | `{"letters": "WEB", "reason": "length", "message": "Tienen que ser 5 letras"}` | no | La palabra no vale y no gasta intento: la primera fila libre se sacude con lo que se entendió (`letters`, hasta cinco letras, puede venir vacío) y un rótulo de una línea dice `message` (de 25 caracteres como mucho). `reason`: `length`, `chars`, `empty` o `repeated`. |
+| `end` | orquestador → Unity | `{"word": "KAFKA", "attempts": 3, "result": "win"}` | no | El final común (lo manda el manager tras `finish`): Unity enseña su tarjeta de resultado con la palabra y los intentos y se retira. `result`: `win` o `lose` (o `cancel`, sin más datos). |
+
+Unity no manda ningún `game_event` en este juego. Una Unity sin el controlador ignora todo esto.
 
 ##### `busqueda` (Búsqueda relámpago, `docs/juegos/busqueda.md`)
 

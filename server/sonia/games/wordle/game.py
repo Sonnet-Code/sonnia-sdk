@@ -66,7 +66,7 @@ ECHO_MAX = 20
 
 RULES_TEXT = """\
 JUEGO EN MARCHA: Wordle de tecnología. Hay una palabra secreta de tecnología de {cols} letras y el grupo tiene {rows} intentos. El tablero está en tu pantalla y tú NO conoces la palabra.
-- Cuando digan una palabra de {cols} letras (o la deletreen), sea de tecnología o no, escríbela bien y delega enseguida «wordle: intento PIZZA». Si dicen otra cosa o no se entiende, pregunta. Lo que hablan entre ellos no es un intento: si no está claro que te lo dicen a ti, pregunta antes. Si gritan varias a la vez, pregunta cuál.
+- Cuando digan una palabra de {cols} letras (o la deletreen), sea de tecnología o no, escríbela bien y delega enseguida «wordle: intento PIZZA». Si dicen otra cosa o no se entiende, pregunta. Lo que hablan entre ellos no es un intento: si no está claro que te lo dicen a ti, pregunta antes. Si gritan varias a la vez, vale cualquiera de las que oigas bien; si dudas, pregunta.
 - Con el resultado, cuenta en una frase corta qué letras están bien colocadas, cuáles en otro sitio y cuáles no están, y anímales a decir otra. Di solo lo que diga el resultado.
 - Nunca digas si una palabra acierta ni qué letras tiene la secreta sin delegar el intento. {hint_rule}
 - Si quieren dejarlo, delega terminarlo.

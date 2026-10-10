@@ -112,10 +112,12 @@ namespace Sonia.Games.Wordle
         private static readonly Color CorrectColor = new Color32(76, 165, 83, 255);
         private static readonly Color PresentColor = new Color32(206, 168, 36, 255);
         private static readonly Color AbsentColor = new Color32(62, 70, 94, 255);
-        private static readonly Color EmptyFill = new Color(1f, 1f, 1f, 0.04f);
-        private static readonly Color EmptyBorder = new Color(0.42f, 0.55f, 0.85f, 0.38f);
-        private static readonly Color TypedFill = new Color(1f, 1f, 1f, 0.1f);
-        private static readonly Color TypedBorder = new Color(0.78f, 0.87f, 1f, 0.95f);
+        // Los fondos son opacos: el borde es una pieza entera debajo y, si el fondo dejara pasar
+        // algo, toda la ficha se vería del color del borde.
+        private static readonly Color EmptyFill = new Color(0.07f, 0.11f, 0.22f, 1f);
+        private static readonly Color EmptyBorder = new Color(0.27f, 0.37f, 0.6f, 1f);
+        private static readonly Color TypedFill = new Color(0.11f, 0.17f, 0.32f, 1f);
+        private static readonly Color TypedBorder = new Color(0.78f, 0.87f, 1f, 1f);
         private static readonly Color KeyFill = new Color(0.27f, 0.36f, 0.58f, 1f);
         private static readonly Color KeyAbsentFill = new Color(0.09f, 0.13f, 0.23f, 1f);
         private static readonly Color KeyAbsentLetter = new Color(0.42f, 0.48f, 0.62f, 1f);
@@ -229,7 +231,7 @@ namespace Sonia.Games.Wordle
             if (result == GameResults.Win)
             {
                 string score = end.Attempts > 0 ? word + " · " + end.Attempts + " DE " + _rows : word;
-                Hud.ShowResult("¡LO ADIVINARON!", score, "¡Eso es nivel DevFest!", true);
+                Hud.ShowResult("¡GANARON!", score, "¡Eso es nivel DevFest!", true);
             }
             else
             {

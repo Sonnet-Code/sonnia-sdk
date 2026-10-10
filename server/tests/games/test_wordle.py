@@ -490,12 +490,17 @@ def demo_games(steps: list[Step]) -> list[list[GameMsg]]:
 
 async def test_la_secuencia_del_orquestador_falso_es_la_del_juego_real() -> None:
     # Se juega con el juego de verdad lo mismo que dice la secuencia y se comparan los mensajes.
-    won, lost = demo_games(wordle_demo.steps())
-    for messages, (secret, hint), words in (
-        (won, wordle_demo.WON, wordle_demo.WON_GUESSES),
-        (lost, wordle_demo.LOST, wordle_demo.LOST_GUESSES),
-    ):
-        game, host = make_wordle(secret, hint=hint)
+    won, lost, many, replay = demo_games(wordle_demo.steps())
+    plan = (
+        (won, wordle_demo.WON, wordle_demo.WON_GUESSES, {}, "win"),
+        (lost, wordle_demo.LOST, wordle_demo.LOST_GUESSES, {}, "lose"),
+        # La tercera: ocho filas, sin pista y se cancela a medias (el end lo manda el manager).
+        (many, wordle_demo.MANY, wordle_demo.MANY_GUESSES, {"rows": 8, "hint_after": 0}, "cancel"),
+        # La cuarta: una pantalla que se conecta a mitad y solo recibe el último estado.
+        (replay, wordle_demo.LONG, wordle_demo.LONG_GUESSES, {}, "replay"),
+    )
+    for messages, (secret, hint), words, own, outcome in plan:
+        game, host = make_wordle(secret, hint=hint, settings=wordle_settings(**own))
         await game.start("voice", {})
         start = messages[0].data
         assert {k: v for k, v in start.items() if k != "title"} == host.last("start")
@@ -503,21 +508,36 @@ async def test_la_secuencia_del_orquestador_falso_es_la_del_juego_real() -> None
         for word in words:
             await play(game, word)
         wanted = [m.data for m in messages if m.event == "guess"]
-        assert wanted == host.events("guess")
-        result, data = host.finished[0]
+        # La pantalla que se conecta a mitad solo recibe el último (fijo) con el tablero entero.
+        assert wanted == (
+            host.events("guess")[-1:] if outcome == "replay" else host.events("guess")
+        )
         end = messages[-1]
-        assert end.event == "end" and end.data == {**(data or {}), "result": result}
-        # Los dos finales de la secuencia: una victoria y una derrota.
-    assert [m.data["result"] for m in (won[-1], lost[-1])] == ["win", "lose"]
+        assert end.event == "end"
+        if outcome in ("cancel", "replay"):
+            assert host.finished == [] and end.data == {"result": "cancel"}
+        else:
+            result, data = host.finished[0]
+            assert result == outcome and end.data == {**(data or {}), "result": result}
 
 
-async def test_el_intento_invalido_de_la_secuencia_es_el_del_juego_real() -> None:
-    won, _ = demo_games(wordle_demo.steps())
-    invalid = next(m for m in won if m.event == "invalid")
+async def test_los_intentos_invalidos_de_la_secuencia_son_los_del_juego_real() -> None:
+    won = demo_games(wordle_demo.steps())[0]
+    invalid = [m for m in won if m.event == "invalid"]
+    assert [m.data["reason"] for m in invalid] == ["length", "repeated"]
     game, host = make_wordle(wordle_demo.WON[0], hint=wordle_demo.WON[1])
     await game.start("voice", {})
-    await play(game, invalid.data["letters"])
-    assert host.last("invalid") == invalid.data
+    await play(game, "web")
+    await play(game, "SWIFT")
+    await play(game, "SWIFT")
+    assert host.events("invalid") == [m.data for m in invalid]
+
+
+def test_la_pista_mas_larga_de_la_secuencia_cabe_en_el_banco() -> None:
+    from sonia.games.wordle.bank import HINT_MAX_CHARS
+
+    word, hint = wordle_demo.LONG
+    assert 120 <= len(hint) <= HINT_MAX_CHARS and word not in hint.upper()
 
 
 def test_la_secuencia_pasa_por_cada_estado_y_pide_su_captura() -> None:
@@ -525,7 +545,19 @@ def test_la_secuencia_pasa_por_cada_estado_y_pide_su_captura() -> None:
     captures = [s.name for s in steps if isinstance(s, Capture)]
     assert len(captures) == len(set(captures))
     assert all(capture_name(name) == name for name in captures)
-    for state in ("empezar", "jugada", "invalida", "pista", "acierto", "derrota", "final"):
+    for state in (
+        "empezar",
+        "jugada",
+        "invalida",
+        "repetida",
+        "pista",
+        "acierto",
+        "derrota",
+        "final",
+        "ocho-filas",
+        "solapados",
+        "reconexion",
+    ):
         assert any(state in name for name in captures), state
     # Cada captura va tras el mensaje que quiere ver: nunca la primera de la secuencia.
     assert not isinstance(steps[0], Capture)
