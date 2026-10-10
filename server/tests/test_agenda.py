@@ -613,6 +613,29 @@ async def test_show_talk_ensena_la_tarjeta_y_dice_cuando_y_donde(tmp_path: Path)
     assert len(avatar.shown) == 2
 
 
+async def test_show_talk_con_un_juego_en_pantalla_no_ensena_nada(tmp_path: Path) -> None:
+    """Con un juego en la franja alta la tarjeta no se vería (pasó con GPT-Live real: contestó
+    una pregunta del pasillo con show_talk en pleno Wordle): ni se dibuja ni se manda."""
+    from types import SimpleNamespace
+
+    from sonia.actions.agenda import show_talk
+
+    rows = base_rows()
+    web = FakeWeb(page(rows))
+    book = make_book(tmp_path, web, fallback_rows=rows)
+    await book.load()
+    requests = web.requests
+    avatar = FakeAvatar()
+    games = SimpleNamespace(active=True, current=SimpleNamespace(spoken="el Wordle de tecnología"))
+    ctx = ActionContext(
+        camera=None, avatar=avatar, gallery_dir="", extra={"agenda": book, "games": games}
+    )
+    result = await show_talk(ctx, {"charla": "Charla uno"})
+    assert avatar.shown == [] and web.requests == requests
+    assert "el Wordle de tecnología" in result.text
+    assert "la tarjeta de la charla" in result.text and "con palabras" in result.text
+
+
 def test_las_descripciones_largas_se_leen_de_su_trozo() -> None:
     from sonia.agenda.source import _text_chunks
 

@@ -312,6 +312,14 @@ namespace Sonia
                 // la pide el panel y la cierra al guardar o salir.
                 gameObject.AddComponent<AvatarEditorLauncher>();
             }
+
+            if (GetComponent<GameRouter>() == null)
+            {
+                // También por código: los juegos (docs/plan-juegos.md). El router
+                // añade su pantalla común, la vista en vivo y un controlador por
+                // juego, y los anuncia en client_hello antes de conectar.
+                gameObject.AddComponent<GameRouter>();
+            }
         }
 
         private void ApplyKioskSettings()
@@ -1149,9 +1157,16 @@ namespace Sonia
                 return;
             }
 
+            // Con un juego o la trivia en la franja alta, la imagen no se vería: Sonia no
+            // señala hacia nada. El orquestador ya no manda show_image en ese caso (red de
+            // seguridad para un orquestador anterior o una carrera con el arranque del juego).
+            GameHud games = GetComponent<GameHud>();
+            TriviaController trivia = GetComponent<TriviaController>();
+            bool stripTaken = (games != null && games.IsOpen) || (trivia != null && trivia.IsActive);
+
             // Sonia levanta la mano y señala; la imagen aparece encima del dedo
             // cuando la mano llega arriba (ver Update), no antes.
-            if (choreographer != null && choreographer.BeginPresent())
+            if (!stripTaken && choreographer != null && choreographer.BeginPresent())
             {
                 _pendingImage = message;
             }

@@ -376,3 +376,32 @@ async def test_hub_varios_clientes_reciben_lo_mismo() -> None:
                     "type": "speech_end",
                     "utterance_id": 9,
                 }
+
+
+# ---------------------------------------------------------------------------
+# Vista en vivo de la cámara (frames SNCV, docs/plan-juegos.md)
+# ---------------------------------------------------------------------------
+
+
+def test_preview_frame_ida_y_vuelta() -> None:
+    jpeg = b"\xff\xd8 jpeg falso \xff\xd9"
+    data = p.encode_preview_frame(7, 640, 360, jpeg, mirrored=True)
+    assert data[:4] == b"SNCV"
+    assert len(data) == p.PREVIEW_HEADER_SIZE + len(jpeg) == 16 + len(jpeg)
+    assert p.decode_preview_frame(data) == (7, 640, 360, True, jpeg)
+    plain = p.encode_preview_frame(2**32 + 3, 70000, 360, jpeg, mirrored=False)
+    seq, width, _, mirrored, _ = p.decode_preview_frame(plain)
+    assert (seq, width, mirrored) == (3, 0xFFFF, False)
+
+
+def test_preview_frame_rechaza_otra_marca_o_corto() -> None:
+    audio = p.encode_audio_frame(1, b"\x00\x00" * 8, False)
+    with pytest.raises(ValueError):
+        p.decode_preview_frame(audio + b"\x00" * 8)
+    with pytest.raises(ValueError):
+        p.decode_preview_frame(b"SNCV")
+
+
+def test_msg_camera_preview() -> None:
+    assert p.msg_camera_preview(True) == {"type": "camera_preview", "on": True, "mirror": True}
+    assert p.msg_camera_preview(False, mirror=False)["on"] is False

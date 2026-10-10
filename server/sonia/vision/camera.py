@@ -17,7 +17,7 @@ import logging
 import sys
 import time
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sonia.types import CameraSource, Frame
 from sonia.vision.obs import ObsConnect, ObsError
@@ -151,6 +151,14 @@ def _release_quietly(device: Any) -> None:
         logger.debug("Error liberando la cámara", exc_info=True)
 
 
+class LiveFeed(Protocol):
+    """La lectura continua de los juegos (``sonia.vision.stream``) mientras tiene la cámara."""
+
+    async def snapshot(self, max_width: int, quality: int) -> Frame | None:
+        """Su último frame, reducido y en JPEG como los de ``capture()``."""
+        ...
+
+
 class NullCamera:
     """Cámara que no ve nada. Se usa con ``VISION_SOURCE=none``."""
 
@@ -184,6 +192,11 @@ class OpenCVCamera:
         self._keep_resolution = False
         # Serializa los accesos: el objeto VideoCapture no es seguro entre hilos.
         self._lock = asyncio.Lock()
+        #: La lectura continua de los juegos que tiene ahora el dispositivo (``lend_device``):
+        #: mientras la haya, ``capture()`` coge su último frame y no toca la cámara.
+        self._feed: LiveFeed | None = None
+        self._lent_index = -1
+        self._closed = False
 
     # -- apertura ----------------------------------------------------------
 
@@ -367,36 +380,82 @@ class OpenCVCamera:
         (el Modo Jean los ajusta a lo que aguanta la red)."""
         width = self._settings.max_width if max_width is None else max_width
         jpeg_quality = self._settings.jpeg_quality if quality is None else quality
+        feed = self._feed
+        if feed is None:
+            async with self._lock:
+                feed = self._feed
+                if feed is None:
+                    return await self._capture_locked(width, jpeg_quality)
+        # La tiene la lectura continua de un juego: su último frame, sin tocar el dispositivo.
+        return await feed.snapshot(width, jpeg_quality)
+
+    async def _capture_locked(self, width: int, jpeg_quality: int) -> Frame | None:
+        """Lee del dispositivo. Se llama con ``self._lock`` cogido."""
+        device = await self._ensure_open()
+        if device is None:
+            return None
+        task = asyncio.create_task(asyncio.to_thread(self._read_sync, device, width, jpeg_quality))
+        try:
+            frame = await asyncio.wait_for(asyncio.shield(task), timeout=READ_TIMEOUT_S)
+        except TimeoutError:
+            logger.warning(
+                "La cámara se quedó colgada leyendo (%.1f s); se abandona el dispositivo",
+                READ_TIMEOUT_S,
+            )
+            self._abandon(device, task)
+            return None
+        except asyncio.CancelledError:
+            # El turno se canceló: el hilo sigue dentro de read(), así que
+            # ese VideoCapture ya no se puede volver a tocar desde otro hilo.
+            self._abandon(device, task)
+            raise
+        except Exception:  # noqa: BLE001 - la demo sigue aunque la cámara falle
+            logger.exception("Fallo leyendo de la cámara")
+            await self._release(device)
+            return None
+        if frame is None:
+            await self._note_read_failure(device)
+            return None
+        self._read_failures = 0
+        return frame
+
+    # -- préstamo a la lectura continua de los juegos ---------------------------
+
+    async def lend_device(self, feed: LiveFeed) -> Any | None:
+        """Le deja el dispositivo abierto a la lectura continua de un juego (``sonia.vision.stream``).
+
+        Mientras lo tiene, ``capture()`` (``look``, caras, presencia) coge los frames de
+        ``feed``: nunca hay dos lecturas a la vez. ``None`` si la cámara no abre.
+        """
         async with self._lock:
+            if self._closed:
+                return None
             device = await self._ensure_open()
             if device is None:
                 return None
-            task = asyncio.create_task(
-                asyncio.to_thread(self._read_sync, device, width, jpeg_quality)
-            )
-            try:
-                frame = await asyncio.wait_for(asyncio.shield(task), timeout=READ_TIMEOUT_S)
-            except TimeoutError:
-                logger.warning(
-                    "La cámara se quedó colgada leyendo (%.1f s); se abandona el dispositivo",
-                    READ_TIMEOUT_S,
-                )
-                self._abandon(device, task)
-                return None
-            except asyncio.CancelledError:
-                # El turno se canceló: el hilo sigue dentro de read(), así que
-                # ese VideoCapture ya no se puede volver a tocar desde otro hilo.
-                self._abandon(device, task)
-                raise
-            except Exception:  # noqa: BLE001 - la demo sigue aunque la cámara falle
-                logger.exception("Fallo leyendo de la cámara")
-                await self._release(device)
-                return None
-            if frame is None:
-                await self._note_read_failure(device)
-                return None
-            self._read_failures = 0
-            return frame
+            self._capture = None
+            self._feed = feed
+            self._lent_index = self._settings.camera_index
+            return device
+
+    async def end_loan(self, device: Any | None) -> None:
+        """La lectura continua devuelve el dispositivo (``None`` si lo perdió o lo suelta ella).
+
+        Vuelve abierto para la próxima captura, salvo que entretanto se cambiara de cámara.
+        """
+        async with self._lock:
+            self._feed = None
+            if (
+                device is not None
+                and not self._closed
+                and self._capture is None
+                and self._lent_index == self._settings.camera_index
+            ):
+                self._capture = device
+                self._read_failures = 0
+                return
+        if device is not None:
+            await asyncio.to_thread(_release_quietly, device)
 
     async def _note_read_failure(self, device: Any) -> None:
         """Cuenta una lectura sin frame y reabre el dispositivo si insiste."""
@@ -437,6 +496,7 @@ class OpenCVCamera:
 
     async def close(self) -> None:
         async with self._lock:
+            self._closed = True
             device, self._capture = self._capture, None
             if device is not None:
                 await asyncio.to_thread(device.release)

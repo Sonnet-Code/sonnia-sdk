@@ -11,7 +11,8 @@ Este script, sobre la carpeta ``sonia-orquestador`` de una build anterior de Win
    haría PyInstaller allí. Después recalcula la suma de verificación PE (el exe no lleva
    firma Authenticode).
 2. Copia los ``assets/`` y los estáticos del panel que cambiaron (archivos sueltos en
-   ``_internal``, los mismos que mete ``scripts/build_orquestador.sh``).
+   ``_internal``, los mismos que mete ``scripts/build_orquestador.sh``), y los modelos de
+   los juegos: los dos de poses (``n`` y ``s``) y los de manos, que baja aquí si faltan.
 
 Vale mientras no cambien las dependencias de terceros: si se añade un paquete, hay que
 congelar en Windows. Se ejecuta con el Python del orquestador (3.12), desde ``server/``:
@@ -44,9 +45,21 @@ SERVER = REPO / "server"
 DATA_DIRS = [
     *(
         (REPO / "assets" / name, Path("assets") / name)
-        for name in ("knowledge", "gallery", "showcase", "trivia", "agenda", "faces", "fonts")
+        for name in (
+            "knowledge",
+            "gallery",
+            "showcase",
+            "trivia",
+            "agenda",
+            "faces",
+            "fonts",
+            "games",
+        )
     ),
     (SERVER / "sonia" / "panel" / "static", Path("sonia") / "panel" / "static"),
+    # Modelos de poses y manos de los juegos (python -m sonia.vision.models): si una build
+    # anterior no los traía, van ahora; la app los copia a su carpeta de datos al arrancar.
+    (REPO / "cache" / "games" / "modelos", Path("cache") / "games" / "modelos"),
 ]
 
 COOKIE_MAGIC = b"MEI\014\013\012\013\016"
@@ -287,6 +300,29 @@ def sync_data(internal: Path) -> None:
         print("  copiado:", path)
 
 
+def ensure_game_models() -> None:
+    """Los modelos de los juegos en ``cache/games/modelos``, como los lleva la build.
+
+    Los dos de poses (``n`` y ``s``, para cambiar desde el panel sin bajar nada) y los de
+    manos, con la revisión fijada y su SHA-256 (``python -m sonia.vision.models``). Sin red,
+    se sigue con los que haya: la app baja al arrancar el de ``GAME_POSES_MODEL``.
+    """
+    sys.path.insert(0, str(SERVER))
+    try:
+        from sonia.vision.models import all_game_models, download_game_models
+    except ImportError as exc:
+        print(f"aviso: no se pudieron comprobar los modelos de los juegos ({exc})")
+        return
+    folder = REPO / "cache" / "games" / "modelos"
+    try:
+        fetched = download_game_models(folder, all_game_models())
+    except Exception as exc:  # noqa: BLE001 - sin red se parchea igual
+        print(f"aviso: sin todos los modelos de los juegos ({exc}); la app los bajará")
+        return
+    if fetched:
+        print("modelos de los juegos bajados:", ", ".join(fetched))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -305,6 +341,7 @@ def main() -> None:
     target = exe.with_suffix(".parcheado.exe") if args.probar or args.sin_cambios else exe
     patch_exe(exe, target, unchanged=args.sin_cambios)
     if not (args.probar or args.sin_cambios):
+        ensure_game_models()
         sync_data(args.folder / "_internal")
 
 

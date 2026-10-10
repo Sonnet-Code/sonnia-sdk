@@ -453,6 +453,150 @@ class TriviaSettings(BaseSettings):
     win_contact: str = "Brian o Mariel"
 
 
+class RuletaSettings(BaseSettings):
+    """La ruleta de Sonnia (``GAME_RULETA_*``, docs/juegos/ruleta.md)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="GAME_RULETA_", extra="ignore", env_ignore_empty=True
+    )
+
+    enabled: bool = True
+    #: Pesos de las cinco casillas, en orden: trivia relámpago, adivinanza geek, explica en
+    #: 20 segundos, predice el futuro de la IA y reto sorpresa de Sonnet Code.
+    weights: str = "1,1,1,1,1"
+    #: Contador (solo visual) de la trivia relámpago.
+    quiz_seconds: float = 20.0
+    #: La pista de la adivinanza sale a estos segundos.
+    hint_seconds: float = 30.0
+    #: Tiempo para explicar una tecnología.
+    explain_seconds: float = 20.0
+    #: Sin voz ni nadie delante durante esto, la partida se cancela (0: ``GAMES_ABANDON_SECONDS``).
+    abandon_seconds: float = 60.0
+
+
+class PosesSettings(BaseSettings):
+    """Simón dice con poses (``GAME_POSES_*``, docs/juegos/poses.md)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="GAME_POSES_", extra="ignore", env_ignore_empty=True
+    )
+
+    enabled: bool = True
+    #: Rondas por partida, de las que ``tricks`` son trampa (nunca la primera).
+    rounds: int = 6
+    tricks: int = 1
+    #: Ventana tras la orden en la que se cuenta quién hace la pose (cuenta el mejor frame).
+    window_seconds: float = 1.8
+    #: Altura mínima de una persona en la imagen (fracción) para contar como jugador.
+    min_person: float = 0.25
+    #: Detecciones por segundo.
+    fps: float = 8.0
+    #: Variante del modelo de poses: ``n`` (ligero, la mitad de CPU con Unity en marcha) o
+    #: ``s`` (algo más preciso con gente tapada). Por defecto ``n`` (10 de octubre de 2026).
+    model: str = "n"
+    #: 0: ``GAMES_ABANDON_SECONDS``.
+    abandon_seconds: float = 0.0
+
+
+class AkinatorSettings(BaseSettings):
+    """Akinator dev (``GAME_AKINATOR_*``, docs/juegos/akinator.md)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="GAME_AKINATOR_", extra="ignore", env_ignore_empty=True
+    )
+
+    enabled: bool = True
+    #: Preguntas de sí o no como mucho antes de pedir la respuesta.
+    max_questions: int = 20
+    #: No intenta adivinar antes de esta pregunta.
+    min_questions: int = 5
+    abandon_seconds: float = 60.0
+
+
+class PptSettings(BaseSettings):
+    """Piedra, papel o tijera (``GAME_PPT_*``, docs/juegos/piedra_papel_tijera.md)."""
+
+    model_config = SettingsConfigDict(env_prefix="GAME_PPT_", extra="ignore", env_ignore_empty=True)
+
+    enabled: bool = True
+    #: Al mejor de estas rondas.
+    rounds: int = 3
+    #: Tiempo de lectura de la mano tras el «¡ya!» (se queda con la lectura estable).
+    read_seconds: float = 0.8
+    #: Detecciones por segundo mientras se juega.
+    fps: float = 8.0
+    #: Veces que se repite una ronda si no se ve la mano.
+    retries: int = 1
+    #: 0: ``GAMES_ABANDON_SECONDS``.
+    abandon_seconds: float = 0.0
+
+
+class WordleSettings(BaseSettings):
+    """Wordle de tecnología (``GAME_WORDLE_*``, docs/juegos/wordle.md)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="GAME_WORDLE_", extra="ignore", env_ignore_empty=True
+    )
+
+    enabled: bool = True
+    #: Intentos.
+    rows: int = 6
+    #: La pista sale tras estos intentos fallidos.
+    hint_after: int = 4
+    abandon_seconds: float = 90.0
+
+
+class BusquedaSettings(BaseSettings):
+    """Búsqueda relámpago (``GAME_BUSQUEDA_*``, docs/juegos/busqueda.md)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="GAME_BUSQUEDA_", extra="ignore", env_ignore_empty=True
+    )
+
+    enabled: bool = True
+    rounds: int = 3
+    #: Duración de cada ronda.
+    round_seconds: float = 25.0
+    #: Cada cuánto va una foto reducida al modelo de visión.
+    check_seconds: float = 2.5
+    #: Tope de fotos al modelo de visión por ronda.
+    max_checks: int = 10
+    #: 0: ``GAMES_ABANDON_SECONDS``.
+    abandon_seconds: float = 0.0
+
+
+class GamesSettings(BaseSettings):
+    """Los juegos del stand (``sonia/games``, docs/juegos.md).
+
+    Cada juego tiene además su bloque (``GAME_<JUEGO>_*``). Un juego solo se ofrece si
+    está encendido aquí y en ``games/registry.py``, no está apagado desde el panel
+    (``games_off``) y la Unity conectada lo anuncia (``client_hello.games``).
+    """
+
+    model_config = SettingsConfigDict(env_prefix="GAMES_", extra="ignore", env_ignore_empty=True)
+
+    #: ``GAMES_ENABLED``: con ``false`` no se ofrece ningún juego.
+    enabled: bool = True
+    #: Sin voz ni nadie delante durante esto, la partida se cancela (el visitante se fue).
+    abandon_seconds: float = 60.0
+    #: Si el visitante habla en plena partida y en este tiempo no se delega nada, se le
+    #: recuerda a Sonia que delegue la jugada (solo los juegos que lo piden).
+    nudge_seconds: float = 3.0
+    #: Al terminar, el resultado se queda al menos esto en pantalla...
+    result_seconds: float = 4.0
+    #: ...y como mucho esto esperando a que Sonia termine de contarlo.
+    final_wait_seconds: float = 20.0
+    #: Modelos de visión de los juegos (poses, manos), como los de caras.
+    models_dir: str = str(_HOME / "cache" / "games" / "modelos")
+
+    ruleta: RuletaSettings = Field(default_factory=RuletaSettings)
+    poses: PosesSettings = Field(default_factory=PosesSettings)
+    akinator: AkinatorSettings = Field(default_factory=AkinatorSettings)
+    ppt: PptSettings = Field(default_factory=PptSettings)
+    wordle: WordleSettings = Field(default_factory=WordleSettings)
+    busqueda: BusquedaSettings = Field(default_factory=BusquedaSettings)
+
+
 class AgendaSettings(BaseSettings):
     """Agenda del DevFest leída de su web (``sonia/agenda``, docs/agenda.md).
 
@@ -592,6 +736,7 @@ class Settings(BaseSettings):
     ws: WSSettings = Field(default_factory=WSSettings)
     showcase: ShowcaseSettings = Field(default_factory=ShowcaseSettings)
     trivia: TriviaSettings = Field(default_factory=TriviaSettings)
+    games: GamesSettings = Field(default_factory=GamesSettings)
     panel: PanelSettings = Field(default_factory=PanelSettings)
     agenda: AgendaSettings = Field(default_factory=AgendaSettings)
     faces: FaceSettings = Field(default_factory=FaceSettings)
@@ -682,6 +827,11 @@ class Settings(BaseSettings):
     @property
     def trivia_file(self) -> Path:
         return Path(self.assets_dir) / "trivia" / "preguntas.md"
+
+    @property
+    def games_dir(self) -> Path:
+        """Bancos de los juegos que trae la app: ``assets/games/<juego>/*.md``."""
+        return Path(self.assets_dir) / "games"
 
 
 def load_settings() -> Settings:

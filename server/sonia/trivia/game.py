@@ -37,7 +37,7 @@ import logging
 import random
 import re
 import time
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
@@ -253,8 +253,11 @@ class TriviaGame:
         host: TriviaHost,
         screen: TriviaScreen,
         rng: random.Random | None = None,
+        busy: Callable[[], str | None] | None = None,
     ) -> None:
         self._settings = settings
+        #: Por qué no puede empezar ahora por otra cosa (un juego en marcha), o ``None``.
+        self._busy = busy
         self._bank_file = bank_file
         self._host = host
         self._screen = screen
@@ -378,6 +381,23 @@ class TriviaGame:
             logger.warning("No se pudo leer el banco de la trivia %s: %s", self._bank_file, exc)
             return ""
 
+    def draw_one(self, level: str | None = None) -> TriviaQuestion | None:
+        """Una pregunta suelta del banco en uso (el de la nube, si lo hay), opciones barajadas.
+
+        Respeta el «sin repetir» de las partidas: primero las que nunca han salido y
+        después las que hace más. Sin ``level``, el de ``TRIVIA_DEFAULT_LEVEL``. ``None``
+        si el banco está vacío. No lee disco. La usa la trivia relámpago de la ruleta
+        (``docs/juegos/ruleta.md``).
+        """
+        wanted = (
+            normalize_level(level) or normalize_level(self._settings.default_level) or DEFAULT_LEVEL
+        )
+        drawn = self._bank.draw(1, self._rng, wanted, recent=self._asked)
+        if not drawn:
+            return None
+        self._asked[drawn[0].text] = self._game
+        return drawn[0]
+
     def _draw(self) -> list[TriviaQuestion]:
         """Las preguntas de la partida, empezando por las que hace más que no salen."""
         questions = self._bank.draw(self._total, self._rng, self._level, recent=self._asked)
@@ -402,6 +422,9 @@ class TriviaGame:
             return False, "La trivia está desactivada (TRIVIA_ENABLED=false)."
         if self.active:
             return False, "Ya hay una trivia en marcha."
+        busy = self._busy() if self._busy is not None else None
+        if busy:
+            return False, busy
         if not self._host.connected:
             return False, "Sonnia no está conectada a GPT-Live ahora mismo."
         # Se relee el archivo: se puede editar durante el evento sin reiniciar. El banco

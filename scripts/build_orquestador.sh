@@ -51,6 +51,18 @@ fi
 
 cd "$REPO/server"
 uv sync --group dev --extra audio --extra camera --extra panel >/dev/null
+# Modelos de poses y manos de los juegos (docs/plan-juegos.md, sección 6): se bajan si
+# faltan (revisión fijada y SHA-256) y van dentro, como los de caras.
+uv run --no-sync python -m sonia.vision.models "$REPO/cache/games/modelos" \
+  || echo "aviso: sin los modelos de los juegos; la app los bajará al arrancar" >&2
+if [ -d "$REPO/cache/games/modelos" ]; then
+  EXTRA+=(--add-data "$REPO/cache/games/modelos${SEP}cache/games/modelos")
+fi
+# Bancos de los juegos (assets/games/<juego>/*.md, docs/juegos.md): cada partida lee el suyo.
+# Sin ellos, en la app congelada ningún juego arranca («banco vacío»).
+if [ -d "$REPO/assets/games" ]; then
+  EXTRA+=(--add-data "$REPO/assets/games${SEP}assets/games")
+fi
 rm -rf "$OUT"
 uv run --no-sync pyinstaller --noconfirm --clean --log-level WARN \
   --name sonia-orquestador --onedir --console \
