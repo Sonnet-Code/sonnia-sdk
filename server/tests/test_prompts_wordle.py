@@ -1,8 +1,8 @@
 """Wordle de tecnología: los textos que se mandan a GPT-Live, idénticos a los de antes con los de la app.
 
 La instantánea (``snapshots/prompts_wordle.json``) se sacó con el código de antes de hacer
-editables los prompts (``sonia.prompts``). Sin red ni APIs: el juego suelto con
-``FakeGameHost``.
+editables los prompts (``sonia.prompts``). Con una versión de la nube se usa esa y no la de la
+app. Sin red ni APIs: el juego suelto con ``FakeGameHost``.
 """
 
 from __future__ import annotations
@@ -10,11 +10,13 @@ from __future__ import annotations
 from typing import Any
 
 from sonia.config import Settings
-from sonia.games import NOT_SAID
+from sonia.games import INSTRUCT_MAX_CHARS, NOT_SAID
 from sonia.games.wordle import WordleGame
+from sonia.games.wordle.game import prompt_specs
+from sonia.prompts import BOOK
 from tests.games.fakes import FakeGameHost, game_settings
 from tests.games.test_wordle import SECRET, make_wordle, play, wordle_settings
-from tests.prompt_snapshots import assert_snapshot
+from tests.prompt_snapshots import assert_snapshot, cloud_prompts
 
 
 def without_contact() -> Settings:
@@ -84,3 +86,31 @@ async def collect() -> dict[str, Any]:
 
 async def test_los_textos_del_wordle_no_cambian() -> None:
     assert_snapshot("prompts_wordle", await collect())
+
+
+def test_las_piezas_de_la_app_validan_y_estan_registradas() -> None:
+    specs = prompt_specs()
+    assert specs and len({spec.id for spec in specs}) == len(specs)
+    for spec in specs:
+        assert spec.id.startswith("juegos/wordle/") and spec.group == "Juego: Wordle"
+        assert spec.id in BOOK and BOOK.source(spec.id) == "app"
+        assert BOOK.validate(spec.id, BOOK.default(spec.id)) == [], spec.id
+    assert BOOK.spec("juegos/wordle/reglas").max_len == INSTRUCT_MAX_CHARS
+
+
+async def test_con_la_version_de_la_nube_se_usa_solo_esa() -> None:
+    cloud = {
+        "juegos/wordle/reglas": "WORDLE: {rows} intentos de {cols} letras. {hint_rule}",
+        "juegos/wordle/regla_pista": "Pista tras {hint_after}.",
+        "juegos/wordle/intento": "Van {number}: {summary}.",
+        "juegos/wordle/ganan": "Era {word}.",
+    }
+    with cloud_prompts(cloud):
+        game, host, _ = await started()
+        step = await play(game, "REDIS")
+        won = await play(game, SECRET)
+    assert host.instructions == ["WORDLE: 6 intentos de 5 letras. Pista tras 4."]
+    assert step == "Van 1: no están (grises): R, E, D, I y S."
+    assert won.startswith(f"Era {SECRET}. Diles que pasen a hablar con Brian o Mariel")
+    assert "LO HAN ADIVINADO" not in won and "JUEGO EN MARCHA" not in host.instructions[0]
+    assert BOOK.source("juegos/wordle/reglas") == "app"
