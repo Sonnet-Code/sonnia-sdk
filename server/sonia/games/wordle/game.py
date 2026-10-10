@@ -104,6 +104,13 @@ LOST_TEXT = (
     "lo cuentes: {hint} Díselo con cariño y buen humor, que ha estado reñido, y anímales a una "
     "revancha."
 )
+#: Lo terminan con la partida en marcha (``stop_game`` o «Terminar juego»): se enseña la
+#: palabra, como al perder, y Sonia la dice.
+STOPPED_TEXT = (
+    "Lo dejan aquí: la palabra era {word}. Un dato para que lo cuentes: {hint} Dilo con gracia "
+    "en una frase y, si quieren otra partida, que te la pidan. Luego sigue conversando con "
+    "normalidad."
+)
 #: Sonia no sabe qué premios hay: a quien gana lo manda con el equipo del stand.
 WIN_CONTACT_TEXT = (
     " Diles que pasen a hablar con {contact} aquí en el stand. No sabes qué premios hay: no "
@@ -281,6 +288,25 @@ class WordleGame(Game):
         )
         return RESUME_TEXT.format(used=len(self._guesses), rows=self._rows, tried=tried, hint=hint)
 
+    async def stop_requested(self, source: str) -> str | None:
+        """Lo terminan con la partida en marcha: antes de cerrar se enseña la palabra con su
+        pista (la pantalla de la derrota) y GPT-Live recibe cuál era para decirla."""
+        async with self._lock:
+            if self._over or not self._word:
+                return None
+            self._over = True
+            self._result = "stopped"
+            attempts = len(self._guesses)
+            logger.info(
+                "Wordle: lo terminan (%s) tras %d intentos; era %s", source, attempts, self._word
+            )
+            if self._guesses:
+                # El tablero otra vez con el final: Unity enseña la palabra y su pista. Sin
+                # intentos no hay fila que repetir: la palabra sale en la tarjeta del ``end``.
+                await self.host.send("guess", self._state("lose"))
+            await self.host.finish("lose", {"word": self._word, "attempts": attempts})
+            return STOPPED_TEXT.format(word=self._word, hint=_sentence(self._hint))
+
     async def stop(self, reason: StopReason) -> None:
         # Nada que soltar: sin cámara ni tareas. La palabra se queda hasta el próximo ``start``.
         self._over = True
@@ -308,6 +334,8 @@ class WordleGame(Game):
             return f"Acertaron en {attempts} de {self._rows}"
         if self._result == "lose":
             return f"Sin intentos ({attempts} de {self._rows})"
+        if self._result == "stopped":
+            return f"Lo dejaron ({attempts} de {self._rows})"
         if attempts == 0:
             return f"{self._rows} intentos"
         return f"Intento {attempts} de {self._rows}"

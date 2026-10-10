@@ -73,6 +73,10 @@ async def stop_game(ctx: ActionContext, arguments: dict[str, Any]) -> ActionResu
     ok, message = await manager.stop("voice")
     if not ok:
         return ActionResult(text=message)
+    if manager.phase == "finishing":
+        # El juego cerró él mismo enseñando su final (``Game.stop_requested``): el mensaje es
+        # su guion para Sonia (la palabra del Wordle, por ejemplo).
+        return ActionResult(text=f"{SCRIPT_PREFIX} {message}")
     return ActionResult(
         text="Juego terminado. Sonia lo dice en una frase corta y sigue conversando con normalidad."
     )

@@ -115,6 +115,10 @@ CANCEL_TEXT = {
 #: Lo que se le pasa a GPT-Live cuando el juego se arranca desde el panel.
 PANEL_START_TEXT = "JUEGO: el equipo del stand ha puesto {spoken} en tu pantalla. "
 
+#: Lo que se le pasa a GPT-Live cuando el equipo termina desde el panel un juego que cierra
+#: enseñando su final (``Game.stop_requested``).
+PANEL_STOP_TEXT = "JUEGO: el equipo del stand ha terminado {spoken}. "
+
 #: Sin juego elegido (``start_game`` con ``no_lo_dijo``).
 CHOOSE_TEXT = (
     "El visitante quiere jugar pero no ha dicho a qué. Pregúntale a cuál, en una frase: "
@@ -618,6 +622,10 @@ class GameManager:
         game = self._active
         if game is None:
             return False, "No hay ningún juego en marcha."
+        if reason in ("voice", "panel") and self._phase == "playing":
+            ending = await self._stop_with_ending(game, reason)
+            if ending is not None:
+                return True, ending
         was_playing = self._phase == "playing"
         logger.info("Juego %s terminado (%s)", game.id, reason)
         await self._end_now(reason)
@@ -628,6 +636,41 @@ class GameManager:
                 if text and was_playing:
                     await self._engine.speak(text.format(spoken=game.spoken))
         return True, f"{game.title} terminado."
+
+    async def _stop_with_ending(self, game: Game, reason: StopReason) -> str | None:
+        """Si el juego sabe terminar enseñando su final (``Game.stop_requested``), lo deja.
+
+        El juego se cierra él mismo con ``host.finish`` (la fase pasa a ``finishing``): aquí
+        no se cancela y la pantalla sigue el final normal. Por voz devuelve el guion (que
+        ``stop_game`` pasa con ``PARA SONIA:``); desde el panel se lo pasa a GPT-Live en
+        cuanto calla y devuelve un texto para el equipo. ``None``: se cancela como siempre.
+        """
+        try:
+            script = await game.stop_requested(reason)
+        except Exception:  # noqa: BLE001 - un juego roto se cancela como siempre
+            logger.exception("Falló stop_requested de %s", game.id)
+            return None
+        if not script:
+            return None
+        if self._active is not game or self._phase != "finishing":
+            logger.warning(
+                "Juego %s: devolvió un final sin cerrarse con finish; se cancela", game.id
+            )
+            return None
+        logger.info("Juego %s: lo terminan (%s) y enseña su final", game.id, reason)
+        if reason == "voice":
+            return script
+        self._spawn(
+            self._speak_ending(self._match, PANEL_STOP_TEXT.format(spoken=game.spoken) + script),
+            "game-stop",
+        )
+        return f"{game.title}: enseña su final y se cierra."
+
+    async def _speak_ending(self, match: int, prompt: str) -> None:
+        """El final de un juego terminado desde el panel, en cuanto Sonia calla."""
+        await self._engine.wait_idle(PANEL_WAIT_S)
+        if match == self._match and self._active is not None:
+            await self._engine.speak(prompt)
 
     async def finish(
         self, game_id: str, result: GameResult, data: dict[str, Any] | None = None

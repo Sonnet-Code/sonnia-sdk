@@ -349,6 +349,20 @@ class Game:
             "donde iba."
         )
 
+    async def stop_requested(self, source: str) -> str | None:
+        """Le piden terminar con la partida en marcha: por voz (``stop_game``, ``source`` =
+        ``voice``) o con «Terminar juego» en el panel (``panel``). Opcional.
+
+        Por defecto devuelve ``None`` y la partida se cancela como siempre. Si el juego
+        quiere cerrar enseñando su final (el Wordle enseña la palabra, como al perder),
+        lo enseña, se cierra él mismo con :meth:`GameHost.finish` y devuelve el guion para
+        Sonia: el manager no cancela, sigue el final normal (``GAMES_RESULT_SECONDS`` y a
+        que Sonia termine de hablar) y le pasa el guion a GPT-Live (por voz, como
+        resultado de ``stop_game``; desde el panel, por ``speak``). Si devuelve un guion
+        sin haber llamado a ``finish``, se cancela igual.
+        """
+        return None
+
     async def stop(self, reason: StopReason) -> None:
         """La partida termina (siempre una vez, sea cual sea el motivo): suelta lo tuyo.
 

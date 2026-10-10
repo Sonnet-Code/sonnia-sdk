@@ -30,7 +30,7 @@ Es un juego sin cámara (`needs` vacío) y de grupo: pueden jugar a la vez todos
 |---|---|---|
 | `start_game` (`juego`: `wordle`) | El visitante quiere jugar al Wordle. | El guion de arranque (con `PARA SONIA:`). Si ya hay una partida del Wordle, cómo va (intentos, palabras probadas y la pista si ya salió). |
 | `wordle_guess` (`palabra`) | El grupo dice una palabra de 5 letras. | El resumen del intento con los intentos que quedan; si sale la pista, que la lea; si aciertan o pierden, el guion final. Con `no_lo_dijo` (no se entendió ninguna), que pida una. |
-| `stop_game` | Quieren dejarlo. | El juego se cancela (`end` con `cancel`) y vuelve la conversación. |
+| `stop_game` | Quieren dejarlo. | Con la partida en marcha, antes de cerrar se enseña la palabra con su pista (la pantalla de la derrota: se repite el último intento con `result: lose`; sin ningún intento, la palabra sale en la tarjeta del `end`) y el resultado le dice a Sonia cuál era para que la diga («Lo dejan aquí: la palabra era REACT…»). Termina con `end` y `lose`, como al perder, y vuelve la conversación. «Terminar juego» en el panel hace lo mismo y Sonia lo cuenta en cuanto calla. |
 
 Los guiones de `wordle_guess` por caso:
 
@@ -76,7 +76,7 @@ Todo va en la tarjeta de la franja alta (la de la trivia): la rejilla a la izqui
 
 ## En el panel
 
-La tarjeta «Juegos» enseña «Jugando a Wordle de tecnología · 1:15 · Intento 3 de 6» (el `summary` de `snapshot()`: «6 intentos» al empezar, «Intento N de 6» mientras se juega, «Acertaron en N de 6» o «Sin intentos (6 de 6)» al terminar). El estado del panel **no lleva la palabra ni la pista**: se ve delante de los visitantes, y sin `summary` el panel enseñaría los datos del estado tal cual. Los bancos se editan en «Bancos de los juegos» (`wordle_palabras`), y el interruptor del juego (`games_off`) lo apaga en todas las Sonnias sin reinstalar.
+La tarjeta «Juegos» enseña «Jugando a Wordle de tecnología · 1:15 · Intento 3 de 6» (el `summary` de `snapshot()`: «6 intentos» al empezar, «Intento N de 6» mientras se juega, «Acertaron en N de 6», «Sin intentos (6 de 6)» o «Lo dejaron (N de 6)» al terminar). El estado del panel **no lleva la palabra ni la pista**: se ve delante de los visitantes, y sin `summary` el panel enseñaría los datos del estado tal cual. Los bancos se editan en «Bancos de los juegos» (`wordle_palabras`), y el interruptor del juego (`games_off`) lo apaga en todas las Sonnias sin reinstalar.
 
 ## Bancos
 
@@ -123,4 +123,4 @@ Los comunes (`GAMES_*`): `GAMES_NUDGE_SECONDS` (3), `GAMES_RESULT_SECONDS` (4) y
 
 - **Probar con la API real** (lo decide Jean): que GPT-Live delegue cada palabra (también con varias voces y deletreadas), que no diga el resultado sin delegar y que el empujón no la haga hablar de más. Las pruebas automáticas usan un GPT-Live falso.
 - **Que Jean revise el banco** (`assets/games/wordle/palabras.md`): es un borrador.
-- **Rendirse.** Si el grupo quiere saber la palabra antes de agotar los intentos, `stop_game` cancela sin enseñarla (GPT-Live no la conoce). Se puede añadir una jugada que la revele si se ve necesario.
+- **Rendirse.** Si el grupo lo deja antes de agotar los intentos (`stop_game` o «Terminar juego»), se enseña la palabra y Sonia la dice (`WordleGame.stop_requested`, el gancho de los cimientos), sin acción nueva para el backend.
