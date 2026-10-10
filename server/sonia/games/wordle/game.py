@@ -290,7 +290,13 @@ class WordleGame(Game):
 
     async def stop_requested(self, source: str) -> str | None:
         """Lo terminan con la partida en marcha: antes de cerrar se enseña la palabra con su
-        pista (la pantalla de la derrota) y GPT-Live recibe cuál era para decirla."""
+        pista y GPT-Live recibe cuál era para decirla.
+
+        La pantalla recibe el último estado con ``stopped: true``, ``result: lose``, la palabra y
+        la pista: Unity no vuelve a voltear la fila ya pintada (no es un intento nuevo), cambia
+        el rótulo a «lo dejamos aquí» y enseña la palabra. Sin ningún intento, el estado va con
+        ``row: -1`` y el tablero vacío. El ``end`` lleva también ``stopped``.
+        """
         async with self._lock:
             if self._over or not self._word:
                 return None
@@ -300,11 +306,10 @@ class WordleGame(Game):
             logger.info(
                 "Wordle: lo terminan (%s) tras %d intentos; era %s", source, attempts, self._word
             )
-            if self._guesses:
-                # El tablero otra vez con el final: Unity enseña la palabra y su pista. Sin
-                # intentos no hay fila que repetir: la palabra sale en la tarjeta del ``end``.
-                await self.host.send("guess", self._state("lose"))
-            await self.host.finish("lose", {"word": self._word, "attempts": attempts})
+            await self.host.send("guess", self._state("lose", stopped=True))
+            await self.host.finish(
+                "lose", {"word": self._word, "attempts": attempts, "stopped": True}
+            )
             return STOPPED_TEXT.format(word=self._word, hint=_sentence(self._hint))
 
     async def stop(self, reason: StopReason) -> None:
@@ -430,16 +435,21 @@ class WordleGame(Game):
             text += WIN_CONTACT_TEXT.format(contact=contact)
         return text + BACK_TO_TALK_TEXT
 
-    def _state(self, result: str) -> dict[str, Any]:
-        """El tablero entero y el estado de las letras: lo que Unity pinta y repite al reconectar."""
-        last = self._guesses[-1]
+    def _state(self, result: str, *, stopped: bool = False) -> dict[str, Any]:
+        """El tablero entero y el estado de las letras: lo que Unity pinta y repite al reconectar.
+
+        Con ``stopped`` no es un intento nuevo: lo terminaron con la partida en marcha y es el
+        último estado con la palabra (``row`` es el del último intento, o -1 sin ninguno).
+        """
+        last = self._guesses[-1] if self._guesses else None
         return {
             "row": len(self._guesses) - 1,
-            "letters": last.letters,
-            "marks": last.marks,
+            "letters": last.letters if last else "",
+            "marks": last.marks if last else "",
             "board": [{"letters": g.letters, "marks": g.marks} for g in self._guesses],
             "used": used_letters([(g.letters, g.marks) for g in self._guesses]),
             "hint": self._hint if self._hint_shown or result == "lose" else "",
             "result": result,
             "word": self._word if result else "",
+            "stopped": stopped,
         }
