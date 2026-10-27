@@ -61,6 +61,13 @@ namespace Sonia.EditorTools
         /// <summary>Contenido del build.env de la build en curso; null: sin build.env (las del stand).</summary>
         public static string BuildEnv;
 
+        /// <summary>
+        /// Cierto durante la build de vídeo para redes (SoniaBuild.BuildMacVideo): no lleva
+        /// orquestador ni panel, sino la herramienta sonnia-video congelada
+        /// (scripts/build_sonnia_video.sh) con el .env del repo al lado.
+        /// </summary>
+        public static bool VideoBuild;
+
         /// <summary>build.env de las builds de prueba (ver la cabecera).</summary>
         public const string TesterBuildEnv =
             "# Build de prueba: la cámara y el micrófono no se mandan al panel de Cloudflare.\n"
@@ -85,7 +92,7 @@ namespace Sonia.EditorTools
         public void OnPreprocessBuild(BuildReport report)
         {
             BuildTarget platform = report.summary.platform;
-            if (platform == BuildTarget.StandaloneOSX || platform == BuildTarget.StandaloneWindows64)
+            if (!VideoBuild && (platform == BuildTarget.StandaloneOSX || platform == BuildTarget.StandaloneWindows64))
             {
                 RequirePanelToken();
             }
@@ -299,7 +306,18 @@ namespace Sonia.EditorTools
 
             int unlocked = WithoutKeychain(plugins);
 
-            AddOrchestrator("macOS", Path.Combine(app, "Contents", "Resources", "orquestador"));
+            if (VideoBuild)
+            {
+                AddVideoTool("macOS", Path.Combine(app, "Contents", "Resources", "sonnia-video"));
+                // Renderizador sin ventana: ni icono en el Dock ni menú (LSUIElement).
+                string plist = Path.Combine(app, "Contents", "Info.plist");
+                Run("/usr/libexec/PlistBuddy", "-c \"Delete :LSUIElement\" \"" + plist + "\"", allowFailure: true);
+                Run("/usr/libexec/PlistBuddy", "-c \"Add :LSUIElement bool true\" \"" + plist + "\"");
+            }
+            else
+            {
+                AddOrchestrator("macOS", Path.Combine(app, "Contents", "Resources", "orquestador"));
+            }
 
             // Firma ad hoc de todo de nuevo: install_name_tool invalida las firmas.
             Run("codesign", "--force --deep --sign - \"" + app + "\"");
@@ -360,6 +378,49 @@ namespace Sonia.EditorTools
         // ------------------------------------------------------------------
         // Orquestador empaquetado
         // ------------------------------------------------------------------
+
+        /// <summary>sonnia-video congelado de una plataforma (scripts/build_sonnia_video.sh).</summary>
+        private static string FrozenVideoTool(string platform) =>
+            Path.Combine(UnityRoot, "Build", "sonnia-video", platform, "sonnia-video");
+
+        /// <summary>
+        /// Mete sonnia-video congelado en la app de vídeo, con el .env del repo al lado (las
+        /// claves de Gemini y ElevenLabs; se copia como archivo, nunca se escribe su contenido).
+        /// La app lo lanza con doble clic (el estudio web) y la herramienta encuentra la app
+        /// porque vive dentro de ella.
+        /// </summary>
+        private static void AddVideoTool(string platform, string destination)
+        {
+            string frozen = FrozenVideoTool(platform);
+            if (!Directory.Exists(frozen))
+            {
+                Debug.LogWarning("[Sonia] Build de vídeo sin sonnia-video empaquetado: falta " + frozen
+                                 + " (scripts/build_sonnia_video.sh). Habrá que usar el del repo.");
+                return;
+            }
+
+            if (Directory.Exists(destination))
+            {
+                Directory.Delete(destination, true);
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destination));
+#if UNITY_EDITOR_OSX
+            Run("ditto", "\"" + frozen + "\" \"" + destination + "\"");
+#else
+            CopyDirectory(frozen, destination);
+#endif
+            string env = Path.Combine(RepoRoot, ".env");
+            if (File.Exists(env))
+            {
+                File.Copy(env, Path.Combine(destination, ".env"), true);
+                Debug.Log("[Sonia] sonnia-video empaquetado con el .env del repo (" + platform + ").");
+            }
+            else
+            {
+                Debug.LogWarning("[Sonia] sonnia-video empaquetado sin .env: las claves irán en la carpeta de datos.");
+            }
+        }
 
         private static void AddOrchestrator(string platform, string destination)
         {

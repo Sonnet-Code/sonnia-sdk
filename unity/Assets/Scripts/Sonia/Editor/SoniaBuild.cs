@@ -91,6 +91,43 @@ namespace Sonia.EditorTools
                 BuildOptions.Development, "FORCE_LOGS");
         }
 
+        /// <summary>Nombre de la app de vídeo para redes (y de su ejecutable).</summary>
+        public const string VideoProductName = "Sonnia Video";
+
+        /// <summary>Identificador de la app de vídeo: distinto del de la del stand para que convivan.</summary>
+        public const string VideoBundleId = "com.sonnetcode.sonnia.video";
+
+        /// <summary>
+        /// App de macOS para hacer vídeos de Sonnia para redes (docs/video.md): la misma escena
+        /// con SONNIA_VIDEO_APP, que no conversa sino que renderiza los trabajos de sonnia-video,
+        /// y con sonnia-video congelado dentro en lugar del orquestador. Sale en
+        /// Build/macOS-video/Sonnia Video.app.
+        /// </summary>
+        [MenuItem("Sonia/Build macOS (vídeo para redes)")]
+        public static void BuildMacVideo()
+        {
+            string savedName = PlayerSettings.productName;
+            SoniaPlayerBuildFixes.VideoBuild = true;
+            s_bundleId = VideoBundleId;
+            try
+            {
+                PlayerSettings.productName = VideoProductName;
+                Build(BuildTarget.StandaloneOSX, "macOS-video", VideoProductName + ".app", "Sonnia-Video-macOS",
+                    BuildOptions.None, "SONNIA_VIDEO_APP");
+            }
+            finally
+            {
+                PlayerSettings.productName = savedName;
+                SoniaPlayerBuildFixes.VideoBuild = false;
+                s_bundleId = BundleId;
+                PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Standalone, BundleId);
+                // Build() guarda los ajustes con el nombre de la de vídeo: se vuelven a guardar.
+                AssetDatabase.SaveAssets();
+            }
+        }
+
+        private static string s_bundleId = BundleId;
+
         [MenuItem("Sonia/Build Windows")]
         public static void BuildWindows()
         {
@@ -147,7 +184,7 @@ namespace Sonia.EditorTools
         {
             string version = ResolveVersion();
             SoniaSceneSetup.ConfigureVerticalBuild();
-            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Standalone, BundleId);
+            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Standalone, s_bundleId);
             // macOS exige explicar para qué se usan la cámara y el micrófono; sin
             // el texto de la cámara el build falla porque WebcamFrameSender usa WebCamTexture.
             PlayerSettings.macOS.cameraUsageDescription =

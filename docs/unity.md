@@ -704,6 +704,49 @@ mide algo distinto, así que recalcularlo cambia un poco el plano.
 
 Las del stand no llevan `build.env`.
 
+### App de vídeo para redes (Sonnia Video)
+
+**Sonia > Build macOS (vídeo para redes)** (o `SoniaBuild.BuildMacVideo` en modo batch) hace
+`Build/macOS-video/Sonnia Video.app`: la misma escena compilada con `SONNIA_VIDEO_APP`, que
+no conversa sino que renderiza vídeos y fotos de Sonnia para redes (uso en `docs/video.md`).
+La incremental tarda menos de un minuto.
+
+- `SoniaVideoMode.Active` (esa build, o cualquier app con `-sonnia-video`): no se lanza el
+  orquestador, `SoniaClient` no se conecta y la webcam no se abre.
+- Sin ventana: `sonnia-video` la lanza con `-batchmode` (y la app lleva `LSUIElement`: ni icono
+  en el Dock ni menú). En modo batch Unity no pinta las cámaras solo, así que cada subfotograma
+  se pinta a mano (`RenderPipeline.SubmitRenderRequest` con `StandardRequest`). Con la cámara
+  principal apagada esa petición no pinta la cámara del HUD: **los vídeos no llevan HUD** (ni
+  logo, ni QR, ni subtítulos; Jean, 27 de octubre de 2026). Con doble clic la app abre el
+  estudio web de `sonnia-video`, que lanza su propio renderizador sin ventana, y se cierra.
+- `Sonia.Video.SoniaVideoStudio` (ensamblado `Sonia.Video`) espera trabajos por HTTP en
+  `127.0.0.1:8795` (`-sonnia-video-port`) y hace de orquestador grabado: despacha la línea de
+  tiempo del trabajo por `SoniaClient.InjectMessage` e `InjectAudioFrame` (estado,
+  `speech_start`, voz en trozos de 100 ms, `gesture`) y hace él de motor de audio, como el
+  laboratorio de cara. Boca, gestos y mirada salen por el camino del stand, a paso fijo
+  (`Time.captureDeltaTime`). Medido: boca y voz con 0 cuadros de desfase (correlación 0,87).
+- `VideoFrameRecorder` pinta a una RenderTexture N veces más grande y reduce y acumula en la
+  GPU (shader `Resources/Video/SoniaVideoResolve`: supermuestreo y desenfoque de movimiento por
+  subfotogramas); los cuadros van a ffmpeg por stdin, que puede escribir varias salidas a la vez
+  (`.mov`, secuencia PNG y proxies). Con fondo transparente la cámara solo ve la capa 31 (Sonnia
+  y su gorra) y cada exposición se pinta sobre negro y sobre blanco: el alfa sale de la
+  diferencia, calibrada con el fondo vacío (la viñeta y el tonemapping cambian el blanco de
+  cada píxel).
+- Al acabar deja `registro.json` (cuándo sonó cada frase, boca por cuadro y los huesos en
+  píxeles: cara, manos, índices, pecho...; de ahí sale el `localizador.json` de los reels) y
+  `heard.wav`. Las fotos son trabajos `still` con varios instantes (`stills`).
+- `VideoLook` aplica el aspecto y lo deshace al acabar: fondo (`StageScreen.SetBackdrop`:
+  stand, color, degradado o imagen), presets de luz sobre las luces de la escena por nombre,
+  contraluz y exposición (Volume propio), encuadre con los huesos
+  (`CameraFramingController.SetOverride`: stand, primer plano, medio, americano y entero),
+  emoción y gorra Noogler.
+- La camiseta se elige al arrancar (`-sin-camiseta-staff` para la de Genies); la app se queda
+  abierta entre trabajos (el avatar tarda en cargar; con la caché de Genies, unos 8 s) y se
+  cierra sola tras 45 min sin peticiones (`-sonnia-video-idle-min`).
+- Lleva dentro `sonnia-video` congelado (`scripts/build_sonnia_video.sh`, en
+  `Contents/Resources/sonnia-video`) con el `.env` del repo, en lugar del orquestador, y no
+  pide `PANEL_CLOUD_TOKEN`.
+
 ### Camiseta de staff
 
 Sonnia lleva la camiseta de staff del DevFest Santo Domingo 2026 sobre la prenda

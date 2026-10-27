@@ -143,6 +143,8 @@ namespace Sonia
         private Image _scrim;
         private Image _conversationScrim;
         private Image _backdrop;
+        private Sprite _standBackdrop;
+        private Color _standTint = Color.white;
         private float _backdropShade;
 
         // Estado de la conversación.
@@ -204,6 +206,23 @@ namespace Sonia
                     _backdrop.color = Color.Lerp(backdropTint, ShadedBackdrop, _backdropShade);
                 }
             }
+        }
+
+        /// <summary>
+        /// Cambia el fondo de la pantalla por <paramref name="sprite"/> (ya recortado a la
+        /// proporción del cuadro) con su tinte; null vuelve al fondo del stand. Para el
+        /// renderizador de vídeos (fondos de color, degradado o imagen).
+        /// </summary>
+        public void SetBackdrop(Sprite sprite, Color tint)
+        {
+            if (_backdrop == null)
+            {
+                return;
+            }
+
+            _backdrop.sprite = sprite != null ? sprite : _standBackdrop;
+            backdropTint = sprite != null ? tint : _standTint;
+            BackdropShade = _backdropShade;
         }
 
         private void Awake()
@@ -818,6 +837,8 @@ namespace Sonia
             image.preserveAspect = false;
             Stretch(image.rectTransform);
             _backdrop = image;
+            _standBackdrop = background;
+            _standTint = backdropTint;
             BackdropShade = _backdropShade;
         }
 

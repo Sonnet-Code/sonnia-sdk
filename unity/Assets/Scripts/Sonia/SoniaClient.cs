@@ -298,6 +298,12 @@ namespace Sonia
 
         private void Start()
         {
+            // En el renderizador de vídeos los mensajes los inyecta SoniaVideoStudio.
+            if (SoniaVideoMode.Active)
+            {
+                autoConnect = false;
+            }
+
             if (autoConnect)
             {
                 Connect();
@@ -428,6 +434,15 @@ namespace Sonia
 
             Dispatch(parsed);
             return true;
+        }
+
+        /// <summary>
+        /// Despacha un trozo de voz como si llegara del orquestador (frame binario),
+        /// en el acto. Para el renderizador de vídeos (SoniaVideoStudio).
+        /// </summary>
+        public void InjectAudioFrame(AudioFrame frame)
+        {
+            Dispatch(frame);
         }
 
         // ------------------------------------------------------------------

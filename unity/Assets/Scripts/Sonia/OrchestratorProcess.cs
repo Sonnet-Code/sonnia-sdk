@@ -76,7 +76,9 @@ namespace Sonia
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void CreateOnStart()
         {
-            if (Application.isEditor || Array.IndexOf(Environment.GetCommandLineArgs(), DisableArgument) >= 0)
+            // El renderizador de vídeos (SoniaVideoMode) no conversa: sin orquestador.
+            if (Application.isEditor || SoniaVideoMode.Active
+                || Array.IndexOf(Environment.GetCommandLineArgs(), DisableArgument) >= 0)
             {
                 return;
             }

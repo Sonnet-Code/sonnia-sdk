@@ -75,6 +75,12 @@ namespace Sonia
 
         private void OnEnable()
         {
+            // El renderizador de vídeos no usa la cámara (ni pide el permiso).
+            if (SoniaVideoMode.Active)
+            {
+                return;
+            }
+
             StartCoroutine(StartCameraRoutine());
         }
 
