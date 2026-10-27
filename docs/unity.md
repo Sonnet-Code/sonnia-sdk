@@ -735,8 +735,10 @@ La incremental tarda menos de un minuto.
 - Al acabar deja `registro.json` (cuándo sonó cada frase, boca por cuadro y los huesos en
   píxeles: cara, manos, índices, pecho...; de ahí sale el `localizador.json` de los reels) y
   `heard.wav`. Las fotos son trabajos `still` con varios instantes (`stills`).
-- `VideoLook` aplica el aspecto y lo deshace al acabar: fondo (`StageScreen.SetBackdrop`:
-  stand, color, degradado o imagen), presets de luz sobre las luces de la escena por nombre,
+- Fondos: el del stand es la escena tal cual; con color, degradado o imagen, Sonnia se pinta
+  aislada como en transparente y el fondo se compone en el shader con sus colores exactos (bajo
+  el posprocesado de la escena, un `#F4F1EA` salía gris y con viñeta).
+- `VideoLook` aplica el aspecto y lo deshace al acabar: presets de luz sobre las luces de la escena por nombre,
   contraluz y exposición (Volume propio), encuadre con los huesos
   (`CameraFramingController.SetOverride`: stand, primer plano, medio, americano y entero),
   emoción y gorra Noogler.

@@ -2,7 +2,9 @@
 //   pasada 0: reduce el render supermuestreado con un promedio de caja N×N y lo suma
 //             al acumulador con peso _Weight (subfotogramas del desenfoque de movimiento);
 //   pasada 1: copia el acumulador al cuadro final y, si _FlipY, al revés (ffmpeg quiere
-//             las filas de arriba abajo); opaco o, si _Transparent, con alfa sin premultiplicar;
+//             las filas de arriba abajo); opaco o, si _Transparent, con alfa sin premultiplicar
+//             o, con _HasBackground, compuesto sobre _Background (color, degradado o imagen
+//             con sus colores exactos, sin el posprocesado de la escena; _BgST lo recorta);
 //   pasada 2: como la 0 pero para el fondo transparente: con el render sobre blanco
 //             (_MainTex) y sobre negro (_BlackTex), y los mismos sin Sonnia (_BgWhite,
 //             _BgBlack: viñeta y tonemapping del fondo), saca el alfa por diferencia y suma
@@ -62,8 +64,11 @@ Shader "Hidden/Sonia/VideoResolve"
             #include "UnityCG.cginc"
 
             sampler2D _MainTex;
+            sampler2D _Background;
+            float4 _BgST;
             float _FlipY;
             float _Transparent;
+            float _HasBackground;
 
             float4 frag(v2f_img i) : SV_Target
             {
@@ -80,6 +85,12 @@ Shader "Hidden/Sonia/VideoResolve"
                 }
 
                 float a = saturate(c.a);
+                if (_HasBackground > 0.5)
+                {
+                    float3 back = tex2D(_Background, uv * _BgST.xy + _BgST.zw).rgb;
+                    return float4(saturate(c.rgb) + back * (1.0 - a), 1.0);
+                }
+
                 return a > 0.002 ? float4(saturate(c.rgb / a), a) : float4(0, 0, 0, 0);
             }
             ENDCG

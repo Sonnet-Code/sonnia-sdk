@@ -36,6 +36,8 @@ namespace Sonia.Video
         private RenderTexture _black;
         private RenderTexture _bgBlack;
         private RenderTexture _bgWhite;
+        private Texture _background;
+        private Vector4 _backgroundST = new Vector4(1f, 1f, 0f, 0f);
         private int _exposures;
 
         private Process _ffmpeg;
@@ -115,6 +117,16 @@ namespace Sonia.Video
             Render(camera);
             Graphics.Blit(Target, _bgWhite);
             camera.cullingMask = mask;
+        }
+
+        /// <summary>
+        /// Fondo con sus colores exactos detrás de Sonnia aislada (con <c>transparent</c>): el
+        /// cuadro sale opaco. <paramref name="st"/> = escala y desplazamiento de sus UV (recorte).
+        /// </summary>
+        public void SetBackground(Texture texture, Vector4 st)
+        {
+            _background = texture;
+            _backgroundST = st;
         }
 
         /// <summary>Donde pinta la cámara principal mientras dura el trabajo.</summary>
@@ -237,6 +249,13 @@ namespace Sonia.Video
         {
             _material.SetFloat("_FlipY", topDown ? 1f : 0f);
             _material.SetFloat("_Transparent", _transparent ? 1f : 0f);
+            _material.SetFloat("_HasBackground", _transparent && _background != null ? 1f : 0f);
+            if (_background != null)
+            {
+                _material.SetTexture("_Background", _background);
+                _material.SetVector("_BgST", _backgroundST);
+            }
+
             Graphics.Blit(_accum, _output, _material, 1);
             AsyncGPUReadbackRequest request = AsyncGPUReadback.Request(_output, 0, TextureFormat.RGBA32);
             request.WaitForCompletion();

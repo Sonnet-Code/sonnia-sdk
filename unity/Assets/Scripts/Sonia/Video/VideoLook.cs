@@ -57,14 +57,10 @@ namespace Sonia.Video
         // Fondo, HUD, partículas y emoción
         // ------------------------------------------------------------------
 
-        /// <summary>Fondo, partículas y emoción. El HUD del stand no sale en los vídeos.</summary>
-        public void ApplyStage(VideoJob job, StageScreen screen, SoniaClient client, FacialExpressionController face)
+        /// <summary>Partículas y emoción (el fondo lo pone VideoFrameRecorder; el HUD del stand no sale).</summary>
+        public void ApplyStage(VideoJob job, SoniaClient client, FacialExpressionController face)
         {
             VideoScene scene = job.Scene;
-            if (screen != null)
-            {
-                screen.SetBackdrop(BackdropSprite(scene.Background, job.Width, job.Height, out Color tint), tint);
-            }
 
             if (client != null)
             {
@@ -80,14 +76,22 @@ namespace Sonia.Video
             }
         }
 
-        private Sprite BackdropSprite(VideoBackground background, int width, int height, out Color tint)
+        /// <summary>
+        /// Fondo de color, degradado o imagen, que se compone detrás de Sonnia aislada con sus
+        /// colores exactos; null con el del stand o transparente. <paramref name="st"/>: el
+        /// recorte de la imagen para que cubra el cuadro (escala y desplazamiento de UV).
+        /// </summary>
+        public Texture2D BackgroundTexture(VideoBackground background, int width, int height, out Vector4 st)
         {
-            tint = Color.white;
+            st = new Vector4(1f, 1f, 0f, 0f);
             string mode = (background.Mode ?? "stand").ToLowerInvariant();
             if (mode == "color")
             {
-                tint = ParseColor(background.Color, new Color32(20, 39, 82, 255));
-                return MakeSprite(Texture2D.whiteTexture, new Rect(0, 0, 4, 4));
+                var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+                texture.SetPixel(0, 0, ParseColor(background.Color, new Color32(20, 39, 82, 255)));
+                texture.Apply(false);
+                _created.Add(texture);
+                return texture;
             }
 
             if (mode == "gradient")
@@ -102,7 +106,7 @@ namespace Sonia.Video
 
                 texture.Apply(false);
                 _created.Add(texture);
-                return MakeSprite(texture, new Rect(0, 0, 1, 256));
+                return texture;
             }
 
             if (mode == "image" && !string.IsNullOrEmpty(background.Image) && File.Exists(background.Image))
@@ -120,10 +124,10 @@ namespace Sonia.Video
                 // Cubre el cuadro: se recorta lo que sobra de la imagen, centrado.
                 float frame = width / (float)height;
                 float image = texture.width / (float)texture.height;
-                Rect rect = image > frame
-                    ? new Rect((texture.width - texture.height * frame) * 0.5f, 0, texture.height * frame, texture.height)
-                    : new Rect(0, (texture.height - texture.width / frame) * 0.5f, texture.width, texture.width / frame);
-                return MakeSprite(texture, rect);
+                st = image > frame
+                    ? new Vector4(frame / image, 1f, (1f - frame / image) * 0.5f, 0f)
+                    : new Vector4(1f, image / frame, 0f, (1f - image / frame) * 0.5f);
+                return texture;
             }
 
             if (mode == "image")
@@ -132,13 +136,6 @@ namespace Sonia.Video
             }
 
             return null;
-        }
-
-        private Sprite MakeSprite(Texture2D texture, Rect rect)
-        {
-            Sprite sprite = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-            _created.Add(sprite);
-            return sprite;
         }
 
         // ------------------------------------------------------------------
@@ -244,11 +241,12 @@ namespace Sonia.Video
                     p.RimColor = new Color32(0x71, 0xBF, 0xFF, 255);
                     break;
                 case "dramatic":
-                    p.Key = 1.25f;
-                    p.Fill = 0.35f;
-                    p.Other = 0.6f;
-                    p.Ambient = 0.55f;
-                    p.ExtraRim = 2.6f;
+                    p.Key = 1.3f;
+                    p.Fill = 0.15f;
+                    p.Other = 0.4f;
+                    p.Ambient = 0.3f;
+                    p.ExtraRim = 3.2f;
+                    p.Exposure = -0.2f;
                     p.RimColor = new Color32(0x71, 0xBF, 0xFF, 255);
                     break;
             }
@@ -538,15 +536,11 @@ namespace Sonia.Video
         // Deshacer
         // ------------------------------------------------------------------
 
-        /// <summary>Todo como estaba: fondo del stand, luces, exposición y partículas.</summary>
-        public void Restore(StageScreen screen, CameraFramingController controller)
+        /// <summary>Todo como estaba: luces, exposición y partículas.</summary>
+        public void Restore(CameraFramingController controller)
         {
             RestoreLights();
             SetExposure(0f);
-            if (screen != null)
-            {
-                screen.SetBackdrop(null, Color.white);
-            }
 
             StageParticles.SetQualityAllows(true);
             if (controller != null)

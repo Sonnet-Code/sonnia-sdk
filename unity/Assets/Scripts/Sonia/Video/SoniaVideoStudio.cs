@@ -41,7 +41,6 @@ namespace Sonia.Video
         private const string IdleArgument = "-sonnia-video-idle-min";
         private const int DefaultPort = 8795;
         private const float ChunkSeconds = 0.1f;
-        private const float DoubleAfterSeconds = 150f;
         private const float CapWaitSeconds = 120f;
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -59,7 +58,6 @@ namespace Sonia.Video
         private AvatarStateController _state;
         private FacialExpressionController _face;
         private LipSyncController _lipSync;
-        private StageScreen _screen;
         private CameraFramingController _framing;
         private MethodInfo _filterRead;
         private float[] _block = new float[0];
@@ -207,12 +205,24 @@ namespace Sonia.Video
             _state = _sonia.GetComponentInChildren<AvatarStateController>(true);
             _face = _sonia.GetComponentInChildren<FacialExpressionController>(true);
             _lipSync = _sonia.GetComponentInChildren<LipSyncController>(true);
-            _screen = _sonia.GetComponentInChildren<StageScreen>(true);
             _framing = FindAnyObjectByType<CameraFramingController>(FindObjectsInactive.Include);
             _filterRead = typeof(AudioStreamPlayer).GetMethod("OnAudioFilterRead", BindingFlags.Instance | BindingFlags.NonPublic);
 
+            // Solo Sonnia: el invitado del Modo Jean cargaba otro avatar de Genies a la vez y a
+            // veces se estorbaban (el de Sonnia no llegaba). Y sin el doble: un vídeo con el doble
+            // no sirve; mejor esperar a que Genies entregue el de verdad (el cargador reintenta).
+            GameObject guest = GameObject.Find("Invitado");
+            if (guest != null)
+            {
+                guest.SetActive(false);
+            }
+
+            Component loader = _sonia.GetComponent("GeniesAvatarLoader");
+            VideoLook.SetField(loader, "standInAfterSeconds", 0f);
+            VideoLook.SetField(loader, "standInAfterFailures", 0);
+
             // Nada que no pida el guion: ni saludo al aparecer ni gestos de atención o aburrimiento.
-            VideoLook.SetField(_sonia.GetComponent("GeniesAvatarLoader"), "greetOnAppear", false);
+            VideoLook.SetField(loader, "greetOnAppear", false);
             AvatarChoreographer choreographer = _sonia.GetComponentInChildren<AvatarChoreographer>(true);
             VideoLook.SetField(choreographer, "attentionQuietDelay", 1e6f);
             VideoLook.SetField(choreographer, "boredInterval", new Vector2(1e5f, 1e5f + 1f));
@@ -283,20 +293,11 @@ namespace Sonia.Video
             Application.Quit();
         }
 
+        /// <summary>"ready" con el avatar de Genies puesto; si no, "loading" (sin doble: se espera al de verdad).</summary>
         private string AvatarStatus()
         {
             Transform current = _binder != null ? _binder.Current : null;
-            if (current != null && current.name.Contains("(Genies)"))
-            {
-                return "ready";
-            }
-
-            if (current != null && Time.realtimeSinceStartup - _startedAt > DoubleAfterSeconds)
-            {
-                return "fallback";
-            }
-
-            return "loading";
+            return current != null && current.name.Contains("(Genies)") ? "ready" : "loading";
         }
 
         private string StatusJson()
@@ -466,7 +467,11 @@ namespace Sonia.Video
             Transform avatar = _binder != null ? _binder.Current : null;
             Animator animator = avatar != null ? avatar.GetComponentInChildren<Animator>() : null;
             Camera camera = _framing != null && _framing.TargetCamera != null ? _framing.TargetCamera : Camera.main;
-            bool transparent = string.Equals(job.Scene.Background.Mode, "transparent", StringComparison.OrdinalIgnoreCase);
+            // Con fondo transparente, de color, degradado o imagen, Sonnia se pinta aislada (alfa por
+            // diferencia) y el fondo se compone después con sus colores exactos: el posprocesado de
+            // la escena (tonemapping y viñeta) los apagaba. El del stand es la escena tal cual.
+            string mode = (job.Scene.Background.Mode ?? "stand").ToLowerInvariant();
+            bool transparent = mode == "transparent" || mode == "color" || mode == "gradient" || mode == "image";
 
             // Gorra (en tiempo real: el pelo aplastado lo hace Genies en segundo plano).
             Time.captureDeltaTime = 0f;
@@ -481,7 +486,7 @@ namespace Sonia.Video
                 _capOn = job.Scene.Cap;
             }
 
-            _look.ApplyStage(job, _screen, _client, _face);
+            _look.ApplyStage(job, _client, _face);
             _look.ApplyLighting(job.Scene.Lighting, avatar);
             _client.InjectMessage("{\"type\":\"state\",\"state\":\"idle\"}");
             _player.Flush();
@@ -491,6 +496,15 @@ namespace Sonia.Video
             int window = Mathf.Clamp(Mathf.RoundToInt(sub * Mathf.Clamp01(job.Shutter)), 1, sub);
             float dt = 1f / (job.Fps * sub);
             _recorder = new VideoFrameRecorder(job.Width, job.Height, job.Supersample, transparent);
+            if (mode != "transparent")
+            {
+                Texture2D background = _look.BackgroundTexture(job.Scene.Background, job.Width, job.Height, out Vector4 st);
+                if (background != null)
+                {
+                    _recorder.SetBackground(background, st);
+                }
+            }
+
             _camera = camera;
             _cameraMask = camera.cullingMask;
             _cameraClear = camera.clearFlags;
@@ -838,7 +852,7 @@ namespace Sonia.Video
             _player.Flush();
             _client.InjectMessage("{\"type\":\"state\",\"state\":\"idle\"}");
             _state.ClearLookOverride();
-            _look.Restore(_screen, _framing);
+            _look.Restore(_framing);
             if (_recorder != null)
             {
                 _recorder.Abort();
