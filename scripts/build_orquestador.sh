@@ -50,7 +50,7 @@ if [ ! -d "$REPO/cache/faces/huellas" ]; then
 fi
 
 cd "$REPO/server"
-uv sync --group dev --extra audio --extra camera --extra panel >/dev/null
+uv sync --group dev --extra audio --extra camera --extra panel --extra video >/dev/null
 # Modelos de poses y manos de los juegos (docs/plan-juegos.md, sección 6): se bajan si
 # faltan (revisión fijada y SHA-256) y van dentro, como los de caras.
 uv run --no-sync python -m sonia.vision.models "$REPO/cache/games/modelos" \

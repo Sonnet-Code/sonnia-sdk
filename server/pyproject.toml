@@ -23,11 +23,15 @@ audio = ["sounddevice>=0.5"]
 camera = ["opencv-python>=4.10", "mss>=10.0"]
 # Panel de control web para el personal del stand (docs/panel.md).
 panel = ["starlette>=0.40", "uvicorn>=0.30", "pyjwt[crypto]>=2.8"]
+# Sonnia Video (docs/video.md): ffmpeg con libx264 y AAC empaquetado (comprobado el
+# 27-oct-2026 en macOS arm64), para no depender del de Homebrew.
+video = ["imageio-ffmpeg>=0.5"]
 # Todo lo necesario para la demo completa.
 all = ["sonia[audio,camera,panel]"]
 
 [project.scripts]
 sonia = "sonia.cli:main"
+sonnia-video = "sonia.video.cli:main"
 
 [dependency-groups]
 dev = [

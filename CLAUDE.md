@@ -13,7 +13,7 @@ Sonia **no corre en local**: la voz y la conversación van por la API de OpenAI 
 1. **Voz a voz con GPT-Live.** Hay un solo motor (ADR 007): GPT-Live (`gpt-live-1`) por WebSocket oye el micrófono de forma continua, gestiona él solo los turnos y las interrupciones (es full duplex: se le puede interrumpir hablando) y habla con su propia voz. Las acciones las ejecuta el backend de la API Responses en el que delega (`LIVE_BACKEND_MODEL`). El motor en cascada anterior (detector de voz, reconocedor, modelo de texto y TTS) y el silenciado manual del micrófono mientras hablaba Sonia se borraron el 4 de octubre de 2026: no se reintroducen. Única excepción: mientras suena una frase grabada (`LiveEngine.play_clip`: saludos, avisos y números del stand sacados de `cache/voice`) y `CLIP_ECHO_TAIL_S` después, el micrófono manda silencio a GPT-Live, porque esa frase no la dijo él y, si la oyera, la contestaría. Modelos y voz se cambian por variables de entorno, sin tocar código.
 2. **Latencia primero.** Todo es streaming: el micrófono va a GPT-Live a tiempo real y su voz llega a Unity según se genera. Meta: menos de dos segundos entre que el usuario termina de hablar y Sonia empieza a responder. La descripción de la cámara corre en paralelo y no frena la respuesta. Cualquier cambio que añada latencia perceptible necesita justificación.
 3. **Demo de stand, no producto.** Prioriza que funcione de forma fiable durante ocho horas seguidas sobre la elegancia arquitectónica. Reconexión con espera creciente, sesiones renovadas antes de caducar, timeouts y degradación controlada valen más que abstracciones. Nada de lo que pase en una sesión de GPT-Live, la cámara, el micrófono o Unity tumba el proceso. Sin internet Sonia no conversa: el plan B es el modo "Solo saludos" del panel, que reproduce frases ya grabadas sin red ni gasto.
-4. **Gasto bajo control.** GPT-Live cuesta 0,05 USD por minuto de sesión abierta (unos 3 USD por hora), más los tokens del backend, del modelo de visión, del director de gestos y del juez de los juegos de cámara (Gemini, unos 0,0004 USD por foto). En "Solo saludos" y "Fuera" no se abre sesión. **Ningún test ni script automático llama a APIs reales**; solo gastan `sonia check`, `sonia say` y el uso manual (`sonia run`, `sonia chat`, el panel).
+4. **Gasto bajo control.** GPT-Live cuesta 0,05 USD por minuto de sesión abierta (unos 3 USD por hora), más los tokens del backend, del modelo de visión, del director de gestos y del juez de los juegos de cámara (Gemini, unos 0,0004 USD por foto). En "Solo saludos" y "Fuera" no se abre sesión. **Ningún test ni script automático llama a APIs reales**; solo gastan `sonia check`, `sonia say` y el uso manual (`sonia run`, `sonia chat`, el panel, `sonnia-video`).
 5. **Pantalla vertical.** La demo se muestra en un monitor colocado en vertical, relación 9:16 (1080x1920). Toda la escena de Unity, los subtítulos, el panel de imágenes y la build se diseñan para ese encuadre.
 6. **Nombre: se escribe «Sonnia», se dice «Sonia»** (decisión de Jean del 6 de octubre de 2026, para que coincida con Sonnet Code). Todo lo que se lee (pantalla, subtítulos, panel, nombre de la app) dice «Sonnia»: `clean_transcript` lo corrige en los subtítulos. Lo hablado y lo que leen los modelos (persona, conocimiento, frases grabadas de `assets/showcase`, cuya caché de voz va por texto) sigue con «Sonia». Los identificadores, rutas (`SONIA_HOME`) y cabeceras (`X-Sonia-*`) no cambian.
 7. **Sonia es del staff.** Se presenta como asistente virtual y parte del staff del DevFest, creada por Sonnet Code. El avatar lleva la camiseta del staff del DevFest Santo Domingo 2026 (azul marino como la real, con su arte del DevFest 2026 en el pecho y Sonnet Code debajo; detrás, STAFF y los patrocinadores 2026 con Sonnet Code el más visible), horneada sobre su prenda de Genies al cargarse (`GeniesStaffShirt`, diseño en `scripts/camiseta_staff/genera.py`, ver `docs/unity.md`, «Camiseta de staff»), y la pantalla muestra el logo de Sonnet Code. La persona vive en `server/sonia/persona.py` (y las reglas propias de GPT-Live en `server/sonia/live/prompts.py`); los datos del evento, del GDG, de la biblioteca, de Sonnet Code y de cómo funciona Sonia en `assets/knowledge/*.md` (editables sin tocar código, y desde el panel: Developer, «Prompts de Sonnia», `docs/prompts.md`). Si le preguntan cómo funciona, dice la verdad pero sin marcas (decisión de Jean del 7 de octubre de 2026): un modelo de IA de voz a voz en tiempo real en la nube, un agente que ejecuta las acciones y un avatar 3D animado en el equipo del stand, nada de "100 % local". Sonia no conoce su stack concreto: ni GPT-Live, ni OpenAI, ni Unity, ni Genies, ni el sistema operativo (lo comprueba `test_sonia_no_conoce_las_marcas_de_su_stack`); si le preguntan qué modelo es, remite al equipo del stand sin negarlo.
@@ -55,12 +55,12 @@ Hacer hablar a la Sonnia del stand interrumpe a quien esté con ella. Las accion
 ```
 server/        Orquestador Python. live (motor GPT-Live), actions, agenda (agenda en vivo), games (juegos del stand), vision, faces (caras conocidas), llm (cliente del
                modelo de visión y del de gestos), gestures (director de gestos), audio
-               (micrófono), ws (Unity), panel, showcase, persona.
+               (micrófono), ws (Unity), panel, showcase, persona, video (Sonnia Video: vídeos para redes, docs/video.md).
 unity/         Proyecto Unity. Scripts en unity/Assets/Scripts.
 cloud/panel/   Panel de control en Cloudflare (Worker + Durable Object).
 assets/        gallery (imágenes que Sonia puede mostrar), knowledge (base de conocimiento), agenda (copia de la agenda),
                showcase (frases, cantos y saludos fijos), trivia (banco de preguntas), games (bancos de los juegos), faces (caras conocidas), fonts.
-scripts/       Modo kiosco, checks del stand, sonda del WebSocket, herramientas del avatar.
+scripts/       Modo kiosco, checks del stand, sonda del WebSocket, herramientas del avatar, builds del orquestador y de sonnia-video.
 docs/          Arquitectura, protocolo, panel, guía del stand, Unity y decisiones (ADR).
 ```
 
@@ -120,7 +120,7 @@ Si cambias el protocolo, actualiza ambos lados y el documento en el mismo commit
 Todo desde `server/`. Usa `--no-sync` para no tocar el lockfile en cada ejecución.
 
 ```bash
-uv sync --group dev --extra audio --extra camera --extra panel   # entorno de desarrollo
+uv sync --group dev --extra audio --extra camera --extra panel --extra video   # entorno de desarrollo
 uv run --no-sync sonia check       # micrófono, cámara, GPT-Live (abre y cierra una sesión), modelo de visión, galería
 uv run --no-sync sonia chat        # escribir a GPT-Live por consola (--speak para oírla)
 uv run --no-sync sonia say "Hola"  # GPT-Live lee el texto con su voz (--out para guardar un WAV)
@@ -131,9 +131,11 @@ uv run --no-sync ruff check sonia tests && uv run --no-sync ruff format sonia te
 uv run --no-sync mypy sonia
 uv run --no-sync pytest -q         # sin hardware, sin red, sin APIs reales
 uv run --no-sync python ../scripts/juegos_demo.py --juego wordle --puerto 8791   # orquestador falso de un juego (pantallas sin Sonia)
+uv run --no-sync sonnia-video render guion.toml   # vídeo de Sonnia para redes con el renderizador de Unity sin ventana (docs/video.md; ejemplo, decir, foto, vista, voces, gestos, estado, cerrar; --reel para los reels de media/)
+../scripts/build_sonnia_video.sh && ../scripts/instala_sonnia_video.sh   # tras la build de vídeo (SoniaBuild.BuildMacVideo): app en /Applications y `sonnia-video` en ~/.local/bin, solo por terminal
 ```
 
-`check`, `chat`, `say`, `run` y `reunion` hablan con la API de OpenAI y gastan. Los tests usan `httpx.MockTransport`, un GPT-Live falso inyectado, servidores WebSocket falsos y audio sintético. Las dependencias opcionales (sounddevice, cv2, starlette, uvicorn, jwt) se importan de forma perezosa dentro de funciones para que el paquete importe sin ellas.
+`check`, `chat`, `say`, `run` y `reunion` hablan con la API de OpenAI y gastan; `sonnia-video` gasta voz de Gemini o ElevenLabs (con caché por texto y voz) y una petición de gestos por vídeo. Los tests usan `httpx.MockTransport`, un GPT-Live falso inyectado, servidores WebSocket falsos y audio sintético. Las dependencias opcionales (sounddevice, cv2, starlette, uvicorn, jwt) se importan de forma perezosa dentro de funciones para que el paquete importe sin ellas.
 
 ## Cosas que no hay que hacer
 

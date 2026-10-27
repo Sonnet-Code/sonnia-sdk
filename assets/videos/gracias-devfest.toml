@@ -1,0 +1,48 @@
+# Agradecimiento tras el DevFest Santo Domingo 2026 (pedido del 27 de octubre de 2026):
+# gracias a quien pasó por el stand, quién es Sonnia para quien no la conoce y que se puede
+# pedir una igual en la web. Vertical para Instagram, TikTok y Reels.
+titulo = "gracias-devfest"
+
+[voz]
+motor = "gemini"
+voz = "es-es-techagent-5"          # la del comercial del DevFest
+modelo = "gemini-3.8-flash-tts"
+
+[pronunciacion]
+"sonnetcode.com" = "sónet code punto com"
+"DevFest" = "dev fest"
+
+[video]
+formato = "vertical"
+calidad = "alta"
+antes = 0.6
+despues = 1.5
+
+[escena]
+fondo = "stand"
+encuadre = "stand"
+luz = "stand"
+emocion = "alegre"
+
+[gestos]
+modo = "auto"
+
+[[frase]]
+texto = "¡Gracias a todos los que pasaron por el stand de Sonnet Code en el DevFest Santo Domingo!"
+
+[[frase]]
+texto = "Me encantó conversar, jugar y reírme con ustedes."
+
+[[frase]]
+texto = "Y si todavía no me conoces…"
+pausa = 0.15
+
+[[frase]]
+texto = "¡Hola! Soy Sonnia, la mascota de Sonnet Code: una asistente virtual que conversa contigo en tiempo real."
+gesto = "waveCalm"
+
+[[frase]]
+texto = "¿Te gustaría tener una como yo en tu empresa o en tu evento?"
+
+[[frase]]
+texto = "Pídela en sonnetcode.com. ¡Nos vemos!"

@@ -24,3 +24,12 @@ def _dispositivos_aparte(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
 def _subidas_de_galeria_aparte(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Las imágenes que un test sube a la galería no van a ``cache/gallery`` del equipo."""
     monkeypatch.setenv("GALLERY_UPLOAD_DIR", str(tmp_path / "gallery-uploads"))
+
+
+@pytest.fixture(autouse=True)
+def _sonnia_video_aparte(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Sonnia Video guarda su caché y sus trabajos en una carpeta del test, nunca en la del
+    usuario, y no habla con un renderizador que esté abierto en el equipo."""
+    monkeypatch.setenv("SONNIA_VIDEO_HOME", str(tmp_path / "sonnia-video"))
+    monkeypatch.setenv("SONNIA_VIDEO_PORT", "1")
+    monkeypatch.setenv("SONNIA_VIDEO_APP", str(tmp_path / "no-hay-app"))
