@@ -111,11 +111,6 @@ namespace Sonia.Video
             _lastRequest = _startedAt;
             Application.runInBackground = true;
             Application.targetFrameRate = 30;
-            if (!Application.isBatchMode)
-            {
-                Screen.fullScreenMode = FullScreenMode.Windowed;
-                Screen.SetResolution(540, 960, FullScreenMode.Windowed);
-            }
 
             AudioListener.pause = true;
             _idleLimit = 60f * ArgFloat(IdleArgument, 45f);
@@ -128,49 +123,14 @@ namespace Sonia.Video
 
             SceneManager.sceneLoaded += OnSceneLoaded;
 
-            // Abierta con doble clic (sin -sonnia-video-port): se abre el estudio web, que
-            // lanza el renderizador sin ventana (modo batch), y esta copia se cierra.
-            if (!HasArgument(PortArgument) && !Application.isBatchMode && LaunchStudio())
+            // Se usa desde la terminal (sonnia-video la lanza sin ventana con -batchmode y el
+            // puerto). Abierta con doble clic no tiene nada que hacer: avisa y se cierra.
+            if (!HasArgument(PortArgument) && !Application.isBatchMode)
             {
-                Invoke(nameof(Quit), 0.5f);
+                Debug.Log("[Vídeo] Sonnia Video se usa desde la terminal (sonnia-video): me cierro.");
+                Invoke(nameof(Quit), 0.2f);
             }
         }
-
-        private System.Diagnostics.Process _studio;
-
-        /// <summary>
-        /// Lanza el estudio web de sonnia-video que va dentro de la app (Contents/Resources/sonnia-video):
-        /// abre el navegador y lanza esta misma app sin ventana para renderizar. Sigue vivo
-        /// cuando esta copia se cierra.
-        /// </summary>
-        private bool LaunchStudio()
-        {
-            string tool = Path.Combine(Application.dataPath, "Resources", "sonnia-video", "sonnia-video");
-            if (!File.Exists(tool))
-            {
-                Debug.Log("[Vídeo] Sin sonnia-video dentro de la app (" + tool + "): no se abre el estudio.");
-                return false;
-            }
-
-            try
-            {
-                var info = new System.Diagnostics.ProcessStartInfo(tool, "estudio")
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WorkingDirectory = Path.GetDirectoryName(tool)
-                };
-                _studio = System.Diagnostics.Process.Start(info);
-                Debug.Log("[Vídeo] Estudio web lanzado (pid " + (_studio != null ? _studio.Id : 0) + ").");
-                return _studio != null;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning("[Vídeo] No se pudo lanzar el estudio: " + ex.Message);
-                return false;
-            }
-        }
-
 
         private void OnDestroy()
         {
@@ -1001,34 +961,6 @@ namespace Sonia.Video
 
             int rate = _player.OutputSampleRate > 0 ? _player.OutputSampleRate : 48000;
             WriteWav(Path.Combine(job.OutputDir, "heard.wav"), _heardSamples, rate);
-        }
-
-        // ------------------------------------------------------------------
-        // Ventana
-        // ------------------------------------------------------------------
-
-        private void OnGUI()
-        {
-            string label;
-            if (_job != null && _recorder != null)
-            {
-                RenderTexture preview = _recorder.Preview;
-                if (preview != null && _jobState == "rendering")
-                {
-                    float scale = Mathf.Min(Screen.width / (float)preview.width, Screen.height / (float)preview.height);
-                    float w = preview.width * scale;
-                    float h = preview.height * scale;
-                    GUI.DrawTexture(new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h), preview, ScaleMode.StretchToFill, false);
-                }
-
-                label = _job.Id + " · " + _jobState + " · " + _frame + "/" + _frames;
-            }
-            else
-            {
-                label = "Sonnia Video · " + (_sceneReady ? AvatarStatus() : "cargando") + " · puerto " + (_http != null ? _http.Port : 0);
-            }
-
-            GUI.Label(new Rect(10, Screen.height - 26, Screen.width - 20, 22), label);
         }
 
         // ------------------------------------------------------------------

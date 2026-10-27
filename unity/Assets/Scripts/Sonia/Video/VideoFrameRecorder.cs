@@ -132,12 +132,6 @@ namespace Sonia.Video
         /// <summary>Donde pinta la cámara principal mientras dura el trabajo.</summary>
         public RenderTexture Target { get; }
 
-        /// <summary>Último cuadro cerrado (para la ventana de la app).</summary>
-        public RenderTexture Preview
-        {
-            get { return _output; }
-        }
-
         /// <summary>Últimas líneas de ffmpeg (para los errores).</summary>
         public string FfmpegLog
         {

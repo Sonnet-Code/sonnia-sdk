@@ -717,8 +717,9 @@ La incremental tarda menos de un minuto.
   en el Dock ni menú). En modo batch Unity no pinta las cámaras solo, así que cada subfotograma
   se pinta a mano (`RenderPipeline.SubmitRenderRequest` con `StandardRequest`). Con la cámara
   principal apagada esa petición no pinta la cámara del HUD: **los vídeos no llevan HUD** (ni
-  logo, ni QR, ni subtítulos; Jean, 27 de octubre de 2026). Con doble clic la app abre el
-  estudio web de `sonnia-video`, que lanza su propio renderizador sin ventana, y se cierra.
+  logo, ni QR, ni subtítulos; Jean, 27 de octubre de 2026). Se usa solo desde la terminal
+  (Jean: «es por terminal que quiero que funcione, no con UI»): abierta con doble clic, se
+  cierra sola.
 - `Sonia.Video.SoniaVideoStudio` (ensamblado `Sonia.Video`) espera trabajos por HTTP en
   `127.0.0.1:8795` (`-sonnia-video-port`) y hace de orquestador grabado: despacha la línea de
   tiempo del trabajo por `SoniaClient.InjectMessage` e `InjectAudioFrame` (estado,
