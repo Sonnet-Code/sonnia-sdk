@@ -22,7 +22,7 @@ namespace Sonia
     {
         private static readonly Color PanelColor = new Color(0.02f, 0.03f, 0.08f, 0.94f);
         private static readonly Color ItemColor = new Color(0.16f, 0.22f, 0.40f, 1f);
-        private static readonly Color SelectedColor = new Color(0.01f, 0.44f, 0.96f, 1f);
+        private static readonly Color SelectedColor = new Color(0.30f, 0.36f, 0.83f, 1f);
         private static readonly Color MutedText = new Color(0.72f, 0.77f, 0.88f, 1f);
 
         private GraphicsQualityMenu _graphics;

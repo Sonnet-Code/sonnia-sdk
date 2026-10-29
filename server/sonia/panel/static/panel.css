@@ -2,14 +2,14 @@
  * Sonnia control panel.
  * High-contrast light theme: it is often used in bright rooms, from a phone.
  * Mobile first (one column); two or three columns on wide screens.
- * Palette: navy #142752, blue #0371f5, sky blue #71bfff.
+ * Palette: dark indigo #1e2240, indigo #4c5bd4, periwinkle #9aa6f0.
  */
 
 :root {
-  --navy: #142752;
-  --blue: #0371f5;
-  --blue-strong: #0356c2;
-  --sky: #71bfff;
+  --navy: #1e2240;
+  --blue: #4c5bd4;
+  --blue-strong: #3a47b0;
+  --sky: #9aa6f0;
   --grey: #b0b2b7;
 
   --bg: #e9edf4;
@@ -33,7 +33,7 @@
   /* One color per mode */
   --mode-conversation: #0a6e34;
   --mode-conversation-bg: #dff3e7;
-  --mode-greeter: #0356c2;
+  --mode-greeter: #3a47b0;
   --mode-greeter-bg: #e1ecfd;
   --mode-away: #a65300;
   --mode-away-bg: #ffefd9;
@@ -1338,7 +1338,7 @@ input[type="range"]:disabled {
   background: var(--blue);
   border-color: var(--blue-strong);
   color: #fff;
-  box-shadow: 0 0 0 3px rgba(3, 113, 245, 0.25);
+  box-shadow: 0 0 0 3px rgba(76, 91, 212, 0.25);
 }
 
 .anim-item.is-playing .anim-play::before {

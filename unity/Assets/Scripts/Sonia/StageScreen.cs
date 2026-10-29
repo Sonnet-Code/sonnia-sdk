@@ -104,8 +104,8 @@ namespace Sonia
         private float invitationDelay = 1.5f;
 
         // Screen colors.
-        private static readonly Color Navy = new Color32(20, 39, 82, 255);
-        private static readonly Color Brand = new Color32(3, 113, 245, 255);
+        private static readonly Color Navy = new Color32(30, 34, 64, 255);
+        private static readonly Color Brand = new Color32(76, 91, 212, 255);
         private static readonly Color Dark = new Color32(11, 19, 34, 255);
 
         /// <summary>What the background darkens towards (the glyph rain of StageParticles).</summary>
