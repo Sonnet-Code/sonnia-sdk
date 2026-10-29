@@ -1,6 +1,0 @@
-node_modules
-public
-.wrangler
-.dev.vars
-# Generado por `npm run types` / `npm run typecheck` (`wrangler types`).
-worker-configuration.d.ts

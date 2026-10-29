@@ -1,12 +1,14 @@
-kimi.txt
+# Secrets
 .env
+overrides.env
 
-# Modelos y capturas
-models/
+# Runtime cache (recorded voice lines, panel state, instance id) and debug output
 cache/
+logs/
 debug_frames/
-*.pt
+models/
 *.onnx
+*.pt
 *.bin
 *.safetensors
 
@@ -19,6 +21,7 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 dist/
+build/
 
 # Unity
 unity/Library/
@@ -28,39 +31,23 @@ unity/obj/
 unity/UserSettings/
 unity/Build/
 unity/Builds/
+unity/.plastic/
+unity/.vscode/
+unity/mono_crash.*
+unity/Assets/_Recovery/
+unity/Assets/_Recovery.meta
 *.csproj
 *.sln
+*.slnx
 .vs/
 .idea/
 .DS_Store
-*.slnx
-unity/.plastic/
-unity/.vscode/
 
-logs/
-aistudio.txt
-
-# Fotos de personas para dar de alta caras (docs/caras.md): los recortes van a
-# cache/faces/fotos y los originales no se suben nunca.
-saludar/
-
-# Genies Avatar SDK
-# Assets/Genies lo genera y regenera el SDK (ver su IMPORTANT.md) y guarda ahí las
-# credenciales (Resources/GeniesAuthSettings.bytes, Client ID y Secret solo ofuscados)
+# Genies Avatar SDK (optional, imported from the Unity Asset Store).
+# The SDK writes its credentials to Assets/Resources/GeniesAuthSettings.bytes: never commit them.
+unity/Packages/com.genies.avatar-sdk.client/
 unity/Assets/Genies/
 unity/Assets/Genies.meta
-unity/Assets/Resources/GeniesAuthSettings.bytes*
-# El SDK se importa del Asset Store (462 MB) y sus samples se regeneran desde el paquete
-unity/Packages/com.genies.avatar-sdk.client/
 unity/Assets/Samples/
 unity/Assets/Samples.meta
-
-# Restos de Unity tras un cierre inesperado (copias de escenas y volcados de memoria)
-unity/Assets/_Recovery/
-unity/Assets/_Recovery.meta
-unity/mono_crash.*
-# Variables de cada equipo que escribe el backoffice (sonia/paths.py)
-overrides.env
-# Gorro Noogler de la trivia: el zip de Sketchfab descomprimido y los intermedios
-scripts/gorro_noogler/fuente/
-scripts/gorro_noogler/trabajo/
+unity/Assets/Resources/GeniesAuthSettings.bytes*
