@@ -4,7 +4,7 @@
 
 Sonnia was born as a booth demo at a developer conference and is now released as an open-source starting point for anyone who wants to build a talking, animated AI character for kiosks, events, museums or streams.
 
-> **Status: early public release.** The repository is being published in stages. See [Roadmap](#roadmap) for what is already here and what is coming next.
+> **Status: early public release.** The orchestrator passes its offline test suite and the Unity client was verified against a simulated orchestrator, with and without the Genies SDK. A full run against the real voice model has not been done yet since the public release. See [Roadmap](#roadmap) and [Known limitations](#known-limitations).
 
 ## How it works
 
@@ -49,13 +49,43 @@ The character itself is pluggable:
 - **Genies Avatar SDK (optional).** If you import the free [Genies Avatar SDK](https://genies.com) from the Unity Asset Store and add your own credentials, Sonnia loads a fully customizable Genies avatar at runtime. The SDK is proprietary and is **not** included in this repository.
 - **Fallback avatar.** Without the SDK, the client uses a character from the Genies Avatar Starter Pack, which is distributed under a permissive license.
 
+## Getting started
+
+1. Copy `.env.example` to `.env` at the repository root and set `OPENAI_API_KEY`.
+2. Start the orchestrator from `server/` (details in [`server/README.md`](server/README.md)):
+
+   ```bash
+   cd server
+   uv sync --extra audio --extra camera --extra panel
+   uv run sonia run
+   ```
+
+3. Open `unity/` with Unity 6000.6.0f1, set the Game view to 1080x1920 and press Play (details in [`unity/README.md`](unity/README.md)).
+4. Talk to Sonnia. The local control panel is at `http://127.0.0.1:8780`.
+
+Customize her by editing plain files, no code needed: what she knows in `assets/knowledge/`, the lines she says while idle in `assets/showcase/`, the trivia questions in `assets/trivia/questions.md` and the images she can show in `assets/gallery/`.
+
+The written name is "Sonnia". Texts read by the voice model spell it "Sonia" so it is pronounced right; the code identifiers (`sonia` package, `Sonia` namespace) keep that spelling too.
+
 ## Roadmap
 
 - [x] License, architecture overview and the [WebSocket protocol](docs/protocol.md) between the orchestrator and the avatar client
-- [ ] Python orchestrator: realtime voice engine, actions (`look`, `show_image`, `hide_image`, `play_animation`), camera snapshots, local control panel, idle lines, trivia mode
-- [ ] Unity client: avatar, lip-sync, animation, vertical stage, image panel, subtitles, trivia screen, optional Genies integration
-- [ ] Setup guide for macOS and Windows, `.env.example` and a sample knowledge base
+- [x] Python orchestrator: realtime voice engine, actions (`look`, `show_image`, `hide_image`, `play_animation`), camera snapshots, local control panel, idle lines, trivia mode
+- [x] Unity client: avatar, lip-sync, animation, vertical stage, image panel, subtitles, trivia screen, optional Genies integration
+- [x] `.env.example` and a sample knowledge base
+- [ ] Step-by-step setup guide for macOS and Windows, including player builds
 - [ ] Continuous integration (lint, type checks and tests without network access)
+- [ ] A walk cycle for the default avatar (without the Genies SDK it slides off screen in away mode)
+
+## Known limitations
+
+- Player builds have not been tested since the public release; running from the Unity editor works.
+- Without the Genies SDK there is no walk cycle: in away mode the avatar slides off screen.
+- On Windows, the Genies SDK needs the Visual C++ runtime.
+
+## History
+
+Sonnia was developed in a private repository between September and October 2026 and ran live for two days at a developer conference. Its commit history is kept here, filtered: third-party assets that cannot be redistributed, brand logos and personal data were removed from every commit, and the commit messages were translated to English. The commits before "Start the public release" therefore show the original, event-specific project in Spanish; everything after it is the generic, English-only Sonnia SDK.
 
 ## Requirements
 

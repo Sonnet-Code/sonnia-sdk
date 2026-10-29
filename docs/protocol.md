@@ -236,7 +236,7 @@ With `VISION_SOURCE=unity`, the client sends snapshots from its webcam when aske
 
 ### `animations` and `animation_playing`
 
-On `hello`, the client sends the catalog of one-shot clips that can be triggered with `play_animation`. `group` is one of `greeting`, `dance`, `fourth_wall`, `soft`, `talking`, `idle_variation`, `thinking`, `nod` or `present`. Whenever the playing one-shot clip changes, the client sends `animation_playing` (`clip` or `null`).
+On `hello`, the client sends the catalog of one-shot clips that can be triggered with `play_animation`. `group` is one of `greeting`, `dance`, `fourth_wall`, `soft`, `talking`, `idle_variation`, `thinking`, `nod`, `present` or `trivia`. Whenever the playing one-shot clip changes, the client sends `animation_playing` (`clip` or `null`).
 
 ```json
 {"type": "animations", "animations": [{"clip": "Wave", "group": "greeting"}]}

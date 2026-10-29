@@ -1,0 +1,436 @@
+{
+ "actions": [
+  [
+   "instruct",
+   "TRIVIA MODE ON: 3 questions, medium level, three options each (A, B, C) on your screen. Winning takes 2 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"What does the \"I\" in AI stand for?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: Interface; B: Internet; C: Intelligence."
+  ],
+  [
+   "start_trivia",
+   "FOR SONIA: The trivia is on your screen, medium level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"What does the \"I\" in AI stand for?\". Do not read the options, they are already on the screen (for you: A: Interface; B: Internet; C: Intelligence)."
+  ],
+  [
+   "start_trivia",
+   "FOR SONIA: The trivia is already running on your screen, no need to start it. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"What does the \"I\" in AI stand for?\". Do not read the options, they are already on the screen (for you: A: Interface; B: Internet; C: Intelligence)."
+  ],
+  [
+   "trivia_answer",
+   "FOR SONIA: They picked C, \"Intelligence\": it is CORRECT. Celebrate it. Explain in one or two sentences why it is the right one. Then ask whether they want to move on to the next question and wait: when they say yes, delegate \"trivia: next question\"; if they do not want to go on, delegate ending the trivia."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 2 of 3: \"Which protocol do web browsers use to load pages?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: HTTP; B: SMTP; C: FTP."
+  ],
+  [
+   "trivia_next",
+   "FOR SONIA: Go on with question 2 of 3 and read only the question, as is: \"Which protocol do web browsers use to load pages?\". Do not read the options, they are already on the screen (for you: A: HTTP; B: SMTP; C: FTP)."
+  ],
+  [
+   "trivia_answer",
+   "FOR SONIA: They do not know. The right one was A, \"HTTP\". Tell them kindly. Explain in one or two sentences why it is the right one. Then ask whether they want to move on to the next question and wait: when they say yes, delegate \"trivia: next question\"; if they do not want to go on, delegate ending the trivia."
+  ],
+  [
+   "instruct",
+   "TRIVIA MODE ON: 3 questions, hard level, three options each (A, B, C) on your screen. Winning takes 2 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"In which year was the first version of Python released?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: 1985; B: 2000; C: 1991."
+  ],
+  [
+   "restart_trivia",
+   "FOR SONIA: New trivia from scratch. The trivia is on your screen, hard level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"In which year was the first version of Python released?\". Do not read the options, they are already on the screen (for you: A: 1985; B: 2000; C: 1991)."
+  ],
+  [
+   "instruct",
+   "The trivia is over and there are no more questions on your screen: go back to talking normally."
+  ],
+  [
+   "stop_trivia",
+   "Trivia ended. Sonia says so in one short sentence and keeps talking normally."
+  ],
+  [
+   "instruct",
+   "TRIVIA MODE ON: 3 questions, easy level, three options each (A, B, C) on your screen. Winning takes 2 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"Which language is used to style web pages?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: SQL; B: Bash; C: CSS."
+  ],
+  [
+   "start_trivia",
+   "FOR SONIA: The trivia is on your screen, easy level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"Which language is used to style web pages?\". Do not read the options, they are already on the screen (for you: A: SQL; B: Bash; C: CSS)."
+  ],
+  [
+   "trivia_answer",
+   "FOR SONIA: They picked A, \"SQL\": it is NOT correct; the right one was C, \"CSS\". Tell them kindly. Explain in one or two sentences why it is the right one. Use this fact: CSS stands for Cascading Style Sheets. Then ask whether they want to move on to the next question and wait: when they say yes, delegate \"trivia: next question\"; if they do not want to go on, delegate ending the trivia."
+  ],
+  [
+   "instruct",
+   "The trivia is over and there are no more questions on your screen: go back to talking normally."
+  ],
+  [
+   "stop_trivia",
+   "Trivia ended. Sonia says so in one short sentence and keeps talking normally."
+  ]
+ ],
+ "change_level": [
+  [
+   "instruct",
+   "TRIVIA MODE ON: 3 questions, easy level, three options each (A, B, C) on your screen. Winning takes 2 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"Which language is used to style web pages?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: SQL; B: CSS; C: Bash."
+  ],
+  [
+   "start",
+   true,
+   "The trivia is on your screen, easy level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"Which language is used to style web pages?\". Do not read the options, they are already on the screen (for you: A: SQL; B: CSS; C: Bash)."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"In which year was the first version of Python released?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: 1985; B: 2000; C: 1991."
+  ],
+  [
+   "restart",
+   true,
+   "The trivia is now hard level and the first question is a different one. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"In which year was the first version of Python released?\". Do not read the options, they are already on the screen (for you: A: 1985; B: 2000; C: 1991)."
+  ],
+  [
+   "resume",
+   "The trivia is already running on your screen, no need to start it. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"In which year was the first version of Python released?\". Do not read the options, they are already on the screen (for you: A: 1985; B: 2000; C: 1991)."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"Which protocol do web browsers use to load pages?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: HTTP; B: SMTP; C: FTP."
+  ],
+  [
+   "restart",
+   true,
+   "The trivia is now medium level and the first question is a different one. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"Which protocol do web browsers use to load pages?\". Do not read the options, they are already on the screen (for you: A: HTTP; B: SMTP; C: FTP)."
+  ],
+  [
+   "answer",
+   true,
+   "They picked A, \"HTTP\": it is CORRECT. Celebrate it. Explain in one or two sentences why it is the right one. Then ask whether they want to move on to the next question and wait: when they say yes, delegate \"trivia: next question\"; if they do not want to go on, delegate ending the trivia."
+  ],
+  [
+   "instruct",
+   "TRIVIA MODE ON: 3 questions, medium level, three options each (A, B, C) on your screen. Winning takes 2 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"Which protocol do web browsers use to load pages?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: FTP; B: SMTP; C: HTTP."
+  ],
+  [
+   "restart",
+   true,
+   "New trivia from scratch. The trivia is on your screen, medium level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"Which protocol do web browsers use to load pages?\". Do not read the options, they are already on the screen (for you: A: FTP; B: SMTP; C: HTTP)."
+  ],
+  [
+   "instruct",
+   "The trivia is over and there are no more questions on your screen: go back to talking normally."
+  ],
+  [
+   "stop",
+   true,
+   "Trivia ended."
+  ],
+  [
+   "resume",
+   "The trivia is over and there are no more questions on your screen: go back to talking normally."
+  ]
+ ],
+ "loses": [
+  [
+   "instruct",
+   "TRIVIA MODE ON: 3 questions, medium level, three options each (A, B, C) on your screen. Winning takes 2 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"What does the \"I\" in AI stand for?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: Interface; B: Internet; C: Intelligence."
+  ],
+  [
+   "start",
+   true,
+   "The trivia is on your screen, medium level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"What does the \"I\" in AI stand for?\". Do not read the options, they are already on the screen (for you: A: Interface; B: Internet; C: Intelligence)."
+  ],
+  [
+   "next",
+   false,
+   "Question 1 is still waiting for an answer: \"What does the \"I\" in AI stand for?\". Let them answer first."
+  ],
+  [
+   "answer",
+   true,
+   "They do not know. The right one was C, \"Intelligence\". Tell them kindly. Explain in one or two sentences why it is the right one. Then ask whether they want to move on to the next question and wait: when they say yes, delegate \"trivia: next question\"; if they do not want to go on, delegate ending the trivia."
+  ],
+  [
+   "answer",
+   false,
+   "Question 1 is already answered and its result is still on screen. If the player wants to go on, delegate \"trivia: next question\" and let them answer the new one."
+  ],
+  [
+   "resume",
+   "Question 1 is already answered and its result is still on screen. If the player wants to go on, delegate \"trivia: next question\" and let them answer the new one."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 2 of 3: \"Which protocol do web browsers use to load pages?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: HTTP; B: SMTP; C: FTP."
+  ],
+  [
+   "next",
+   true,
+   "Go on with question 2 of 3 and read only the question, as is: \"Which protocol do web browsers use to load pages?\". Do not read the options, they are already on the screen (for you: A: HTTP; B: SMTP; C: FTP)."
+  ],
+  [
+   "resume",
+   "The trivia is already running on your screen, no need to start it. If you have not read it, read question 2 of 3 and read only the question, as is: \"Which protocol do web browsers use to load pages?\". Do not read the options, they are already on the screen (for you: A: HTTP; B: SMTP; C: FTP)."
+  ],
+  [
+   "answer",
+   true,
+   "They picked B, \"SMTP\": it is NOT correct; the right one was A, \"HTTP\". Tell them kindly. Explain in one or two sentences why it is the right one. Then ask whether they want to move on to the next question and wait: when they say yes, delegate \"trivia: next question\"; if they do not want to go on, delegate ending the trivia."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 3 of 3: \"Which language is used to style web pages?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: Bash; B: CSS; C: SQL."
+  ],
+  [
+   "next",
+   true,
+   "Go on with question 3 of 3 and read only the question, as is: \"Which language is used to style web pages?\". Do not read the options, they are already on the screen (for you: A: Bash; B: CSS; C: SQL)."
+  ],
+  [
+   "answer",
+   true,
+   "They picked B, \"CSS\": it is CORRECT. Celebrate it. Explain in one or two sentences why it is the right one. Use this fact: CSS stands for Cascading Style Sheets. That ends the trivia: they got 1 of 3 right and fell short of the 2 needed. Kindly encourage them to try again. Then keep talking normally."
+  ],
+  [
+   "instruct",
+   "The trivia is over and there are no more questions on your screen: go back to talking normally."
+  ]
+ ],
+ "panel": [
+  [
+   "instruct",
+   "TRIVIA MODE ON: 3 questions, easy level, three options each (A, B, C) on your screen. Winning takes 2 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"Which language is used to style web pages?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: SQL; B: CSS; C: Bash."
+  ],
+  [
+   "start",
+   true,
+   "Trivia started, easy level: 3 questions, win with 2."
+  ],
+  [
+   "speak",
+   "TRIVIA: The trivia is on your screen, easy level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"Which language is used to style web pages?\". Do not read the options, they are already on the screen (for you: A: SQL; B: CSS; C: Bash)."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"In which year was the first version of Python released?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: 1985; B: 2000; C: 1991."
+  ],
+  [
+   "restart",
+   true,
+   "Trivia at hard level: other questions from the first one."
+  ],
+  [
+   "speak",
+   "TRIVIA: The trivia is now hard level and the first question is a different one. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"In which year was the first version of Python released?\". Do not read the options, they are already on the screen (for you: A: 1985; B: 2000; C: 1991)."
+  ],
+  [
+   "speak",
+   "TRIVIA (answer recorded by the operator): They picked A, \"1985\": it is NOT correct; the right one was C, \"1991\". Tell them kindly. Explain in one or two sentences why it is the right one. Use this fact: Guido van Rossum published it in February 1991. Then ask whether they want to move on to the next question and wait: when they say yes, delegate \"trivia: next question\"; if they do not want to go on, delegate ending the trivia."
+  ],
+  [
+   "answer",
+   true,
+   "Answer A: wrong."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 2 of 3: \"What does the \"I\" in AI stand for?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: Interface; B: Intelligence; C: Internet."
+  ],
+  [
+   "next",
+   true,
+   "Question 2 of 3 on screen."
+  ],
+  [
+   "speak",
+   "TRIVIA: Go on with question 2 of 3 and read only the question, as is: \"What does the \"I\" in AI stand for?\". Do not read the options, they are already on the screen (for you: A: Interface; B: Intelligence; C: Internet)."
+  ],
+  [
+   "speak",
+   "TRIVIA (answer recorded by the operator): They do not know. The right one was B, \"Intelligence\". Tell them kindly. Explain in one or two sentences why it is the right one. Then ask whether they want to move on to the next question and wait: when they say yes, delegate \"trivia: next question\"; if they do not want to go on, delegate ending the trivia."
+  ],
+  [
+   "answer",
+   true,
+   "Answer \"I don't know\": wrong."
+  ],
+  [
+   "instruct",
+   "TRIVIA MODE ON: 3 questions, hard level, three options each (A, B, C) on your screen. Winning takes 2 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"In which year was the first version of Python released?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: 1991; B: 2000; C: 1985."
+  ],
+  [
+   "restart",
+   true,
+   "Trivia started, hard level: 3 questions, win with 2."
+  ],
+  [
+   "speak",
+   "TRIVIA: The trivia is on your screen, hard level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"In which year was the first version of Python released?\". Do not read the options, they are already on the screen (for you: A: 1991; B: 2000; C: 1985)."
+  ],
+  [
+   "instruct",
+   "The trivia is over and there are no more questions on your screen: go back to talking normally."
+  ],
+  [
+   "speak",
+   "TRIVIA: the operator has ended the trivia. Say it in one short sentence and keep talking normally."
+  ],
+  [
+   "stop",
+   true,
+   "Trivia ended."
+  ]
+ ],
+ "ticks": [
+  [
+   "instruct",
+   "TRIVIA MODE ON: 3 questions, medium level, three options each (A, B, C) on your screen. Winning takes 2 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"What does the \"I\" in AI stand for?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: Interface; B: Internet; C: Intelligence."
+  ],
+  [
+   "start",
+   true,
+   "The trivia is on your screen, medium level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"What does the \"I\" in AI stand for?\". Do not read the options, they are already on the screen (for you: A: Interface; B: Internet; C: Intelligence)."
+  ],
+  [
+   "speak",
+   "TRIVIA: there is no answer recorded for question 1. If the player already gave you their option, delegate \"trivia: answer\" with its letter now, without saying whether it is correct. If not, encourage them in a few words and, if needed, repeat the question, without reading the options (they are on the screen)."
+  ],
+  [
+   "speak",
+   "TRIVIA: the player just spoke to you and you have not delegated anything. If they asked to stop playing, for a new game from scratch or for the next question, or gave you their option, delegate it right now (saying it is not enough: the screen only changes if you delegate) and then say it in a few words. If they were just chatting, say nothing."
+  ],
+  [
+   "instruct",
+   "The trivia is over and there are no more questions on your screen: go back to talking normally."
+  ],
+  [
+   "speak",
+   "TRIVIA: the player no longer answers and the trivia is cancelled. Say in one short sentence that the trivia will have to wait for another time."
+  ]
+ ],
+ "wins_with_contact": [
+  [
+   "instruct",
+   "TRIVIA MODE ON: 3 questions, easy level, three options each (A, B, C) on your screen. Winning takes 2 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 3: \"Which language is used to style web pages?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: SQL; B: CSS; C: Bash."
+  ],
+  [
+   "start",
+   true,
+   "The trivia is on your screen, easy level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 3 questions and that they win with 2 correct answers. Then say question 1 of 3 and read only the question, as is: \"Which language is used to style web pages?\". Do not read the options, they are already on the screen (for you: A: SQL; B: CSS; C: Bash)."
+  ],
+  [
+   "answer",
+   true,
+   "They picked B, \"CSS\": it is CORRECT. Celebrate it. Explain in one or two sentences why it is the right one. Use this fact: CSS stands for Cascading Style Sheets. Then ask whether they want to move on to the next question and wait: when they say yes, delegate \"trivia: next question\"; if they do not want to go on, delegate ending the trivia."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 2 of 3: \"What does the \"I\" in AI stand for?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: Interface; B: Intelligence; C: Internet."
+  ],
+  [
+   "next",
+   true,
+   "Go on with question 2 of 3 and read only the question, as is: \"What does the \"I\" in AI stand for?\". Do not read the options, they are already on the screen (for you: A: Interface; B: Intelligence; C: Internet)."
+  ],
+  [
+   "answer",
+   true,
+   "They picked C, \"Internet\": it is NOT correct; the right one was B, \"Intelligence\". Tell them kindly. Explain in one or two sentences why it is the right one. Then ask whether they want to move on to the next question and wait: when they say yes, delegate \"trivia: next question\"; if they do not want to go on, delegate ending the trivia."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 3 of 3: \"Which protocol do web browsers use to load pages?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: SMTP; B: FTP; C: HTTP."
+  ],
+  [
+   "next",
+   true,
+   "Go on with question 3 of 3 and read only the question, as is: \"Which protocol do web browsers use to load pages?\". Do not read the options, they are already on the screen (for you: A: SMTP; B: FTP; C: HTTP)."
+  ],
+  [
+   "answer",
+   true,
+   "They picked C, \"HTTP\": it is CORRECT. Celebrate it. Explain in one or two sentences why it is the right one. That ends the trivia: they got 2 of 3 right and HAVE WON. Congratulate them big time. Tell them to go and talk to the people at the front desk. You do not know about any prizes: do not promise any and, if they ask, let the people at the front desk tell them. Then keep talking normally."
+  ],
+  [
+   "resume",
+   "That was the last question: the trivia is already over, wrap it up."
+  ],
+  [
+   "answer",
+   false,
+   "That was the last question: the trivia is already over, wrap it up."
+  ],
+  [
+   "next",
+   false,
+   "That was the last question: the trivia is already over."
+  ],
+  [
+   "instruct",
+   "The trivia is over and there are no more questions on your screen: go back to talking normally."
+  ],
+  [
+   "resume",
+   "The trivia is over and there are no more questions on your screen: go back to talking normally."
+  ]
+ ],
+ "wins_without_contact": [
+  [
+   "instruct",
+   "TRIVIA MODE ON: 1 questions, hard level, three options each (A, B, C) on your screen. Winning takes 1 correct answers.\n- Read only the question, never the options: they are on screen. You know them to tell which letter the player picks.\n- When they give their option, however they say it, turn it into its letter and delegate right away \"trivia: answer B\"; if they do not know, \"trivia: does not know\". People talking to each other is not an answer: if unsure they are answering you, ask.\n- You do not know the right answer: never say if it is correct or which one it was before delegating; wait for the result.\n- With the result, react and explain in one or two sentences why it is right. Then ask if they want the next question and wait: only when they say yes, delegate \"trivia: next question\".\n- If they ask for the answer, answer twice, want to change theirs after the result or skip one, tell them with humor that the trivia does not work that way.\n- To stop playing, delegate ending it; for a new game from scratch, restarting it.\n- The screen only changes if you delegate: never say \"done\" or \"stopped\" without delegating."
+  ],
+  [
+   "instruct",
+   "TRIVIA, question 1 of 1: \"In which year was the first version of Python released?\". Options on the screen, so you know which letter the player picks, whether they say the letter or the answer (do not read them): A: 1991; B: 1985; C: 2000."
+  ],
+  [
+   "start",
+   true,
+   "The trivia is on your screen, hard level. If they ask for another level (easy, medium or hard), delegate restarting it with that level. Start with energy: say in one sentence that there are 1 questions and that they win with 1 correct answers. Then say question 1 of 1 and read only the question, as is: \"In which year was the first version of Python released?\". Do not read the options, they are already on the screen (for you: A: 1991; B: 1985; C: 2000)."
+  ],
+  [
+   "answer",
+   true,
+   "They picked A, \"1991\": it is CORRECT. Celebrate it. Explain in one or two sentences why it is the right one. Use this fact: Guido van Rossum published it in February 1991. That ends the trivia: they got 1 of 1 right and HAVE WON. Congratulate them big time. Then keep talking normally."
+  ],
+  [
+   "instruct",
+   "The trivia is over and there are no more questions on your screen: go back to talking normally."
+  ]
+ ]
+}

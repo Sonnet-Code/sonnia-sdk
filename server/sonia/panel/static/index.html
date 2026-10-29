@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#142752">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Sonnia panel</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/panel.css">
+  <script src="/static/panel.js" defer></script>
+</head>
+<body>
+  <!-- Fixed top bar: name, title and mode summary for when the page is scrolled -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <span class="brand-name">Sonnia</span>
+      <span class="topbar-title">Control panel</span>
+      <span class="topbar-status" id="topbar-status" data-mode="">
+        <span class="mode-dot" aria-hidden="true"></span>
+        <span id="topbar-text">Connecting…</span><span class="topbar-state" id="topbar-state"></span>
+      </span>
+    </div>
+
+    <!-- Big warning when the panel cannot reach the orchestrator -->
+    <div class="conn-banner conn-banner--offline" id="offline-banner" role="alert" hidden>
+      <strong class="conn-title">No connection to the panel</strong>
+      <span class="conn-detail" id="offline-detail">Retrying…</span>
+    </div>
+    <!-- Small warning when the live connection fails but polling still works -->
+    <div class="conn-banner conn-banner--slow" id="slow-banner" role="status" hidden>
+      Unstable connection: what you see updates every few seconds. Reconnecting…
+    </div>
+  </header>
+
+  <main class="layout" id="layout">
+    <!-- ===== Status at a glance and mode switch ===== -->
+    <section class="card hero" id="hero" data-mode="" aria-labelledby="hero-mode">
+      <div class="hero-status">
+        <p class="kicker">Right now</p>
+        <h1 class="hero-mode" id="hero-mode">Connecting to Sonnia…</h1>
+        <p class="hero-activity">
+          <span class="activity-dot" id="activity-dot" aria-hidden="true"></span>
+          <span id="hero-activity">Waiting for data</span>
+        </p>
+        <a class="hero-health" id="hero-health" href="#health" data-level="unknown">Checking…</a>
+        <p class="hero-warning" id="hero-muted" hidden>
+          Microphone muted: Sonnia does not hear anyone.
+        </p>
+        <p class="hero-warning" id="hero-debug" hidden>
+          Debug mode: Sonnia is still and disconnected from OpenAI. Turn it off in “Advanced”.
+        </p>
+        <div class="away-sign" id="away-sign" hidden>
+          <span class="away-sign-label">Sign on screen:</span>
+          <q class="away-sign-text" id="away-sign-text"></q>
+          <button type="button" class="btn btn-small" id="edit-sign-btn" data-cap="modes">Change the sign</button>
+        </div>
+      </div>
+
+      <div class="hero-modes">
+        <h2 class="visually-hidden">Change Sonnia's mode</h2>
+        <div class="mode-buttons" role="group" aria-label="Sonnia's mode">
+          <button type="button" class="mode-btn" data-set-mode="conversation" data-cap="modes" aria-pressed="false">
+            <span class="mode-name">Conversing</span>
+            <span class="mode-desc">Listens, looks and talks with people. Connected to OpenAI: costs money.</span>
+            <span class="mode-check" aria-hidden="true">Active</span>
+          </button>
+          <button type="button" class="mode-btn" data-set-mode="greeter" data-cap="modes" aria-pressed="false">
+            <span class="mode-name">Greeter only</span>
+            <span class="mode-desc">Disconnected from OpenAI, no cost. Greets and dances on her own with recorded lines.</span>
+            <span class="mode-check" aria-hidden="true">Active</span>
+          </button>
+          <button type="button" class="mode-btn" data-set-mode="away" data-cap="modes" aria-pressed="false">
+            <span class="mode-name">Away</span>
+            <span class="mode-desc">Disconnected from OpenAI, no cost. Leaves the screen and shows a sign.</span>
+            <span class="mode-check" aria-hidden="true">Active</span>
+          </button>
+        </div>
+        <p class="cap-note" data-cap-note="modes" hidden>
+          With the current voice engine Sonnia is always conversing: the modes cannot be changed.
+        </p>
+      </div>
+    </section>
+
+    <div class="col col-1">
+      <!-- ===== Quick actions ===== -->
+      <section class="card card-actions" id="actions" aria-labelledby="actions-title">
+        <h2 id="actions-title">Quick actions</h2>
+        <div class="quick-grid">
+          <button type="button" class="btn btn-danger quick-wide" id="stop-btn" data-cap="stop">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg>
+            Silence Sonnia
+          </button>
+          <button type="button" class="btn" id="greet-btn" data-cap="greet" data-off-modes="away">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-6 4z"/></svg>
+            Greet now
+          </button>
+          <button type="button" class="btn" id="dance-btn" data-cap="gestures" data-off-modes="away">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+            Dance
+          </button>
+          <button type="button" class="btn" id="hide-btn" data-cap="images">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 9l8 6M16 9l-8 6"/></svg>
+            Hide image
+          </button>
+          <button type="button" class="btn" id="mute-btn" data-cap="mute" aria-pressed="false">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/><path class="icon-slash" d="M4 4l16 16"/></svg>
+            <span id="mute-label">Mute microphone</span>
+          </button>
+        </div>
+        <p class="note" data-mode-note="away" hidden>Sonnia is away: bring her back with “Conversing” or “Greeter only” so she can greet, dance or show images.</p>
+        <p class="cap-note" data-cap-note="greet" hidden>“Greet now” is not available with the current voice engine.</p>
+        <p class="cap-note" data-cap-note="mute" hidden>Muting the microphone is not available with the current voice engine.</p>
+      </section>
+
+      <!-- ===== Trivia ===== -->
+      <section class="card" id="trivia" aria-labelledby="trivia-title">
+        <h2 id="trivia-title">Trivia</h2>
+        <p class="help">Questions with three options on Sonnia's screen. Visitors can also ask her: “shall we play trivia?”.</p>
+        <p class="trivia-state" id="trivia-state" aria-live="polite">No trivia running right now.</p>
+        <div class="trivia-question" id="trivia-question" hidden>
+          <p class="trivia-q" id="trivia-q"></p>
+          <div class="trivia-options">
+            <button type="button" class="btn trivia-opt" data-trivia-answer="A" data-cap="trivia" data-extra="trivia_asking"><b>A</b><span id="trivia-opt-a"></span></button>
+            <button type="button" class="btn trivia-opt" data-trivia-answer="B" data-cap="trivia" data-extra="trivia_asking"><b>B</b><span id="trivia-opt-b"></span></button>
+            <button type="button" class="btn trivia-opt" data-trivia-answer="C" data-cap="trivia" data-extra="trivia_asking"><b>C</b><span id="trivia-opt-c"></span></button>
+            <button type="button" class="btn btn-small" data-trivia-answer="pass" data-cap="trivia" data-extra="trivia_asking">Doesn't know</button>
+          </div>
+          <p class="help">Sonnia understands the answer on her own. If she cannot hear it over the noise, answer for the visitor.</p>
+        </div>
+        <div class="row">
+          <label class="trivia-level-label" for="trivia-level">Level
+            <select id="trivia-level" data-cap="trivia">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-primary" id="trivia-start-btn" data-cap="trivia" data-off-modes="away greeter" data-extra="trivia_idle">Start trivia</button>
+          <button type="button" class="btn btn-primary" id="trivia-next-btn" data-cap="trivia" data-extra="trivia_revealing">Next question</button>
+          <button type="button" class="btn" id="trivia-restart-btn" data-cap="trivia" data-off-modes="away greeter" data-extra="trivia_active">Restart</button>
+          <button type="button" class="btn" id="trivia-stop-btn" data-cap="trivia" data-extra="trivia_active">End trivia</button>
+        </div>
+        <p class="note" id="trivia-note" hidden>Trivia needs Sonnia in “Conversing”.</p>
+        <p class="cap-note" data-cap-note="trivia" hidden>Trivia is not available: the question bank is missing or has too few questions.</p>
+        <p class="summary-hint bank-info" id="trivia-bank-info"></p>
+      </section>
+
+      <!-- ===== Gallery images ===== -->
+      <section class="card" id="images" aria-labelledby="images-title">
+        <h2 id="images-title">Show an image</h2>
+        <p class="help">Tap an image to show it on Sonnia's screen. It hides by itself after a while. Images you add here have a “×” to remove them.</p>
+        <p class="now-showing" id="now-showing">No image on screen.</p>
+        <div class="thumbs" id="thumbs" aria-live="polite">
+          <p class="muted">Loading images…</p>
+        </div>
+        <label class="field">
+          <span class="field-label">Caption under the image (optional)</span>
+          <input type="text" id="caption-input" maxlength="120" autocomplete="off" data-cap="images" placeholder="For example: Come say hi">
+        </label>
+        <p class="cap-note" data-cap-note="images" hidden>Showing images is not available with the current voice engine.</p>
+        <div class="gallery-add">
+          <button type="button" class="btn" id="gallery-add-btn" data-cap="gallery_upload">Add image</button>
+          <input type="file" id="gallery-file" accept="image/*" data-cap="gallery_upload" hidden>
+          <div class="gallery-upload" id="gallery-upload" hidden>
+            <img id="gallery-upload-preview" alt="Preview of the chosen image">
+            <label class="field">
+              <span class="field-label">Image name (Sonnia knows it by this name)</span>
+              <input type="text" id="gallery-upload-name" maxlength="60" autocomplete="off" data-cap="gallery_upload" placeholder="For example: team photo">
+            </label>
+            <div class="gallery-upload-actions">
+              <button type="button" class="btn btn-primary" id="gallery-upload-btn" data-cap="gallery_upload">Upload to the gallery</button>
+              <button type="button" class="btn" id="gallery-upload-cancel">Cancel</button>
+            </div>
+          </div>
+          <p class="gallery-upload-state" id="gallery-upload-state" role="status" aria-live="polite" hidden></p>
+        </div>
+        <p class="cap-note" data-cap-note="gallery_upload" hidden>This orchestrator cannot receive images from the panel.</p>
+      </section>
+
+      <!-- ===== Idle show ===== -->
+      <section class="card" id="showcase" aria-labelledby="showcase-title">
+        <h2 id="showcase-title">Idle show</h2>
+        <label class="switch">
+          <input type="checkbox" role="switch" id="showcase-input" data-cap="showcase">
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="switch-text">When nobody is around, Sonnia says lines and dances on her own</span>
+        </label>
+        <p class="cap-note" data-cap-note="showcase" hidden>Not available with the current voice engine.</p>
+      </section>
+    </div>
+
+    <div class="col col-2">
+      <!-- ===== Have Sonnia say… ===== -->
+      <section class="card" id="say" aria-labelledby="say-title">
+        <h2 id="say-title">Have Sonnia say…</h2>
+        <p class="help">Write an announcement and Sonnia will say it out loud word for word.</p>
+        <form class="stack" id="say-form">
+          <label class="visually-hidden" for="say-input">Text Sonnia will say</label>
+          <textarea id="say-input" rows="3" maxlength="400" data-cap="say" placeholder="For example: We close in fifteen minutes. Thanks for coming!"></textarea>
+          <button type="submit" class="btn btn-primary" id="say-btn" data-cap="say">Say it now</button>
+        </form>
+        <p class="cap-note" data-cap-note="say" hidden>Not available with the current voice engine.</p>
+      </section>
+
+      <!-- ===== Ask as a visitor ===== -->
+      <section class="card" id="ask" aria-labelledby="ask-title">
+        <h2 id="ask-title">Ask as a visitor</h2>
+        <p class="help">Sonnia answers out loud as if a visitor had said it. Useful for testing her. Only in “Conversing”.</p>
+        <form class="row" id="ask-form">
+          <label class="visually-hidden" for="ask-input">Question</label>
+          <input type="text" id="ask-input" maxlength="400" autocomplete="off" data-cap="ask" placeholder="What can you do?">
+          <button type="submit" class="btn" id="ask-btn" data-cap="ask" data-off-modes="away greeter">Ask</button>
+        </form>
+        <p class="cap-note" data-cap-note="ask" hidden>Not available with the current voice engine.</p>
+      </section>
+
+      <!-- ===== New conversation ===== -->
+      <section class="card" id="restart" aria-labelledby="restart-title">
+        <h2 id="restart-title">New conversation</h2>
+        <p class="help">Sonnia forgets everything that was said and starts from scratch. Useful if she acts strange or repeats herself.</p>
+        <button type="button" class="btn" id="restart-btn" data-cap="restart">Start a new conversation</button>
+        <p class="cap-note" data-cap-note="restart" hidden>Not available with the current voice engine.</p>
+      </section>
+
+      <!-- ===== Today's notes ===== -->
+      <section class="card" id="notes" aria-labelledby="notes-title">
+        <h2 id="notes-title">Today's notes for Sonnia</h2>
+        <p class="help">Sonnia takes what you write here into account when people ask her. She does not say it out loud on her own.</p>
+        <form class="stack" id="notes-form">
+          <label class="visually-hidden" for="notes-input">Today's notes</label>
+          <textarea id="notes-input" rows="5" maxlength="1000" data-cap="notes" placeholder="For example: The demo room moved to the second floor."></textarea>
+          <div class="row">
+            <button type="submit" class="btn btn-primary" id="notes-btn" data-cap="notes">Save notes</button>
+            <span class="save-state" id="notes-state" data-state="saved">Saved</span>
+          </div>
+        </form>
+        <p class="cap-note" data-cap-note="notes" hidden>Not available with the current voice engine.</p>
+      </section>
+
+      <!-- ===== Sound: volume and background noise ===== -->
+      <section class="card" id="sound" aria-labelledby="sound-title">
+        <h2 id="sound-title">Sound</h2>
+
+        <div class="control">
+          <div class="control-head">
+            <label for="volume-input" class="control-label">Voice volume</label>
+            <output class="control-value" id="volume-value" for="volume-input">100%</output>
+          </div>
+          <input type="range" id="volume-input" min="0" max="150" step="5" value="100" data-cap="volume">
+          <div class="scale scale--volume"><span>Mute</span><span class="scale-normal">Normal</span><span>Max</span></div>
+          <p class="cap-note" data-cap-note="volume" hidden>Not available with the current voice engine.</p>
+        </div>
+
+        <div class="control">
+          <div class="control-head">
+            <label for="gate-input" class="control-label">Background noise</label>
+            <output class="control-value" id="gate-value" for="gate-input">Off</output>
+          </div>
+          <p class="help">If Sonnia answers background noise or people talking far away, raise this control. Sonnia does not hear anything below the line. Speak close to the microphone to check that your voice goes past the line.</p>
+          <div class="meter meter--big" id="gate-meter" aria-hidden="true">
+            <div class="meter-fill" id="gate-meter-fill"></div>
+            <div class="meter-mark" id="gate-meter-mark"></div>
+          </div>
+          <input type="range" id="gate-input" min="0" max="1000" step="10" value="0" data-cap="mic_gate" aria-describedby="gate-value">
+          <div class="scale"><span>Hears everything</span><span>Only nearby voices</span></div>
+          <p class="meter-caption" id="gate-meter-caption">Microphone: no data</p>
+          <p class="cap-note" data-cap-note="mic_gate" hidden>Not available with the current voice engine.</p>
+        </div>
+      </section>
+    </div>
+
+    <div class="col col-3">
+      <!-- ===== Health ===== -->
+      <section class="card" id="health" aria-labelledby="health-title">
+        <h2 id="health-title">Is everything working?</h2>
+        <ul class="health-list" id="health-list">
+          <li class="muted">Waiting for data…</li>
+        </ul>
+        <div class="last-error" id="last-error" hidden>
+          <strong>Last error:</strong> <span id="last-error-text"></span>
+        </div>
+      </section>
+
+      <!-- ===== Live conversation ===== -->
+      <section class="card" id="conversation" aria-labelledby="conversation-title">
+        <h2 id="conversation-title">Live conversation</h2>
+        <div class="chat" id="chat" tabindex="0" aria-label="Live conversation">
+          <p class="chat-empty" id="chat-empty">Nobody has spoken yet.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===== Advanced (folded) ===== -->
+    <details class="card advanced" id="advanced">
+      <summary><span>Advanced</span><span class="summary-hint">Debug mode, subtitles, voice, gestures, animations, usage and log</span></summary>
+
+      <div class="adv-grid">
+        <section class="adv-block" aria-labelledby="adv-debug-title">
+          <h3 id="adv-debug-title">Debug mode</h3>
+          <label class="switch">
+            <input type="checkbox" role="switch" id="debug-input" data-cap="debug">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Sonnia stays still for visual tests</span>
+          </label>
+          <p class="help">No GPT-Live (no cost), no automatic greetings, lines or dances, and no gestures of her own on screen. The panel buttons keep working.</p>
+          <p class="cap-note" data-cap-note="debug" hidden>This orchestrator does not support debug mode.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-subtitles-title">
+          <h3 id="adv-subtitles-title">Subtitles</h3>
+          <label class="switch">
+            <input type="checkbox" role="switch" id="subtitles-input" data-cap="subtitles">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Show on screen what the visitor and Sonnia say</span>
+          </label>
+          <p class="cap-note" data-cap-note="subtitles" hidden>This orchestrator does not support this switch.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-voice-title">
+          <h3 id="adv-voice-title">Sonnia's voice</h3>
+          <p class="help warn-text">Changing the voice starts a new conversation: Sonnia forgets what she was talking about.</p>
+          <div class="row">
+            <label class="visually-hidden" for="voice-select">Voice</label>
+            <select id="voice-select" data-cap="voice"></select>
+            <button type="button" class="btn" id="voice-btn" data-cap="voice" data-extra="voice">Change voice</button>
+          </div>
+          <p class="cap-note" data-cap-note="voice" hidden>Not available with the current voice engine.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-gestures-title">
+          <h3 id="adv-gestures-title">Gestures</h3>
+          <p class="help">Only visible when Sonnia is not speaking.</p>
+          <div class="button-row">
+            <button type="button" class="btn" data-gesture="greeting" data-cap="gestures" data-off-modes="away">Wave</button>
+            <button type="button" class="btn" data-gesture="soft" data-cap="gestures" data-off-modes="away">Soft gesture</button>
+            <button type="button" class="btn" data-gesture="fourth_wall" data-cap="gestures" data-off-modes="away">Touch the screen</button>
+            <button type="button" class="btn" data-gesture="dance" data-cap="gestures" data-off-modes="away">Dance</button>
+          </div>
+          <p class="cap-note" data-cap-note="gestures" hidden>Not available with the current voice engine.</p>
+        </section>
+
+        <!-- Folded at first: there are many animations. -->
+        <details class="adv-block adv-wide adv-fold" id="anim-fold">
+          <summary><h3 id="adv-anim-title">Animations</h3><span class="summary-hint" id="anim-count"></span></summary>
+          <p class="help">Each button plays one specific animation; the one playing shows in blue. If Sonnia is speaking, she pauses her gestures for a moment and then carries on. Untick “Auto” so that Sonnia does not play it on her own (the button still plays it).</p>
+          <div class="anim-groups" id="anim-groups"></div>
+          <p class="cap-note" data-cap-note="animations" hidden>This orchestrator does not support the animation list.</p>
+        </details>
+
+        <section class="adv-block" aria-labelledby="adv-cache-title">
+          <h3 id="adv-cache-title">Recorded lines</h3>
+          <p class="help">Records Sonnia's fixed lines with her voice (the greetings of “Greeter only” and the other fixed phrases), so they play instantly and cost nothing. Needs internet.</p>
+          <progress id="cache-progress" max="1" value="0"></progress>
+          <p class="cache-text" id="cache-text">No data</p>
+          <p class="cache-error" id="cache-error" hidden></p>
+          <button type="button" class="btn" id="cache-btn" data-cap="voice_cache" data-extra="cache">Prepare voices</button>
+          <p class="cap-note" data-cap-note="voice_cache" hidden>Not available with the current voice engine.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-session-title">
+          <h3 id="adv-session-title">Session details</h3>
+          <dl class="facts" id="session-facts"></dl>
+        </section>
+
+        <section class="adv-block" aria-labelledby="adv-usage-title">
+          <h3 id="adv-usage-title">Today's usage</h3>
+          <dl class="facts" id="usage-facts"></dl>
+          <p class="help">Approximate figures. It only costs money in “Conversing”.</p>
+        </section>
+
+        <section class="adv-block adv-wide" aria-labelledby="adv-log-title">
+          <h3 id="adv-log-title">Log</h3>
+          <div class="log" id="log" tabindex="0" aria-label="Orchestrator log"></div>
+        </section>
+      </div>
+    </details>
+
+    <!-- ===== Developer (folded): avatar, mouth, camera framing, idle motion and detailed log ===== -->
+    <details class="card advanced developer" id="developer">
+      <summary><span>Developer</span><span class="summary-hint">Avatar, mouth, camera framing, idle motion and detailed log</span></summary>
+
+      <div class="adv-grid">
+        <section class="adv-block adv-wide" id="dev-avatar" aria-labelledby="dev-avatar-title">
+          <h3 id="dev-avatar-title">Avatar</h3>
+          <p class="help">Genies avatar definition (JSON). Ignored if the Genies Avatar SDK is not installed in the avatar client.</p>
+          <p class="avatar-state" id="avatar-state" data-state="default">In use: the default avatar.</p>
+          <div class="stack">
+            <label class="visually-hidden" for="avatar-input">Avatar definition (JSON)</label>
+            <textarea id="avatar-input" class="code-input" rows="6" spellcheck="false" autocomplete="off" data-cap="avatar" placeholder="Paste the avatar definition here"></textarea>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="avatar-save-btn" data-cap="avatar" data-extra="avatar_typed">Save</button>
+              <button type="button" class="btn" id="avatar-default-btn" data-cap="avatar" data-extra="avatar_custom">Use default avatar</button>
+            </div>
+          </div>
+          <p class="cap-note" data-cap-note="avatar" hidden>This orchestrator does not support changing the avatar.</p>
+        </section>
+
+        <section class="adv-block" aria-labelledby="dev-mouth-title">
+          <h3 id="dev-mouth-title">Mouth</h3>
+          <p class="help">Takes effect immediately while Sonnia speaks: try it with “Greet now”, which costs nothing.</p>
+          <div class="tune-list" id="tune-mouth"></div>
+          <button type="button" class="btn btn-small tune-reset" data-reset-tuning="mouth" data-cap="tuning">Reset the mouth</button>
+        </section>
+
+        <section class="adv-block" aria-labelledby="dev-camera-title">
+          <h3 id="dev-camera-title">Camera</h3>
+          <p class="help">Moves the usual framing, the one used while Sonnia talks. The camera glides there smoothly, without jumps.</p>
+          <div class="tune-list" id="tune-camera"></div>
+          <button type="button" class="btn btn-small tune-reset" data-reset-tuning="camera" data-cap="tuning">Reset the camera</button>
+        </section>
+
+        <section class="adv-block" aria-labelledby="dev-idle-title">
+          <h3 id="dev-idle-title">Idle motion</h3>
+          <p class="help">Sonnia's breathing and sway when she is not gesturing, and her body accents while speaking. Takes effect within a few seconds; the accents, while she speaks.</p>
+          <div class="tune-list" id="tune-idle"></div>
+          <button type="button" class="btn btn-small tune-reset" data-reset-tuning="idle" data-cap="tuning">Reset the motion</button>
+        </section>
+
+        <section class="adv-block adv-wide" aria-labelledby="dev-log-title">
+          <h3 id="dev-log-title">Detailed log</h3>
+          <p class="help">What happens inside: what GPT-Live delegates to the backend, each action with its arguments and result, and the warnings and errors. If Sonnia says she is doing something and no delegation shows up here, she did not delegate it.</p>
+          <div class="log-filters" role="group" aria-label="Filter the log">
+            <button type="button" class="btn btn-small log-filter" data-log-filter="all" aria-pressed="true">All</button>
+            <button type="button" class="btn btn-small log-filter" data-log-filter="actions" aria-pressed="false">Delegations and actions</button>
+            <button type="button" class="btn btn-small log-filter" data-log-filter="problems" aria-pressed="false">Errors and warnings</button>
+          </div>
+          <div class="log dev-log" id="dev-log" tabindex="0" aria-label="Detailed log"></div>
+          <div class="dev-log-foot">
+            <button type="button" class="btn btn-small" id="dev-log-copy-btn">Copy what is shown</button>
+            <span class="dev-log-count" id="dev-log-count" aria-live="polite"></span>
+          </div>
+          <p class="cap-note" data-cap-note="log_tags" hidden>This orchestrator does not tag its log lines: the “Delegations and actions” filter shows nothing.</p>
+        </section>
+      </div>
+      <p class="cap-note dev-cap-note" data-cap-note="tuning" hidden>This orchestrator does not support the Developer settings.</p>
+    </details>
+  </main>
+
+  <!-- Replies to each action -->
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <!-- Generic confirmation -->
+  <dialog class="dialog" id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+      <div class="dialog-actions">
+        <button type="submit" class="btn" value="cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" value="ok" id="confirm-ok">Yes</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Send Sonnia away or change the sign -->
+  <dialog class="dialog" id="away-dialog" aria-labelledby="away-title">
+    <form method="dialog">
+      <h2 id="away-title">Send Sonnia away?</h2>
+      <p id="away-help">Sonnia will walk off the screen and leave this sign. She will not talk or greet anyone until you bring her back.</p>
+      <label class="field">
+        <span class="field-label">Sign text (leave it empty for the default one)</span>
+        <textarea id="away-text" rows="3" maxlength="140"></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button type="submit" class="btn" value="cancel">Cancel</button>
+        <button type="submit" class="btn btn-warning" value="ok" id="away-ok">Yes, send her away</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
