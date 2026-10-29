@@ -51,3 +51,6 @@ unity/Assets/Genies.meta
 unity/Assets/Samples/
 unity/Assets/Samples.meta
 unity/Assets/Resources/GeniesAuthSettings.bytes*
+# Clips copied from the Genies SDK by "Sonnia > Create Motion Set" (Genies SDK license)
+unity/Assets/Animations/GeniesSdk/
+unity/Assets/Animations/GeniesSdk.meta

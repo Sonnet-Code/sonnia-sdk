@@ -1,0 +1,27 @@
+{
+    "name": "Sonia.Genies",
+    "rootNamespace": "Sonia",
+    "references": [
+        "Sonia",
+        "Genies.Sdk.Avatar",
+        "Genies.Sdk.Core",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "SONNIA_GENIES"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.genies.avatar-sdk.client",
+            "expression": "1.0.0",
+            "define": "SONNIA_GENIES"
+        }
+    ],
+    "noEngineReferences": false
+}

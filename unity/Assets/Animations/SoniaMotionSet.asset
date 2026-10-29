@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d825e5b717122416fba897fb28555f4c, type: 3}
+  m_Name: SoniaMotionSet
+  m_EditorClassIdentifier: Sonia::Sonia.SoniaMotionSet
+  idleLoop: {fileID: 7400000, guid: 58a8cc1b4cd914beabcafccc7bb75a4d, type: 2}
+  idleVariations: []
+  listeningLoop: {fileID: 7400000, guid: 58a8cc1b4cd914beabcafccc7bb75a4d, type: 2}
+  nods: []
+  thinkingLoop: {fileID: 7400000, guid: 58a8cc1b4cd914beabcafccc7bb75a4d, type: 2}
+  thinkingVariations:
+  - {fileID: 7400000, guid: 459a0d81b01fb4c569590db31050acc2, type: 2}
+  talking: []
+  greeting: {fileID: 7400000, guid: 2b031281c1a5d4156a8b944b188fcbc6, type: 2}
+  present: {fileID: 7400000, guid: 18c685f97bda4472cae188a4d5857634, type: 2}
+  walk: {fileID: 0}
+  trivia: []
+  attention:
+  - clip: {fileID: 7400000, guid: c5143ec9398b243d2822e0e903e135c3, type: 2}
+    category: 0
+  - clip: {fileID: 7400000, guid: fbdbcdc4769664bd18fe62f768cdf817, type: 2}
+    category: 1
+  - clip: {fileID: 7400000, guid: 9c8d66f7cc9f4465d9b2ad3e9ec7159d, type: 2}
+    category: 1
+  - clip: {fileID: 7400000, guid: 32ab4a5b24f9744efbe67de16decb98b, type: 2}
+    category: 1

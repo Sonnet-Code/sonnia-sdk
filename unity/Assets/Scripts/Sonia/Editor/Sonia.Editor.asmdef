@@ -1,0 +1,30 @@
+{
+    "name": "Sonia.Editor",
+    "rootNamespace": "Sonia.EditorTools",
+    "references": [
+        "Sonia",
+        "Unity.InputSystem",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "uLipSync.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.genies.avatar-sdk.client",
+            "expression": "1.0.0",
+            "define": "SONNIA_GENIES"
+        }
+    ],
+    "noEngineReferences": false
+}
