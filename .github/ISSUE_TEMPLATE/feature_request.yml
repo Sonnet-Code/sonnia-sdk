@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest an idea for Sonnia
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do
+      description: The use case (a museum guide, a shop, a stream...) and what is missing for it.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed solution
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered

@@ -96,6 +96,10 @@ macOS and Windows are both supported targets.
 
 Realtime speech-to-speech sessions are billed per minute while they are open, plus the tokens of the backend and vision models. Sonnia only opens a session when it can actually hold a conversation, and the test suite never calls a real API.
 
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first; security problems go through [SECURITY.md](SECURITY.md).
+
 ## License
 
 Sonnia SDK is released under the [MIT License](LICENSE).

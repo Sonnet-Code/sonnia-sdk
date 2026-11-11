@@ -1,0 +1,45 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `uv run sonia run`
+        2. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Part
+      options:
+        - Orchestrator (Python)
+        - Unity client
+        - Local control panel
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: macOS 15, Python 3.12.7, Unity 6000.6.0f1, with/without Genies SDK
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant part of the orchestrator log or the Unity console. Remove any API key first.
+      render: text
