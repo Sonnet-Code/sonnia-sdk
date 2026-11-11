@@ -16,6 +16,7 @@ jobs:
   orchestrator:
     name: Orchestrator (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -30,17 +31,14 @@ jobs:
           python-version: "3.12"
           enable-cache: true
           cache-dependency-glob: server/uv.lock
-      - name: System libraries (Linux)
-        if: runner.os == 'Linux'
-        # Retried: the package mirrors fail now and then.
-        run: |
-          for attempt in 1 2 3; do
-            sudo apt-get update && sudo apt-get install -y libportaudio2 libgl1 && exit 0
-            sleep 15
-          done
-          exit 1
+      # The audio extra needs PortAudio from the system on Linux, and the
+      # suite does not need a sound device, so Linux skips it.
       - name: Install
+        if: runner.os != 'Linux'
         run: uv sync --locked --group dev --all-extras
+      - name: Install (Linux)
+        if: runner.os == 'Linux'
+        run: uv sync --locked --group dev --extra camera --extra panel
       - name: Lint
         run: uv run --no-sync ruff check sonia tests
       - name: Format
