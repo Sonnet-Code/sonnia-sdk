@@ -16,7 +16,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ planned
 1. ✅ **Continuous integration.** GitHub Actions running `ruff`, `ruff format --check`, `mypy` and `pytest` on Linux, macOS and Windows, plus a secret scan. No network access to model APIs.
 2. ✅ **Contributor files.** `CONTRIBUTING.md`, `SECURITY.md`, code of conduct, issue and pull request templates, `.editorconfig` and a changelog.
 3. ✅ **Configuration reference.** `docs/configuration.md` generated from the settings model, with a test that fails when a setting is added without being documented.
-4. ⏳ **Architecture guide.** `docs/architecture.md`: processes, threads and asyncio tasks, the life of an utterance, session renewal, degradation paths and where each concern lives in the code.
+4. ✅ **Architecture guide.** `docs/architecture.md`: processes, threads and asyncio tasks, the life of an utterance, session renewal, degradation paths and where each concern lives in the code.
 
 ## 0.3 · Run it without an API key
 

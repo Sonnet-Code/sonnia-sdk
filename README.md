@@ -31,7 +31,7 @@ flowchart TB
     Unity --> Screen[Vertical screen 9:16]
 ```
 
-Everything is streamed: the microphone reaches the model in real time and the voice reaches the avatar as it is generated. The latency goal is under two seconds from the end of the user's turn to the first word of the answer.
+Everything is streamed: the microphone reaches the model in real time and the voice reaches the avatar as it is generated. The latency goal is under two seconds from the end of the user's turn to the first word of the answer. The [architecture guide](docs/architecture.md) follows a turn through the code.
 
 ### Design principles
 

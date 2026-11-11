@@ -8,6 +8,7 @@ All notable changes to Sonnia SDK are listed here. The format follows [Keep a Ch
 
 - Continuous integration: lint, format check, type check and the test suite on Linux, macOS and Windows, and a gitleaks scan of the whole history.
 - A public roadmap in `docs/roadmap.md`.
+- `docs/architecture.md`: processes, asyncio tasks and threads, the life of a turn, delegation, and how the orchestrator survives a whole day.
 - `docs/configuration.md`, a reference of every setting generated from the settings model, with tests that keep it, the field descriptions and `.env.example` in sync.
 - Contributor guide, security policy, code of conduct, issue and pull request templates, `.editorconfig` and this changelog.
 
