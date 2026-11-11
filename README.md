@@ -1,5 +1,7 @@
 # Sonnia SDK
 
+[![CI](https://github.com/Sonnet-Code/sonnia-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/Sonnet-Code/sonnia-sdk/actions/workflows/ci.yml)
+
 **A real-time voice AI assistant with a 3D avatar.** You talk to Sonnia through a microphone, she answers out loud with a natural voice while a 3D character lip-syncs and gestures on a vertical screen. She can glance at a camera when it helps, show images inside her scene and run small interactive activities such as a trivia game.
 
 Sonnia was born as a booth demo at a developer conference and is now released as an open-source starting point for anyone who wants to build a talking, animated AI character for kiosks, events, museums or streams.
@@ -69,13 +71,7 @@ The written name is "Sonnia". Texts read by the voice model spell it "Sonia" so 
 
 ## Roadmap
 
-- [x] License, architecture overview and the [WebSocket protocol](docs/protocol.md) between the orchestrator and the avatar client
-- [x] Python orchestrator: realtime voice engine, actions (`look`, `show_image`, `hide_image`, `play_animation`), camera snapshots, local control panel, idle lines, trivia mode
-- [x] Unity client: avatar, lip-sync, animation, vertical stage, image panel, subtitles, trivia screen, optional Genies integration
-- [x] `.env.example` and a sample knowledge base
-- [ ] Step-by-step setup guide for macOS and Windows, including player builds
-- [ ] Continuous integration (lint, type checks and tests without network access)
-- [ ] A walk cycle for the default avatar (without the Genies SDK it slides off screen in away mode)
+The plan, release by release, is in [`docs/roadmap.md`](docs/roadmap.md). Next up: continuous integration, contributor docs, an offline demo mode that needs no API key, a setup guide and player build scripts.
 
 ## Known limitations
 
