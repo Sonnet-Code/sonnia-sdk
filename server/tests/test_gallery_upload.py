@@ -100,6 +100,9 @@ def test_accepts_png_and_jpeg_by_their_content() -> None:
         (jpeg(20, 4100), "from 16 to 4096"),
         (png() + b"\x00" * (UPLOAD_MAX_BYTES + 1), "too big"),
     ],
+    # Short ids: pytest puts the test id in an environment variable, and on
+    # Windows a few megabytes of image bytes do not fit in one.
+    ids=lambda value: f"{len(value)}-bytes" if isinstance(value, bytes) else None,
 )
 def test_rejects_anything_that_is_not_a_valid_image(data: bytes, reason: str) -> None:
     with pytest.raises(GalleryError, match=reason):

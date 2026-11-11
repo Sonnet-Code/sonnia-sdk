@@ -24,7 +24,7 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
@@ -32,7 +32,13 @@ jobs:
           cache-dependency-glob: server/uv.lock
       - name: System libraries (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2 libgl1
+        # Retried: the package mirrors fail now and then.
+        run: |
+          for attempt in 1 2 3; do
+            sudo apt-get update && sudo apt-get install -y libportaudio2 libgl1 && exit 0
+            sleep 15
+          done
+          exit 1
       - name: Install
         run: uv sync --locked --group dev --all-extras
       - name: Lint
@@ -49,7 +55,7 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Scan the whole history with gitleaks
