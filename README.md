@@ -65,6 +65,8 @@ The character itself is pluggable:
 3. Open `unity/` with Unity 6000.6.0f1, set the Game view to 1080x1920 and press Play (details in [`unity/README.md`](unity/README.md)).
 4. Talk to Sonnia. The local control panel is at `http://127.0.0.1:8780`.
 
+Every setting is an environment variable; they are all listed in the [configuration reference](docs/configuration.md).
+
 Customize her by editing plain files, no code needed: what she knows in `assets/knowledge/`, the lines she says while idle in `assets/showcase/`, the trivia questions in `assets/trivia/questions.md` and the images she can show in `assets/gallery/`.
 
 The written name is "Sonnia". Texts read by the voice model spell it "Sonia" so it is pronounced right; the code identifiers (`sonia` package, `Sonia` namespace) keep that spelling too.

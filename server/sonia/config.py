@@ -32,7 +32,9 @@ class LLMSettings(BaseSettings):
         env_prefix="LLM_", extra="ignore", env_ignore_empty=True, populate_by_name=True
     )
 
+    #: Base URL of the OpenAI-compatible Chat Completions API.
     base_url: str = "https://api.openai.com/v1"
+    #: Model with image input that describes camera snapshots.
     model: str = "gpt-6-luna"
     #: ``LLM_API_KEY``: the key of the model server.
     api_key: str = Field(default="", repr=False)
@@ -51,6 +53,7 @@ class LLMSettings(BaseSettings):
     reasoning_effort: str = "none"
     #: Only sent when not None (some models only accept their default value).
     temperature: float | None = None
+    #: Token cap of each description.
     max_tokens: int = 400
     #: Field name used to send ``max_tokens``: OpenAI's API wants
     #: ``max_completion_tokens`` for its reasoning models; other servers, ``max_tokens``.
@@ -61,6 +64,7 @@ class LLMSettings(BaseSettings):
     #: Extra request body fields, as JSON in ``LLM_EXTRA_BODY``, for whatever each
     #: server needs (for example a flag that turns off a model's reasoning).
     extra_body: dict[str, Any] = Field(default_factory=dict)
+    #: Seconds before a vision request is given up.
     request_timeout: float = 60.0
 
     @property
@@ -95,13 +99,17 @@ class VisionSettings(BaseSettings):
 
     #: opencv = capture from Python; unity = the avatar client sends frames over the WebSocket; none.
     source: Literal["opencv", "unity", "none"] = "opencv"
+    #: Index of the USB camera opened with OpenCV.
     camera_index: int = 0
     #: Resolution requested from the USB camera if it opens below it (many webcams open at
     #: 640x480 on Windows even though they do 1080p). If it gives no image at that size,
     #: the camera keeps its own. 0 = whatever the camera gives.
     capture_width: int = 1920
+    #: Height requested from the USB camera (see ``VISION_CAPTURE_WIDTH``).
     capture_height: int = 1080
+    #: Snapshots are downscaled to this width before going to a model.
     max_width: int = 768
+    #: JPEG quality (1-100) of the snapshots sent to a model.
     jpeg_quality: int = 80
     #: Describe the camera when the user starts speaking (``[Camera]`` note).
     #: Off by default: Sonnia only looks when she decides to, with the ``look`` action.
@@ -110,13 +118,16 @@ class VisionSettings(BaseSettings):
     interval_seconds: float = 0.0
     #: Save snapshots to disk (debugging only; never with real visitors).
     debug_save_frames: bool = False
+    #: Where debug snapshots are saved when ``VISION_DEBUG_SAVE_FRAMES`` is on.
     debug_dir: str = str(_HOME / "debug_frames")
 
 
 class WSSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="WS_", extra="ignore", env_ignore_empty=True)
 
+    #: Address the avatar client connects to. Keep it local.
     host: str = "127.0.0.1"
+    #: Port of the avatar client WebSocket (the client takes ``-sonia-ws`` to match).
     port: int = 8765
 
 
@@ -133,11 +144,13 @@ class LiveSettings(BaseSettings):
         env_prefix="LIVE_", extra="ignore", env_ignore_empty=True, populate_by_name=True
     )
 
+    #: WebSocket endpoint of the speech-to-speech model.
     url: str = "wss://api.openai.com/v1/live/sessions"
     #: API key. If ``LIVE_API_KEY`` is missing, ``OPENAI_API_KEY`` is used.
     api_key: str = Field(
         default="", validation_alias=AliasChoices("LIVE_API_KEY", "OPENAI_API_KEY")
     )
+    #: Speech-to-speech model.
     model: str = "gpt-live-1"
     #: Built-in voice (marin, cedar, coral, shimmer...). Fixed for the whole session.
     voice: str = "marin"
@@ -163,9 +176,10 @@ class LiveSettings(BaseSettings):
     backend_web_search: bool = True
     #: How much web context each search reads: ``low`` (faster), ``medium`` or ``high``.
     backend_web_search_context: str = "low"
-    #: Where Sonnia is, so searches give local results (ISO country code and city).
-    #: Empty = not sent.
+    #: Where Sonnia is, so searches give local results: ISO country code (``US``,
+    #: ``ES``...). Empty = not sent.
     backend_web_search_country: str = ""
+    #: City for local search results. Empty = not sent.
     backend_web_search_city: str = ""
     #: Silence in Sonnia's voice that closes an utterance for the avatar client.
     segment_gap_ms: int = 800
@@ -186,9 +200,11 @@ class LiveSettings(BaseSettings):
     vision_min_interval_seconds: float = 10.0
     #: Restart the session at the next quiet moment once the context passes this ratio.
     context_restart_ratio: float = 0.85
+    #: Seconds to wait for the model WebSocket to open.
     connect_timeout: float = 15.0
-    #: Waits between reconnections (they grow from the minimum to the maximum).
+    #: First wait before reconnecting; the waits grow up to the maximum.
     reconnect_min_seconds: float = 1.0
+    #: Longest wait between reconnections.
     reconnect_max_seconds: float = 15.0
 
     @field_validator("sample_rate")
@@ -204,11 +220,13 @@ class ShowcaseSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="SHOWCASE_", extra="ignore", env_ignore_empty=True)
 
+    #: Say lines and dance while nobody is talking to her.
     enabled: bool = True
     #: Seconds idle before the first bit.
     first_delay_seconds: float = 25.0
-    #: Minimum and maximum seconds between bits.
+    #: Minimum seconds between bits (each wait is random between both).
     interval_min_seconds: float = 40.0
+    #: Maximum seconds between bits.
     interval_max_seconds: float = 90.0
     #: Probability that a bit is a sung dance instead of a line.
     dance_chance: float = 0.3
@@ -232,6 +250,7 @@ class TriviaSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="TRIVIA_", extra="ignore", env_ignore_empty=True)
 
+    #: Offer the trivia game (the ``start_trivia`` action and its siblings).
     enabled: bool = True
     #: Questions per game (drawn at random from ``assets/trivia/questions.md``).
     questions: int = 5
@@ -258,16 +277,19 @@ class PanelSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="PANEL_", extra="ignore", env_ignore_empty=True)
 
+    #: Serve the local control panel while ``sonia run`` is running.
     enabled: bool = True
     #: Local only: the panel has no authentication of its own.
     host: str = "127.0.0.1"
+    #: Port of the local control panel.
     port: int = 8780
     #: Where the panel state is saved (mode, notes, volume...).
     state_file: str = str(_HOME / "cache" / "panel_state.json")
     #: Cache of fixed lines recorded with the realtime model's voice.
     voice_cache_dir: str = str(_HOME / "cache" / "voice")
-    #: "Greeter" mode: seconds between greetings (minimum and maximum).
+    #: "Greeter" mode: minimum seconds between recorded greetings.
     greeter_interval_min_seconds: float = 25.0
+    #: "Greeter" mode: maximum seconds between recorded greetings.
     greeter_interval_max_seconds: float = 55.0
     #: Realtime model price per session minute, to estimate the cost.
     live_price_per_minute: float = 0.05
@@ -291,7 +313,9 @@ class Settings(BaseSettings):
     trivia: TriviaSettings = Field(default_factory=TriviaSettings)
     panel: PanelSettings = Field(default_factory=PanelSettings)
 
+    #: ``ASSETS_DIR``: knowledge, idle lines, trivia bank and gallery.
     assets_dir: str = str(BUNDLE_ROOT / "assets")
+    #: ``LOG_LEVEL``: DEBUG, INFO, WARNING or ERROR.
     log_level: str = "INFO"
     #: ``DEVICES_FILE``: microphone and camera chosen in the avatar's options menu (sonia/devices.py).
     devices_file: str = str(_HOME / "cache" / "devices.json")
