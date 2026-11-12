@@ -2,6 +2,8 @@
 
 Version 1 (draft). One local WebSocket, `ws://127.0.0.1:8765/` by default. The orchestrator is the server; the Unity avatar (or any other client, such as a test console) connects as a client. Several clients may be connected at once and all of them receive the same messages.
 
+A machine-readable [JSON Schema](protocol.schema.json) (draft 2020-12) describes every text message below. It is strict on purpose (no unknown fields), so a sender notices its mistakes; a receiver still ignores fields and message types it does not know. The orchestrator's test suite validates every message it builds against the schema, together with the examples in this document and the message names in the Unity client.
+
 There are two kinds of frames:
 
 - **Text**: JSON with a mandatory `type` field. Everything that is not audio goes here.
@@ -266,4 +268,4 @@ Client                                 Orchestrator                      Realtim
 
 - The client must never block waiting for a specific message. Any message can arrive at any time.
 - Messages with an unknown `type` are ignored in both directions.
-- When the protocol changes, update this document, the orchestrator's protocol module and the Unity `Protocol.cs` in the same commit.
+- When the protocol changes, update this document, [`protocol.schema.json`](protocol.schema.json), the orchestrator's protocol module and the Unity `Protocol.cs` in the same commit. `server/tests/test_protocol_schema.py` fails if they disagree.

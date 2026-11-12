@@ -33,6 +33,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.6",
     "mypy>=1.11",
+    "jsonschema>=4.23",
 ]
 
 [build-system]
@@ -53,6 +54,9 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "protocol_unchecked: the test builds messages that break docs/protocol.schema.json on purpose",
+]
 
 [tool.mypy]
 python_version = "3.12"

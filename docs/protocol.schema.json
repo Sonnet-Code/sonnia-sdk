@@ -1,0 +1,1101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sonnia WebSocket protocol, version 1",
+  "description": "JSON text frames between the orchestrator and the avatar client (docs/protocol.md). Every message is one of $defs/serverMessage (orchestrator to client) or $defs/clientMessage (client to orchestrator), and each message type is described in $defs under its own name. The schema is strict (no unknown fields) so that senders notice mistakes; receivers still ignore fields and types they do not know. Binary audio frames are not JSON and are described in the document.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/serverMessage"
+    },
+    {
+      "$ref": "#/$defs/clientMessage"
+    }
+  ],
+  "$defs": {
+    "serverMessage": {
+      "description": "Orchestrator to client.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/hello"
+        },
+        {
+          "$ref": "#/$defs/state"
+        },
+        {
+          "$ref": "#/$defs/activity"
+        },
+        {
+          "$ref": "#/$defs/busy"
+        },
+        {
+          "$ref": "#/$defs/transcript"
+        },
+        {
+          "$ref": "#/$defs/speech_start"
+        },
+        {
+          "$ref": "#/$defs/speech_end"
+        },
+        {
+          "$ref": "#/$defs/stop_speaking"
+        },
+        {
+          "$ref": "#/$defs/show_image"
+        },
+        {
+          "$ref": "#/$defs/hide_image"
+        },
+        {
+          "$ref": "#/$defs/attention"
+        },
+        {
+          "$ref": "#/$defs/play_animation"
+        },
+        {
+          "$ref": "#/$defs/presence"
+        },
+        {
+          "$ref": "#/$defs/stage_mode"
+        },
+        {
+          "$ref": "#/$defs/devices"
+        },
+        {
+          "$ref": "#/$defs/set_volume"
+        },
+        {
+          "$ref": "#/$defs/set_subtitles"
+        },
+        {
+          "$ref": "#/$defs/set_disabled_animations"
+        },
+        {
+          "$ref": "#/$defs/set_debug"
+        },
+        {
+          "$ref": "#/$defs/set_tuning"
+        },
+        {
+          "$ref": "#/$defs/set_avatar"
+        },
+        {
+          "$ref": "#/$defs/trivia_start"
+        },
+        {
+          "$ref": "#/$defs/trivia_question"
+        },
+        {
+          "$ref": "#/$defs/trivia_answer"
+        },
+        {
+          "$ref": "#/$defs/trivia_end"
+        },
+        {
+          "$ref": "#/$defs/request_frame"
+        },
+        {
+          "$ref": "#/$defs/error"
+        }
+      ]
+    },
+    "clientMessage": {
+      "description": "Client to orchestrator.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/client_hello"
+        },
+        {
+          "$ref": "#/$defs/interrupt"
+        },
+        {
+          "$ref": "#/$defs/playback_done"
+        },
+        {
+          "$ref": "#/$defs/text_input"
+        },
+        {
+          "$ref": "#/$defs/camera_frame"
+        },
+        {
+          "$ref": "#/$defs/list_devices"
+        },
+        {
+          "$ref": "#/$defs/set_device"
+        },
+        {
+          "$ref": "#/$defs/animations"
+        },
+        {
+          "$ref": "#/$defs/animation_playing"
+        }
+      ]
+    },
+    "utteranceId": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295,
+      "description": "Increasing within a session; uint32 in the binary frame header."
+    },
+    "tuning": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "hello": {
+      "description": "First message after connecting: the audio format of the binary frames.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "hello"
+        },
+        "version": {
+          "const": 1
+        },
+        "sample_rate": {
+          "type": "integer",
+          "minimum": 8000,
+          "maximum": 48000
+        },
+        "channels": {
+          "const": 1
+        },
+        "format": {
+          "const": "pcm_s16le"
+        }
+      },
+      "required": [
+        "type",
+        "version",
+        "sample_rate",
+        "channels",
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "state": {
+      "description": "Assistant state change.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "state"
+        },
+        "state": {
+          "enum": [
+            "idle",
+            "listening",
+            "thinking",
+            "speaking"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "activity": {
+      "description": "What the assistant does behind the scenes, for scene effects.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "activity"
+        },
+        "activity": {
+          "enum": [
+            "none",
+            "think",
+            "search"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "activity"
+      ],
+      "additionalProperties": false
+    },
+    "busy": {
+      "description": "On-screen waiting indicator: the whole state, on with its kind and text, or off.",
+      "oneOf": [
+        {
+          "description": "Indicator on.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "busy"
+            },
+            "on": {
+              "const": true
+            },
+            "kind": {
+              "enum": [
+                "search",
+                "think"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "on",
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "Indicator off.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "busy"
+            },
+            "on": {
+              "const": false
+            }
+          },
+          "required": [
+            "type",
+            "on"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "transcript": {
+      "description": "Accumulated text of what the user or the assistant says.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "transcript"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "final": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "role",
+        "text",
+        "final"
+      ],
+      "additionalProperties": false
+    },
+    "speech_start": {
+      "description": "An utterance begins; binary frames with its id follow.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "speech_start"
+        },
+        "utterance_id": {
+          "$ref": "#/$defs/utteranceId"
+        },
+        "text": {
+          "type": "string"
+        },
+        "ambient": {
+          "const": true,
+          "description": "Idle line: mouth only, no state change."
+        }
+      },
+      "required": [
+        "type",
+        "utterance_id",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "speech_end": {
+      "description": "No more audio for that utterance.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "speech_end"
+        },
+        "utterance_id": {
+          "$ref": "#/$defs/utteranceId"
+        }
+      },
+      "required": [
+        "type",
+        "utterance_id"
+      ],
+      "additionalProperties": false
+    },
+    "stop_speaking": {
+      "description": "Drop all queued audio now.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "stop_speaking"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "show_image": {
+      "description": "Show an image in the scene's image panel.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "show_image"
+        },
+        "image_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "enum": [
+            "gallery"
+          ]
+        },
+        "mime": {
+          "type": "string",
+          "pattern": "^image/[a-z0-9.+-]+$"
+        },
+        "data_base64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+        },
+        "caption": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "image_id",
+        "source",
+        "mime",
+        "data_base64",
+        "caption"
+      ],
+      "additionalProperties": false
+    },
+    "hide_image": {
+      "description": "Hide the image panel.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "hide_image"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "attention": {
+      "description": "Attention gesture, honored in idle.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "attention"
+        },
+        "category": {
+          "enum": [
+            "dance",
+            "fourth_wall",
+            "soft",
+            "greeting"
+          ]
+        },
+        "clip": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "type",
+        "category"
+      ],
+      "additionalProperties": false
+    },
+    "play_animation": {
+      "description": "Play a clip from the catalog sent with animations.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "play_animation"
+        },
+        "clip": {
+          "type": "string",
+          "minLength": 1
+        },
+        "whole": {
+          "const": true
+        }
+      },
+      "required": [
+        "type",
+        "clip"
+      ],
+      "additionalProperties": false
+    },
+    "presence": {
+      "description": "On screen or away, with the sign left behind. Sticky.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "presence"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "present",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "stage_mode": {
+      "description": "Operating mode and whether the assistant can converse now. Sticky.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "stage_mode"
+        },
+        "mode": {
+          "enum": [
+            "conversation",
+            "greeter",
+            "away"
+          ]
+        },
+        "talk": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "mode",
+        "talk"
+      ],
+      "additionalProperties": false
+    },
+    "devices": {
+      "description": "Microphones of the orchestrator's machine and the current choices.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "devices"
+        },
+        "microphones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "default": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "default"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "microphone": {
+          "type": "string"
+        },
+        "default_microphone": {
+          "type": "string"
+        },
+        "camera": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "camera_source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "microphones",
+        "microphone",
+        "default_microphone",
+        "camera",
+        "camera_source"
+      ],
+      "additionalProperties": false
+    },
+    "set_volume": {
+      "description": "Voice volume (1 is normal). Sticky.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "set_volume"
+        },
+        "value": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.5
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "set_subtitles": {
+      "description": "Show or hide subtitles. Sticky.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "set_subtitles"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "set_disabled_animations": {
+      "description": "Clips the avatar must not use on its own. Sticky.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "set_disabled_animations"
+        },
+        "clips": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "type",
+        "clips"
+      ],
+      "additionalProperties": false
+    },
+    "set_debug": {
+      "description": "Debug mode: no idle variations or attention gestures. Sticky.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "set_debug"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "set_tuning": {
+      "description": "Developer tuning multipliers and camera offsets. Sticky.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "set_tuning"
+        },
+        "mouth": {
+          "$ref": "#/$defs/tuning",
+          "propertyNames": {
+            "enum": [
+              "open",
+              "jaw",
+              "closure",
+              "speed"
+            ]
+          }
+        },
+        "camera": {
+          "$ref": "#/$defs/tuning",
+          "propertyNames": {
+            "enum": [
+              "height",
+              "distance",
+              "side",
+              "zoom",
+              "tilt"
+            ]
+          }
+        },
+        "idle": {
+          "$ref": "#/$defs/tuning",
+          "propertyNames": {
+            "enum": [
+              "breath",
+              "accents",
+              "speed"
+            ]
+          }
+        }
+      },
+      "required": [
+        "type",
+        "mouth",
+        "camera",
+        "idle"
+      ],
+      "additionalProperties": false
+    },
+    "set_avatar": {
+      "description": "Genies avatar definition as a JSON string, or null for the default character. Sticky.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "set_avatar"
+        },
+        "definition": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "definition"
+      ],
+      "additionalProperties": false
+    },
+    "trivia_start": {
+      "description": "A trivia game starts.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "trivia_start"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "threshold": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "level": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "total",
+        "threshold",
+        "level"
+      ],
+      "additionalProperties": false
+    },
+    "trivia_question": {
+      "description": "Question number (from 1) with its three options.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "trivia_question"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "question": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "score": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "type",
+        "number",
+        "total",
+        "question",
+        "options",
+        "score"
+      ],
+      "additionalProperties": false
+    },
+    "trivia_answer": {
+      "description": "Result of a question; chosen is -1 if the player did not know.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "trivia_answer"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "chosen": {
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 2
+        },
+        "correct": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "is_correct": {
+          "type": "boolean"
+        },
+        "score": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "type",
+        "number",
+        "chosen",
+        "correct",
+        "is_correct",
+        "score"
+      ],
+      "additionalProperties": false
+    },
+    "trivia_end": {
+      "description": "End of the trivia game.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "trivia_end"
+        },
+        "score": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "won": {
+          "type": "boolean"
+        },
+        "reason": {
+          "enum": [
+            "finished",
+            "cancelled"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "score",
+        "total",
+        "won",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "request_frame": {
+      "description": "Ask the client for a camera snapshot (VISION_SOURCE=unity).",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "request_frame"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "error": {
+      "description": "Human-readable error.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "error"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "client_hello": {
+      "description": "Optional: identifies the client and what it supports.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "client_hello"
+        },
+        "client": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "maxItems": 50
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "interrupt": {
+      "description": "Interrupt the assistant through a non-voice channel.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "interrupt"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "playback_done": {
+      "description": "The client finished playing that utterance.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "playback_done"
+        },
+        "utterance_id": {
+          "$ref": "#/$defs/utteranceId"
+        }
+      },
+      "required": [
+        "type",
+        "utterance_id"
+      ],
+      "additionalProperties": false
+    },
+    "text_input": {
+      "description": "Typed input instead of voice.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "text_input"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "type",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "camera_frame": {
+      "description": "A webcam snapshot, answering request_frame.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "camera_frame"
+        },
+        "mime": {
+          "type": "string",
+          "pattern": "^image/[a-z0-9.+-]+$"
+        },
+        "data_base64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+        }
+      },
+      "required": [
+        "type",
+        "mime",
+        "data_base64"
+      ],
+      "additionalProperties": false
+    },
+    "list_devices": {
+      "description": "Ask for the microphones and current choices (answered with devices).",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "list_devices"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "set_device": {
+      "description": "Pick a microphone by name (empty: system default) or a camera by index.",
+      "oneOf": [
+        {
+          "description": "Microphone.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "set_device"
+            },
+            "kind": {
+              "const": "microphone"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "Camera.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "set_device"
+            },
+            "kind": {
+              "const": "camera"
+            },
+            "value": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "animations": {
+      "description": "Catalog of one-shot clips that play_animation can trigger.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "animations"
+        },
+        "animations": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": [
+              "clip",
+              "group"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "clip": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "group": {
+                "enum": [
+                  "greeting",
+                  "dance",
+                  "fourth_wall",
+                  "soft",
+                  "talking",
+                  "idle_variation",
+                  "thinking",
+                  "nod",
+                  "present",
+                  "trivia"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "type",
+        "animations"
+      ],
+      "additionalProperties": false
+    },
+    "animation_playing": {
+      "description": "The one-shot clip playing now, or null.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "animation_playing"
+        },
+        "clip": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 80
+        }
+      },
+      "required": [
+        "type",
+        "clip"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

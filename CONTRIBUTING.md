@@ -40,7 +40,7 @@ These keep the project usable as an unattended kiosk and safe to publish:
 - **Speech to speech, one engine.** Do not add a cascaded VAD, ASR, LLM and TTS pipeline.
 - **Configuration through environment variables** (documented in `.env.example`), never hardcoded paths, ports or keys.
 - **Optional dependencies are imported lazily** inside functions, so the package imports without them.
-- **Both sides of the protocol change together.** If a change touches a WebSocket message, update the orchestrator, the Unity client and `docs/protocol.md` in the same pull request.
+- **Both sides of the protocol change together.** If a change touches a WebSocket message, update the orchestrator, the Unity client, `docs/protocol.md` and `docs/protocol.schema.json` in the same pull request. The test suite checks every message the orchestrator builds against the schema.
 - **Portrait screen.** Anything visual is designed for 1080x1920 and checked with a capture at that size (menu **Sonnia > Vertical 9:16 Capture** in the editor).
 - **Only redistributable assets.** Do not add models, animations, fonts, images or logos unless their license allows redistribution under this repository. Say where each new asset comes from in the pull request.
 - **No secrets.** `.env` is ignored by git; never commit keys or tokens. CI scans the whole history with gitleaks.

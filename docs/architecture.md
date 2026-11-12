@@ -181,4 +181,4 @@ By default the client connects to `ws://127.0.0.1:8765` and reconnects on its ow
 | Change the prompts | `sonia/live/prompts.py` |
 | Add a panel control | `sonia/panel/control.py` and `sonia/panel/server.py` |
 | Try the client without a key, or script a new scene for it | `sonia/demo.py` (`sonia demo`) |
-| Add a protocol message | `sonia/ws/protocol.py`, `unity/Assets/Scripts/Sonia/Protocol.cs`, `docs/protocol.md` |
+| Add a protocol message | `sonia/ws/protocol.py`, `unity/Assets/Scripts/Sonia/Protocol.cs`, `docs/protocol.md`, `docs/protocol.schema.json` |
