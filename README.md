@@ -53,6 +53,8 @@ The character itself is pluggable:
 
 ## Getting started
 
+Step by step for macOS and Windows, with devices, portrait screens and troubleshooting: the [setup guide](docs/setup.md).
+
 1. Copy `.env.example` to `.env` at the repository root and set `OPENAI_API_KEY`.
 2. Start the orchestrator from `server/` (details in [`server/README.md`](server/README.md)):
 

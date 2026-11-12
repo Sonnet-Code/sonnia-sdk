@@ -6,6 +6,7 @@ All notable changes to Sonnia SDK are listed here. The format follows [Keep a Ch
 
 ### Added
 
+- `docs/setup.md`: installing on macOS and Windows, trying the offline demo, devices and permissions, portrait screens, running all day and troubleshooting.
 - `docs/protocol.schema.json`: a JSON Schema for every WebSocket message. The test suite validates every message the orchestrator builds or sends against it, and checks that the document's examples and the Unity client's message names agree with it.
 - `sonia demo`: an offline, scripted show for the avatar client with a synthetic speech-like voice, subtitles, states, the waiting indicator, an image and a trivia round. No API key, no network, no cost.
 - Continuous integration: lint, format check, type check and the test suite on Linux, macOS and Windows, and a gitleaks scan of the whole history.

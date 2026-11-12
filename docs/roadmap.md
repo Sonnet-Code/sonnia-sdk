@@ -18,11 +18,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ planned
 3. ✅ **Configuration reference.** `docs/configuration.md` generated from the settings model, with a test that fails when a setting is added without being documented.
 4. ✅ **Architecture guide.** `docs/architecture.md`: processes, threads and asyncio tasks, the life of an utterance, session renewal, degradation paths and where each concern lives in the code.
 
-## 0.3 · Run it without an API key 🚧
+## 0.3 · Run it without an API key ✅
 
 5. ✅ **Offline demo orchestrator.** `sonia demo`: drives the Unity client with synthetic speech-like audio, scripted subtitles, state changes, images and a trivia round, so the avatar can be tried, developed and screenshotted with no account and no cost.
 6. ✅ **Protocol schema and contract tests.** A JSON Schema for every message in `docs/protocol.md`, validated against what the orchestrator actually sends in the test suite.
-7. ⏳ **Setup guide.** `docs/setup.md`: step-by-step install on macOS and Windows, devices, portrait screens, kiosk tips and troubleshooting.
+7. ✅ **Setup guide.** `docs/setup.md`: step-by-step install on macOS and Windows, devices, portrait screens, kiosk tips and troubleshooting.
 
 ## 0.4 · Make her yours
 
