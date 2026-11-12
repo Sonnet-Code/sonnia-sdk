@@ -8,10 +8,11 @@ uv run sonia check       # microphone, camera, GPT-Live, vision model and galler
 uv run sonia chat        # type to GPT-Live from the console (--speak to hear it)
 uv run sonia say "Hello" # hear the GPT-Live voice (--out to save a WAV)
 uv run sonia run         # start everything (--no-mic: typed text only)
+uv run sonia demo        # offline scripted show for the avatar client: no key, no network (--once, --volume 0)
 uv run pytest -q         # no hardware, no network, no real APIs
 ```
 
-`check`, `chat`, `say` and `run` use the OpenAI API and cost money; the tests never do. Settings come from environment variables or `.env` at the repository root (see `.env.example`). The local control panel listens on `http://127.0.0.1:8780` while `sonia run` is running.
+`check`, `chat`, `say` and `run` use the OpenAI API and cost money; `demo` and the tests never do. Settings come from environment variables or `.env` at the repository root (see `.env.example`). The local control panel listens on `http://127.0.0.1:8780` while `sonia run` is running.
 
 Lint and type checks:
 

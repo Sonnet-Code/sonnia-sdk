@@ -6,6 +6,7 @@ All notable changes to Sonnia SDK are listed here. The format follows [Keep a Ch
 
 ### Added
 
+- `sonia demo`: an offline, scripted show for the avatar client with a synthetic speech-like voice, subtitles, states, the waiting indicator, an image and a trivia round. No API key, no network, no cost.
 - Continuous integration: lint, format check, type check and the test suite on Linux, macOS and Windows, and a gitleaks scan of the whole history.
 - A public roadmap in `docs/roadmap.md`.
 - `docs/architecture.md`: processes, asyncio tasks and threads, the life of a turn, delegation, and how the orchestrator survives a whole day.

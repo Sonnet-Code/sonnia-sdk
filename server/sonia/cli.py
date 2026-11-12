@@ -918,6 +918,17 @@ def build_parser() -> argparse.ArgumentParser:
     say.add_argument("--out", type=Path, default=None, help="save to a WAV instead of playing it")
 
     commands.add_parser("check", help="check microphone, camera, GPT-Live, vision and gallery")
+
+    demo = commands.add_parser(
+        "demo", help="offline show for the avatar client: no API key, no network, no cost"
+    )
+    demo.add_argument("--once", action="store_true", help="play the show once and exit")
+    demo.add_argument(
+        "--volume",
+        type=float,
+        default=1.0,
+        help="volume of the synthetic voice on the client (0 mutes it; default 1)",
+    )
     return parser
 
 
@@ -935,6 +946,19 @@ def main(argv: list[str] | None = None) -> int:
             return _run(cmd_say(settings, args.text, args.out))
         case "check":
             return _run(cmd_check(settings))
+        case "demo":
+            from sonia.demo import run_demo
+
+            return _run(
+                run_demo(
+                    host=settings.ws.host,
+                    port=settings.ws.port,
+                    sample_rate=settings.live.sample_rate,
+                    assets_dir=Path(settings.assets_dir),
+                    volume=args.volume,
+                    loops=1 if args.once else None,
+                )
+            )
     return 2
 
 

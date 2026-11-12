@@ -65,6 +65,8 @@ The character itself is pluggable:
 3. Open `unity/` with Unity 6000.6.0f1, set the Game view to 1080x1920 and press Play (details in [`unity/README.md`](unity/README.md)).
 4. Talk to Sonnia. The local control panel is at `http://127.0.0.1:8780`.
 
+No API key yet? `uv run sonia demo` (no extras needed) drives the avatar with an offline, scripted show: a synthetic voice with lip-sync, subtitles, the waiting indicator, an image, a dance and a trivia round. It costs nothing and needs no network, so it is also the quickest way to work on the Unity client.
+
 Every setting is an environment variable; they are all listed in the [configuration reference](docs/configuration.md).
 
 Customize her by editing plain files, no code needed: what she knows in `assets/knowledge/`, the lines she says while idle in `assets/showcase/`, the trivia questions in `assets/trivia/questions.md` and the images she can show in `assets/gallery/`.
