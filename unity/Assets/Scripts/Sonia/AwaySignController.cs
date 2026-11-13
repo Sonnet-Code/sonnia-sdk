@@ -36,8 +36,12 @@ namespace Sonia
         private string eyebrow = "SONNIA";
 
         [SerializeField]
-        [Tooltip("Discreet line under the message. Empty: not shown.")]
-        private string footer = "Virtual assistant";
+        [Tooltip("Discreet line under the message. Empty: the text of the orchestrator's LANGUAGE (screen_texts), English until it arrives.")]
+        private string footer = string.Empty;
+
+        [SerializeField]
+        [Tooltip("Show the line under the message.")]
+        private bool showFooter = true;
 
         [Header("Layout (pixels at the 1080x1920 reference)")]
         [SerializeField]
@@ -113,6 +117,7 @@ namespace Sonia
         private TextMeshProUGUI _headline;
         private Image[] _dots = new Image[0];
         private string _message = PresenceController.DefaultAwayMessage;
+        private TextMeshProUGUI _footerText;
         private bool _shown;
         private float _progress;
         private float _clock;
@@ -141,10 +146,26 @@ namespace Sonia
         {
             // Built right away (hidden) so appearing costs nothing.
             Build();
+            ScreenTexts.Changed += ApplyScreenTexts;
+        }
+
+        private string FooterText
+        {
+            get { return string.IsNullOrEmpty(footer) ? ScreenTexts.Get(ScreenTexts.AwayFooter) : footer; }
+        }
+
+        /// <summary>The footer in the current language (<see cref="ScreenTexts"/>).</summary>
+        private void ApplyScreenTexts()
+        {
+            if (_footerText != null)
+            {
+                _footerText.text = FooterText;
+            }
         }
 
         private void OnDestroy()
         {
+            ScreenTexts.Changed -= ApplyScreenTexts;
             DestroyAsset(_roundSprite);
             DestroyAsset(_glowSprite);
             DestroyAsset(_dotSprite);
@@ -193,7 +214,7 @@ namespace Sonia
         /// <summary>Changes the text, whether shown or not. Empty: the default one.</summary>
         public void SetMessage(string message)
         {
-            _message = string.IsNullOrWhiteSpace(message) ? PresenceController.DefaultAwayMessage : message.Trim();
+            _message = string.IsNullOrWhiteSpace(message) ? ScreenTexts.Get(ScreenTexts.AwayMessage) : message.Trim();
             if (_headline == null)
             {
                 return;
@@ -383,9 +404,9 @@ namespace Sonia
                 _dots[i] = dot.GetComponent<Image>();
             }
 
-            if (!string.IsNullOrEmpty(footer))
+            if (showFooter)
             {
-                MakeText("Footer", card.transform, font, footer, 28f, mutedColor);
+                _footerText = MakeText("Footer", card.transform, font, FooterText, 28f, mutedColor);
             }
 
             RefreshLayout();

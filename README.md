@@ -77,7 +77,7 @@ The written name is "Sonnia". Texts read by the voice model spell it "Sonia" so 
 
 ## Roadmap
 
-The plan, release by release, is in [`docs/roadmap.md`](docs/roadmap.md). Next up: a language setting, an event schedule, a games framework and player build scripts.
+The plan, release by release, is in [`docs/roadmap.md`](docs/roadmap.md). Next up: an event schedule, a games framework, a gesture director and player build scripts.
 
 ## Known limitations
 

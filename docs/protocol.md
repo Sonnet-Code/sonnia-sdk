@@ -135,6 +135,16 @@ Operating mode (`conversation`, `greeter` or `away`) and whether the assistant c
 {"type": "stage_mode", "mode": "greeter", "talk": false}
 ```
 
+### `screen_texts`
+
+What the client writes on the screen, in the language of the `LANGUAGE` setting (`server/sonia/language.py`, one file per language in `assets/languages`): the invitation, the "you" label of the subtitles, the away sign footer and the trivia texts. Sticky. `language` is the setting's code; `texts` maps keys to texts, and `{name}` placeholders (`{number}`, `{total}`, `{letter}`, `{score}`, `{threshold}`) are filled in by the client. A client ignores keys it does not know and keeps its built-in English text for keys that are missing, so an older client or an older orchestrator keeps working.
+
+```json
+{"type": "screen_texts", "language": "es", "texts": {"invitation": "¡Acércate y pregúntame\nlo que quieras!", "you": "TÚ", "trivia_counter": "PREGUNTA {number} DE {total}"}}
+```
+
+The texts the orchestrator writes itself (the waiting pill of `busy`, the away sign of `presence`) are already in that language when they arrive.
+
 ### `devices`
 
 Answer to `list_devices` (and after each `set_device`): the microphones of the machine running the orchestrator, the configured one, the camera index in use and where snapshots come from.

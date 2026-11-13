@@ -1,0 +1,25 @@
+{
+  "name": "French",
+  "native_name": "Français",
+  "texts": {
+    "invitation": "Approche et pose-moi\ntes questions !",
+    "you": "TOI",
+    "thinking": "Je réfléchis…",
+    "searching": "Recherche sur le web…",
+    "away_message": "De retour dans quelques minutes",
+    "away_footer": "Assistante virtuelle",
+    "trivia_title": "QUIZ",
+    "trivia_counter": "QUESTION {number} SUR {total}",
+    "trivia_level_easy": "FACILE",
+    "trivia_level_medium": "MOYEN",
+    "trivia_level_hard": "DIFFICILE",
+    "trivia_correct": "Bonne réponse !",
+    "trivia_it_was": "C’était la {letter}",
+    "trivia_oops": "Oups ! C’était la {letter}",
+    "trivia_won": "GAGNÉ !",
+    "trivia_close": "PRESQUE !",
+    "trivia_score": "{score} sur {total} bonnes réponses",
+    "trivia_won_line": "Bravo, tu maîtrises le quiz !",
+    "trivia_lost_line": "Il en fallait {threshold}. Demande-moi un autre quiz et réessaie !"
+  }
+}

@@ -962,6 +962,7 @@ def main(argv: list[str] | None = None) -> int:
                     assets_dir=Path(settings.assets_dir),
                     volume=args.volume,
                     loops=1 if args.once else None,
+                    language=settings.load_language(),
                 )
             )
     return 2

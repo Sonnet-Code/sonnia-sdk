@@ -1,0 +1,25 @@
+{
+  "name": "English",
+  "native_name": "English",
+  "texts": {
+    "invitation": "Come closer and ask me\nanything!",
+    "you": "YOU",
+    "thinking": "Thinking…",
+    "searching": "Searching the web…",
+    "away_message": "Back in a few minutes",
+    "away_footer": "Virtual assistant",
+    "trivia_title": "TRIVIA",
+    "trivia_counter": "QUESTION {number} OF {total}",
+    "trivia_level_easy": "EASY",
+    "trivia_level_medium": "MEDIUM",
+    "trivia_level_hard": "HARD",
+    "trivia_correct": "Correct!",
+    "trivia_it_was": "It was {letter}",
+    "trivia_oops": "Oops! It was {letter}",
+    "trivia_won": "YOU WON!",
+    "trivia_close": "SO CLOSE!",
+    "trivia_score": "{score} of {total} correct",
+    "trivia_won_line": "Great job, trivia champ!",
+    "trivia_lost_line": "You needed {threshold}. Ask me for another trivia and try again!"
+  }
+}

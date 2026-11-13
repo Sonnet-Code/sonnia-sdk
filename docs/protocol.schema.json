@@ -60,6 +60,9 @@
           "$ref": "#/$defs/stage_mode"
         },
         {
+          "$ref": "#/$defs/screen_texts"
+        },
+        {
           "$ref": "#/$defs/devices"
         },
         {
@@ -527,6 +530,31 @@
         "type",
         "mode",
         "talk"
+      ],
+      "additionalProperties": false
+    },
+    "screen_texts": {
+      "description": "What the client writes on the screen, in the LANGUAGE setting. Unknown keys are ignored; missing ones keep the client's built-in English. Sticky.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "screen_texts"
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1
+        },
+        "texts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "language",
+        "texts"
       ],
       "additionalProperties": false
     },

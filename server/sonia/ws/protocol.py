@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import struct
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -65,6 +66,7 @@ MSG_ERROR = "error"
 MSG_REQUEST_FRAME = "request_frame"
 MSG_PRESENCE = "presence"
 MSG_STAGE_MODE = "stage_mode"
+MSG_SCREEN_TEXTS = "screen_texts"
 MSG_SET_VOLUME = "set_volume"
 MSG_DEVICES = "devices"
 MSG_PLAY_ANIMATION = "play_animation"
@@ -251,6 +253,19 @@ def msg_error(message: str) -> dict[str, Any]:
 def msg_presence(present: bool, message: str = "") -> dict[str, Any]:
     """Sonnia is on screen or has left (leaving a sign with ``message``)."""
     return {"type": MSG_PRESENCE, "present": bool(present), "message": str(message)}
+
+
+def msg_screen_texts(language: str, texts: Mapping[str, str]) -> dict[str, Any]:
+    """What the client writes on the screen, in ``LANGUAGE`` (``sonia.language``). Sticky.
+
+    Keys the client does not know are ignored, and keys missing here keep the client's
+    built-in English text, so either side can be newer.
+    """
+    return {
+        "type": MSG_SCREEN_TEXTS,
+        "language": str(language),
+        "texts": {str(key): str(value) for key, value in texts.items()},
+    }
 
 
 def msg_stage_mode(mode: str, talk: bool) -> dict[str, Any]:

@@ -28,6 +28,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from sonia.language import Language, load_language
 from sonia.showcase import load_lines
 from sonia.trivia.bank import TriviaBank, TriviaQuestion
 from sonia.types import AssistantState, AudioChunk
@@ -241,8 +242,11 @@ class DemoDirector:
         *,
         time_scale: float = 1.0,
         seed: int | None = None,
+        language: Language | None = None,
     ) -> None:
         self._link = link
+        #: Only the screen texts change with ``LANGUAGE``: the scripted lines are English.
+        self._language = language or load_language("en")
         self._content = content
         self._scale = max(0.0, time_scale)
         self._rng = random.Random(seed)
@@ -304,7 +308,7 @@ class DemoDirector:
         await self._user_says("Can you look up something on the web for me?")
         await self._think(0.4)
         await self._say("Sure, give me a second.")
-        await self._busy("search", "Searching the web…", 3.0, activity="search")
+        await self._busy("search", self._language.text("searching"), 3.0, activity="search")
         # The show_emotion action (docs/actions.md), so the client's side can be seen offline.
         await self._link.broadcast_json(p.msg_show_emotion("surprise", 2.5))
         await self._say("Here's what I found. In the real thing, this is a live web search.")
@@ -312,7 +316,7 @@ class DemoDirector:
 
     async def _scene_picture(self) -> None:
         await self._user_says("Show me a picture.")
-        await self._busy("think", "Thinking…", 1.2, activity="think")
+        await self._busy("think", self._language.text("thinking"), 1.2, activity="think")
         image_id, data, mime = self._content.picture
         await self._link.broadcast_json(
             p.msg_show_image(image_id, "gallery", mime, data, caption="From the gallery")
@@ -452,6 +456,7 @@ async def run_demo(
     assets_dir: Path,
     volume: float,
     loops: int | None = None,
+    language: Language | None = None,
 ) -> int:
     """``sonia demo``: the hub plus the director, until Ctrl+C or ``loops`` shows."""
     from sonia.config import WSSettings
@@ -459,10 +464,12 @@ async def run_demo(
 
     hub = Hub(WSSettings(host=host, port=port), sample_rate)
     content = await asyncio.to_thread(DemoContent.load, assets_dir, random.Random())
-    director = DemoDirector(hub, content)
+    screen = language or load_language("en")
+    director = DemoDirector(hub, content, language=screen)
     hub.on(p.MSG_TEXT_INPUT, director.on_text_input)
     hub.on(p.MSG_INTERRUPT, director.on_interrupt)
     await hub.set_sticky("volume", p.msg_set_volume(volume))
+    await hub.set_sticky("screen_texts", p.msg_screen_texts(screen.code, screen.texts))
     async with hub:
         logger.info(
             "Offline demo on ws://%s:%d/ (no API key, no network). Ctrl+C to stop.",

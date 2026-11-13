@@ -179,6 +179,7 @@ By default the client connects to `ws://127.0.0.1:8765` and reconnects on its ow
 | Change how turns or utterances are detected | `sonia/live/engine.py` (`_tick_once`, `_on_output_audio`, `_on_input_transcript`) |
 | Change what the voice model hears | `sonia/live/audio.py` (`MicGate`) |
 | Change the prompts | `sonia/live/prompts.py` |
+| Change the language or a screen text | `LANGUAGE`, `assets/languages/*.json` and `sonia/language.py`; `unity/Assets/Scripts/Sonia/ScreenTexts.cs` on the client |
 | Add a panel control | `sonia/panel/control.py` and `sonia/panel/server.py` |
 | Try the client without a key, or script a new scene for it | `sonia/demo.py` (`sonia demo`) |
 | Add a protocol message | `sonia/ws/protocol.py`, `unity/Assets/Scripts/Sonia/Protocol.cs`, `docs/protocol.md`, `docs/protocol.schema.json` |

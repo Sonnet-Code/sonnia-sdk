@@ -145,6 +145,7 @@ Local web control panel (`sonia/panel`).
 | `LOG_LEVEL` | text | `INFO` | DEBUG, INFO, WARNING or ERROR. |
 | `DEVICES_FILE` | text | `<SONIA_HOME>/cache/devices.json` | Microphone and camera chosen in the avatar's options menu (sonia/devices.py). |
 | `TIMEZONE` | text | (empty) | The IANA time zone Sonnia uses for the date and time she knows (for example `Europe/Madrid`). Empty = the system time zone. |
+| `LANGUAGE` | text | `en` | The language Sonnia speaks by default and writes on the screen: the name of a file in `assets/languages` (`en`, `es`, `fr`, `pt`, `de`, or one you add). She still answers visitors in the language they speak to her. |
 | `IDLE_RESET_SECONDS` | number | `120.0` | Restart the conversation after N seconds without activity (kiosk mode). |
 | `IMAGE_AUTO_HIDE_SECONDS` | number | `30.0` | Hide a shown image on its own after N seconds (0 = never). The model hides it when the topic changes, but if it forgets, the image does not stay there. |
 | `SHOW_EMOTION_ENABLED` | true/false | `false` | Offer the `show_emotion` action, the worked example of `docs/actions.md`: Sonnia shows joy, sadness or surprise on her face when she is asked to. Off by default: each one is a task delegated to the backend. |

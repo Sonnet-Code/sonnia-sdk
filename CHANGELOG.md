@@ -6,6 +6,7 @@ All notable changes to Sonnia SDK are listed here. The format follows [Keep a Ch
 
 ### Added
 
+- A `LANGUAGE` setting: the language Sonnia speaks by default and writes on the screen, with English, Spanish, French, Portuguese and German in `assets/languages`. The prompts stay in English and are told the default language; the screen texts (the invitation, the subtitle label, the waiting pill, the away sign and the trivia card) are written once per language and reach the avatar client in the new sticky `screen_texts` message. A language can be added with a JSON file, without code.
 - A prompt editor in the control panel (Developer > Prompts): the persona, the knowledge base, the voice-model rules, the backend rules and the vision prompt, checked before saving, stored in the panel state file and used from the next conversation without a restart.
 - `docs/actions.md`: how an action runs and how to write one, from the tool definition and handler to the prompts, the protocol message, the Unity side and the tests, with a checklist.
 - `show_emotion`, the worked example of that guide: joy, sadness or surprise on the avatar's face, with its `show_emotion` protocol message and Unity handler. Off unless `SHOW_EMOTION_ENABLED=true`; `sonia demo` shows it after its web search.

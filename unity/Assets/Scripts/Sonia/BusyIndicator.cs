@@ -564,7 +564,7 @@ namespace Sonia
             _message.characterSpacing = -1f;
             PlaceLeft(_message.rectTransform, textLeft, 48f, 74f);
 
-            SetText(string.IsNullOrEmpty(_pendingText) ? "Thinking…" : _pendingText);
+            SetText(string.IsNullOrEmpty(_pendingText) ? ScreenTexts.Get(ScreenTexts.Thinking) : _pendingText);
             _width = _targetWidth;
             _pill.gameObject.SetActive(false);
         }
@@ -712,16 +712,16 @@ namespace Sonia
             rect.offsetMax = new Vector2(0f, -topOffset);
         }
 
-        /// <summary>No extra spaces or line breaks; empty becomes "Thinking...".</summary>
+        /// <summary>No extra spaces or line breaks; empty becomes "Thinking…" in the current language.</summary>
         private static string Clean(string text)
         {
             if (string.IsNullOrEmpty(text))
             {
-                return "Thinking…";
+                return ScreenTexts.Get(ScreenTexts.Thinking);
             }
 
             string clean = text.Replace('\n', ' ').Replace('\r', ' ').Trim();
-            return clean.Length == 0 ? "Thinking…" : clean;
+            return clean.Length == 0 ? ScreenTexts.Get(ScreenTexts.Thinking) : clean;
         }
 
         private static float EaseOutCubic(float t)

@@ -304,6 +304,7 @@ class PanelControl:
         rng: random.Random | None = None,
     ) -> None:
         self._settings = settings
+        self._language = settings.load_language()
         self._hub = hub
         self._registry = registry
         self._engine = engine
@@ -427,7 +428,12 @@ class PanelControl:
 
     @property
     def _away_message(self) -> str:
-        return self.state.away_message.strip() or DEFAULT_AWAY_MESSAGE
+        """The sign's text: the one written in the panel or, if it was never changed, the
+        default of ``LANGUAGE``."""
+        text = self.state.away_message.strip()
+        if text and text != DEFAULT_AWAY_MESSAGE:
+            return text
+        return self._language.text("away_message") or DEFAULT_AWAY_MESSAGE
 
     # -- greeter loop -----------------------------------------------------------
 

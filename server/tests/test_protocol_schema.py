@@ -91,6 +91,7 @@ BUILDS: list[tuple[str, Callable[[], dict[str, Any]]]] = [
     ("error", lambda: p.msg_error("oops")),
     ("presence", lambda: p.msg_presence(False, "Back soon")),
     ("stage_mode", lambda: p.msg_stage_mode("away", False)),
+    ("screen_texts", lambda: p.msg_screen_texts("es", {"you": "TÚ", "invitation": "¡Hola!"})),
     (
         "devices",
         lambda: p.msg_devices(

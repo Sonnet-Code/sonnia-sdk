@@ -31,6 +31,8 @@ namespace Sonia
         public const string Attention = "attention";
         public const string Presence = "presence";
         public const string StageMode = "stage_mode";
+        /// <summary>The screen texts in the orchestrator's language (<see cref="ScreenTextsMessage"/>), kept by <see cref="ScreenTexts"/>.</summary>
+        public const string ScreenTexts = "screen_texts";
         public const string SetVolume = "set_volume";
         public const string Devices = "devices";
         public const string PlayAnimation = "play_animation";
@@ -355,6 +357,20 @@ namespace Sonia
 
         /// <summary>True if Sonnia would answer whoever speaks to her.</summary>
         [JsonProperty("talk")] public bool Talk = true;
+    }
+
+    /// <summary>
+    /// What to write on the screen, in the orchestrator's LANGUAGE (sticky). Missing keys keep
+    /// the built-in English text and unknown ones are ignored (<see cref="ScreenTexts"/>).
+    /// </summary>
+    [Serializable]
+    public class ScreenTextsMessage
+    {
+        /// <summary>The LANGUAGE code: <c>en</c>, <c>es</c>...</summary>
+        [JsonProperty("language")] public string Language = "en";
+
+        /// <summary>Text by key; <c>{name}</c> placeholders are filled in by the client.</summary>
+        [JsonProperty("texts")] public Dictionary<string, string> Texts = new Dictionary<string, string>();
     }
 
     /// <summary>Values of the <c>activity</c> field of the <c>activity</c> message.</summary>

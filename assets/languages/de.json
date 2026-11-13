@@ -1,0 +1,25 @@
+{
+  "name": "German",
+  "native_name": "Deutsch",
+  "texts": {
+    "invitation": "Komm näher und frag\nmich, was du willst!",
+    "you": "DU",
+    "thinking": "Ich überlege…",
+    "searching": "Ich suche im Web…",
+    "away_message": "Bin in ein paar Minuten zurück",
+    "away_footer": "Virtuelle Assistentin",
+    "trivia_title": "QUIZ",
+    "trivia_counter": "FRAGE {number} VON {total}",
+    "trivia_level_easy": "LEICHT",
+    "trivia_level_medium": "MITTEL",
+    "trivia_level_hard": "SCHWER",
+    "trivia_correct": "Richtig!",
+    "trivia_it_was": "Es war {letter}",
+    "trivia_oops": "Hoppla! Es war {letter}",
+    "trivia_won": "GEWONNEN!",
+    "trivia_close": "FAST!",
+    "trivia_score": "{score} von {total} richtig",
+    "trivia_won_line": "Super, du bist ein Quiz-Profi!",
+    "trivia_lost_line": "Du brauchtest {threshold}. Frag mich nach einem neuen Quiz und versuch es noch mal!"
+  }
+}

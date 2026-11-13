@@ -1,0 +1,25 @@
+{
+  "name": "Portuguese",
+  "native_name": "Português",
+  "texts": {
+    "invitation": "Chegue perto e me\npergunte o que quiser!",
+    "you": "VOCÊ",
+    "thinking": "Pensando…",
+    "searching": "Pesquisando na web…",
+    "away_message": "Volto em alguns minutos",
+    "away_footer": "Assistente virtual",
+    "trivia_title": "QUIZ",
+    "trivia_counter": "PERGUNTA {number} DE {total}",
+    "trivia_level_easy": "FÁCIL",
+    "trivia_level_medium": "MÉDIO",
+    "trivia_level_hard": "DIFÍCIL",
+    "trivia_correct": "Correto!",
+    "trivia_it_was": "Era a {letter}",
+    "trivia_oops": "Ops! Era a {letter}",
+    "trivia_won": "VOCÊ GANHOU!",
+    "trivia_close": "QUASE!",
+    "trivia_score": "{score} de {total} certas",
+    "trivia_won_line": "Muito bem, você manda no quiz!",
+    "trivia_lost_line": "Você precisava de {threshold}. Peça outro quiz e tente de novo!"
+  }
+}

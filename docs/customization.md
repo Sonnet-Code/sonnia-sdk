@@ -14,7 +14,7 @@ Sonnia ships as a generic assistant. This guide turns her into yours: what she k
 | Trivia questions | `assets/trivia/questions.md` | At the next game |
 | Images she can show | `assets/gallery/` or "Add image" in the panel | Within seconds |
 | Voice and models | `LIVE_VOICE`, `LIVE_MODEL`, `LIVE_BACKEND_MODEL`, `LLM_*` | On restart (the voice also from the panel) |
-| Screen invitation | `invitation` in `unity/Assets/Scripts/Sonia/StageScreen.cs` | On the next build |
+| The language she speaks and writes | `LANGUAGE` and `assets/languages/*.json` | On restart |
 
 A new session opens after `IDLE_RESET_SECONDS` without anyone talking to her, or with "Restart conversation" in the panel.
 
@@ -36,7 +36,7 @@ The two files that ship (`01-about-sonia.md`, `02-how-sonia-works.md`) describe 
 
 The panel's Developer section has a Prompts editor with every long text the models receive: the persona, the knowledge base, the voice-model rules, the backend rules and the vision prompt. Pick one, edit it and save. The edit is checked first, stored in the panel state file on this machine (`PANEL_STATE_FILE`) and used from the next conversation, or from the next photo for the vision prompt, with no restart; "Start a new conversation" applies it at once. Sonnia then uses your version instead of the built-in text, never both, until "Use the built-in text" deletes it.
 
-- **Placeholders.** The voice-model rules are a template: the code replaces `{capabilities}`, `{look_when}` and the others with rules that depend on the settings and the actions. An edit may drop a placeholder (that rule is then never added) but must keep `{capabilities}`, and cannot add one the code does not fill. Write a literal brace as `{{` or `}}`. The other texts are used as written, braces included.
+- **Placeholders.** The voice-model rules are a template: the code replaces `{capabilities}`, `{language}`, `{look_when}` and the others with rules that depend on the settings and the actions. An edit may drop a placeholder (that rule is then never added) but must keep `{capabilities}`, and cannot add one the code does not fill. Write a literal brace as `{{` or `}}`. The other texts are used as written, braces included.
 - **The knowledge base** in the editor starts as the files of `assets/knowledge` one after another. A saved version replaces all of them, for the voice model and the backend, until it is reset; editing the files afterwards changes nothing while it is saved.
 - **After an upgrade**, a saved version that no longer passes the check (a placeholder it needs was renamed) is ignored with a warning in the log, and the editor marks it so you can fix it.
 - **To keep a change**, copy it into the code or the knowledge files: the panel state is per machine.
@@ -111,6 +111,20 @@ Never put photos of visitors there.
 
 `uv run sonia check` tries every model with your settings before a long day.
 
+## Language
+
+`LANGUAGE` sets the language Sonnia speaks by default and the one she writes on the screen. It is the name of a file in [`assets/languages`](../assets/languages): `en` (the default), `es`, `fr`, `pt` or `de`. She still answers each visitor in the language they speak to her, and goes back to the default with the next person.
+
+```bash
+LANGUAGE=es uv run sonia run
+```
+
+- **The prompts are written once, in English.** The voice model is told "Speak Spanish by default" through the `{language}` placeholder of its rules, and the backend gets a "Default language" line, so the instructions never need translating. Models read English instructions and answer in the language they are asked to.
+- **The screen texts are written once per language**, in the language file: the invitation bubble, the "you" label of the subtitles, the waiting pill, the away sign and the trivia card. The orchestrator sends them to the avatar client when it starts (the `screen_texts` message of the [protocol](protocol.md)), so changing them needs no rebuild.
+- **Your content stays yours to translate**: the knowledge base, the persona, the idle lines, the trivia bank and the gallery captions are used as written. A knowledge base in English works with any `LANGUAGE`; idle lines and trivia questions are read out as they are, so write them in the language you choose.
+
+To add a language, copy `en.json` to a file named with its code (for example `it.json`), set `"name"` to the language's name in English ("Italian", which is what the models are told), translate every text and keep each `{placeholder}`. Put it in `assets/languages`, or in a `languages` folder of your `ASSETS_DIR` to add or change one without touching the program. A missing text, or one with different placeholders, falls back to English with a warning in the log; an unknown `LANGUAGE` falls back to English entirely.
+
 ## Turning features off
 
 | To remove | Set |
@@ -128,8 +142,8 @@ The instructions the models receive follow these settings: an action that is off
 
 - With the Genies Avatar SDK installed in the client, the panel's Developer section takes a Genies avatar definition (JSON) and swaps the character at runtime. Without the SDK, the client keeps its fallback character.
 - The mouth, the camera framing and the idle motion are tuned from the same Developer section, without rebuilding.
-- The invitation bubble shown while nobody talks ("Come closer and ask me anything!") is `invitation` in `StageScreen.cs`.
-- The "Away" sign is written in the panel.
+- The invitation bubble shown while nobody talks ("Come closer and ask me anything!") and the other screen texts come from the [language file](#language); `invitation` in `StageScreen.cs` overrides it for one build.
+- The "Away" sign is written in the panel; until it is changed, it is the one of the language file.
 
 ## Example: a museum guide
 

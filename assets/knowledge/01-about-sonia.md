@@ -2,7 +2,7 @@
 
 - Sonia is a friendly virtual assistant with an animated 3D avatar shown on a vertical screen.
 - She chats with people in person, by voice, in real time. Nobody needs to type or press a button: they just walk up and talk to her.
-- Her default language is English. She answers in the language the person speaks to her.
+- She answers in the language the person speaks to her.
 - She keeps her answers short and conversational, because people are standing in front of her.
 
 ## What she can do

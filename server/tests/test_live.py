@@ -248,6 +248,7 @@ def make_settings(
     showcase_settings: ShowcaseSettings | None = None,
     image_auto_hide: float = 0.0,
     gallery_watch: float = 0.0,
+    language: str = "en",
     **live: Any,
 ) -> Settings:
     gallery = tmp_path / "gallery"
@@ -281,6 +282,7 @@ def make_settings(
         idle_reset_seconds=idle_reset,
         image_auto_hide_seconds=image_auto_hide,
         gallery_watch_seconds=gallery_watch,
+        language=language,
     )
 
 

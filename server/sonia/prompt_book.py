@@ -284,6 +284,7 @@ def _knowledge() -> str:
 #: The placeholders ``build_live_instructions`` fills in ``LIVE_RULES`` (a test checks
 #: they match).
 LIVE_RULE_FIELDS = (
+    "language",
     "setting_rule",
     "clock_rule",
     "camera_rule",
@@ -328,7 +329,8 @@ def _specs() -> Iterable[PromptSpec]:
         help=(
             "How the voice model takes turns, uses the camera and delegates to the backend. "
             "Each placeholder becomes a rule, or nothing, depending on the settings and the "
-            "actions; {capabilities} is the list of backend tools."
+            "actions; {capabilities} is the list of backend tools and {language} the "
+            'LANGUAGE setting ("Spanish").'
         ),
     )
     yield PromptSpec(
@@ -336,8 +338,8 @@ def _specs() -> Iterable[PromptSpec]:
         title="Backend rules",
         default=_const("sonia.live.prompts", "BACKEND_PROMPT"),
         help=(
-            "The instructions of the model that runs the actions. The date, the gallery ids "
-            "and the knowledge base are added after it."
+            "The instructions of the model that runs the actions. The default language, the "
+            "date, the gallery ids and the knowledge base are added after it."
         ),
     )
     yield PromptSpec(

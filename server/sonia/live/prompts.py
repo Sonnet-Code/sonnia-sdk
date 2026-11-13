@@ -46,7 +46,7 @@ GALLERY_NOTE_PREFIX = "[Gallery]"
 
 LIVE_RULES = """\
 HOW YOU WORK (real-time voice to voice):
-- You hear the user directly and speak with your own voice. Speak English by default; if someone speaks to you in another language, answer in that language.
+- You hear the user directly and speak with your own voice. Speak {language} by default; if someone speaks to you in another language, answer in that language.
 {setting_rule}
 {clock_rule}
 - If a name, a date or an important detail was not clear, ask about exactly that part.
@@ -213,7 +213,7 @@ BACKEND_PROMPT = """\
 You are the backend of Sonia, a virtual assistant who talks with people in person through an animated 3D avatar. Sonia is another model that speaks out loud with the users and delegates tasks to you: you solve them with your tools and give her back the result.
 
 Rules:
-- Do what the task asks with the tools you have and answer with one or two short, factual sentences, without markdown or lists, in the language the user is speaking (English by default): Sonia will use them to keep talking.
+- Do what the task asks with the tools you have and answer with one or two short, factual sentences, without markdown or lists, in the language the user is speaking (the default language below if it is not clear): Sonia will use them to keep talking.
 - Everything you return is said out loud by Sonia: no code, web addresses, tables or lists. If someone asks for a script or a program, explain in two or three sentences how it would be done, without writing it.
 - Do not greet or introduce yourself: Sonia is already talking with the user.
 - To show images, use only the exact gallery ids.
@@ -447,6 +447,7 @@ def build_live_instructions(
     look_when = _LOOK_WHEN[mode] + "\n" if mode in _LOOK_WHEN else ""
     trivia = "start_trivia" in names
     rules = _fill_rules(
+        language=settings.load_language().name,
         capabilities=capabilities or _NO_CAPABILITIES,
         clock_rule=_CLOCK_RULE,
         setting_rule=_SETTING_RULE,
@@ -497,6 +498,9 @@ _BACKEND_SEARCH_RULE = (
     "individuals: say you do not look that up."
 )
 
+#: ``{language}``: the name of ``LANGUAGE`` in English ("Spanish").
+_BACKEND_LANGUAGE = "Default language: {language}."
+
 #: ``{date}``: the spoken date and time when the session opens.
 _BACKEND_CLOCK = (
     "Date and time when the conversation started: {date}. If the task brings a more recent "
@@ -519,12 +523,13 @@ def build_backend_instructions(
     notes: str = "",
     clock_text: str = "",
     web_search: bool = False,
+    language: str = "English",
 ) -> str:
     """Instructions of the Responses backend: rules, gallery and knowledge."""
     rules = BOOK.text("backend_rules")
     if web_search:
         rules += "\n" + _BACKEND_SEARCH_RULE
-    parts = [rules]
+    parts = [rules, _BACKEND_LANGUAGE.format(language=language)]
     if clock_text:
         parts.append(_BACKEND_CLOCK.format(date=clock_text))
     parts.append(_BACKEND_GALLERY.format(images=", ".join(gallery_ids) or "none"))
@@ -577,6 +582,7 @@ def build_session_config(
             notes=notes,
             clock_text=clock_text,
             web_search=live.backend_web_search,
+            language=settings.load_language().name,
         ),
         "max_output_tokens": max(16, live.backend_max_output_tokens),
     }

@@ -140,6 +140,9 @@ namespace Sonia
         /// <summary>Operating mode and whether Sonnia can converse (the invitation to talk).</summary>
         public event Action<StageModeMessage> OnStageMode;
 
+        /// <summary>Screen texts in the orchestrator's language, already applied to <see cref="ScreenTexts"/>.</summary>
+        public event Action<ScreenTextsMessage> OnScreenTexts;
+
         /// <summary>Voice volume.</summary>
         public event Action<SetVolumeMessage> OnSetVolume;
 
@@ -712,6 +715,8 @@ namespace Sonia
                     return Protocol.Deserialize<PresenceMessage>(payload);
                 case MessageTypes.StageMode:
                     return Protocol.Deserialize<StageModeMessage>(payload);
+                case MessageTypes.ScreenTexts:
+                    return Protocol.Deserialize<ScreenTextsMessage>(payload);
                 case MessageTypes.SetVolume:
                     return Protocol.Deserialize<SetVolumeMessage>(payload);
                 case MessageTypes.Devices:
@@ -946,6 +951,14 @@ namespace Sonia
             if (stageMode != null)
             {
                 Raise(OnStageMode, stageMode);
+                return;
+            }
+
+            ScreenTextsMessage screenTexts = message as ScreenTextsMessage;
+            if (screenTexts != null)
+            {
+                ScreenTexts.Apply(screenTexts);
+                Raise(OnScreenTexts, screenTexts);
                 return;
             }
 

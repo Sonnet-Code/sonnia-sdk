@@ -309,6 +309,8 @@ class LiveEngine:
         tick_s: float = 0.05,
     ) -> None:
         self._settings = settings
+        #: ``LANGUAGE``: the screen texts (the waiting pill) and what the client gets.
+        self._language = settings.load_language()
         self._voice_cache = voice_cache
         self._live = settings.live
         self._hub = hub
@@ -480,6 +482,14 @@ class LiveEngine:
         return self._trivia
 
     @property
+    def _busy_think(self) -> str:
+        return self._language.text("thinking") or TEXT_THINK
+
+    @property
+    def _busy_search(self) -> str:
+        return self._language.text("searching") or TEXT_SEARCH
+
+    @property
     def busy_board(self) -> BusyBoard:
         """The on-screen waiting indicator (``sonia.busy``)."""
         return self._busy_board
@@ -582,6 +592,9 @@ class LiveEngine:
             live.voice,
             live.backend_model,
             "yes" if self._narrator is not None and self._policy.enabled else "no",
+        )
+        await self._hub.set_sticky(
+            "screen_texts", p.msg_screen_texts(self._language.code, self._language.texts)
         )
         await self._hub.broadcast_json(p.msg_state(self._state))
         ticker = asyncio.create_task(self._tick_loop(), name="sonia-live-tick")
@@ -1299,9 +1312,9 @@ class LiveEngine:
         now = time.monotonic()
         for delegation in self._delegations.values():
             if now - delegation.created_at >= THINK_DELAY_S:
-                wanted[f"{BUSY_PREFIX}think:{delegation.id}"] = ("think", TEXT_THINK)
+                wanted[f"{BUSY_PREFIX}think:{delegation.id}"] = ("think", self._busy_think)
             if delegation.searches:
-                wanted[f"{BUSY_PREFIX}search:{delegation.id}"] = ("search", TEXT_SEARCH)
+                wanted[f"{BUSY_PREFIX}search:{delegation.id}"] = ("search", self._busy_search)
         board = self._busy_board
         shown = board.keys
         for key in shown:

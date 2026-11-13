@@ -24,12 +24,12 @@ Status legend: ✅ done · 🚧 in progress · ⏳ planned
 6. ✅ **Protocol schema and contract tests.** A JSON Schema for every message in `docs/protocol.md`, validated against what the orchestrator actually sends in the test suite.
 7. ✅ **Setup guide.** `docs/setup.md`: step-by-step install on macOS and Windows, devices, portrait screens, kiosk tips and troubleshooting.
 
-## 0.4 · Make her yours 🚧
+## 0.4 · Make her yours ✅
 
 8. ✅ **Customization guide.** `docs/customization.md`: persona, knowledge base, idle lines, trivia bank, gallery, voice and models, with examples for a museum guide and a shop assistant.
 9. ✅ **Writing actions.** `docs/actions.md` and a worked example action with its Unity side, showing the registry, handler, protocol message and tests.
 10. ✅ **Prompt editor in the local panel.** Every text the models receive (persona, knowledge, voice-model rules, backend, vision) editable and validated from the panel, stored locally and applied without a restart.
-11. ⏳ **Language setting.** One setting to choose the language Sonnia speaks and writes, with the prompts and screen texts written once and the answer language passed to the models.
+11. ✅ **Language setting.** One setting to choose the language Sonnia speaks and writes, with the prompts and screen texts written once and the answer language passed to the models.
 
 ## 0.5 · More to do at the stand
 

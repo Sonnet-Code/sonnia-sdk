@@ -42,8 +42,10 @@ def test_the_persona_gives_safe_compliments() -> None:
     assert "never about the body" in SYSTEM_PROMPT
 
 
-def test_the_persona_speaks_english_by_default_and_follows_the_user() -> None:
-    assert "Speak English by default" in SYSTEM_PROMPT
+def test_the_persona_leaves_the_language_to_the_rules_and_follows_the_user() -> None:
+    # The default language is the LANGUAGE setting, given in the voice-model rules.
+    assert "English" not in SYSTEM_PROMPT
+    assert "default language your operating rules give you" in SYSTEM_PROMPT
     assert "answer in that language" in SYSTEM_PROMPT
 
 

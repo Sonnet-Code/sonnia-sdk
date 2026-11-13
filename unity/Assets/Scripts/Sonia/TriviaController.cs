@@ -187,6 +187,7 @@ namespace Sonia
         private CanvasGroup _cardGroup;
         private TextMeshProUGUI _eyebrow;
         private TextMeshProUGUI _counter;
+        private TextMeshProUGUI _resultEyebrow;
 
         /// <summary>Game level for the counter ("QUESTION 2 OF 5 · HARD").</summary>
         private string _level = string.Empty;
@@ -426,8 +427,9 @@ namespace Sonia
                 }
             }
 
-            _counter.text = "QUESTION " + _number + " OF " + _total
-                            + (_level.Length > 0 ? " · " + _level.ToUpperInvariant() : string.Empty);
+            _eyebrow.text = ColoredWord(ScreenTexts.Get(ScreenTexts.TriviaTitle));
+            _counter.text = ScreenTexts.Format(ScreenTexts.TriviaCounter, "number", _number, "total", _total)
+                            + (_level.Length > 0 ? " · " + LevelText(_level) : string.Empty);
             _question.text = message.Question ?? string.Empty;
             for (int i = 0; i < _options.Length; i++)
             {
@@ -508,7 +510,7 @@ namespace Sonia
             string letter = "ABC".Substring(correct, 1);
             if (message.IsCorrect)
             {
-                SetBanner("Correct!", Green);
+                SetBanner(ScreenTexts.Get(ScreenTexts.TriviaCorrect), Green);
                 Vector2 at = EffectsPoint(_options[correct].Row);
                 Burst(at, 90, 1300f);
                 Sparkles(at, 10);
@@ -517,7 +519,7 @@ namespace Sonia
             }
             else
             {
-                SetBanner(chosen < 0 ? "It was " + letter : "Oops! It was " + letter, Red);
+                SetBanner(ScreenTexts.Format(chosen < 0 ? ScreenTexts.TriviaItWas : ScreenTexts.TriviaOops, "letter", letter), Red);
                 PlayClip(wrongClip, null);
                 ShowEmotion(FacialExpressionController.Emotion.Sad, 2.4f);
             }
@@ -996,14 +998,15 @@ namespace Sonia
                 return;
             }
 
-            _resultTitle.text = won ? "YOU WON!" : "SO CLOSE!";
+            _resultEyebrow.text = ColoredWord(ScreenTexts.Get(ScreenTexts.TriviaTitle));
+            _resultTitle.text = ScreenTexts.Get(won ? ScreenTexts.TriviaWon : ScreenTexts.TriviaClose);
             _resultTitle.colorGradient = won
                 ? new VertexGradient(new Color(1f, 0.93f, 0.55f), new Color(1f, 0.93f, 0.55f), Yellow, new Color(1f, 0.62f, 0.1f))
                 : new VertexGradient(Color.white, Color.white, new Color(0.75f, 0.85f, 1f), new Color(0.75f, 0.85f, 1f));
-            _resultScore.text = _score + " of " + _total + " correct";
+            _resultScore.text = ScreenTexts.Format(ScreenTexts.TriviaScore, "score", _score, "total", _total);
             _resultLine.text = won
-                ? "Great job, trivia champ!"
-                : "You needed " + _threshold + ". Ask me for another trivia and try again!";
+                ? ScreenTexts.Get(ScreenTexts.TriviaWonLine)
+                : ScreenTexts.Format(ScreenTexts.TriviaLostLine, "threshold", _threshold);
             for (int i = 0; i < _resultStars.Count; i++)
             {
                 bool lit = i < _score;
@@ -1126,15 +1129,19 @@ namespace Sonia
             headerRow.childForceExpandHeight = false;
             header.AddComponent<LayoutElement>().preferredHeight = 46f;
 
-            _eyebrow = MakeText("Title", header.transform, ColoredWord("TRIVIA"), 40f, Color.white, TextAlignmentOptions.Left);
+            _eyebrow = MakeText("Title", header.transform, ColoredWord(ScreenTexts.Get(ScreenTexts.TriviaTitle)), 40f, Color.white, TextAlignmentOptions.Left);
             _eyebrow.fontStyle = FontStyles.Bold;
             _eyebrow.characterSpacing = 10f;
             _eyebrow.textWrappingMode = TextWrappingModes.NoWrap;
 
-            _counter = MakeText("Counter", header.transform, "QUESTION 1 OF 5", 26f, Muted, TextAlignmentOptions.Left);
+            _counter = MakeText("Counter", header.transform, ScreenTexts.Format(ScreenTexts.TriviaCounter, "number", 1, "total", 5), 26f, Muted, TextAlignmentOptions.Left);
             _counter.fontStyle = FontStyles.Bold;
             _counter.characterSpacing = 4f;
             _counter.textWrappingMode = TextWrappingModes.NoWrap;
+            // Other languages write longer words ("PREGUNTA 2 DE 5 · DIFÍCIL"): shrink, never spill.
+            _counter.enableAutoSizing = true;
+            _counter.fontSizeMin = 18f;
+            _counter.fontSizeMax = 26f;
             _counter.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
             GameObject dots = new GameObject("Dots", typeof(RectTransform));
@@ -1188,9 +1195,12 @@ namespace Sonia
             bannerFill.AddComponent<LayoutElement>().ignoreLayout = true;
             Stretch((RectTransform)bannerFill.transform);
             _bannerFill = bannerFill.GetComponent<Image>();
-            _bannerText = MakeText("Text", _banner, "Correct!", 52f, Color.white, TextAlignmentOptions.Center);
+            _bannerText = MakeText("Text", _banner, ScreenTexts.Get(ScreenTexts.TriviaCorrect), 52f, Color.white, TextAlignmentOptions.Center);
             _bannerText.fontStyle = FontStyles.Bold;
             _bannerText.textWrappingMode = TextWrappingModes.NoWrap;
+            _bannerText.enableAutoSizing = true;
+            _bannerText.fontSizeMin = 34f;
+            _bannerText.fontSizeMax = 52f;
             banner.SetActive(false);
 
             EnsureDots(_total);
@@ -1297,18 +1307,22 @@ namespace Sonia
             layout.childForceExpandHeight = false;
             body.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            TextMeshProUGUI eyebrow = MakeText("Title", body.transform, ColoredWord("TRIVIA"), 34f, Color.white, TextAlignmentOptions.Center);
+            TextMeshProUGUI eyebrow = MakeText("Title", body.transform, ColoredWord(ScreenTexts.Get(ScreenTexts.TriviaTitle)), 34f, Color.white, TextAlignmentOptions.Center);
             eyebrow.fontStyle = FontStyles.Bold;
             eyebrow.characterSpacing = 10f;
+            _resultEyebrow = eyebrow;
 
             GameObject titleBox = new GameObject("Result", typeof(RectTransform));
             titleBox.layer = body.layer;
             titleBox.transform.SetParent(body.transform, false);
             titleBox.AddComponent<LayoutElement>().preferredHeight = 150f;
-            _resultTitle = MakeText("Text", titleBox.transform, "YOU WON!", 128f, Color.white, TextAlignmentOptions.Center);
+            _resultTitle = MakeText("Text", titleBox.transform, ScreenTexts.Get(ScreenTexts.TriviaWon), 128f, Color.white, TextAlignmentOptions.Center);
             _resultTitle.fontStyle = FontStyles.Bold;
             _resultTitle.enableVertexGradient = true;
             _resultTitle.textWrappingMode = TextWrappingModes.NoWrap;
+            _resultTitle.enableAutoSizing = true;
+            _resultTitle.fontSizeMin = 72f;
+            _resultTitle.fontSizeMax = 128f;
             Stretch(_resultTitle.rectTransform);
 
             GameObject stars = new GameObject("Stars", typeof(RectTransform));
@@ -1331,7 +1345,7 @@ namespace Sonia
                 _resultStars.Add(star);
             }
 
-            _resultScore = MakeText("Correct", body.transform, "4 of 5 correct", 58f, Color.white, TextAlignmentOptions.Center);
+            _resultScore = MakeText("Correct", body.transform, ScreenTexts.Format(ScreenTexts.TriviaScore, "score", 4, "total", 5), 58f, Color.white, TextAlignmentOptions.Center);
             _resultScore.fontStyle = FontStyles.Bold;
             _resultLine = MakeText("Line", body.transform, string.Empty, 38f, Muted, TextAlignmentOptions.Center);
             resultRoot.SetActive(false);
@@ -1464,6 +1478,13 @@ namespace Sonia
         }
 
         /// <summary>A word with each letter in a party color, as rich text.</summary>
+        /// <summary>The level in the current language ("HARD"), or the level as sent, in capitals.</summary>
+        private static string LevelText(string level)
+        {
+            string text = ScreenTexts.Get(ScreenTexts.TriviaLevelPrefix + level.Trim().ToLowerInvariant());
+            return text.Length > 0 ? text : level.ToUpperInvariant();
+        }
+
         private static string ColoredWord(string word)
         {
             System.Text.StringBuilder builder = new System.Text.StringBuilder();

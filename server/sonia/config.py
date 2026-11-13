@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from sonia.language import Language, load_language
 from sonia.paths import BUNDLE_ROOT, env_files, home
 
 #: Root of `cache/` and `overrides.env` (see `sonia/paths.py`).
@@ -322,6 +323,10 @@ class Settings(BaseSettings):
     #: ``TIMEZONE``: the IANA time zone Sonnia uses for the date and time she knows
     #: (for example ``Europe/Madrid``). Empty = the system time zone.
     timezone: str = ""
+    #: ``LANGUAGE``: the language Sonnia speaks by default and writes on the screen: the
+    #: name of a file in ``assets/languages`` (``en``, ``es``, ``fr``, ``pt``, ``de``, or
+    #: one you add). She still answers visitors in the language they speak to her.
+    language: str = "en"
     #: Restart the conversation after N seconds without activity (kiosk mode).
     idle_reset_seconds: float = 120.0
     #: Hide a shown image on its own after N seconds (0 = never). The model hides it
@@ -355,6 +360,10 @@ class Settings(BaseSettings):
         except (TypeError, ValueError):
             return None
         return pid if pid > 0 else None
+
+    def load_language(self) -> Language:
+        """The ``LANGUAGE`` file, complete (English for anything missing)."""
+        return load_language(self.language, self.assets_dir)
 
     @property
     def gallery_dir(self) -> Path:

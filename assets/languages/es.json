@@ -1,0 +1,25 @@
+{
+  "name": "Spanish",
+  "native_name": "Español",
+  "texts": {
+    "invitation": "¡Acércate y pregúntame\nlo que quieras!",
+    "you": "TÚ",
+    "thinking": "Pensando…",
+    "searching": "Buscando en internet…",
+    "away_message": "Vuelvo en unos minutos",
+    "away_footer": "Asistente virtual",
+    "trivia_title": "TRIVIA",
+    "trivia_counter": "PREGUNTA {number} DE {total}",
+    "trivia_level_easy": "FÁCIL",
+    "trivia_level_medium": "MEDIA",
+    "trivia_level_hard": "DIFÍCIL",
+    "trivia_correct": "¡Correcto!",
+    "trivia_it_was": "Era la {letter}",
+    "trivia_oops": "¡Uy! Era la {letter}",
+    "trivia_won": "¡GANASTE!",
+    "trivia_close": "¡CASI!",
+    "trivia_score": "{score} de {total} correctas",
+    "trivia_won_line": "¡Muy bien, dominas la trivia!",
+    "trivia_lost_line": "Necesitabas {threshold}. ¡Pídeme otra trivia y vuelve a intentarlo!"
+  }
+}

@@ -43,9 +43,9 @@ namespace Sonia
 
         [Header("Text")]
         [SerializeField]
-        [Tooltip("What the avatar says in the invitation speech bubble. The line break is part of the design.")]
+        [Tooltip("What the avatar says in the invitation speech bubble. The line break is part of the design. Empty: the text of the orchestrator's LANGUAGE (screen_texts), English until it arrives.")]
         [TextArea(2, 3)]
-        private string invitation = "Come closer and ask me\nanything!";
+        private string invitation = string.Empty;
 
         [SerializeField]
         [Tooltip("Who speaks in the speech bubble.")]
@@ -128,6 +128,8 @@ namespace Sonia
         private CanvasGroup _logoGroup;
         private CanvasGroup _invitationGroup;
         private RectTransform _invitationRect;
+        private TextMeshProUGUI _invitationLine;
+        private TextMeshProUGUI _visitorLabel;
         private CanvasGroup _subtitleGroup;
         private CanvasGroup _visitorGroup;
         private TextMeshProUGUI _visitorText;
@@ -221,6 +223,7 @@ namespace Sonia
             _client.OnSetSubtitles += HandleSetSubtitles;
             _client.OnStageMode += HandleStageMode;
             _client.OnDisconnected += HandleDisconnected;
+            ScreenTexts.Changed += ApplyScreenTexts;
         }
 
         private void OnDisable()
@@ -239,6 +242,21 @@ namespace Sonia
             _client.OnSetSubtitles -= HandleSetSubtitles;
             _client.OnStageMode -= HandleStageMode;
             _client.OnDisconnected -= HandleDisconnected;
+            ScreenTexts.Changed -= ApplyScreenTexts;
+        }
+
+        /// <summary>The invitation and the visitor label in the current language (<see cref="ScreenTexts"/>).</summary>
+        private void ApplyScreenTexts()
+        {
+            if (_invitationLine != null)
+            {
+                _invitationLine.text = string.IsNullOrEmpty(invitation) ? ScreenTexts.Get(ScreenTexts.Invitation) : invitation;
+            }
+
+            if (_visitorLabel != null)
+            {
+                _visitorLabel.text = ScreenTexts.Get(ScreenTexts.You);
+            }
         }
 
         private void Start()
@@ -711,7 +729,8 @@ namespace Sonia
         /// <summary>Characters loaded into each font when created: ASCII, common Latin accents and subtitle typography.</summary>
         private const string Charset =
             " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
-            + "¡¿ÁÉÍÓÚÜÑáéíóúüñ«»·–—‘’“”…‹›€°ºª";
+            + "¡¿ÁÉÍÓÚÜÑáéíóúüñ«»·–—‘’“”…‹›€°ºª"
+            + "ÀÂÄÇÈÊËÎÏÔÖÙÛŸÃÕßàâäçèêëîïôöùûÿãõœŒ\u00a0";
 
         private static TMP_FontAsset LoadFont(string name, TMP_FontAsset fallback)
         {
@@ -929,7 +948,8 @@ namespace Sonia
             Thicken(speaker, 0.12f);
 
             TextMeshProUGUI line = NewText("Invitation", _invitationRect, _display, 62f, Navy);
-            line.text = invitation;
+            _invitationLine = line;
+            line.text = string.IsNullOrEmpty(invitation) ? ScreenTexts.Get(ScreenTexts.Invitation) : invitation;
             line.characterSpacing = -2.5f;
             line.lineSpacing = -22f;
             line.alignment = TextAlignmentOptions.Center;
@@ -980,7 +1000,8 @@ namespace Sonia
             row.childForceExpandHeight = false;
 
             TextMeshProUGUI label = NewText("Label", pill, _mono, 18f, new Color(1f, 1f, 1f, 0.75f));
-            label.text = "YOU";
+            label.text = ScreenTexts.Get(ScreenTexts.You);
+            _visitorLabel = label;
             label.characterSpacing = 14f;
             label.alignment = TextAlignmentOptions.Midline;
 
