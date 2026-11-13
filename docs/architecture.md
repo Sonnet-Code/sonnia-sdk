@@ -41,7 +41,7 @@ flowchart LR
 | `sonia-gallery` | `LiveEngine._gallery_loop` | Watches `assets/gallery` and tells the open session about added or removed images. |
 | `microphone` | `_live_mic_loop` | Reads microphone blocks and pushes them to the engine (`LiveEngine.push_mic`). With `--no-mic`, it feeds silence instead. |
 | WebSocket hub | `sonia/ws/hub.py` | Serves the avatar client on `WS_HOST:WS_PORT`, broadcasts JSON and audio, and dispatches incoming messages to callbacks. |
-| Local panel | `sonia/panel` | Starlette + uvicorn on `PANEL_HOST:PANEL_PORT`: modes, notes, volume, gallery uploads, logs and the greeter mode. |
+| Local panel | `sonia/panel` | Starlette + uvicorn on `PANEL_HOST:PANEL_PORT`: modes, notes, volume, gallery uploads, the prompt editor, logs and the greeter mode. |
 | `parent-watch` | `sonia/parent.py` | Only when the avatar app launched the orchestrator: exits if that app dies. |
 
 Short-lived tasks are spawned for each action call, each camera description and each image auto-hide.
@@ -133,7 +133,7 @@ Sonnia never streams video. By default she only looks when the model decides to,
 
 `sonia/live/prompts.py` builds two prompts from the same sources:
 
-- **Session instructions**, for the voice: the persona (`sonia/persona.py`), the realtime voice rules, the knowledge base (`assets/knowledge/*.md`), the panel notes, the date and time, and the delegation policy (what must be delegated and how to talk while waiting).
+- **Session instructions**, for the voice: the persona (`sonia/persona.py`), the realtime voice rules, the knowledge base (`assets/knowledge/*.md`), the panel notes, the date and time, and the delegation policy (what must be delegated and how to talk while waiting). The persona, the voice rules, the backend rules, the knowledge base and the vision prompt are read through `sonia/prompt_book.py`, so a version saved from the panel's prompt editor replaces the built-in one at the next session.
 - **Backend instructions**, for the model that runs the actions: the tools, the gallery ids and the rules for each action.
 
 During a session the engine adds context without making Sonnia speak: `session.thinking.append` for silent notes (`[Camera]`, `[Gallery]`) and `session.instructions.append` for rule changes. To make her say something specific (a panel announcement, an idle bit), it uses `session.commentary.append`. Each append is trimmed to the API limit.
@@ -174,7 +174,7 @@ By default the client connects to `ws://127.0.0.1:8765` and reconnects on its ow
 
 | You want to | Look at |
 |---|---|
-| Change who Sonnia is or what she knows | `sonia/persona.py`, `assets/knowledge/` and the [customization guide](customization.md) |
+| Change who Sonnia is or what she knows | `sonia/persona.py`, `assets/knowledge/` and the [customization guide](customization.md); the panel's prompt editor (`sonia/prompt_book.py`) for trying it without a restart |
 | Add an action | `sonia/actions` (registry and handlers), `docs/protocol.md` and the Unity side if the avatar reacts; see [Writing actions](actions.md) |
 | Change how turns or utterances are detected | `sonia/live/engine.py` (`_tick_once`, `_on_output_audio`, `_on_input_transcript`) |
 | Change what the voice model hears | `sonia/live/audio.py` (`MicGate`) |

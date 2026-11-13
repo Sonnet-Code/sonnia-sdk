@@ -9,6 +9,7 @@ Sonnia ships as a generic assistant. This guide turns her into yours: what she k
 | Facts she knows | `assets/knowledge/*.md` | At the next session |
 | Last-minute facts | "Today's notes" in the control panel | At once |
 | Who she is and how she speaks | `SYSTEM_PROMPT` in `server/sonia/persona.py` | On restart |
+| Any text the models receive, without touching code | Developer > Prompts in the control panel | At the next session (vision: the next photo) |
 | Idle lines, chants and greetings | `assets/showcase/*.md` | On restart |
 | Trivia questions | `assets/trivia/questions.md` | At the next game |
 | Images she can show | `assets/gallery/` or "Add image" in the panel | Within seconds |
@@ -31,13 +32,22 @@ Every `*.md` file in `assets/knowledge` except `README.md` is appended, in alpha
 
 The two files that ship (`01-about-sonia.md`, `02-how-sonia-works.md`) describe Sonnia herself. Keep them if visitors may ask how she works; rewrite them if she should present herself differently.
 
+## The prompt editor
+
+The panel's Developer section has a Prompts editor with every long text the models receive: the persona, the knowledge base, the voice-model rules, the backend rules and the vision prompt. Pick one, edit it and save. The edit is checked first, stored in the panel state file on this machine (`PANEL_STATE_FILE`) and used from the next conversation, or from the next photo for the vision prompt, with no restart; "Start a new conversation" applies it at once. Sonnia then uses your version instead of the built-in text, never both, until "Use the built-in text" deletes it.
+
+- **Placeholders.** The voice-model rules are a template: the code replaces `{capabilities}`, `{look_when}` and the others with rules that depend on the settings and the actions. An edit may drop a placeholder (that rule is then never added) but must keep `{capabilities}`, and cannot add one the code does not fill. Write a literal brace as `{{` or `}}`. The other texts are used as written, braces included.
+- **The knowledge base** in the editor starts as the files of `assets/knowledge` one after another. A saved version replaces all of them, for the voice model and the backend, until it is reset; editing the files afterwards changes nothing while it is saved.
+- **After an upgrade**, a saved version that no longer passes the check (a placeholder it needs was renamed) is ignored with a warning in the log, and the editor marks it so you can fix it.
+- **To keep a change**, copy it into the code or the knowledge files: the panel state is per machine.
+
 ## Today's notes
 
 The panel's "Today's notes" box (up to 1000 characters) reaches the open session at once and wins over the knowledge base when they clash. Use it for what changes during the day: a moved talk, a closed room, a sold-out item. The notes are saved and survive a restart.
 
 ## Persona
 
-`SYSTEM_PROMPT` in `server/sonia/persona.py` says who she is, how she speaks, how she uses the camera and the images, and what she tells about herself. `server/sonia/live/prompts.py` adds the rules of real-time voice, the delegation to the backend, the knowledge base and a description of her stack generated at startup, so the persona only needs to describe her.
+`SYSTEM_PROMPT` in `server/sonia/persona.py` (or "Persona" in the [prompt editor](#the-prompt-editor), to try changes without a restart) says who she is, how she speaks, how she uses the camera and the images, and what she tells about herself. `server/sonia/live/prompts.py` adds the rules of real-time voice, the delegation to the backend, the knowledge base and a description of her stack generated at startup, so the persona only needs to describe her.
 
 Good changes to make there:
 

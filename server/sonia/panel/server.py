@@ -134,6 +134,11 @@ def build_app(
         data, mime = loaded
         return Response(data, media_type=mime, headers={"Cache-Control": "max-age=60"})
 
+    async def prompts(request: Request) -> Response:
+        # The built-in knowledge base is read from disk: in a thread.
+        catalog = await asyncio.to_thread(control.prompts)
+        return JSONResponse({"prompts": catalog}, headers={"Cache-Control": "no-store"})
+
     async def action(request: Request) -> Response:
         if request.headers.get(ACTION_HEADER) != "1":
             return JSONResponse({"ok": False, "message": "Request not allowed."}, status_code=403)
@@ -189,6 +194,7 @@ def build_app(
             Route("/api/status", status),
             Route("/api/gallery", gallery),
             Route("/api/gallery/{image_id}", gallery_image),
+            Route("/api/prompts", prompts),
             Route("/api/action", action, methods=["POST"]),
             WebSocketRoute("/api/events", events_ws),
             Mount("/static", StaticFiles(directory=static_dir, check_dir=False), name="static"),

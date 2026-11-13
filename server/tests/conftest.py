@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,16 @@ def _separate_devices(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 def _separate_gallery_uploads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Images a test uploads to the gallery do not go to the machine's ``cache/gallery``."""
     monkeypatch.setenv("GALLERY_UPLOAD_DIR", str(tmp_path / "gallery-uploads"))
+
+
+@pytest.fixture(autouse=True)
+def _built_in_prompts() -> Iterator[None]:
+    """Texts a test edits from the prompt editor do not reach the next test."""
+    from sonia.prompt_book import BOOK, use_knowledge_dirs
+
+    yield
+    BOOK.load({})
+    use_knowledge_dirs(None)
 
 
 @pytest.fixture(autouse=True)

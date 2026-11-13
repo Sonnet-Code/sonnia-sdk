@@ -6,9 +6,10 @@ of real-time voice, the knowledge base and the stack. Facts about the place,
 the event or the organization she works for live in Markdown files in
 ``assets/knowledge`` so they can be edited without touching code.
 
-To give Sonnia another personality, edit ``SYSTEM_PROMPT``. Write her name as
-"Sonia" in anything the voice model reads so it is pronounced right; subtitles
-show "Sonnia" (``clean_transcript`` in ``sonia/live/engine.py``).
+To give Sonnia another personality, edit ``SYSTEM_PROMPT``, or try it first from the
+panel's prompt editor (``sonia.prompt_book``). Write her name as "Sonia" in anything
+the voice model reads so it is pronounced right; subtitles show "Sonnia"
+(``clean_transcript`` in ``sonia/live/engine.py``).
 """
 
 from __future__ import annotations

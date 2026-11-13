@@ -1301,6 +1301,44 @@ input[type="range"]:disabled {
   line-height: 1.45;
 }
 
+/* Prompt editor: the text in use, how long it is and what is wrong with it */
+.prompt-help {
+  margin-top: 10px;
+}
+
+.prompt-state {
+  margin: 0 0 12px;
+  font-weight: 700;
+}
+
+.prompt-state[data-state="edited"] {
+  color: var(--blue-strong);
+}
+
+.prompt-state[data-state="ignored"] {
+  color: var(--warn);
+}
+
+.prompt-input {
+  min-height: 16em;
+  resize: vertical;
+}
+
+.prompt-count {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.prompt-problems {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-weight: 600;
+}
+
 /* Animations: one group per family, buttons that share the width */
 .anim-groups {
   display: grid;

@@ -16,6 +16,7 @@ from collections.abc import AsyncIterator
 from typing import Protocol
 
 from sonia.llm.messages import user_with_image
+from sonia.prompt_book import BOOK
 from sonia.types import Frame, LLMEvent, Message, TextDelta, TurnDone
 
 __all__ = ["NARRATOR_PROMPT", "VisionNarrator"]
@@ -46,7 +47,7 @@ class VisionNarrator:
     async def describe(self, frame: Frame) -> str:
         """Returns the description, or an empty string if the model said nothing."""
         messages: list[Message] = [
-            {"role": "system", "content": NARRATOR_PROMPT},
+            {"role": "system", "content": BOOK.text("vision")},
             user_with_image(NARRATOR_REQUEST, frame),
         ]
         parts: list[str] = []

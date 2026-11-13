@@ -6,6 +6,7 @@ All notable changes to Sonnia SDK are listed here. The format follows [Keep a Ch
 
 ### Added
 
+- A prompt editor in the control panel (Developer > Prompts): the persona, the knowledge base, the voice-model rules, the backend rules and the vision prompt, checked before saving, stored in the panel state file and used from the next conversation without a restart.
 - `docs/actions.md`: how an action runs and how to write one, from the tool definition and handler to the prompts, the protocol message, the Unity side and the tests, with a checklist.
 - `show_emotion`, the worked example of that guide: joy, sadness or surprise on the avatar's face, with its `show_emotion` protocol message and Unity handler. Off unless `SHOW_EMOTION_ENABLED=true`; `sonia demo` shows it after its web search.
 - `docs/customization.md`: the knowledge base, today's notes, the persona, idle lines, the trivia bank, the gallery, voice and models, and turning features off, with examples for a museum guide and a shop assistant. A new test checks that the guides only name real settings and link to files that exist.

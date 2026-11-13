@@ -27,6 +27,7 @@ from sonia.actions.gallery import UPLOAD_MAX_BYTES, Gallery, GalleryError
 from sonia.actions.registry import ActionRegistry
 from sonia.clock import resolve_timezone
 from sonia.config import Settings
+from sonia.prompt_book import APPLIES_TEXT, BOOK, PROMPT_MAX_LEN, use_knowledge_dirs
 from sonia.showcase import ATTENTION_DANCE, ATTENTION_FOURTH_WALL, load_lines
 from sonia.types import ActionContext
 from sonia.ws import protocol as p
@@ -87,6 +88,9 @@ CAPABILITIES = [
     #: Upload images to the gallery and remove the uploaded ones (``add_gallery_image``,
     #: ``remove_gallery_image``); the status carries ``gallery`` with the current ids.
     "gallery_upload",
+    #: The prompt editor: ``/api/prompts`` and ``check_prompt``, ``set_prompt``,
+    #: ``reset_prompt``.
+    "prompts",
 ]
 
 #: Settings the operator changes from the panel (saved in ``PANEL_STATE_FILE``). The
@@ -215,6 +219,8 @@ class PanelState:
     #: orchestrator restarts).
     usage_date: str = ""
     usage_seconds: float = 0.0
+    #: Texts edited from the prompt editor (``{id: text}``, see ``sonia.prompt_book``).
+    prompts: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> PanelState:
@@ -241,6 +247,10 @@ class PanelState:
             state.usage_seconds = float(raw["usage_seconds"])
         if isinstance(raw.get("debug"), bool):
             state.debug = raw["debug"]
+        if isinstance(raw.get("prompts"), dict):
+            state.prompts = {
+                str(k): v for k, v in raw["prompts"].items() if isinstance(v, str) and v.strip()
+            }
         return state
 
     def save(self, path: Path) -> None:
@@ -327,6 +337,8 @@ class PanelControl:
         #: Uploads are written one at a time (the free id is chosen before writing).
         self._gallery_lock = asyncio.Lock()
         self._tz = resolve_timezone(settings.timezone)
+        # The editor shows the knowledge base of this machine as the built-in text.
+        use_knowledge_dirs(settings.knowledge_dirs)
         hub.add_listener(self._watch_outgoing)
         hub.on(p.MSG_ANIMATIONS, self._on_animations)
         hub.on(p.MSG_ANIMATION_PLAYING, self._on_animation_playing)
@@ -344,6 +356,8 @@ class PanelControl:
         """Applies what was saved and starts the greeter loop. Before ``engine.run()``."""
         state = self.state
         engine = self._engine
+        # Before the first session opens: it is built with the edited texts.
+        BOOK.load(state.prompts)
         if state.voice in VOICES:
             self._settings.live.voice = state.voice
         if state.mic_gate is not None:
@@ -852,6 +866,56 @@ class PanelControl:
         text = _text(params, "text", max_len=NOTES_MAX_LEN)
         await self._set_setting("notes", text)
         return True, "Notes saved. Sonnia already knows them." if text else "Notes cleared."
+
+    # The prompt editor: the texts the models receive (``sonia.prompt_book``).
+
+    def prompts(self) -> list[dict[str, Any]]:
+        """Every editable text, with the one in use and the built-in one. Reads the
+        knowledge files: call it in a thread."""
+        return BOOK.catalog()
+
+    def _prompt_params(self, params: dict[str, Any], *, with_text: bool) -> tuple[str, str]:
+        prompt_id = params.get("id")
+        if not isinstance(prompt_id, str) or prompt_id not in BOOK:
+            raise _BadRequest("Unknown prompt.")
+        if not with_text:
+            return prompt_id, ""
+        return prompt_id, _text(params, "text", max_len=PROMPT_MAX_LEN, required=True)
+
+    async def _act_check_prompt(self, params: dict[str, Any]) -> tuple[bool, str]:
+        prompt_id, text = self._prompt_params(params, with_text=True)
+        problems = BOOK.validate(prompt_id, text)
+        return (False, " ".join(problems)) if problems else (True, "It is valid.")
+
+    async def _act_set_prompt(self, params: dict[str, Any]) -> tuple[bool, str]:
+        prompt_id, text = self._prompt_params(params, with_text=True)
+        default = await asyncio.to_thread(BOOK.default, prompt_id)
+        if text == default.strip():
+            return await self._act_reset_prompt({"id": prompt_id})
+        problems = BOOK.set(prompt_id, text)
+        if problems:
+            return False, " ".join(problems)
+        self._save_prompts()
+        return True, self._prompt_applies("Saved", prompt_id)
+
+    async def _act_reset_prompt(self, params: dict[str, Any]) -> tuple[bool, str]:
+        prompt_id, _ = self._prompt_params(params, with_text=False)
+        if not BOOK.reset(prompt_id):
+            return True, "It already uses the built-in text."
+        self._save_prompts()
+        return True, self._prompt_applies("Back to the built-in text", prompt_id)
+
+    def _save_prompts(self) -> None:
+        self.state.prompts = BOOK.edits()
+        self._save()
+
+    @staticmethod
+    def _prompt_applies(done: str, prompt_id: str) -> str:
+        applies = BOOK.spec(prompt_id).applies
+        message = f"{done}. Sonnia uses it {APPLIES_TEXT[applies]}"
+        if applies == "conversation":
+            return message + " (start a new conversation to use it now)."
+        return message + "."
 
     async def _act_set_tuning(self, params: dict[str, Any]) -> tuple[bool, str]:
         changes = {group: params[group] for group in TUNING_LIMITS if group in params}

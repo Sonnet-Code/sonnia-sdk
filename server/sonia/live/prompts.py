@@ -15,11 +15,15 @@ settings is decided by this code.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from sonia.actions.registry import ActionRegistry
 from sonia.config import Settings
-from sonia.persona import SYSTEM_PROMPT, KnowledgeSource, host_of, is_local_host, load_knowledge
+from sonia.persona import KnowledgeSource, host_of, is_local_host, load_knowledge
+from sonia.prompt_book import BOOK
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "CAMERA_NOTE_PREFIX",
@@ -406,6 +410,22 @@ _GALLERY_WATCH = (
 )
 
 
+def _knowledge(knowledge_dir: KnowledgeSource) -> str:
+    """The knowledge base: the version edited from the panel, or the files."""
+    edited = BOOK.override("knowledge")
+    return edited.strip() if edited is not None else load_knowledge(knowledge_dir)
+
+
+def _fill_rules(**values: str) -> str:
+    """``LIVE_RULES`` (or its edited version) with its placeholders filled in."""
+    try:
+        return BOOK.text("live_rules").format(**values)
+    except (KeyError, IndexError, ValueError):
+        # The editor only saves templates that format; this is the safety net.
+        logger.exception("The edited voice-model rules do not format; using the built-in ones")
+        return LIVE_RULES.format(**values)
+
+
 def build_live_instructions(
     settings: Settings,
     *,
@@ -426,7 +446,7 @@ def build_live_instructions(
     )
     look_when = _LOOK_WHEN[mode] + "\n" if mode in _LOOK_WHEN else ""
     trivia = "start_trivia" in names
-    rules = LIVE_RULES.format(
+    rules = _fill_rules(
         capabilities=capabilities or _NO_CAPABILITIES,
         clock_rule=_CLOCK_RULE,
         setting_rule=_SETTING_RULE,
@@ -439,10 +459,10 @@ def build_live_instructions(
         search_when=_SEARCH_WHEN + "\n" if web_search else "",
         no_delegate_chat=_NO_DELEGATE_CHAT[mode],
     )
-    parts = [SYSTEM_PROMPT.strip(), rules]
+    parts = [BOOK.text("persona").strip(), rules]
     if clock_text:
         parts.append(_CLOCK_SECTION.format(date=clock_text))
-    knowledge = load_knowledge(knowledge_dir)
+    knowledge = _knowledge(knowledge_dir)
     if knowledge:
         parts.append(_KNOWLEDGE_SECTION.format(knowledge=knowledge))
     if notes.strip():
@@ -501,14 +521,14 @@ def build_backend_instructions(
     web_search: bool = False,
 ) -> str:
     """Instructions of the Responses backend: rules, gallery and knowledge."""
-    rules = BACKEND_PROMPT
+    rules = BOOK.text("backend_rules")
     if web_search:
         rules += "\n" + _BACKEND_SEARCH_RULE
     parts = [rules]
     if clock_text:
         parts.append(_BACKEND_CLOCK.format(date=clock_text))
     parts.append(_BACKEND_GALLERY.format(images=", ".join(gallery_ids) or "none"))
-    knowledge = load_knowledge(knowledge_dir)
+    knowledge = _knowledge(knowledge_dir)
     if knowledge:
         parts.append(_BACKEND_KNOWLEDGE.format(knowledge=knowledge))
     if notes.strip():

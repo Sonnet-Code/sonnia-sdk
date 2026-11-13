@@ -21,6 +21,7 @@
   const API_GALLERY = "/api/gallery";
   const API_ACTION = "/api/action";
   const API_EVENTS = "/api/events";
+  const API_PROMPTS = "/api/prompts";
 
   const MIC_GATE_MAX = 0.2;
   const GATE_SLIDER_MAX = 1000;
@@ -219,6 +220,9 @@
     galleryPreviews: new Map(), // id -> local preview of what this browser uploaded
     pendingUpload: null, // image picked and already reduced, waiting for "Upload to the gallery"
     notesBase: null, // last notes text that came from the server and is in the box
+    prompts: null, // the editable texts (`/api/prompts`), loaded when Developer opens
+    promptId: null, // the one in the editor
+    promptBase: null, // its text as it came from the server, to know if it was changed
     lastPresence: null,
   };
 
@@ -236,7 +240,9 @@
       "gate-meter-caption", "health-list", "last-error", "last-error-text", "chat", "chat-empty",
       "voice-select", "voice-btn", "showcase-input", "anim-groups", "anim-count", "debug-input", "subtitles-input",
       "ask-form", "ask-input", "ask-btn", "tune-mouth", "tune-camera", "tune-idle",
-      "avatar-state", "avatar-input", "avatar-save-btn", "avatar-default-btn",
+      "avatar-state", "avatar-input", "avatar-save-btn", "avatar-default-btn", "developer",
+      "prompt-select", "prompt-reload-btn", "prompt-help", "prompt-state", "prompt-input", "prompt-count",
+      "prompt-problems", "prompt-save-btn", "prompt-check-btn", "prompt-undo-btn", "prompt-default-btn",
       "restart-btn", "cache-progress", "cache-text", "cache-error", "cache-btn", "session-facts", "usage-facts", "log",
       "dev-log", "dev-log-copy-btn", "dev-log-count",
       "toasts", "confirm-dialog", "confirm-title", "confirm-text", "confirm-ok", "away-dialog",
@@ -597,6 +603,9 @@
     voice: () => Boolean(ui.voiceSelect.value) && ui.voiceSelect.value !== (app.status && app.status.voice),
     avatar_typed: () => Boolean(ui.avatarInput.value.trim()),
     avatar_custom: () => Boolean(avatarInfo().custom),
+    prompt_loaded: () => Boolean(currentPrompt()),
+    prompt_dirty: () => promptDirty(),
+    prompt_edited: () => Boolean(currentPrompt() && currentPrompt().edited),
     trivia_idle: () => triviaInfo().available !== false && !triviaInfo().active,
     trivia_active: () => Boolean(triviaInfo().active),
     trivia_asking: () => triviaInfo().phase === "asking",
@@ -1760,6 +1769,158 @@
     if (ok) await sendAction("set_avatar", { definition: null }, { button: ui.avatarDefaultBtn });
   }
 
+  // ------------------------------------------------------------ prompts (Developer)
+
+  /** The text in the editor (an entry of `/api/prompts`), or null. */
+  function currentPrompt() {
+    return (app.prompts || []).find((prompt) => prompt.id === app.promptId) || null;
+  }
+
+  /** Whether the box differs from what came from the server. */
+  function promptDirty() {
+    return app.promptBase !== null && ui.promptInput.value !== app.promptBase;
+  }
+
+  /** Loads every editable text. Unless told otherwise, keeps what is being typed. */
+  async function loadPrompts({ keepTyping = true } = {}) {
+    if (app.capsKnown && !hasCap("prompts")) return;
+    let data = null;
+    try {
+      ({ data } = await apiFetch(API_PROMPTS));
+    } catch {
+      data = null;
+    }
+    if (!data || !Array.isArray(data.prompts)) {
+      showToast("Could not load the prompts. Try “Reload”.", "error");
+      return;
+    }
+    const typing = keepTyping && promptDirty();
+    app.prompts = data.prompts;
+    if (!currentPrompt()) app.promptId = app.prompts.length ? app.prompts[0].id : null;
+    renderPromptSelect();
+    if (!typing) fillPromptInput();
+    renderPrompt();
+  }
+
+  function renderPromptSelect() {
+    const options = (app.prompts || []).map((prompt) =>
+      el("option", { value: prompt.id, text: prompt.edited ? `${prompt.title} (edited)` : prompt.title }),
+    );
+    ui.promptSelect.replaceChildren(...options);
+    if (app.promptId) ui.promptSelect.value = app.promptId;
+  }
+
+  /** Puts the text of the chosen prompt in the box. */
+  function fillPromptInput() {
+    const prompt = currentPrompt();
+    ui.promptInput.value = prompt ? prompt.text : "";
+    app.promptBase = prompt ? prompt.text : null;
+    showPromptProblems("");
+  }
+
+  function renderPrompt() {
+    const prompt = currentPrompt();
+    if (!prompt) {
+      setText(ui.promptHelp, "");
+      setText(ui.promptState, "");
+      setText(ui.promptCount, "");
+      refreshControls();
+      return;
+    }
+    const fields = prompt.fields.length
+      ? ` The code fills in ${prompt.fields.map((name) => `{${name}}`).join(", ")}; ` +
+        (prompt.required.length ? `${prompt.required.map((name) => `{${name}}`).join(", ")} must stay. ` : "") +
+        "Write a literal brace as {{ or }}."
+      : "";
+    setText(ui.promptHelp, `${prompt.help}${fields} Changes apply ${prompt.applies_text}.`);
+    let state = "default";
+    let text = "In use: the built-in text.";
+    if (prompt.ignored) {
+      state = "ignored";
+      text = "In use: the built-in text. Your edited version is saved but no longer valid: check it and save it again.";
+    } else if (prompt.edited) {
+      state = "edited";
+      text = "In use: your edited version.";
+    }
+    setText(ui.promptState, text);
+    if (ui.promptState.dataset.state !== state) ui.promptState.dataset.state = state;
+    renderPromptCount();
+    refreshControls();
+  }
+
+  function renderPromptCount() {
+    const prompt = currentPrompt();
+    if (!prompt) return;
+    const length = ui.promptInput.value.trim().length;
+    const changed = promptDirty() ? " · not saved" : "";
+    setText(ui.promptCount, `${length.toLocaleString()} of ${prompt.max_len.toLocaleString()} characters${changed}`);
+  }
+
+  function showPromptProblems(message) {
+    setText(ui.promptProblems, message);
+    setHidden(ui.promptProblems, !message);
+  }
+
+  /** Asks before throwing away what was typed. */
+  async function discardPromptChanges() {
+    if (!promptDirty()) return true;
+    return confirmAction({
+      title: "Discard your changes?",
+      text: "What you typed in this prompt has not been saved.",
+      confirmLabel: "Discard them",
+    });
+  }
+
+  async function onPromptSelect() {
+    const chosen = ui.promptSelect.value;
+    if (!(await discardPromptChanges())) {
+      ui.promptSelect.value = app.promptId;
+      return;
+    }
+    app.promptId = chosen;
+    fillPromptInput();
+    renderPrompt();
+  }
+
+  async function onPromptCheck() {
+    const prompt = currentPrompt();
+    if (!prompt) return;
+    const text = ui.promptInput.value.trim();
+    const result = await sendAction("check_prompt", { id: prompt.id, text }, { button: ui.promptCheckBtn, silent: true });
+    showPromptProblems(result.ok ? "" : result.message);
+    if (result.ok) showToast(result.message, "ok");
+  }
+
+  async function onPromptSave() {
+    const prompt = currentPrompt();
+    if (!prompt) return;
+    const text = ui.promptInput.value.trim();
+    const result = await sendAction("set_prompt", { id: prompt.id, text }, { button: ui.promptSaveBtn, silent: true });
+    if (!result.ok) {
+      showPromptProblems(result.message);
+      return;
+    }
+    showToast(result.message, "ok");
+    await loadPrompts({ keepTyping: false });
+  }
+
+  async function onPromptDefault() {
+    const prompt = currentPrompt();
+    if (!prompt) return;
+    const ok = await confirmAction({
+      title: "Use the built-in text?",
+      text: `Your edited version of “${prompt.title}” is deleted.`,
+      confirmLabel: "Yes, use the built-in text",
+    });
+    if (!ok) return;
+    const result = await sendAction("reset_prompt", { id: prompt.id }, { button: ui.promptDefaultBtn });
+    if (result.ok) await loadPrompts({ keepTyping: false });
+  }
+
+  async function onPromptReload() {
+    if (await discardPromptChanges()) await loadPrompts({ keepTyping: false });
+  }
+
   // ------------------------------------------------------------ switches and voice
 
   async function onVoiceChange() {
@@ -2217,6 +2378,22 @@
     ui.avatarInput.addEventListener("input", refreshControls);
     ui.avatarSaveBtn.addEventListener("click", onAvatarSave);
     ui.avatarDefaultBtn.addEventListener("click", onAvatarDefault);
+    ui.developer.addEventListener("toggle", () => {
+      if (ui.developer.open) loadPrompts();
+    });
+    ui.promptSelect.addEventListener("change", onPromptSelect);
+    ui.promptInput.addEventListener("input", () => {
+      renderPromptCount();
+      refreshControls();
+    });
+    ui.promptCheckBtn.addEventListener("click", onPromptCheck);
+    ui.promptSaveBtn.addEventListener("click", onPromptSave);
+    ui.promptUndoBtn.addEventListener("click", () => {
+      fillPromptInput();
+      renderPrompt();
+    });
+    ui.promptDefaultBtn.addEventListener("click", onPromptDefault);
+    ui.promptReloadBtn.addEventListener("click", onPromptReload);
     ui.askForm.addEventListener("submit", onAskSubmit);
     ui.restartBtn.addEventListener("click", onRestart);
     ui.cacheBtn.addEventListener("click", () => sendAction("prepare_voices", {}, { button: ui.cacheBtn }));

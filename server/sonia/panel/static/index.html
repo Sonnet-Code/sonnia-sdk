@@ -377,9 +377,9 @@
       </div>
     </details>
 
-    <!-- ===== Developer (folded): avatar, mouth, camera framing, idle motion and detailed log ===== -->
+    <!-- ===== Developer (folded): avatar, prompts, mouth, camera framing, idle motion and detailed log ===== -->
     <details class="card advanced developer" id="developer">
-      <summary><span>Developer</span><span class="summary-hint">Avatar, mouth, camera framing, idle motion and detailed log</span></summary>
+      <summary><span>Developer</span><span class="summary-hint">Avatar, prompts, mouth, camera framing, idle motion and detailed log</span></summary>
 
       <div class="adv-grid">
         <section class="adv-block adv-wide" id="dev-avatar" aria-labelledby="dev-avatar-title">
@@ -395,6 +395,31 @@
             </div>
           </div>
           <p class="cap-note" data-cap-note="avatar" hidden>This orchestrator does not support changing the avatar.</p>
+        </section>
+
+        <section class="adv-block adv-wide" id="dev-prompts" aria-labelledby="dev-prompts-title">
+          <h3 id="dev-prompts-title">Prompts</h3>
+          <p class="help">Every text the models receive. An edited version is checked before it is saved, stays on this machine and replaces the built-in text, never both. No restart needed.</p>
+          <div class="row">
+            <label class="visually-hidden" for="prompt-select">Prompt</label>
+            <select id="prompt-select" data-cap="prompts"></select>
+            <button type="button" class="btn btn-small" id="prompt-reload-btn" data-cap="prompts">Reload</button>
+          </div>
+          <p class="help prompt-help" id="prompt-help"></p>
+          <p class="prompt-state" id="prompt-state" data-state="default"></p>
+          <div class="stack">
+            <label class="visually-hidden" for="prompt-input">Prompt text</label>
+            <textarea id="prompt-input" class="code-input prompt-input" rows="14" spellcheck="false" autocomplete="off" data-cap="prompts" data-extra="prompt_loaded"></textarea>
+            <p class="prompt-count" id="prompt-count" aria-live="polite"></p>
+            <p class="prompt-problems" id="prompt-problems" role="alert" hidden></p>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="prompt-save-btn" data-cap="prompts" data-extra="prompt_dirty">Save</button>
+              <button type="button" class="btn" id="prompt-check-btn" data-cap="prompts" data-extra="prompt_loaded">Check</button>
+              <button type="button" class="btn" id="prompt-undo-btn" data-cap="prompts" data-extra="prompt_dirty">Undo changes</button>
+              <button type="button" class="btn" id="prompt-default-btn" data-cap="prompts" data-extra="prompt_edited">Use the built-in text</button>
+            </div>
+          </div>
+          <p class="cap-note" data-cap-note="prompts" hidden>This orchestrator does not support editing the prompts.</p>
         </section>
 
         <section class="adv-block" aria-labelledby="dev-mouth-title">
