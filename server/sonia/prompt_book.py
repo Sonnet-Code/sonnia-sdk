@@ -295,6 +295,7 @@ LIVE_RULE_FIELDS = (
     "emotion_when",
     "trivia_when",
     "search_when",
+    "agenda_when",
     "no_delegate_chat",
 )
 

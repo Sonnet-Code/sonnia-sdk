@@ -40,12 +40,18 @@ from typing import Any, Protocol
 from sonia.actions.gallery import Gallery
 from sonia.actions.moves import MoveCatalog
 from sonia.actions.registry import ActionRegistry
+from sonia.agenda import AgendaBook, describe_changes
 from sonia.busy import TEXT_SEARCH, TEXT_THINK, BusyBoard, BusyKind
 from sonia.clock import Clock, clock_for, place_of, resolve_timezone, spoken_now
 from sonia.config import Settings
 from sonia.live.audio import MicGate, rms
 from sonia.live.client import APPEND_MAX_CHARS, LiveClient, WsConnect, describe_error
-from sonia.live.prompts import CAMERA_NOTE_PREFIX, build_session_config, gallery_note
+from sonia.live.prompts import (
+    AGENDA_NOTE_PREFIX,
+    CAMERA_NOTE_PREFIX,
+    build_session_config,
+    gallery_note,
+)
 from sonia.live.vision import VisionNarrator
 from sonia.live.voicecache import VoiceCache
 from sonia.persona import KnowledgeSource
@@ -110,6 +116,9 @@ LEAD_WARN_S = 1.5
 
 #: Maximum wait for a capture to describe.
 CAPTURE_TIMEOUT_S = 3.0
+
+#: How often the agenda loop looks for talks about to start (and for a refresh due).
+AGENDA_TICK_S = 30.0
 
 #: Before the session expires, another one is opened at the next quiet moment.
 EXPIRY_MARGIN_S = 120.0
@@ -306,9 +315,14 @@ class LiveEngine:
         knowledge_dir: KnowledgeSource = None,
         voice_cache: VoiceCache | None = None,
         clock: Clock | None = None,
+        agenda: AgendaBook | None = None,
         tick_s: float = 0.05,
     ) -> None:
         self._settings = settings
+        #: The event schedule (``AGENDA_SOURCE``), or ``None``.
+        self._agenda = agenda
+        #: ``[Agenda]`` lines waiting for a quiet moment of the open session.
+        self._pending_agenda: list[str] = []
         #: ``LANGUAGE``: the screen texts (the waiting pill) and what the client gets.
         self._language = settings.load_language()
         self._voice_cache = voice_cache
@@ -603,6 +617,10 @@ class LiveEngine:
             gallery = asyncio.create_task(
                 self._gallery_loop(self._settings.gallery_watch_seconds), name="sonia-gallery"
             )
+        agenda: asyncio.Task[None] | None = None
+        if self._agenda is not None:
+            await self._agenda.start()
+            agenda = asyncio.create_task(self._agenda_loop(self._agenda), name="sonia-agenda")
         delay = live.reconnect_min_seconds
         try:
             while True:
@@ -630,7 +648,7 @@ class LiveEngine:
                 await asyncio.sleep(delay)
                 delay = min(max(delay * 2, live.reconnect_min_seconds), live.reconnect_max_seconds)
         finally:
-            extra = [task for task in (gallery,) if task is not None]
+            extra = [task for task in (gallery, agenda) if task is not None]
             for task in (ticker, *extra):
                 task.cancel()
             await asyncio.gather(ticker, *extra, return_exceptions=True)
@@ -648,9 +666,11 @@ class LiveEngine:
             knowledge_dir=self._knowledge_dir,
             notes=self._notes,
             clock_text=clock_text,
+            agenda=self._agenda.section(self._now()) if self._agenda is not None else "",
         )
         self._session_gallery = self._gallery_seen = gallery_ids
         self._pending_gallery = None
+        self._pending_agenda.clear()  # the new instructions already have the agenda
         if len(config["instructions"]) > INSTRUCTIONS_WARN_CHARS:
             logger.warning(
                 "The GPT-Live instructions take %d characters: they may go over the limit of "
@@ -1073,7 +1093,7 @@ class LiveEngine:
             gallery_dir=str(self._settings.gallery_dir),
             gallery_upload_dir=self._settings.gallery_upload_dir,
             last_frame=self._last_frame,
-            extra={"trivia": self._trivia, "moves": self._moves},
+            extra={"trivia": self._trivia, "moves": self._moves, "agenda": self._agenda},
         )
         if self._registry is None:
             result = ActionResult(text="Error: no actions are available.")
@@ -1683,6 +1703,7 @@ class LiveEngine:
         if self._client is None:
             return
         await self._gallery_note()
+        await self._agenda_note()
 
     async def _gallery_loop(self, interval: float) -> None:
         """Checks the gallery every ``interval`` s to tell the session what changes.
@@ -1739,6 +1760,52 @@ class LiveEngine:
             return
         self._session_gallery = ids
         logger.info("Gallery note: %s", note)
+
+    async def _agenda_loop(self, book: AgendaBook) -> None:
+        """Reads the agenda again every ``AGENDA_REFRESH_MINUTES`` and leaves a note with
+        what changed and with the talks about to start (``AGENDA_NOTICE_MINUTES``)."""
+        next_refresh = time.monotonic() + self._settings.agenda.refresh_minutes * 60
+        while True:
+            await asyncio.sleep(AGENDA_TICK_S)
+            settings = self._settings.agenda  # read each time: the settings may change
+            refresh_s = settings.refresh_minutes * 60
+            try:
+                if refresh_s > 0 and time.monotonic() >= next_refresh:
+                    next_refresh = time.monotonic() + refresh_s
+                    changes = await book.refresh()
+                    if changes:
+                        self._queue_agenda(
+                            "The schedule changed:\n" + describe_changes(changes, book.tz)
+                        )
+                for line in book.notices(self._now(), settings.notice_minutes):
+                    self._queue_agenda(line)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Could not check the agenda")
+
+    def _queue_agenda(self, text: str) -> None:
+        """Keeps an ``[Agenda]`` line for the open session (none open: nobody to tell, and
+        the next session reads the agenda in its instructions)."""
+        if self._client is not None:
+            self._pending_agenda.append(text)
+
+    async def _agenda_note(self) -> None:
+        """Silent ``[Agenda]`` note with the pending lines (through ``thinking``)."""
+        client = self._client
+        if client is None or not self._pending_agenda:
+            return
+        lines, self._pending_agenda = self._pending_agenda, []
+        note = f"{AGENDA_NOTE_PREFIX} " + "\n".join(lines)
+        if len(note) > APPEND_MAX_CHARS:
+            note = note[: APPEND_MAX_CHARS - 1] + "…"
+        try:
+            await client.append_thinking(note)
+        except Exception as exc:  # noqa: BLE001 - the session reconnects on its own
+            logger.debug("Could not pass the agenda note to GPT-Live: %s", exc)
+            self._pending_agenda = lines + self._pending_agenda
+            return
+        logger.info("Agenda note: %s", note)
 
     async def set_notes(self, text: str) -> None:
         """Notes of the day: they go into the session now and into the instructions of the next ones."""

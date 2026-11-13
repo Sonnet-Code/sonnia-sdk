@@ -12,6 +12,7 @@ Sonnia ships as a generic assistant. This guide turns her into yours: what she k
 | Any text the models receive, without touching code | Developer > Prompts in the control panel | At the next session (vision: the next photo) |
 | Idle lines, chants and greetings | `assets/showcase/*.md` | On restart |
 | Trivia questions | `assets/trivia/questions.md` | At the next game |
+| The event schedule | `AGENDA_SOURCE`: a JSON or iCalendar file or URL ([guide](agenda.md)) | Every `AGENDA_REFRESH_MINUTES`, and when she checks it |
 | Images she can show | `assets/gallery/` or "Add image" in the panel | Within seconds |
 | Voice and models | `LIVE_VOICE`, `LIVE_MODEL`, `LIVE_BACKEND_MODEL`, `LLM_*` | On restart (the voice also from the panel) |
 | The language she speaks and writes | `LANGUAGE` and `assets/languages/*.json` | On restart |

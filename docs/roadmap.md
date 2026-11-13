@@ -31,9 +31,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ planned
 10. ✅ **Prompt editor in the local panel.** Every text the models receive (persona, knowledge, voice-model rules, backend, vision) editable and validated from the panel, stored locally and applied without a restart.
 11. ✅ **Language setting.** One setting to choose the language Sonnia speaks and writes, with the prompts and screen texts written once and the answer language passed to the models.
 
-## 0.5 · More to do at the stand
+## 0.5 · More to do at the stand 🚧
 
-12. ⏳ **Event schedule.** A generic agenda module: load talks from a JSON or iCalendar file or URL, refresh it, tell the voice model what is on now and next, and the `check_agenda` and `show_talk` actions with their Unity card.
+12. 🚧 **Event schedule.** A generic agenda module: load talks from a JSON or iCalendar file or URL, refresh it, tell the voice model what is on now and next, and the `check_agenda` and `show_talk` actions with their Unity card.
+    - ✅ The [agenda](agenda.md): JSON and iCalendar from a file or URL, refreshes, changes and notices worked out in code, a saved copy for when there is no network, and `check_agenda`.
+    - ⏳ `show_talk` and its card on the avatar client.
 13. ⏳ **Games framework.** A `GameManager` with one game at a time, editable banks and panel controls, shipped with camera-free games: a word-guessing game and a "guess what I'm thinking" game.
 14. ⏳ **Gesture director.** Optional: a light text model picks a gesture from the clips the Unity client announces while Sonnia speaks, with frequency rules applied in code.
 

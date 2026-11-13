@@ -186,6 +186,7 @@ def build_default_registry(
     include_look: bool = True,
     include_trivia: bool = False,
     include_emotion: bool = False,
+    include_agenda: bool = False,
 ) -> ActionRegistry:
     """Registry with the built-in actions.
 
@@ -195,8 +196,10 @@ def build_default_registry(
     always there. ``include_trivia`` announces ``start_trivia``, ``trivia_answer``,
     ``trivia_next``, ``restart_trivia`` and ``stop_trivia`` when there is a question
     bank (``assets/trivia/questions.md``). ``include_emotion`` announces ``show_emotion``
-    (:mod:`sonia.actions.emotion`, ``SHOW_EMOTION_ENABLED``).
+    (:mod:`sonia.actions.emotion`, ``SHOW_EMOTION_ENABLED``). ``include_agenda`` announces
+    ``check_agenda`` (:mod:`sonia.actions.agenda`) when there is an ``AGENDA_SOURCE``.
     """
+    from sonia.actions.agenda import CHECK_AGENDA
     from sonia.actions.emotion import SHOW_EMOTION
     from sonia.actions.moves import PLAY_ANIMATION
     from sonia.actions.trivia import (
@@ -215,6 +218,8 @@ def build_default_registry(
     registry.register(PLAY_ANIMATION)
     if include_emotion:
         registry.register(SHOW_EMOTION)
+    if include_agenda:
+        registry.register(CHECK_AGENDA)
     if include_trivia:
         registry.register(START_TRIVIA)
         registry.register(TRIVIA_ANSWER)

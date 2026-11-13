@@ -122,6 +122,18 @@ Trivia mode: multiple-choice questions on the avatar's screen.
 | `TRIVIA_DEFAULT_LEVEL` | text | `medium` | Level when the user does not choose one: easy, medium or hard. |
 | `TRIVIA_WIN_CONTACT` | text | (empty) | Who Sonnia sends winners to (for example "the people at the desk"); empty = nobody. Sonnia does not know about prizes: she never promises any. |
 
+## Event schedule
+
+The event schedule (`docs/agenda.md`): talks from a JSON or iCalendar file or URL.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `AGENDA_SOURCE` | text | (empty) | A file path or an http(s) URL of the agenda: JSON (`assets/agenda/example.json`) or iCalendar (`.ics`). Empty = no agenda. |
+| `AGENDA_REFRESH_MINUTES` | number | `30.0` | How often the source is read again, in minutes (0 = only at startup and when Sonnia checks it). |
+| `AGENDA_NOTICE_MINUTES` | number | `10.0` | A silent note this many minutes before each talk starts (0 = none). |
+| `AGENDA_CACHE_FILE` | text | `<SONIA_HOME>/cache/agenda.json` | Copy of the last agenda read, used at startup when the source cannot be read. |
+| `AGENDA_TIMEOUT_SECONDS` | number | `10.0` | Seconds to wait for the source. |
+
 ## Local control panel
 
 Local web control panel (`sonia/panel`).

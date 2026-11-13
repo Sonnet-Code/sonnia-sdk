@@ -25,8 +25,10 @@ import pytest
 import sonia.live.engine as engine_module
 import sonia.live.oneshot as oneshot_module
 from sonia.actions import Gallery, build_default_registry
+from sonia.agenda import AgendaBook
 from sonia.clock import Clock
 from sonia.config import (
+    AgendaSettings,
     AudioSettings,
     LiveSettings,
     LLMSettings,
@@ -329,17 +331,23 @@ async def make_rig(
     showcase: Showcase | None = None,
     trivia: bool = False,
     clock: Clock | None = None,
+    agenda: AgendaBook | None = None,
+    agenda_settings: AgendaSettings | None = None,
     **settings_overrides: Any,
 ) -> AsyncIterator[LiveRig]:
     from websockets.asyncio.client import connect
 
     settings = make_settings(tmp_path, **settings_overrides)
+    if agenda_settings is not None:
+        settings.agenda = agenda_settings
     server = server or FakeLiveServer()
     knowledge = tmp_path / "knowledge"
     knowledge.mkdir(exist_ok=True)
     (knowledge / "01-place.md").write_text("The museum opens at nine.", encoding="utf-8")
     policy = VisionPolicy(settings.vision, settings.llm.supports_vision)
-    registry = build_default_registry(include_look=policy.enabled, include_trivia=trivia)
+    registry = build_default_registry(
+        include_look=policy.enabled, include_trivia=trivia, include_agenda=agenda is not None
+    )
     hub = Hub(settings.ws, sample_rate=settings.live.sample_rate)
     async with running(server) as live_connect, hub:
         engine = LiveEngine(
@@ -353,6 +361,7 @@ async def make_rig(
             connect=live_connect,
             knowledge_dir=knowledge,
             clock=clock,
+            agenda=agenda,
             tick_s=0.02,
         )
         async with connect(f"ws://127.0.0.1:{hub.port}/") as client:

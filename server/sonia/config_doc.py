@@ -38,6 +38,7 @@ _SECTIONS: list[tuple[str | None, str]] = [
     ("ws", "Avatar client WebSocket"),
     ("showcase", "Idle animation"),
     ("trivia", "Trivia"),
+    ("agenda", "Event schedule"),
     ("panel", "Local control panel"),
     (None, "General"),
 ]

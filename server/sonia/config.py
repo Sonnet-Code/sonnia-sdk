@@ -242,6 +242,30 @@ class ShowcaseSettings(BaseSettings):
     moment_camera: bool = True
 
 
+class AgendaSettings(BaseSettings):
+    """The event schedule (``docs/agenda.md``): talks from a JSON or iCalendar file or URL.
+
+    Sonnia gets today's talks in her instructions, a silent ``[Agenda]`` note before each
+    one starts and when the schedule changes, and the ``check_agenda`` action to read it
+    again. Off while ``AGENDA_SOURCE`` is empty.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="AGENDA_", extra="ignore", env_ignore_empty=True)
+
+    #: A file path or an http(s) URL of the agenda: JSON (``assets/agenda/example.json``)
+    #: or iCalendar (``.ics``). Empty = no agenda.
+    source: str = ""
+    #: How often the source is read again, in minutes (0 = only at startup and when Sonnia
+    #: checks it).
+    refresh_minutes: float = 30.0
+    #: A silent note this many minutes before each talk starts (0 = none).
+    notice_minutes: float = 10.0
+    #: Copy of the last agenda read, used at startup when the source cannot be read.
+    cache_file: str = str(_HOME / "cache" / "agenda.json")
+    #: Seconds to wait for the source.
+    timeout_seconds: float = 10.0
+
+
 class TriviaSettings(BaseSettings):
     """Trivia mode: multiple-choice questions on the avatar's screen.
 
@@ -312,6 +336,7 @@ class Settings(BaseSettings):
     ws: WSSettings = Field(default_factory=WSSettings)
     showcase: ShowcaseSettings = Field(default_factory=ShowcaseSettings)
     trivia: TriviaSettings = Field(default_factory=TriviaSettings)
+    agenda: AgendaSettings = Field(default_factory=AgendaSettings)
     panel: PanelSettings = Field(default_factory=PanelSettings)
 
     #: ``ASSETS_DIR``: knowledge, idle lines, trivia bank and gallery.

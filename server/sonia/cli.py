@@ -33,7 +33,9 @@ from typing import Any
 from sonia import __version__
 from sonia.actions import Gallery, build_default_registry
 from sonia.actions.registry import ActionRegistry
+from sonia.agenda import AgendaBook
 from sonia.audio.capture import list_input_devices, resolve_input_device
+from sonia.clock import clock_for, resolve_timezone
 from sonia.config import Settings, is_openai_url, load_settings
 from sonia.devices import DeviceManager, apply_choice, load_choice
 from sonia.live.audio import silence_blocks
@@ -320,6 +322,8 @@ class Components:
     #: Vision model that describes the camera (``LLM_*``), if vision is on.
     llm: LLMClient | None
     narrator: VisionNarrator | None
+    #: The event schedule (``AGENDA_SOURCE``), if there is one.
+    agenda: AgendaBook | None = None
 
     def action_context(self) -> ActionContext:
         return ActionContext(
@@ -346,10 +350,12 @@ def build_components(settings: Settings, *, with_camera: bool = True) -> Compone
         vision = vision.model_copy(update={"source": "none"})
     camera = build_camera(vision, request_frame, has_clients=lambda: hub.client_count > 0)
     policy = VisionPolicy(vision, _vision_model_ready(settings))
+    agenda = build_agenda(settings)
     registry = build_default_registry(
         include_look=policy.enabled,
         include_trivia=_trivia_ready(settings),
         include_emotion=settings.show_emotion_enabled,
+        include_agenda=agenda is not None,
     )
     llm = LLMClient(settings.llm) if policy.enabled else None
     return Components(
@@ -360,6 +366,22 @@ def build_components(settings: Settings, *, with_camera: bool = True) -> Compone
         registry=registry,
         llm=llm,
         narrator=VisionNarrator(llm) if llm is not None else None,
+        agenda=agenda,
+    )
+
+
+def build_agenda(settings: Settings) -> AgendaBook | None:
+    """The event schedule of ``AGENDA_SOURCE`` (not read yet: the engine does it), or ``None``."""
+    agenda = settings.agenda
+    if not agenda.source.strip():
+        return None
+    tz = resolve_timezone(settings.timezone)
+    return AgendaBook(
+        source=agenda.source.strip(),
+        tz=tz,
+        clock=clock_for(tz),
+        cache_file=Path(agenda.cache_file) if agenda.cache_file.strip() else None,
+        timeout=max(1.0, agenda.timeout_seconds),
     )
 
 
@@ -562,6 +584,7 @@ async def cmd_run(settings: Settings, *, use_mic: bool = True) -> int:
         narrator=components.narrator,
         voice_cache=voice_cache,
         knowledge_dir=settings.knowledge_dirs,
+        agenda=components.agenda,
     )
 
     tasks: list[asyncio.Task[None]] = []
@@ -625,6 +648,7 @@ async def cmd_chat(settings: Settings, *, speak: bool = False) -> int:
         vision_policy=components.policy,
         narrator=None,
         knowledge_dir=settings.knowledge_dirs,
+        agenda=components.agenda,
     )
     tap.playback_done = engine.notify_playback_done
 

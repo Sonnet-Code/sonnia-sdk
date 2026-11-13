@@ -26,6 +26,7 @@ from sonia.prompt_book import BOOK
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "AGENDA_NOTE_PREFIX",
     "CAMERA_NOTE_PREFIX",
     "GALLERY_NOTE_PREFIX",
     "LIVE_RULES",
@@ -63,7 +64,7 @@ Backend tools:
 
 Delegate to the backend when:
 - You want to show or hide an image on your screen. When you change topic, hide it.
-{look_when}{moves_when}{emotion_when}{trivia_when}{search_when}- The question needs careful reasoning and the answer is not clear in your knowledge base.
+{look_when}{moves_when}{emotion_when}{trivia_when}{search_when}{agenda_when}- The question needs careful reasoning and the answer is not clear in your knowledge base.
 - A correction changes what you already asked the backend for.
 
 Do not delegate to the backend when:
@@ -93,6 +94,10 @@ _CAPABILITIES = {
     "trivia_next": "- Trivia: put up the next question when the user asks for it.",
     "restart_trivia": "- Restart the trivia: a new game from the first question.",
     "stop_trivia": "- End the running trivia.",
+    "check_agenda": (
+        "- Agenda: read the event schedule again: the time, what is on now and next, the "
+        "latest changes and the talks about a topic, a speaker or a room."
+    ),
 }
 
 #: The capabilities when the backend has no tool at all.
@@ -142,6 +147,26 @@ _SEARCH_WHEN = (
     "figure): search for it before saying you do not know. Never look up information about "
     "the people you talk to or about private individuals."
 )
+
+#: When to check the agenda (``check_agenda``).
+_AGENDA_WHEN = (
+    "- You are asked about the schedule and the AGENDA section does not answer it: another "
+    "day, a talk you cannot find, the exact time, or whether something changed. If the "
+    "section answers it, answer without delegating."
+)
+
+#: Prefix of the silent notes about the agenda: a talk about to start, a change.
+AGENDA_NOTE_PREFIX = "[Agenda]"
+
+#: ``{agenda}``: the talks (``AgendaBook.section``).
+_AGENDA_SECTION = (
+    "AGENDA (the event schedule, read from its source when this conversation started; "
+    "times are local):\n{agenda}\n"
+    f'You may get internal notes that start with "{AGENDA_NOTE_PREFIX}": a talk about to start '
+    "or a change in the schedule. They win over this list. Use them when they fit (for "
+    "example to suggest a talk to someone), without reading them out or saying you get notes."
+)
+_BACKEND_AGENDA = "AGENDA (when the conversation started; check_agenda reads it again):\n{agenda}"
 
 #: How Sonnia gets what the camera sees (see :func:`camera_mode`).
 CameraMode = Literal["notes", "look", "none"]
@@ -434,8 +459,9 @@ def build_live_instructions(
     knowledge_dir: KnowledgeSource = None,
     notes: str = "",
     clock_text: str = "",
+    agenda: str = "",
 ) -> str:
-    """Session ``instructions``: persona, rules, knowledge, stack and reminder."""
+    """Session ``instructions``: persona, rules, knowledge, agenda, stack and reminder."""
     names = _action_names(registry)
     mode = camera_mode(settings, names)
     web_search = settings.live.backend_web_search
@@ -458,6 +484,7 @@ def build_live_instructions(
         trivia_rule=_TRIVIA_RULE + "\n" if trivia else "",
         trivia_when=_TRIVIA_WHEN + "\n" if trivia else "",
         search_when=_SEARCH_WHEN + "\n" if web_search else "",
+        agenda_when=_AGENDA_WHEN + "\n" if "check_agenda" in names else "",
         no_delegate_chat=_NO_DELEGATE_CHAT[mode],
     )
     parts = [BOOK.text("persona").strip(), rules]
@@ -466,6 +493,8 @@ def build_live_instructions(
     knowledge = _knowledge(knowledge_dir)
     if knowledge:
         parts.append(_KNOWLEDGE_SECTION.format(knowledge=knowledge))
+    if agenda.strip():
+        parts.append(_AGENDA_SECTION.format(agenda=agenda.strip()))
     if notes.strip():
         parts.append(_notes_section(notes))
     gallery = _GALLERY_LINE.format(images=", ".join(gallery_ids)) if gallery_ids else _GALLERY_EMPTY
@@ -524,6 +553,7 @@ def build_backend_instructions(
     clock_text: str = "",
     web_search: bool = False,
     language: str = "English",
+    agenda: str = "",
 ) -> str:
     """Instructions of the Responses backend: rules, gallery and knowledge."""
     rules = BOOK.text("backend_rules")
@@ -533,6 +563,8 @@ def build_backend_instructions(
     if clock_text:
         parts.append(_BACKEND_CLOCK.format(date=clock_text))
     parts.append(_BACKEND_GALLERY.format(images=", ".join(gallery_ids) or "none"))
+    if agenda.strip():
+        parts.append(_BACKEND_AGENDA.format(agenda=agenda.strip()))
     knowledge = _knowledge(knowledge_dir)
     if knowledge:
         parts.append(_BACKEND_KNOWLEDGE.format(knowledge=knowledge))
@@ -567,6 +599,7 @@ def build_session_config(
     knowledge_dir: KnowledgeSource = None,
     notes: str = "",
     clock_text: str = "",
+    agenda: str = "",
 ) -> dict[str, Any]:
     """The ``session`` object of ``session.start``.
 
@@ -583,6 +616,7 @@ def build_session_config(
             clock_text=clock_text,
             web_search=live.backend_web_search,
             language=settings.load_language().name,
+            agenda=agenda,
         ),
         "max_output_tokens": max(16, live.backend_max_output_tokens),
     }
@@ -608,6 +642,7 @@ def build_session_config(
             knowledge_dir=knowledge_dir,
             notes=notes,
             clock_text=clock_text,
+            agenda=agenda,
         ),
         "audio": {
             "format": {"type": "audio/pcm", "rate": int(live.sample_rate)},
