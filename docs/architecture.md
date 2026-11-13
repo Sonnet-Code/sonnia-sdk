@@ -174,7 +174,7 @@ By default the client connects to `ws://127.0.0.1:8765` and reconnects on its ow
 
 | You want to | Look at |
 |---|---|
-| Change who Sonnia is or what she knows | `sonia/persona.py`, `assets/knowledge/` |
+| Change who Sonnia is or what she knows | `sonia/persona.py`, `assets/knowledge/` and the [customization guide](customization.md) |
 | Add an action | `sonia/actions` (registry and handlers), `docs/protocol.md` and the Unity side if the avatar reacts |
 | Change how turns or utterances are detected | `sonia/live/engine.py` (`_tick_once`, `_on_output_audio`, `_on_input_transcript`) |
 | Change what the voice model hears | `sonia/live/audio.py` (`MicGate`) |

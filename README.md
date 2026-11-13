@@ -71,13 +71,13 @@ No API key yet? `uv run sonia demo` (no extras needed) drives the avatar with an
 
 Every setting is an environment variable; they are all listed in the [configuration reference](docs/configuration.md).
 
-Customize her by editing plain files, no code needed: what she knows in `assets/knowledge/`, the lines she says while idle in `assets/showcase/`, the trivia questions in `assets/trivia/questions.md` and the images she can show in `assets/gallery/`.
+Customize her by editing plain files, no code needed: what she knows in `assets/knowledge/`, the lines she says while idle in `assets/showcase/`, the trivia questions in `assets/trivia/questions.md` and the images she can show in `assets/gallery/`. The [customization guide](docs/customization.md) covers those, her persona, voice and models, with examples for a museum guide and a shop assistant.
 
 The written name is "Sonnia". Texts read by the voice model spell it "Sonia" so it is pronounced right; the code identifiers (`sonia` package, `Sonia` namespace) keep that spelling too.
 
 ## Roadmap
 
-The plan, release by release, is in [`docs/roadmap.md`](docs/roadmap.md). Next up: continuous integration, contributor docs, an offline demo mode that needs no API key, a setup guide and player build scripts.
+The plan, release by release, is in [`docs/roadmap.md`](docs/roadmap.md). Next up: a guide to writing actions, a prompt editor in the control panel, a language setting and player build scripts.
 
 ## Known limitations
 
