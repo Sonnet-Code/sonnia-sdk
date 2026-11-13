@@ -147,6 +147,7 @@ Local web control panel (`sonia/panel`).
 | `TIMEZONE` | text | (empty) | The IANA time zone Sonnia uses for the date and time she knows (for example `Europe/Madrid`). Empty = the system time zone. |
 | `IDLE_RESET_SECONDS` | number | `120.0` | Restart the conversation after N seconds without activity (kiosk mode). |
 | `IMAGE_AUTO_HIDE_SECONDS` | number | `30.0` | Hide a shown image on its own after N seconds (0 = never). The model hides it when the topic changes, but if it forgets, the image does not stay there. |
+| `SHOW_EMOTION_ENABLED` | true/false | `false` | Offer the `show_emotion` action, the worked example of `docs/actions.md`: Sonnia shows joy, sadness or surprise on her face when she is asked to. Off by default: each one is a task delegated to the backend. |
 | `GALLERY_WATCH_SECONDS` | number | `5.0` | How often `assets/gallery` is checked; what is added or removed is told to the open session with a silent `[Gallery]` note (0 = do not watch: the new list arrives with the next session). |
 | `GALLERY_UPLOAD_DIR` | text | `<SONIA_HOME>/cache/gallery` | Where images uploaded from the panel are stored. Writable and outside `assets`, which may live inside a read-only app bundle. |
 | `KNOWLEDGE_EXTRA_DIR` | text | (empty) | Another knowledge folder read after `assets/knowledge`, for example with test data. Empty by default. |

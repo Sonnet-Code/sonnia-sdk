@@ -77,6 +77,7 @@ async def test_one_show_uses_every_part_of_the_client() -> None:
         p.MSG_ACTIVITY,
         p.MSG_SHOW_IMAGE,
         p.MSG_HIDE_IMAGE,
+        p.MSG_SHOW_EMOTION,
         p.MSG_TRIVIA_START,
         p.MSG_TRIVIA_QUESTION,
         p.MSG_TRIVIA_ANSWER,

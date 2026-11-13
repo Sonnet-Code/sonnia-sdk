@@ -303,6 +303,10 @@ class ConsoleTap:
         print("  [image hidden]", flush=True)
         await self._inner.hide_image()
 
+    async def show_emotion(self, emotion: str, seconds: float) -> None:
+        print(f"  [emotion: {emotion} for {seconds:g} s]", flush=True)
+        await self._inner.show_emotion(emotion, seconds)
+
 
 @dataclass(slots=True)
 class Components:
@@ -345,6 +349,7 @@ def build_components(settings: Settings, *, with_camera: bool = True) -> Compone
     registry = build_default_registry(
         include_look=policy.enabled,
         include_trivia=_trivia_ready(settings),
+        include_emotion=settings.show_emotion_enabled,
     )
     llm = LLMClient(settings.llm) if policy.enabled else None
     return Components(

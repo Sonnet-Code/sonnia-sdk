@@ -111,6 +111,14 @@ Plays a specific clip from the catalog the client sent with `animations`. Unlike
 {"type": "play_animation", "clip": "QuickAction_vibe", "whole": true}
 ```
 
+### `show_emotion`
+
+Shows `joy`, `sad` or `surprise` on the avatar's face for `seconds` (0.5 to 10), blended over the expression of the current state; the lip-sync keeps moving the mouth. It is sent by the `show_emotion` action, the worked example of [Writing actions](actions.md), which is off unless `SHOW_EMOTION_ENABLED=true`.
+
+```json
+{"type": "show_emotion", "emotion": "surprise", "seconds": 3.0}
+```
+
 ### `presence`
 
 The assistant is on screen (`present: true`) or away (`false`): she walks off and leaves a sign with `message`. Sticky: re-sent after `hello`, and then applied without animation.

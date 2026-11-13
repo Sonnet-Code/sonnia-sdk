@@ -327,6 +327,10 @@ class Settings(BaseSettings):
     #: Hide a shown image on its own after N seconds (0 = never). The model hides it
     #: when the topic changes, but if it forgets, the image does not stay there.
     image_auto_hide_seconds: float = 30.0
+    #: ``SHOW_EMOTION_ENABLED``: offer the ``show_emotion`` action, the worked example of
+    #: ``docs/actions.md``: Sonnia shows joy, sadness or surprise on her face when she is
+    #: asked to. Off by default: each one is a task delegated to the backend.
+    show_emotion_enabled: bool = False
     #: ``GALLERY_WATCH_SECONDS``: how often ``assets/gallery`` is checked; what is added
     #: or removed is told to the open session with a silent ``[Gallery]`` note
     #: (0 = do not watch: the new list arrives with the next session).

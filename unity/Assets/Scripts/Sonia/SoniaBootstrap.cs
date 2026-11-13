@@ -150,6 +150,7 @@ namespace Sonia
                 client.OnHideImage += HandleHideImage;
                 client.OnAttention += HandleAttention;
                 client.OnPlayAnimation += HandlePlayAnimation;
+                client.OnShowEmotion += HandleShowEmotion;
                 client.OnSetDisabledAnimations += HandleSetDisabledAnimations;
                 client.OnSetDebug += HandleSetDebug;
                 client.OnSetTuning += HandleSetTuning;
@@ -182,6 +183,7 @@ namespace Sonia
                 client.OnHideImage -= HandleHideImage;
                 client.OnAttention -= HandleAttention;
                 client.OnPlayAnimation -= HandlePlayAnimation;
+                client.OnShowEmotion -= HandleShowEmotion;
                 client.OnSetDisabledAnimations -= HandleSetDisabledAnimations;
                 client.OnSetDebug -= HandleSetDebug;
                 client.OnSetTuning -= HandleSetTuning;
@@ -464,6 +466,43 @@ namespace Sonia
             if (logEvents)
             {
                 Debug.Log("[Sonnia] debug mode " + (_debugQuiet ? "on: nothing automatic" : "off"), this);
+            }
+        }
+
+        /// <summary>
+        /// The <c>show_emotion</c> action: joy, sadness or surprise on the face. The
+        /// face controller is looked up each time because the avatar can be swapped
+        /// at runtime (<see cref="AvatarBinder"/>).
+        /// </summary>
+        private void HandleShowEmotion(ShowEmotionMessage message)
+        {
+            FacialExpressionController face = GetComponentInChildren<FacialExpressionController>(true);
+            if (face == null || message == null)
+            {
+                return;
+            }
+
+            FacialExpressionController.Emotion emotion;
+            switch (message.Emotion)
+            {
+                case "joy":
+                    emotion = FacialExpressionController.Emotion.Joy;
+                    break;
+                case "sad":
+                    emotion = FacialExpressionController.Emotion.Sad;
+                    break;
+                case "surprise":
+                    emotion = FacialExpressionController.Emotion.Surprise;
+                    break;
+                default:
+                    Debug.LogWarning("[Sonnia] unknown emotion: " + message.Emotion, this);
+                    return;
+            }
+
+            face.ShowEmotion(emotion, Mathf.Clamp(message.Seconds, 0.5f, 10f));
+            if (logEvents)
+            {
+                Debug.Log("[Sonnia] emotion " + message.Emotion + " for " + message.Seconds + " s", this);
             }
         }
 

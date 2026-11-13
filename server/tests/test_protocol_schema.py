@@ -81,6 +81,8 @@ BUILDS: list[tuple[str, Callable[[], dict[str, Any]]]] = [
     ("attention clip", lambda: p.msg_attention("dance", "Dance_1")),
     ("play_animation", lambda: p.msg_play_animation("Wave")),
     ("play_animation whole", lambda: p.msg_play_animation("Wave", whole=True)),
+    ("show_emotion", lambda: p.msg_show_emotion("surprise", 3)),
+    ("show_emotion clamped", lambda: p.msg_show_emotion("joy", 60)),
     ("speech_end", lambda: p.msg_speech_end(3)),
     ("stop_speaking", lambda: p.msg_stop_speaking()),
     ("show_image", lambda: p.msg_show_image("logo", "gallery", "image/png", b"\x89PNG")),

@@ -408,6 +408,7 @@ async def test_console_tap_prints_and_confirms_playback(
         image_id="logo", source="gallery", mime="image/png", data=b"x", caption="L"
     )
     await tap.hide_image()
+    await tap.show_emotion("joy", 2.0)
 
     out = capsys.readouterr().out
     assert "[thinking]" in out
@@ -416,6 +417,7 @@ async def test_console_tap_prints_and_confirms_playback(
     assert "[error] the model went down" in out
     assert "[image: logo (gallery, 1 bytes) — L]" in out
     assert "[image hidden]" in out
+    assert "[emotion: joy for 2 s]" in out
     assert done == [3]  # without a local player, speech_end confirms the utterance
 
 

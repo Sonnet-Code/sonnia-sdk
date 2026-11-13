@@ -59,7 +59,7 @@ Backend tools:
 
 Delegate to the backend when:
 - You want to show or hide an image on your screen. When you change topic, hide it.
-{look_when}{moves_when}{trivia_when}{search_when}- The question needs careful reasoning and the answer is not clear in your knowledge base.
+{look_when}{moves_when}{emotion_when}{trivia_when}{search_when}- The question needs careful reasoning and the answer is not clear in your knowledge base.
 - A correction changes what you already asked the backend for.
 
 Do not delegate to the backend when:
@@ -78,6 +78,7 @@ _CAPABILITIES = {
         "thumbs up, celebrate, a 'so close' gesture or look thoughtful."
     ),
     "look": "- Look: take a new photo with your camera and tell you what is in it.",
+    "show_emotion": "- Face: show joy, sadness or surprise on your face for a few seconds.",
     "start_trivia": (
         "- Trivia: start a tech trivia game on your screen, with three options per question."
     ),
@@ -105,6 +106,13 @@ _MOVES_WHEN = (
     '"do the peace sign"): delegate it in that same turn, without asking or saying first '
     "that you cannot, and go along with a short sentence. "
     "Do not move on your own every now and then: only when asked or when celebrating something."
+)
+
+#: When to delegate an emotion (``show_emotion``, the example of docs/actions.md).
+_EMOTION_WHEN = (
+    "- You are asked to make a face (happy, sad, surprised), or a moment calls for a clear "
+    "reaction (great news, a sad story, a surprising fact): delegate the emotion and keep "
+    "talking. Not on every turn: only when it adds something."
 )
 
 #: How the trivia works (only if the backend has the action). The procedure is dictated
@@ -322,6 +330,7 @@ _BACKEND_DOES = {
     "show_image": "showing or hiding images",
     "look": "looking through the camera",
     "play_animation": "dancing or making a gesture",
+    "show_emotion": "showing an emotion on your face",
     "start_trivia": "the trivia (starting it, recording answers, moving on, restarting and ending it)",
 }
 _BACKEND_DOES_SEARCH = "searching the web"
@@ -424,6 +433,7 @@ def build_live_instructions(
         camera_rule=_CAMERA_RULE[mode],
         look_when=look_when if "look" in names else "",
         moves_when=_MOVES_WHEN + "\n" if "play_animation" in names else "",
+        emotion_when=_EMOTION_WHEN + "\n" if "show_emotion" in names else "",
         trivia_rule=_TRIVIA_RULE + "\n" if trivia else "",
         trivia_when=_TRIVIA_WHEN + "\n" if trivia else "",
         search_when=_SEARCH_WHEN + "\n" if web_search else "",

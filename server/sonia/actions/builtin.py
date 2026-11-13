@@ -1,6 +1,7 @@
 """Built-in actions: `look`, `show_image`, `hide_image` and `play_animation`.
 
-The trivia actions live in their own module and are registered here.
+The trivia actions and the ``show_emotion`` example live in their own modules and
+are registered here.
 
 The texts they return go back to the model as the tool call result, so they are
 short: the model uses them to decide what to say out loud. No action raises;
@@ -184,6 +185,7 @@ def build_default_registry(
     *,
     include_look: bool = True,
     include_trivia: bool = False,
+    include_emotion: bool = False,
 ) -> ActionRegistry:
     """Registry with the built-in actions.
 
@@ -192,8 +194,10 @@ def build_default_registry(
     ``play_animation`` (dances and gestures by voice, :mod:`sonia.actions.moves`) is
     always there. ``include_trivia`` announces ``start_trivia``, ``trivia_answer``,
     ``trivia_next``, ``restart_trivia`` and ``stop_trivia`` when there is a question
-    bank (``assets/trivia/questions.md``).
+    bank (``assets/trivia/questions.md``). ``include_emotion`` announces ``show_emotion``
+    (:mod:`sonia.actions.emotion`, ``SHOW_EMOTION_ENABLED``).
     """
+    from sonia.actions.emotion import SHOW_EMOTION
     from sonia.actions.moves import PLAY_ANIMATION
     from sonia.actions.trivia import (
         RESTART_TRIVIA,
@@ -209,6 +213,8 @@ def build_default_registry(
     registry.register(SHOW_IMAGE)
     registry.register(HIDE_IMAGE)
     registry.register(PLAY_ANIMATION)
+    if include_emotion:
+        registry.register(SHOW_EMOTION)
     if include_trivia:
         registry.register(START_TRIVIA)
         registry.register(TRIVIA_ANSWER)

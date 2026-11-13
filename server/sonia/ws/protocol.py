@@ -41,6 +41,12 @@ ACTIVITIES = ("none", "think", "search")
 #: search and a task delegated to the backend (``sonia.busy``).
 BUSY_KINDS = ("search", "think")
 
+#: Emotions the avatar can show on its face (``show_emotion``).
+EMOTIONS = ("joy", "sad", "surprise")
+
+#: Longest an emotion is held, in seconds (``show_emotion``).
+EMOTION_MAX_SECONDS = 10.0
+
 #: Audio format announced in ``hello``.
 AUDIO_FORMAT = "pcm_s16le"
 AUDIO_CHANNELS = 1
@@ -74,6 +80,8 @@ MSG_TRIVIA_END = "trivia_end"
 MSG_ACTIVITY = "activity"
 #: On-screen waiting indicator (``sonia.busy``): a pill with animated dots.
 MSG_BUSY = "busy"
+#: A passing facial expression (``show_emotion`` action, the example of docs/actions.md).
+MSG_SHOW_EMOTION = "show_emotion"
 
 # Messages from the client to the orchestrator.
 MSG_CLIENT_HELLO = "client_hello"
@@ -173,6 +181,18 @@ def msg_attention(category: str, clip: str | None = None) -> dict[str, Any]:
     if clip:
         msg["clip"] = clip
     return msg
+
+
+def msg_show_emotion(emotion: str, seconds: float = 3.0) -> dict[str, Any]:
+    """Shows ``emotion`` (one of :data:`EMOTIONS`) on the avatar's face for ``seconds``.
+
+    The seconds are clamped to 0.5..:data:`EMOTION_MAX_SECONDS`. The client blends
+    it over the expression of the current state; the lip-sync keeps moving the mouth.
+    """
+    if emotion not in EMOTIONS:
+        raise ValueError(f"unknown emotion {emotion!r}; expected one of {EMOTIONS}")
+    held = min(max(float(seconds), 0.5), EMOTION_MAX_SECONDS)
+    return {"type": MSG_SHOW_EMOTION, "emotion": emotion, "seconds": round(held, 2)}
 
 
 def msg_play_animation(clip: str, *, whole: bool = False) -> dict[str, Any]:

@@ -47,7 +47,7 @@ These keep the project usable as an unattended kiosk and safe to publish:
 
 ## Adding an action
 
-Actions are defined once in `server/sonia/actions`; the tools the voice model delegates to are generated from that registry. A new action needs its definition, its handler, tests and, if the avatar has to react, a protocol message with its Unity side, all in the same pull request.
+Actions are defined once in `server/sonia/actions`; the tools the voice model delegates to are generated from that registry. A new action needs its definition, its handler, tests and, if the avatar has to react, a protocol message with its Unity side, all in the same pull request. [Writing actions](docs/actions.md) walks through every step with `show_emotion`, a small example action.
 
 ## Style
 

@@ -227,6 +227,10 @@ class Hub:
         """Hides the image panel."""
         await self.broadcast_json(p.msg_hide_image())
 
+    async def show_emotion(self, emotion: str, seconds: float) -> None:
+        """Shows an emotion on the avatar's face for a few seconds."""
+        await self.broadcast_json(p.msg_show_emotion(emotion, seconds))
+
     # -- connections --------------------------------------------------------
 
     async def _handle_client(self, connection: ServerConnection) -> None:

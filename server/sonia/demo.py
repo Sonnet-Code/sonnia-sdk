@@ -305,6 +305,8 @@ class DemoDirector:
         await self._think(0.4)
         await self._say("Sure, give me a second.")
         await self._busy("search", "Searching the web…", 3.0, activity="search")
+        # The show_emotion action (docs/actions.md), so the client's side can be seen offline.
+        await self._link.broadcast_json(p.msg_show_emotion("surprise", 2.5))
         await self._say("Here's what I found. In the real thing, this is a live web search.")
         await self._listen_after()
 

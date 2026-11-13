@@ -51,6 +51,9 @@
           "$ref": "#/$defs/play_animation"
         },
         {
+          "$ref": "#/$defs/show_emotion"
+        },
+        {
           "$ref": "#/$defs/presence"
         },
         {
@@ -451,6 +454,33 @@
       "required": [
         "type",
         "clip"
+      ],
+      "additionalProperties": false
+    },
+    "show_emotion": {
+      "description": "A passing facial expression over the current state (the show_emotion example action). The lip-sync keeps moving the mouth.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "show_emotion"
+        },
+        "emotion": {
+          "enum": [
+            "joy",
+            "sad",
+            "surprise"
+          ]
+        },
+        "seconds": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 10
+        }
+      },
+      "required": [
+        "type",
+        "emotion",
+        "seconds"
       ],
       "additionalProperties": false
     },

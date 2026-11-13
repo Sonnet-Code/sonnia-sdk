@@ -98,6 +98,9 @@ namespace Sonia
         /// <summary>The panel asks for a specific animation from the catalog.</summary>
         public event Action<PlayAnimationMessage> OnPlayAnimation;
 
+        /// <summary>A passing facial expression (the <c>show_emotion</c> action).</summary>
+        public event Action<ShowEmotionMessage> OnShowEmotion;
+
         /// <summary>Subtitles on screen or not.</summary>
         public event Action<SetSubtitlesMessage> OnSetSubtitles;
 
@@ -681,6 +684,8 @@ namespace Sonia
                     return Protocol.Deserialize<AttentionMessage>(payload);
                 case MessageTypes.PlayAnimation:
                     return Protocol.Deserialize<PlayAnimationMessage>(payload);
+                case MessageTypes.ShowEmotion:
+                    return Protocol.Deserialize<ShowEmotionMessage>(payload);
                 case MessageTypes.SetSubtitles:
                     return Protocol.Deserialize<SetSubtitlesMessage>(payload);
                 case MessageTypes.SetDisabledAnimations:
@@ -843,6 +848,13 @@ namespace Sonia
             if (playAnimation != null)
             {
                 Raise(OnPlayAnimation, playAnimation);
+                return;
+            }
+
+            ShowEmotionMessage showEmotion = message as ShowEmotionMessage;
+            if (showEmotion != null)
+            {
+                Raise(OnShowEmotion, showEmotion);
                 return;
             }
 

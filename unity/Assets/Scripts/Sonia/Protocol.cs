@@ -48,6 +48,9 @@ namespace Sonia
         /// <summary>On-screen busy indicator (<see cref="BusyMessage"/>): drawn by <see cref="BusyIndicator"/>.</summary>
         public const string Busy = "busy";
 
+        /// <summary>A passing facial expression (<see cref="ShowEmotionMessage"/>), the example action of docs/actions.md.</summary>
+        public const string ShowEmotion = "show_emotion";
+
         // From Unity to the orchestrator.
         public const string ClientHello = "client_hello";
         public const string Interrupt = "interrupt";
@@ -146,6 +149,20 @@ namespace Sonia
         /// requested by voice). Without it, as from the panel, a state change cuts it.
         /// </summary>
         [JsonProperty("whole")] public bool Whole;
+    }
+
+    /// <summary>
+    /// Joy, sadness or surprise on the avatar's face for a few seconds (the
+    /// <c>show_emotion</c> action). Played by <see cref="FacialExpressionController.ShowEmotion"/>.
+    /// </summary>
+    [Serializable]
+    public class ShowEmotionMessage
+    {
+        /// <summary><c>joy</c>, <c>sad</c> or <c>surprise</c>.</summary>
+        [JsonProperty("emotion")] public string Emotion;
+
+        /// <summary>How long to hold it (0.5 to 10 seconds).</summary>
+        [JsonProperty("seconds")] public float Seconds = 3f;
     }
 
     /// <summary>Subtitles on screen or not (panel, sticky message: re-sent after <c>hello</c>).</summary>
