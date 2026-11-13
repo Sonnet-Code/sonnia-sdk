@@ -99,6 +99,8 @@ def test_a_bad_spec_is_refused() -> None:
         ("   ", "empty"),
         ("{tools}" + "x" * PROMPT_MAX_LEN, "too long"),
     ],
+    # Short ids: pytest puts the id in an environment variable, and Windows caps those.
+    ids=lambda value: value[:24] if isinstance(value, str) else None,
 )
 def test_a_template_that_would_not_fill_is_refused(text: str, problem: str) -> None:
     problems = _book().validate("rules", text)
