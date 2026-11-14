@@ -95,6 +95,14 @@ Show an image in the scene's image panel (the `show_image` action or a panel but
 {"type": "hide_image"}
 ```
 
+### `show_talk`
+
+Show the card of a talk of the [agenda](agenda.md) (the `show_talk` action) in the same top strip as images: `hide_image` removes it, a new image replaces it, and the orchestrator hides it after `IMAGE_AUTO_HIDE_SECONDS` too. The texts come written in `LANGUAGE`: `when` is the day and the times, `place` the room and the track. The client writes the badge for `status` from its screen texts: `now` (`talk_now`), `next` (`talk_next`), `over` (`talk_over`) or `later` (`talk_label`).
+
+```json
+{"type": "show_talk", "talk_id": "rust-intro", "title": "Intro to Rust", "status": "next", "when": "Friday 20 November · 10:00–10:45", "speakers": ["Ada Lovelace"], "place": "Room 2 · Systems", "tags": ["rust", "beginners"]}
+```
+
 ### `attention`
 
 Asks the avatar for an attention gesture: `dance`, `fourth_wall` (point, wave, tap the screen), `soft` or `greeting`. `clip` optionally names a specific clip. Honored in `idle` (`greeting` also while listening).

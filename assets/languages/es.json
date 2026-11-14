@@ -20,6 +20,36 @@
     "trivia_close": "¡CASI!",
     "trivia_score": "{score} de {total} correctas",
     "trivia_won_line": "¡Muy bien, dominas la trivia!",
-    "trivia_lost_line": "Necesitabas {threshold}. ¡Pídeme otra trivia y vuelve a intentarlo!"
+    "trivia_lost_line": "Necesitabas {threshold}. ¡Pídeme otra trivia y vuelve a intentarlo!",
+    "talk_label": "CHARLA",
+    "talk_now": "AHORA MISMO",
+    "talk_next": "A CONTINUACIÓN",
+    "talk_over": "YA TERMINÓ"
+  },
+  "dates": {
+    "format": "{weekday} {day} de {month}",
+    "weekdays": [
+      "lunes",
+      "martes",
+      "miércoles",
+      "jueves",
+      "viernes",
+      "sábado",
+      "domingo"
+    ],
+    "months": [
+      "enero",
+      "febrero",
+      "marzo",
+      "abril",
+      "mayo",
+      "junio",
+      "julio",
+      "agosto",
+      "septiembre",
+      "octubre",
+      "noviembre",
+      "diciembre"
+    ]
   }
 }

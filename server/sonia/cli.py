@@ -309,6 +309,10 @@ class ConsoleTap:
         print(f"  [emotion: {emotion} for {seconds:g} s]", flush=True)
         await self._inner.show_emotion(emotion, seconds)
 
+    async def show_talk(self, card: dict[str, Any]) -> None:
+        print(f"  [talk card: {card.get('title')} ({card.get('status')})]", flush=True)
+        await self._inner.show_talk(card)
+
 
 @dataclass(slots=True)
 class Components:

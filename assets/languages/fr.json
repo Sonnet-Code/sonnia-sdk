@@ -20,6 +20,36 @@
     "trivia_close": "PRESQUE !",
     "trivia_score": "{score} sur {total} bonnes réponses",
     "trivia_won_line": "Bravo, tu maîtrises le quiz !",
-    "trivia_lost_line": "Il en fallait {threshold}. Demande-moi un autre quiz et réessaie !"
+    "trivia_lost_line": "Il en fallait {threshold}. Demande-moi un autre quiz et réessaie !",
+    "talk_label": "CONFÉRENCE",
+    "talk_now": "EN CE MOMENT",
+    "talk_next": "ENSUITE",
+    "talk_over": "DÉJÀ TERMINÉE"
+  },
+  "dates": {
+    "format": "{weekday} {day} {month}",
+    "weekdays": [
+      "lundi",
+      "mardi",
+      "mercredi",
+      "jeudi",
+      "vendredi",
+      "samedi",
+      "dimanche"
+    ],
+    "months": [
+      "janvier",
+      "février",
+      "mars",
+      "avril",
+      "mai",
+      "juin",
+      "juillet",
+      "août",
+      "septembre",
+      "octobre",
+      "novembre",
+      "décembre"
+    ]
   }
 }

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import struct
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -62,6 +62,7 @@ MSG_SPEECH_END = "speech_end"
 MSG_STOP_SPEAKING = "stop_speaking"
 MSG_SHOW_IMAGE = "show_image"
 MSG_HIDE_IMAGE = "hide_image"
+MSG_SHOW_TALK = "show_talk"
 MSG_ERROR = "error"
 MSG_REQUEST_FRAME = "request_frame"
 MSG_PRESENCE = "presence"
@@ -241,8 +242,42 @@ def msg_show_image(
 
 
 def msg_hide_image() -> dict[str, Any]:
-    """Hides the image panel."""
+    """Hides the image panel (and the talk card of ``show_talk``)."""
     return {"type": MSG_HIDE_IMAGE}
+
+
+#: When a talk is, for the badge of its card (the client writes it in ``LANGUAGE``).
+TalkStatus = Literal["now", "next", "later", "over"]
+TALK_STATUSES: tuple[str, ...] = ("now", "next", "later", "over")
+
+
+def msg_show_talk(
+    talk_id: str,
+    title: str,
+    *,
+    status: TalkStatus | str,
+    when: str,
+    speakers: Sequence[str] = (),
+    place: str = "",
+    tags: Sequence[str] = (),
+) -> dict[str, Any]:
+    """Shows the card of a talk of the agenda where images go (``hide_image`` removes it).
+
+    The texts come written in ``LANGUAGE`` (``when``: "Friday 20 November · 10:00–10:45");
+    the client only writes the badge for ``status``.
+    """
+    if status not in TALK_STATUSES:
+        raise ValueError(f"unknown talk status {status!r}; expected one of {TALK_STATUSES}")
+    return {
+        "type": MSG_SHOW_TALK,
+        "talk_id": str(talk_id),
+        "title": str(title),
+        "status": str(status),
+        "when": str(when),
+        "speakers": [str(name) for name in speakers],
+        "place": str(place),
+        "tags": [str(tag) for tag in tags],
+    }
 
 
 def msg_error(message: str) -> dict[str, Any]:

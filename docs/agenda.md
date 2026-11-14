@@ -36,8 +36,13 @@ Times without a zone are in `TIMEZONE` (the zone Sonnia uses for the date and ti
 | `AGENDA_NOTICE_MINUTES` before a talk (10) | "Starting in 10 minutes: ..." | A silent `[Agenda]` note, once per talk |
 | Every `AGENDA_REFRESH_MINUTES` (30) | What changed: moved, cancelled or new talks | A silent `[Agenda]` note, worked out in code |
 | When she is asked something the section does not answer | The current time, what is on now and next, the latest changes and the talks that match a topic, a speaker or a room | The `check_agenda` action, delegated to the backend |
+| When she is asked about one talk | Its card on the screen | The `show_talk` action, delegated to the backend |
 
 Silent notes go through `session.thinking.append`: they never make her speak, and they only reach an open conversation, in a quiet moment between turns. The changes and the notices are worked out by the code, not by the model, so they do not depend on it comparing two lists correctly.
+
+## The talk card
+
+`show_talk` puts the card of one talk where images go: a badge (on now, up next, later or already over), the title, the speakers, the day and times, the room and track and up to four tags. The talk is picked in code from the words the model sends (a title, a speaker, a topic or an id): with several matches, the one on now wins, then the next to start, then the last one that ended, and the model is told the other matches. The card is written in `LANGUAGE`, with the day as the language file writes it (its `dates` block: "Friday 20 November", "viernes 20 de noviembre"), and reaches the avatar client in the `show_talk` message of the [protocol](protocol.md). Like an image, Sonnia points up while it comes in, `hide_image` removes it and it goes away on its own after `IMAGE_AUTO_HIDE_SECONDS`; it is not shown over the trivia.
 
 ## Without network
 
@@ -58,6 +63,7 @@ The full reference is in [configuration](configuration.md).
 ## In the code
 
 - `server/sonia/agenda/sources.py` reads JSON and iCalendar; `model.py` has `Talk` and `Agenda` and how a talk is told; `book.py` (`AgendaBook`) keeps the agenda, refreshes it, compares it and writes the texts.
-- `server/sonia/actions/agenda.py` is `check_agenda`.
-- `server/sonia/live/engine.py` loads it at startup and runs the refresh and notice loop (`_agenda_loop`); `server/sonia/live/prompts.py` has the `AGENDA` section, the capability and the `{agenda_when}` rule.
+- `server/sonia/actions/agenda.py` is `check_agenda` and `show_talk`; `server/sonia/agenda/card.py` picks the talk and writes its card.
+- `unity/Assets/Scripts/Sonia/TalkCardController.cs` draws the card on the HUD; `SoniaBootstrap` shares the top strip and the pointing gesture between it and the image panel.
+- `server/sonia/live/engine.py` loads it at startup and runs the refresh and notice loop (`_agenda_loop`); `server/sonia/live/prompts.py` has the `AGENDA` section, the capabilities and the `{agenda_when}` rules.
 - `server/tests/test_agenda.py` covers all of it offline; URLs go through `httpx.MockTransport`.

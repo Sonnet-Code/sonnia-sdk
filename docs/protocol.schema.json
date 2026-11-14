@@ -45,6 +45,9 @@
           "$ref": "#/$defs/hide_image"
         },
         {
+          "$ref": "#/$defs/show_talk"
+        },
+        {
           "$ref": "#/$defs/attention"
         },
         {
@@ -410,6 +413,60 @@
       },
       "required": [
         "type"
+      ],
+      "additionalProperties": false
+    },
+    "show_talk": {
+      "description": "Show the card of a talk of the agenda where images go; hide_image removes it.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "show_talk"
+        },
+        "talk_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "now",
+            "next",
+            "later",
+            "over"
+          ]
+        },
+        "when": {
+          "type": "string"
+        },
+        "speakers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "place": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "talk_id",
+        "title",
+        "status",
+        "when",
+        "speakers",
+        "place",
+        "tags"
       ],
       "additionalProperties": false
     },

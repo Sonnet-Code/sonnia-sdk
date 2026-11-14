@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Sonnet-Code/sonnia-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/Sonnet-Code/sonnia-sdk/actions/workflows/ci.yml)
 
-**A real-time voice AI assistant with a 3D avatar.** You talk to Sonnia through a microphone, she answers out loud with a natural voice while a 3D character lip-syncs and gestures on a vertical screen. She can glance at a camera when it helps, show images inside her scene and run small interactive activities such as a trivia game.
+**A real-time voice AI assistant with a 3D avatar.** You talk to Sonnia through a microphone, she answers out loud with a natural voice while a 3D character lip-syncs and gestures on a vertical screen. She can glance at a camera when it helps, show images inside her scene, tell visitors what is on at an event and run small interactive activities such as a trivia game.
 
 Sonnia was born as a booth demo at a developer conference and is now released as an open-source starting point for anyone who wants to build a talking, animated AI character for kiosks, events, museums or streams.
 
@@ -67,7 +67,7 @@ Step by step for macOS and Windows, with devices, portrait screens and troublesh
 3. Open `unity/` with Unity 6000.6.0f1, set the Game view to 1080x1920 and press Play (details in [`unity/README.md`](unity/README.md)).
 4. Talk to Sonnia. The local control panel is at `http://127.0.0.1:8780`.
 
-No API key yet? `uv run sonia demo` (no extras needed) drives the avatar with an offline, scripted show: a synthetic voice with lip-sync, subtitles, the waiting indicator, an image, a dance and a trivia round. It costs nothing and needs no network, so it is also the quickest way to work on the Unity client.
+No API key yet? `uv run sonia demo` (no extras needed) drives the avatar with an offline, scripted show: a synthetic voice with lip-sync, subtitles, the waiting indicator, an image, a talk card, a dance and a trivia round. It costs nothing and needs no network, so it is also the quickest way to work on the Unity client.
 
 Every setting is an environment variable; they are all listed in the [configuration reference](docs/configuration.md).
 
@@ -77,7 +77,7 @@ The written name is "Sonnia". Texts read by the voice model spell it "Sonia" so 
 
 ## Roadmap
 
-The plan, release by release, is in [`docs/roadmap.md`](docs/roadmap.md). Next up: an event schedule, a games framework, a gesture director and player build scripts.
+The plan, release by release, is in [`docs/roadmap.md`](docs/roadmap.md). Next up: a games framework, a gesture director and player build scripts.
 
 ## Known limitations
 

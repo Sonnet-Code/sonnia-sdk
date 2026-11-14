@@ -74,7 +74,7 @@ The rules every handler follows:
 | `camera` | The camera source, or `None` when there is none. `await ctx.camera.capture()` returns a `Frame`. |
 | `last_frame` | The most recent snapshot, if any. |
 | `gallery_dir`, `gallery_upload_dir` | The image folders. |
-| `extra` | Engine objects some actions need: `extra["trivia"]` (the trivia game) and `extra["moves"]` (the animation catalog). |
+| `extra` | Engine objects some actions need: `extra["trivia"]` (the trivia game), `extra["moves"]` (the animation catalog), `extra["agenda"]` (the `AgendaBook`, when there is an agenda) and `extra["language"]` (the `Language` of `LANGUAGE`, for anything written on the screen). |
 
 An `ActionResult` can also carry an `image`: `look` returns the snapshot that way, and the engine shows it to the backend.
 

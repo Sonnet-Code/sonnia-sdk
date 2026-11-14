@@ -89,8 +89,11 @@ namespace Sonia
         /// <summary>Show an image in the scene's image panel.</summary>
         public event Action<ShowImageMessage> OnShowImage;
 
-        /// <summary>Hide the image panel.</summary>
+        /// <summary>Hide the image panel (and the talk card).</summary>
         public event Action<HideImageMessage> OnHideImage;
+
+        /// <summary>Show the card of a talk of the agenda where images go.</summary>
+        public event Action<ShowTalkMessage> OnShowTalk;
 
         /// <summary>Attention gesture requested by the orchestrator (dance, fourth wall, soft, greeting).</summary>
         public event Action<AttentionMessage> OnAttention;
@@ -683,6 +686,8 @@ namespace Sonia
                     return Protocol.Deserialize<ShowImageMessage>(payload);
                 case MessageTypes.HideImage:
                     return Protocol.Deserialize<HideImageMessage>(payload);
+                case MessageTypes.ShowTalk:
+                    return Protocol.Deserialize<ShowTalkMessage>(payload);
                 case MessageTypes.Attention:
                     return Protocol.Deserialize<AttentionMessage>(payload);
                 case MessageTypes.PlayAnimation:
@@ -839,6 +844,13 @@ namespace Sonia
             if (hideImage != null)
             {
                 Raise(OnHideImage, hideImage);
+                return;
+            }
+
+            ShowTalkMessage showTalk = message as ShowTalkMessage;
+            if (showTalk != null)
+            {
+                Raise(OnShowTalk, showTalk);
                 return;
             }
 

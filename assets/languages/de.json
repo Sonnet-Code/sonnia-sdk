@@ -20,6 +20,36 @@
     "trivia_close": "FAST!",
     "trivia_score": "{score} von {total} richtig",
     "trivia_won_line": "Super, du bist ein Quiz-Profi!",
-    "trivia_lost_line": "Du brauchtest {threshold}. Frag mich nach einem neuen Quiz und versuch es noch mal!"
+    "trivia_lost_line": "Du brauchtest {threshold}. Frag mich nach einem neuen Quiz und versuch es noch mal!",
+    "talk_label": "VORTRAG",
+    "talk_now": "JETZT",
+    "talk_next": "ALS NÄCHSTES",
+    "talk_over": "SCHON VORBEI"
+  },
+  "dates": {
+    "format": "{weekday}, {day}. {month}",
+    "weekdays": [
+      "Montag",
+      "Dienstag",
+      "Mittwoch",
+      "Donnerstag",
+      "Freitag",
+      "Samstag",
+      "Sonntag"
+    ],
+    "months": [
+      "Januar",
+      "Februar",
+      "März",
+      "April",
+      "Mai",
+      "Juni",
+      "Juli",
+      "August",
+      "September",
+      "Oktober",
+      "November",
+      "Dezember"
+    ]
   }
 }

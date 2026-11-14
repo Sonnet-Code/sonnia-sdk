@@ -44,7 +44,7 @@ Without a key, without network and without cost:
 uv run sonia demo
 ```
 
-Then open the client (step 4) and press Play. The demo drives the avatar with a synthetic voice, subtitles, the waiting indicator, an image, a dance and a trivia round, and answers typed text with a canned line. `--volume 0` keeps it silent, `--once` plays the show once and exits. If the avatar moves and its mouth follows the voice, the client and the WebSocket are working.
+Then open the client (step 4) and press Play. The demo drives the avatar with a synthetic voice, subtitles, the waiting indicator, an image, a talk card from the example agenda, a dance and a trivia round, and answers typed text with a canned line. `--volume 0` keeps it silent, `--once` plays the show once and exits. If the avatar moves and its mouth follows the voice, the client and the WebSocket are working.
 
 ## 3. Add your key and check the machine
 

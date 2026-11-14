@@ -7,6 +7,7 @@ import json
 import logging
 import random
 import re
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,7 @@ from sonia.language import (
     available_languages,
     describe_languages,
     load_language,
+    read_dates,
     read_language_file,
     text_placeholders,
 )
@@ -210,3 +212,31 @@ async def test_the_offline_demo_uses_the_screen_texts() -> None:
     )
     texts = {m["text"] for m in link.messages if m["type"] == p.MSG_BUSY and m["on"]}
     assert texts == {"Je réfléchis…", "Recherche sur le web…"}
+
+
+def test_each_language_writes_a_day(tmp_path: Path) -> None:
+    friday = date(2026, 11, 20)
+    assert load_language("en").date(friday) == "Friday 20 November"
+    assert load_language("es").date(friday) == "viernes 20 de noviembre"
+    assert load_language("fr").date(friday) == "vendredi 20 novembre"
+    assert load_language("pt").date(friday) == "sexta-feira, 20 de novembro"
+    assert load_language("de").date(friday) == "Freitag, 20. November"
+    # A file without dates, or with wrong ones, writes days in English.
+    languages = tmp_path / "languages"
+    languages.mkdir()
+    (languages / "it.json").write_text(
+        json.dumps({"name": "Italian", "texts": {"you": "TU"}}), encoding="utf-8"
+    )
+    (languages / "nl.json").write_text(
+        json.dumps(
+            {
+                "name": "Dutch",
+                "texts": {},
+                "dates": {"format": "{day} {month}", "weekdays": [], "months": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert load_language("it", tmp_path).date(friday) == "Friday 20 November"
+    assert load_language("nl", tmp_path).date(friday) == "Friday 20 November"
+    assert read_dates(languages / "nl.json") is None

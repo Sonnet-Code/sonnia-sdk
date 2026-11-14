@@ -114,6 +114,7 @@ namespace Sonia
         private SoniaClient _client;
         private Canvas _hud;
         private ImagePanelController _imagePanel;
+        private TalkCardController _talkCard;
         private TriviaController _trivia;
         private PresenceController _presence;
         private BusyIndicator _busy;
@@ -265,6 +266,7 @@ namespace Sonia
             _trivia = GetComponentInChildren<TriviaController>(true);
             _presence = GetComponentInChildren<PresenceController>(true);
             _busy = GetComponentInChildren<BusyIndicator>(true);
+            _talkCard = GetComponentInChildren<TalkCardController>(true);
             Build();
         }
 
@@ -596,7 +598,8 @@ namespace Sonia
 
             float now = Time.time;
             float dt = Time.deltaTime;
-            bool imageUp = _imagePanel != null && _imagePanel.IsVisible;
+            bool imageUp = (_imagePanel != null && _imagePanel.IsVisible)
+                           || (_talkCard != null && _talkCard.IsVisible);
             bool triviaUp = _trivia != null && _trivia.IsActive;
             bool away = _presence != null && (_presence.IsAway || !_presence.TargetPresent);
             bool busyUp = _busy != null && _busy.IsShowing;

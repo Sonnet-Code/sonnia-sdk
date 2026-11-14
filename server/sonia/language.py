@@ -7,14 +7,17 @@ it is written once per language, in ``assets/languages/<code>.json``:
     {
       "name": "Spanish",            # in English: what the models are told
       "native_name": "Español",
-      "texts": {"invitation": "¡Acércate y pregúntame\\nlo que quieras!", ...}
+      "texts": {"invitation": "¡Acércate y pregúntame\\nlo que quieras!", ...},
+      "dates": {"format": "{weekday} {day} de {month}",
+                "weekdays": ["lunes", ...], "months": ["enero", ...]}
     }
 
 ``en.json`` is the reference: every other file has exactly its keys and the same
 ``{placeholders}`` in each text (a test checks the bundled ones; :func:`load_language`
 fills a missing text with the English one and logs it). The orchestrator uses a few of
 the texts itself (the waiting pill, the away sign) and sends all of them to the avatar
-client in the sticky ``screen_texts`` message.
+client in the sticky ``screen_texts`` message. ``dates`` (optional; English if missing or
+wrong) writes a day on the screen, as on the talk card of ``show_talk``.
 
 To add a language, copy ``en.json`` to ``<code>.json`` (a short code such as ``it``),
 translate the texts and set ``LANGUAGE=<code>``. A folder ``languages`` in ``ASSETS_DIR``
@@ -29,6 +32,7 @@ import logging
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 from sonia.paths import BUNDLE_ROOT
@@ -36,12 +40,14 @@ from sonia.paths import BUNDLE_ROOT
 __all__ = [
     "BUNDLED_LANGUAGES_DIR",
     "DEFAULT_LANGUAGE",
+    "DateWords",
     "Language",
     "LanguageError",
     "available_languages",
     "describe_languages",
     "language_dirs",
     "load_language",
+    "read_dates",
     "read_language_file",
     "text_placeholders",
 ]
@@ -66,6 +72,48 @@ def text_placeholders(text: str) -> set[str]:
     return set(_PLACEHOLDER.findall(text))
 
 
+#: The placeholders a date format has (all three, each once or more).
+DATE_PLACEHOLDERS = frozenset({"weekday", "day", "month"})
+
+
+@dataclass(frozen=True, slots=True)
+class DateWords:
+    """How a language writes a day: ``Friday 20 November``, ``viernes 20 de noviembre``."""
+
+    format: str = "{weekday} {day} {month}"
+    #: Monday first.
+    weekdays: tuple[str, ...] = (
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    )
+    months: tuple[str, ...] = (
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    )
+
+    def write(self, day: date) -> str:
+        return (
+            self.format.replace("{weekday}", self.weekdays[day.weekday()])
+            .replace("{day}", str(day.day))
+            .replace("{month}", self.months[day.month - 1])
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class Language:
     """A language: its name for the models and its screen texts."""
@@ -78,6 +126,11 @@ class Language:
     native_name: str
     #: Screen texts by key, complete (gaps filled with English).
     texts: Mapping[str, str] = field(default_factory=dict)
+    dates: DateWords = field(default_factory=DateWords)
+
+    def date(self, day: date) -> str:
+        """``day`` as this language writes it on the screen."""
+        return self.dates.write(day)
 
     def text(self, key: str, **values: object) -> str:
         """The text ``key`` with its ``{placeholders}`` replaced; empty if there is none
@@ -129,6 +182,41 @@ def read_language_file(path: Path) -> tuple[str, str, dict[str, str]]:
     return name.strip(), native, clean
 
 
+def _words(value: object, count: int) -> tuple[str, ...] | None:
+    if not isinstance(value, list) or len(value) != count:
+        return None
+    words = tuple(str(item).strip() for item in value)
+    return words if all(words) else None
+
+
+def read_dates(path: Path) -> DateWords | None:
+    """The ``dates`` block of a language file; ``None`` if it has none or it is wrong (a
+    format without ``{weekday}``, ``{day}`` and ``{month}``, not 7 weekdays or 12 months)."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    block = data.get("dates") if isinstance(data, dict) else None
+    if not isinstance(block, dict):
+        return None
+    fmt = block.get("format")
+    weekdays = _words(block.get("weekdays"), 7)
+    months = _words(block.get("months"), 12)
+    if (
+        not isinstance(fmt, str)
+        or text_placeholders(fmt) != DATE_PLACEHOLDERS
+        or weekdays is None
+        or months is None
+    ):
+        logger.warning(
+            '%s: "dates" needs a "format" with {weekday}, {day} and {month}, 7 weekdays '
+            "(Monday first) and 12 months; using English dates",
+            path.name,
+        )
+        return None
+    return DateWords(fmt, weekdays, months)
+
+
 def load_language(code: str, assets_dir: str | Path | None = None) -> Language:
     """The language ``code``, complete. Never raises: an unknown code or a broken file
     falls back to English with a warning, and texts missing from a file are taken from
@@ -170,7 +258,13 @@ def load_language(code: str, assets_dir: str | Path | None = None) -> Language:
             complete[key] = text
     if missing:
         logger.warning("%s: using English for %s", path.name, ", ".join(missing))
-    return Language(code=wanted, name=name, native_name=native, texts=complete)
+    return Language(
+        code=wanted,
+        name=name,
+        native_name=native,
+        texts=complete,
+        dates=read_dates(path) or reference.dates,
+    )
 
 
 _FALLBACK_NAME = "English"
@@ -182,7 +276,7 @@ def _reference(files: Mapping[str, Path]) -> Language:
     if path is not None:
         try:
             name, native, texts = read_language_file(path)
-            return Language(DEFAULT_LANGUAGE, name, native, texts)
+            return Language(DEFAULT_LANGUAGE, name, native, texts, read_dates(path) or DateWords())
         except LanguageError as exc:
             logger.error("%s", exc)
     return Language(DEFAULT_LANGUAGE, _FALLBACK_NAME, _FALLBACK_NAME, {})

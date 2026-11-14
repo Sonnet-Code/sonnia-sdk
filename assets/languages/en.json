@@ -20,6 +20,36 @@
     "trivia_close": "SO CLOSE!",
     "trivia_score": "{score} of {total} correct",
     "trivia_won_line": "Great job, trivia champ!",
-    "trivia_lost_line": "You needed {threshold}. Ask me for another trivia and try again!"
+    "trivia_lost_line": "You needed {threshold}. Ask me for another trivia and try again!",
+    "talk_label": "TALK",
+    "talk_now": "ON NOW",
+    "talk_next": "UP NEXT",
+    "talk_over": "ALREADY OVER"
+  },
+  "dates": {
+    "format": "{weekday} {day} {month}",
+    "weekdays": [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday"
+    ],
+    "months": [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ]
   }
 }

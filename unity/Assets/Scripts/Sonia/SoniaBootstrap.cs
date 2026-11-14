@@ -112,6 +112,8 @@ namespace Sonia
         // brought it back as an empty image, not as null.
         [System.NonSerialized]
         private ShowImageMessage _pendingImage;
+        private ShowTalkMessage _pendingTalk;
+        private TalkCardController _talkCard;
         // Time of the last hello (to apply the presence that follows it without animation).
         private float _helloAt = -999f;
 
@@ -148,6 +150,7 @@ namespace Sonia
                 client.OnStopSpeaking += HandleStopSpeaking;
                 client.OnShowImage += HandleShowImage;
                 client.OnHideImage += HandleHideImage;
+                client.OnShowTalk += HandleShowTalk;
                 client.OnAttention += HandleAttention;
                 client.OnPlayAnimation += HandlePlayAnimation;
                 client.OnShowEmotion += HandleShowEmotion;
@@ -181,6 +184,7 @@ namespace Sonia
                 client.OnStopSpeaking -= HandleStopSpeaking;
                 client.OnShowImage -= HandleShowImage;
                 client.OnHideImage -= HandleHideImage;
+                client.OnShowTalk -= HandleShowTalk;
                 client.OnAttention -= HandleAttention;
                 client.OnPlayAnimation -= HandlePlayAnimation;
                 client.OnShowEmotion -= HandleShowEmotion;
@@ -270,6 +274,14 @@ namespace Sonia
                 // Also by code: draws the trivia on the HUD (card, confetti) when
                 // the orchestrator sends it.
                 gameObject.AddComponent<TriviaController>();
+            }
+
+            _talkCard = GetComponent<TalkCardController>();
+            if (_talkCard == null)
+            {
+                // Also by code: the card of a talk of the agenda (show_talk), where
+                // images go.
+                _talkCard = gameObject.AddComponent<TalkCardController>();
             }
 
             if (GetComponent<StageScreen>() == null)
@@ -791,20 +803,22 @@ namespace Sonia
                 }
             }
 
-            if (_pendingImage != null && choreographer != null)
+            if ((_pendingImage != null || _pendingTalk != null) && choreographer != null
+                && (choreographer.IsPresentHolding || !choreographer.IsPresenting))
             {
-                if (choreographer.IsPresentHolding)
+                // The hand is up, or the gesture was cut (another state, another clip):
+                // what was waiting shows anyway.
+                ShowImageMessage image = _pendingImage;
+                ShowTalkMessage talk = _pendingTalk;
+                _pendingImage = null;
+                _pendingTalk = null;
+                if (image != null)
                 {
-                    ShowImageMessage message = _pendingImage;
-                    _pendingImage = null;
-                    ShowImageNow(message);
+                    ShowImageNow(image);
                 }
-                else if (!choreographer.IsPresenting)
+                else
                 {
-                    // The gesture was cut (another state, another clip): the image shows anyway.
-                    ShowImageMessage message = _pendingImage;
-                    _pendingImage = null;
-                    ShowImageNow(message);
+                    ShowTalkNow(talk);
                 }
             }
 
@@ -985,6 +999,7 @@ namespace Sonia
 
             // Sonnia raises her hand and points; the image appears above the finger
             // when the hand reaches the top (see Update), not before.
+            _pendingTalk = null;
             if (!stripTaken && choreographer != null && choreographer.BeginPresent())
             {
                 _pendingImage = message;
@@ -1003,6 +1018,12 @@ namespace Sonia
 
         private void ShowImageNow(ShowImageMessage message)
         {
+            // One thing at a time in the top strip.
+            if (_talkCard != null)
+            {
+                _talkCard.Hide();
+            }
+
             // Screen element: the panel is placed in its fixed spot when shown.
             imagePanel.Show(message);
 
@@ -1014,11 +1035,6 @@ namespace Sonia
 
         private void HandleHideImage(HideImageMessage message)
         {
-            if (imagePanel == null)
-            {
-                return;
-            }
-
             HideImageNow();
 
             if (logEvents)
@@ -1031,20 +1047,79 @@ namespace Sonia
         private void HideImageNow()
         {
             _pendingImage = null;
-            if (imagePanel == null)
+            _pendingTalk = null;
+            if (_talkCard != null && _talkCard.IsVisible)
             {
-                return;
+                _talkCard.Hide();
+                if (avatarState != null)
+                {
+                    avatarState.SetImagePanel(_talkCard.Anchor, false);
+                }
             }
 
-            imagePanel.Hide();
+            if (imagePanel != null)
+            {
+                imagePanel.Hide();
+                if (avatarState != null)
+                {
+                    avatarState.SetImagePanel(imagePanel.PanelTransform, false);
+                }
+            }
+
             if (choreographer != null)
             {
                 choreographer.EndPresent();
             }
+        }
 
+        private void HandleShowTalk(ShowTalkMessage message)
+        {
+            if (_talkCard == null || message == null)
+            {
+                return;
+            }
+
+            // Like an image: Sonnia points up and the card comes in when the hand is there.
+            // Not over the trivia (the orchestrator does not send it then; safety net).
+            TriviaController trivia = GetComponent<TriviaController>();
+            if (trivia != null && trivia.IsActive)
+            {
+                return;
+            }
+
+            _pendingImage = null;
+            if (choreographer != null && choreographer.BeginPresent())
+            {
+                _pendingTalk = message;
+            }
+            else
+            {
+                _pendingTalk = null;
+                ShowTalkNow(message);
+            }
+
+            if (logEvents)
+            {
+                Debug.Log("[Sonnia] show_talk: " + message.TalkId + " (" + message.Status + ")", this);
+            }
+        }
+
+        private void ShowTalkNow(ShowTalkMessage message)
+        {
+            if (_talkCard == null || message == null)
+            {
+                return;
+            }
+
+            if (imagePanel != null && imagePanel.IsVisible)
+            {
+                imagePanel.Hide();
+            }
+
+            _talkCard.Show(message);
             if (avatarState != null)
             {
-                avatarState.SetImagePanel(imagePanel.PanelTransform, false);
+                avatarState.SetImagePanel(_talkCard.Anchor, _talkCard.IsVisible);
             }
         }
 

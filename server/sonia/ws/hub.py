@@ -231,6 +231,10 @@ class Hub:
         """Shows an emotion on the avatar's face for a few seconds."""
         await self.broadcast_json(p.msg_show_emotion(emotion, seconds))
 
+    async def show_talk(self, card: dict[str, Any]) -> None:
+        """Shows the card of a talk (a ``show_talk`` message, :func:`p.msg_show_talk`)."""
+        await self.broadcast_json(card)
+
     # -- connections --------------------------------------------------------
 
     async def _handle_client(self, connection: ServerConnection) -> None:

@@ -32,6 +32,10 @@ namespace Sonia
         public const string TriviaScore = "trivia_score";
         public const string TriviaWonLine = "trivia_won_line";
         public const string TriviaLostLine = "trivia_lost_line";
+        public const string TalkLabel = "talk_label";
+        public const string TalkNow = "talk_now";
+        public const string TalkNext = "talk_next";
+        public const string TalkOver = "talk_over";
 
         /// <summary>The built-in texts: assets/languages/en.json (a test checks they match).</summary>
         public static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>
@@ -55,6 +59,10 @@ namespace Sonia
             [TriviaScore] = "{score} of {total} correct",
             [TriviaWonLine] = "Great job, trivia champ!",
             [TriviaLostLine] = "You needed {threshold}. Ask me for another trivia and try again!",
+            [TalkLabel] = "TALK",
+            [TalkNow] = "ON NOW",
+            [TalkNext] = "UP NEXT",
+            [TalkOver] = "ALREADY OVER",
         };
 
         private static readonly Dictionary<string, string> Current = new Dictionary<string, string>(English);

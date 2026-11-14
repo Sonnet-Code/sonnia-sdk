@@ -26,6 +26,7 @@ namespace Sonia
         public const string StopSpeaking = "stop_speaking";
         public const string ShowImage = "show_image";
         public const string HideImage = "hide_image";
+        public const string ShowTalk = "show_talk";
         public const string Error = "error";
         public const string RequestFrame = "request_frame";
         public const string Attention = "attention";
@@ -483,10 +484,34 @@ namespace Sonia
         [JsonProperty("caption")] public string Caption;
     }
 
-    /// <summary>Hides the image panel.</summary>
+    /// <summary>Hides the image panel and the talk card.</summary>
     [Serializable]
     public class HideImageMessage
     {
+    }
+
+    /// <summary>
+    /// Card of a talk of the agenda, shown where images go. The texts come written in the
+    /// orchestrator's language; the badge comes from <see cref="Status"/> and the screen texts.
+    /// </summary>
+    [Serializable]
+    public class ShowTalkMessage
+    {
+        [JsonProperty("talk_id")] public string TalkId = string.Empty;
+        [JsonProperty("title")] public string Title = string.Empty;
+
+        /// <summary>now, next, later or over.</summary>
+        [JsonProperty("status")] public string Status = "later";
+
+        /// <summary>Day and times: "Friday 20 November · 10:00–10:45".</summary>
+        [JsonProperty("when")] public string When = string.Empty;
+
+        [JsonProperty("speakers")] public List<string> Speakers = new List<string>();
+
+        /// <summary>Room and track.</summary>
+        [JsonProperty("place")] public string Place = string.Empty;
+
+        [JsonProperty("tags")] public List<string> Tags = new List<string>();
     }
 
     /// <summary>Human-readable error sent by the orchestrator.</summary>

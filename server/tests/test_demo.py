@@ -78,6 +78,7 @@ async def test_one_show_uses_every_part_of_the_client() -> None:
         p.MSG_SHOW_IMAGE,
         p.MSG_HIDE_IMAGE,
         p.MSG_SHOW_EMOTION,
+        p.MSG_SHOW_TALK,
         p.MSG_TRIVIA_START,
         p.MSG_TRIVIA_QUESTION,
         p.MSG_TRIVIA_ANSWER,
@@ -233,6 +234,7 @@ def test_content_falls_back_without_assets(tmp_path: Path) -> None:
     assert content.idle_lines
     assert len(content.questions) == 3
     assert content.picture[0] == "demo"
+    assert content.agenda is None
 
 
 # -- end to end ------------------------------------------------------------

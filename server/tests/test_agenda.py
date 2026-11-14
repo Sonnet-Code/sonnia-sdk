@@ -15,6 +15,7 @@ import sonia.live.engine as engine_module
 from sonia import cli
 from sonia.actions import build_default_registry
 from sonia.actions.agenda import NO_AGENDA
+from sonia.actions.builtin import NO_AVATAR
 from sonia.agenda import (
     Agenda,
     AgendaBook,
@@ -25,11 +26,14 @@ from sonia.agenda import (
     parse_ics,
     parse_json,
 )
+from sonia.agenda.card import choose_talk, talk_card, talk_status
 from sonia.config import AgendaSettings
+from sonia.language import load_language
 from sonia.live.prompts import build_backend_instructions, build_live_instructions
 from sonia.paths import BUNDLE_ROOT
 from sonia.types import ActionContext
 from tests.test_live import make_rig, make_settings
+from tests.test_protocol_schema import problems
 
 TZ = timezone(timedelta(hours=-4), "event")
 EXAMPLES = BUNDLE_ROOT / "assets" / "agenda"
@@ -347,3 +351,112 @@ async def test_the_session_knows_the_agenda_and_hears_what_is_about_to_start(
         assert note.startswith('[Agenda] Starting in 15 minutes: "Building voice agents"')
         assert '"Intro to Rust"' in note
         assert conn.of_type("session.commentary.append") == []
+
+
+# -- show_talk -----------------------------------------------------------------
+
+
+class CardScreen:
+    """The avatar: keeps the talk cards it is asked to show."""
+
+    def __init__(self) -> None:
+        self.cards: list[dict[str, object]] = []
+
+    async def show_image(self, **kwargs: object) -> None:
+        raise AssertionError("show_talk does not send images")
+
+    async def hide_image(self) -> None:
+        pass
+
+    async def show_emotion(self, emotion: str, seconds: float) -> None:
+        pass
+
+    async def show_talk(self, card: dict[str, object]) -> None:
+        self.cards.append(card)
+
+
+def _example() -> Agenda:
+    return parse_json((EXAMPLES / "example.json").read_text(encoding="utf-8"), TZ)
+
+
+def test_which_talk_a_request_means() -> None:
+    agenda = _example()
+    # By id, or by words; with several, the one on now, then the next, then the last.
+    assert choose_talk(agenda, "coffee", at(20, 9))[0] is agenda.by_id()["coffee"]
+    talk, others = choose_talk(agenda, "Ada Byron", at(20, 10))
+    assert talk is not None and talk.id == "rust-intro"
+    assert [t.id for t in others] == ["keynote-day2"]
+    assert choose_talk(agenda, "ada byron", at(20, 11))[0] is agenda.by_id()["keynote-day2"]
+    assert choose_talk(agenda, "Ada", at(22, 9))[0] is agenda.by_id()["keynote-day2"]
+    assert choose_talk(agenda, "kotlin", at(20, 9)) == (None, [])
+    assert choose_talk(agenda, "  ", at(20, 9)) == (None, [])
+
+
+def test_the_badge_of_a_card() -> None:
+    agenda = _example()
+    talks = agenda.by_id()
+    assert talk_status(agenda, talks["welcome"], at(20, 9, 10)) == "now"
+    assert talk_status(agenda, talks["rust-intro"], at(20, 9, 10)) == "next"
+    assert talk_status(agenda, talks["voice-agents"], at(20, 9, 10)) == "next"
+    assert talk_status(agenda, talks["testing"], at(20, 9, 10)) == "later"
+    assert talk_status(agenda, talks["welcome"], at(20, 10)) == "over"
+
+
+def test_a_card_is_written_in_the_language() -> None:
+    agenda = _example()
+    rust = agenda.by_id()["rust-intro"]
+    card = talk_card(agenda, rust, TZ, load_language("en"), at(20, 9, 50))
+    assert card == {
+        "type": "show_talk",
+        "talk_id": "rust-intro",
+        "title": "Intro to Rust",
+        "status": "now",
+        "when": "Friday 20 November · 09:45–10:30",
+        "speakers": ["Ada Byron"],
+        "place": "Room 2 · Languages",
+        "tags": ["rust", "systems"],
+    }
+    assert problems(card) == []
+    spanish = talk_card(agenda, rust, TZ, load_language("es"), at(20, 9))
+    assert spanish["when"] == "viernes 20 de noviembre · 09:45–10:30"
+    assert spanish["status"] == "next"
+    german = talk_card(agenda, agenda.by_id()["coffee"], TZ, load_language("de"), at(21, 9))
+    assert german["when"] == "Freitag, 20. November · 10:30–11:00"
+    assert german["status"] == "over" and german["place"] == "Hall" and german["speakers"] == []
+
+
+async def test_show_talk(tmp_path: Path) -> None:
+    registry = build_default_registry(include_agenda=True)
+    screen = CardScreen()
+    ctx = ActionContext(camera=None, avatar=screen, gallery_dir=str(tmp_path))
+    assert (await registry.execute("show_talk", {"talk": "rust"}, ctx)).text == NO_AGENDA
+
+    book = _book(EXAMPLES / "example.json", at(20, 9, 30))
+    await book.start()
+    ctx.extra["agenda"] = book
+    ctx.extra["language"] = load_language("es")
+    text = (await registry.execute("show_talk", {"talk": "Ada"}, ctx)).text
+    assert text.startswith('Showing the card of "Intro to Rust" by Ada Byron')
+    assert 'Other talks also match: "Closing keynote"' in text
+    assert screen.cards[-1]["talk_id"] == "rust-intro"
+    assert screen.cards[-1]["when"] == "viernes 20 de noviembre · 09:45–10:30"
+
+    text = (await registry.execute("show_talk", {"talk": "kotlin"}, ctx)).text
+    assert text.startswith('Nothing on the agenda matches "kotlin"') and len(screen.cards) == 1
+
+    # Not over the trivia, and not without an avatar.
+    ctx.extra["trivia"] = type("Trivia", (), {"active": True})()
+    text = (await registry.execute("show_talk", {"talk": "rust"}, ctx)).text
+    assert "trivia game on your screen" in text and "the talk card" in text
+    ctx.avatar = None
+    assert (await registry.execute("show_talk", {"talk": "rust"}, ctx)).text == NO_AVATAR
+    assert len(screen.cards) == 1
+
+
+def test_show_talk_is_offered_and_explained_with_the_agenda(tmp_path: Path) -> None:
+    registry = build_default_registry(include_look=False, include_agenda=True)
+    assert "show_talk" in registry and "show_talk" not in build_default_registry()
+    live = build_live_instructions(make_settings(tmp_path), registry=registry, gallery_ids=[])
+    assert "- Screen: show the card of one talk of the agenda" in live
+    assert "Someone asks about one specific talk" in live
+    assert "showing a talk's card" in live

@@ -20,6 +20,36 @@
     "trivia_close": "QUASE!",
     "trivia_score": "{score} de {total} certas",
     "trivia_won_line": "Muito bem, você manda no quiz!",
-    "trivia_lost_line": "Você precisava de {threshold}. Peça outro quiz e tente de novo!"
+    "trivia_lost_line": "Você precisava de {threshold}. Peça outro quiz e tente de novo!",
+    "talk_label": "PALESTRA",
+    "talk_now": "AGORA",
+    "talk_next": "A SEGUIR",
+    "talk_over": "JÁ TERMINOU"
+  },
+  "dates": {
+    "format": "{weekday}, {day} de {month}",
+    "weekdays": [
+      "segunda-feira",
+      "terça-feira",
+      "quarta-feira",
+      "quinta-feira",
+      "sexta-feira",
+      "sábado",
+      "domingo"
+    ],
+    "months": [
+      "janeiro",
+      "fevereiro",
+      "março",
+      "abril",
+      "maio",
+      "junho",
+      "julho",
+      "agosto",
+      "setembro",
+      "outubro",
+      "novembro",
+      "dezembro"
+    ]
   }
 }

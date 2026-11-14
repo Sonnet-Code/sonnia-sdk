@@ -121,7 +121,7 @@ sequenceDiagram
 
 Actions are defined once in `sonia/actions` (`ActionSpec`: name, description, JSON Schema, handler) and registered in an `ActionRegistry`. The backend's tool list is generated from it (`sonia/live/prompts.py`), so the model and the code never disagree on a tool.
 
-When the backend calls a tool, the engine validates the arguments against the schema, runs the handler with an `ActionContext` (camera, avatar link, gallery, last frame, trivia game) and returns the result as a `function_call_output`. An error is returned as text for the model to read; it never raises into the engine. After every call of a round has finished, the engine asks the backend to continue, up to `LIVE_BACKEND_MAX_TOOL_ROUNDS` rounds. A task that does not finish in 90 seconds is forgotten.
+When the backend calls a tool, the engine validates the arguments against the schema, runs the handler with an `ActionContext` (camera, avatar link, gallery, last frame, trivia game, agenda, language) and returns the result as a `function_call_output`. An error is returned as text for the model to read; it never raises into the engine. After every call of a round has finished, the engine asks the backend to continue, up to `LIVE_BACKEND_MAX_TOOL_ROUNDS` rounds. A task that does not finish in 90 seconds is forgotten.
 
 While a task runs, the waiting indicator (`sonia/busy.py`) shows "Thinking…" after 0.3 s or "Searching the web…" while the backend runs `web_search`, so visitors know something is happening. After 5 s, the avatar also gets an `activity` hint (`think`, or `search` during a web search) it can react to.
 
@@ -166,7 +166,7 @@ The Unity client (`unity/Assets/Scripts/Sonia`) is a set of components bound to 
 - **`PhonemeLipSyncBridge` + uLipSync**: phonemes from the audio that is actually playing drive the mouth blendshapes through `FaceRig`, so lip-sync never drifts from the voice.
 - **`MotionPlayer` and `AvatarChoreographer`**: Playables-based animation without an Animator Controller, with fades in code, an upper-body layer for gestures and a choreography per state (idle variations, listening nods, thinking, speaking, greeting).
 - **`AvatarStateController`, `EyeGazeController`, `FacialExpressionController`**: head motion, blinking, breathing, saccades and expressions.
-- **`StageScreen`, `ImagePanelController`, `TriviaController`, `BusyIndicator`, `StageParticles`**: the portrait screen, subtitles, images, the trivia card, the waiting pill and the particles.
+- **`StageScreen`, `ImagePanelController`, `TalkCardController`, `TriviaController`, `BusyIndicator`, `StageParticles`**: the portrait screen, subtitles, images, the talk card, the trivia card, the waiting pill and the particles.
 
 By default the client connects to `ws://127.0.0.1:8765` and reconnects on its own; the `-sonia-ws` command-line argument points it elsewhere.
 

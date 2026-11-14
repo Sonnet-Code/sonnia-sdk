@@ -3,7 +3,7 @@
 ``sonia demo`` starts the same WebSocket hub as ``sonia run`` but, instead of a
 voice model, a scripted director plays a short show on a loop: idle lines, a
 conversation with subtitles, the waiting indicator, a web search, an image on the
-panel, a dance and a trivia round. Her voice is synthetic: harmonics shaped like
+panel, the card of a talk of the example agenda, a dance and a trivia round. Her voice is synthetic: harmonics shaped like
 vowels, so the client's lip-sync moves the mouth as with real speech. It is not
 meant to sound like a person, only to exercise everything the client draws.
 
@@ -23,11 +23,14 @@ import struct
 import zlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
 
+from sonia.agenda import Agenda, AgendaFormatError, parse_json
+from sonia.agenda.card import talk_card
 from sonia.language import Language, load_language
 from sonia.showcase import load_lines
 from sonia.trivia.bank import TriviaBank, TriviaQuestion
@@ -217,6 +220,8 @@ class DemoContent:
     idle_lines: tuple[str, ...]
     questions: tuple[TriviaQuestion, ...]
     picture: tuple[str, bytes, str]
+    #: The example agenda (``assets/agenda/example.json``) for the talk card, if there is one.
+    agenda: Agenda | None = None
 
     @classmethod
     def load(cls, assets_dir: Path, rng: random.Random) -> DemoContent:
@@ -225,7 +230,21 @@ class DemoContent:
         )
         bank = TriviaBank.from_file(assets_dir / "trivia" / "questions.md")
         questions = tuple(bank.draw(3, rng)) if len(bank) >= 3 else _FALLBACK_QUESTIONS
-        return cls(lines, questions, gallery_picture(assets_dir / "gallery", rng))
+        return cls(
+            lines,
+            questions,
+            gallery_picture(assets_dir / "gallery", rng),
+            _example_agenda(assets_dir),
+        )
+
+
+def _example_agenda(assets_dir: Path) -> Agenda | None:
+    try:
+        text = (assets_dir / "agenda" / "example.json").read_text(encoding="utf-8")
+        agenda = parse_json(text, UTC)
+    except (OSError, AgendaFormatError):
+        return None
+    return agenda if agenda.talks else None
 
 
 class DemoDirector:
@@ -283,6 +302,7 @@ class DemoDirector:
             self._scene_greeting,
             self._scene_search,
             self._scene_picture,
+            self._scene_talk,
             self._scene_dance,
             self._scene_trivia,
         ]
@@ -322,6 +342,21 @@ class DemoDirector:
             p.msg_show_image(image_id, "gallery", mime, data, caption="From the gallery")
         )
         await self._say("Here's one from my gallery. Add your own images to assets/gallery.")
+        await self._pause(4.0)
+        await self._link.broadcast_json(p.msg_hide_image())
+        await self._listen_after()
+
+    async def _scene_talk(self) -> None:
+        agenda = self._content.agenda
+        if agenda is None:
+            return
+        talk = agenda.by_id().get("voice-agents") or agenda.talks[0]
+        await self._user_says(f'When is "{talk.title}"?')
+        await self._busy("think", self._language.text("thinking"), 0.8, activity="think")
+        # As if it were a quarter of an hour before: the card says it is up next.
+        moment = talk.start - timedelta(minutes=15)
+        await self._link.broadcast_json(talk_card(agenda, talk, UTC, self._language, moment))
+        await self._say("Here's its card. With your own agenda in AGENDA_SOURCE, this is live.")
         await self._pause(4.0)
         await self._link.broadcast_json(p.msg_hide_image())
         await self._listen_after()

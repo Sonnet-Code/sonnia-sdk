@@ -98,6 +98,10 @@ _CAPABILITIES = {
         "- Agenda: read the event schedule again: the time, what is on now and next, the "
         "latest changes and the talks about a topic, a speaker or a room."
     ),
+    "show_talk": (
+        "- Screen: show the card of one talk of the agenda (title, speakers, day, time and "
+        "room) next to you."
+    ),
 }
 
 #: The capabilities when the backend has no tool at all.
@@ -153,6 +157,11 @@ _AGENDA_WHEN = (
     "- You are asked about the schedule and the AGENDA section does not answer it: another "
     "day, a talk you cannot find, the exact time, or whether something changed. If the "
     "section answers it, answer without delegating."
+)
+#: When to show a talk's card (``show_talk``).
+_TALK_WHEN = (
+    "- Someone asks about one specific talk (where or when it is, who gives it): show its "
+    "card on your screen while you tell them, even if the AGENDA section already answers it."
 )
 
 #: Prefix of the silent notes about the agenda: a talk about to start, a change.
@@ -361,6 +370,7 @@ _BACKEND_DOES = {
     "play_animation": "dancing or making a gesture",
     "show_emotion": "showing an emotion on your face",
     "start_trivia": "the trivia (starting it, recording answers, moving on, restarting and ending it)",
+    "show_talk": "showing a talk's card",
 }
 _BACKEND_DOES_SEARCH = "searching the web"
 
@@ -484,7 +494,8 @@ def build_live_instructions(
         trivia_rule=_TRIVIA_RULE + "\n" if trivia else "",
         trivia_when=_TRIVIA_WHEN + "\n" if trivia else "",
         search_when=_SEARCH_WHEN + "\n" if web_search else "",
-        agenda_when=_AGENDA_WHEN + "\n" if "check_agenda" in names else "",
+        agenda_when=(_AGENDA_WHEN + "\n" if "check_agenda" in names else "")
+        + (_TALK_WHEN + "\n" if "show_talk" in names else ""),
         no_delegate_chat=_NO_DELEGATE_CHAT[mode],
     )
     parts = [BOOK.text("persona").strip(), rules]

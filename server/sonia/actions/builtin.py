@@ -197,9 +197,10 @@ def build_default_registry(
     ``trivia_next``, ``restart_trivia`` and ``stop_trivia`` when there is a question
     bank (``assets/trivia/questions.md``). ``include_emotion`` announces ``show_emotion``
     (:mod:`sonia.actions.emotion`, ``SHOW_EMOTION_ENABLED``). ``include_agenda`` announces
-    ``check_agenda`` (:mod:`sonia.actions.agenda`) when there is an ``AGENDA_SOURCE``.
+    ``check_agenda`` and ``show_talk`` (:mod:`sonia.actions.agenda`) when there is an
+    ``AGENDA_SOURCE``.
     """
-    from sonia.actions.agenda import CHECK_AGENDA
+    from sonia.actions.agenda import CHECK_AGENDA, SHOW_TALK
     from sonia.actions.emotion import SHOW_EMOTION
     from sonia.actions.moves import PLAY_ANIMATION
     from sonia.actions.trivia import (
@@ -220,6 +221,7 @@ def build_default_registry(
         registry.register(SHOW_EMOTION)
     if include_agenda:
         registry.register(CHECK_AGENDA)
+        registry.register(SHOW_TALK)
     if include_trivia:
         registry.register(START_TRIVIA)
         registry.register(TRIVIA_ANSWER)

@@ -1093,14 +1093,19 @@ class LiveEngine:
             gallery_dir=str(self._settings.gallery_dir),
             gallery_upload_dir=self._settings.gallery_upload_dir,
             last_frame=self._last_frame,
-            extra={"trivia": self._trivia, "moves": self._moves, "agenda": self._agenda},
+            extra={
+                "trivia": self._trivia,
+                "moves": self._moves,
+                "agenda": self._agenda,
+                "language": self._language,
+            },
         )
         if self._registry is None:
             result = ActionResult(text="Error: no actions are available.")
         else:
             result = await self._registry.execute(name, arguments, ctx)
         logger.info("Action %s(%s) -> %s", name, arguments, result.text)
-        if name == "show_image" and result.text.startswith("Showing"):
+        if name in ("show_image", "show_talk") and result.text.startswith("Showing"):
             self._schedule_image_auto_hide()
         elif name == "hide_image":
             self._cancel_image_auto_hide()
